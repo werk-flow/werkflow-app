@@ -31,6 +31,7 @@ export const CONTEXT_WRAPPERS: Record<string, string> = {
   requireManagerAndClient: 'lib/clients/manager-access.ts',
   requireManagedInvite: 'lib/invites/managed-invite.ts',
   verifyCurrentMembership: 'lib/time-tracking/action-access.ts',
+  resolveBillingAdmin: 'lib/werkflow-billing/billing-page.ts',
 };
 
 const SESSION_IDENTITY = 'getAuthenticatedUser';
@@ -68,8 +69,8 @@ export const IDENTITY_ONLY_ACTIONS: Record<string, string> = {
   'lib/org/join-request-actions.ts#requestOrganizationJoin': 'Runs before the caller has a membership.',
   'lib/org/join-request-actions.ts#withdrawOrganizationJoinRequest':
     "Withdraws the caller's own request, which exists before any membership.",
-  'lib/subscription/actions.ts#simulatePayment':
-    'Activates the subscription before the first organization exists.',
+  'lib/subscription/actions.ts#startOrganizationCheckout':
+    "Reserves the caller's own first organization, which does not exist yet.",
   'lib/members/actions.ts#getProfilesByIds':
     'Names are visible across every organization the caller shares with the person (SI-015).',
   'lib/time-tracking/clock-state-actions.ts#clockOutBeforeSignOut':

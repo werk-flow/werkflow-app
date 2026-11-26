@@ -1,0 +1,72 @@
+'use client';
+
+import dynamic from 'next/dynamic';
+
+import { useLiveAttentionOverview } from '@/components/aufgaben/use-aufgaben-overview';
+import { useOrganization } from '@/components/organization/organization-context';
+import { OfficeStartSkeleton } from '@/components/loading-states/office-start-skeleton';
+import { OnCallNowCard } from '@/components/on-call/on-call-now-card';
+import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
+import { readInBackground } from '@/lib/data/background-read-client';
+import { OfficeStartView } from './office-start-sections';
+
+// Only Admin renders it: in its own chunk, the page's client references,
+// which every clock action's render sends, stay as they are for everyone else.
+const OwnerStartView = dynamic(() => import('./owner-start').then((mod) => mod.OwnerStartView), {
+  loading: () => <OfficeStartSkeleton />,
+});
+
+/**
+ * The count of überfällig maintenance from the Wartung list's own reader,
+ * live on the tables that list follows. Its first page of each list is read
+ * and left unused: the count has no reader of its own.
+ */
+function useOverdueMaintenanceCount() {
+  const { activeOrgId } = useOrganization();
+  const view = useLiveView<number>({
+    tables: ['maintenance_coverages', 'maintenance_plans', 'maintenance_due_work'],
+    resetKey: activeOrgId,
+    read: async ({ signal }): Promise<LiveViewResult<number>> => {
+      if (!activeOrgId) return { ok: false };
+      const result = await readInBackground(
+        'maintenance-workspace',
+        {
+          search: '',
+          overdueOnly: true,
+          duePage: 1,
+          planPage: 1,
+          coveragePage: 1,
+          organizationId: activeOrgId,
+        },
+        signal,
+      );
+      return result.success ? { ok: true, data: result.workspace.totals.due.overdue } : { ok: false };
+    },
+  });
+  // A due date that passes makes its work überfällig without a write.
+  useBusinessDayRefresh(view.refresh);
+  return view;
+}
+
+/**
+ * The start page of Büro and Admin: „Bereitschaft jetzt“ as every role sees
+ * it, then what needs them now (the Aufgaben sections without personnel
+ * approvals, each with its count and first items, and the überfällig
+ * maintenance). Between the two, Admin sees what needs the owner's decision,
+ * from the same two reads. It reads in the browser, because every clock
+ * action renders the dashboard's server component again, and it is that
+ * render's one client component for them.
+ */
+export function OfficeStart() {
+  const { activeOrg } = useOrganization();
+  const attention = useLiveAttentionOverview();
+  const maintenance = useOverdueMaintenanceCount();
+  return (
+    <div className="mx-auto max-w-3xl space-y-6">
+      <OnCallNowCard />
+      {activeOrg?.role === 'admin' && <OwnerStartView attention={attention} maintenance={maintenance} />}
+      <OfficeStartView attention={attention} maintenance={maintenance} />
+    </div>
+  );
+}

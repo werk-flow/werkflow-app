@@ -1,11 +1,11 @@
 // Rule test: the staging deploy (.github/scripts/staging-deploy.sh, through vercel-api.sh) never
 // polls a deployment Vercel refused to create. A refusal fails at once with Vercel's error code
 // and message, a rate limit waits and retries within its budget, and a failed poll stops the step.
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from './temporary-directory';
 
 const script = resolve(import.meta.dir, '../../.github/scripts/staging-deploy.sh');
 const TOKEN = 'token-that-must-never-print';
@@ -46,15 +46,13 @@ type Answer = { status: number; headers?: string[]; body: unknown; takes?: numbe
 let stub = '';
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'staging-deploy-'));
+  stub = temporaryDirectory('staging-deploy-');
   writeFileSync(join(stub, 'curl'), CURL_STUB);
   writeFileSync(join(stub, 'sleep'), SLEEP_STUB);
   writeFileSync(join(stub, 'date'), '#!/usr/bin/env bash\ncat "$STUB/clock"\n');
   for (const name of ['curl', 'sleep', 'date']) chmodSync(join(stub, name), 0o755);
   writeFileSync(join(stub, 'clock'), '1000');
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 /** Runs the deploy against the given answers, in request order, and fails the test if the token prints. */
 function deploy(answers: Answer[], extraEnv: Record<string, string> = {}) {

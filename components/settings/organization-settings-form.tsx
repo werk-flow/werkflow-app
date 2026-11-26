@@ -51,6 +51,8 @@ type OrganizationSettingsFormProps = {
     uniqueCode: string;
     createdAtLabel: string;
     role: 'admin' | 'buero' | 'employee';
+    /** Null when the read failed. */
+    memberCount: number | null;
   };
   /** What a deletion removes, read for Admins only; null for other roles. */
   deletionScope: OrganizationDeletionScope | 'load_failed' | null;
@@ -98,9 +100,11 @@ function showSaveFailure(
 function OrganizationDetailsCard({
   roleLabel,
   createdAtLabel,
+  memberCount,
 }: {
   roleLabel: string;
   createdAtLabel: string;
+  memberCount: number | null;
 }) {
   return (
     <Card>
@@ -118,6 +122,14 @@ function OrganizationDetailsCard({
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">Erstellt am</p>
           <p className="text-sm text-muted-foreground">{createdAtLabel}</p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">Mitglieder</p>
+          {memberCount === null ? (
+            <RegionLoadError>Die Mitgliederzahl konnte nicht geladen werden.</RegionLoadError>
+          ) : (
+            <p className="text-sm text-muted-foreground tabular-nums">{memberCount}</p>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -253,6 +265,7 @@ export function OrganizationSettingsForm({
       <OrganizationDetailsCard
         roleLabel={getRoleLabel(initialOrganization.role)}
         createdAtLabel={initialOrganization.createdAtLabel}
+        memberCount={initialOrganization.memberCount}
       />
 
       <Card>

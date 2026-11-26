@@ -1,16 +1,15 @@
 // Rule test: a machine runs one local Supabase stack. `supabase start` for any other project id is
 // refused (lib/testing/runner/second-stack.ts); a start that reaches the shared stack passes.
-import { afterAll, expect, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { secondStackRefusal, stackProjectId } from './second-stack';
+import { temporaryDirectory } from '../temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const SHARED = 'werkflow-app';
-const base = mkdtempSync(join(tmpdir(), 'werkflow-second-stack-'));
-afterAll(() => rmSync(base, { recursive: true, force: true }));
+const base = temporaryDirectory('werkflow-second-stack-');
 
 /** A folder with a Supabase config; `projectId` undefined leaves the id out, as a hand-written config may. */
 function stackFolder(name: string, projectId?: string): string {

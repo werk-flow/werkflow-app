@@ -5,7 +5,12 @@
 import type { InvoiceDraft } from '../model';
 
 type InvoiceLine = InvoiceDraft['lines'][number];
-import { EXEMPT_INVOICE, MIXED_RATE_INVOICE, STANDARD_RATE_INVOICE } from './reference-invoices';
+import {
+  CARD_INVOICE,
+  EXEMPT_INVOICE,
+  MIXED_RATE_INVOICE,
+  STANDARD_RATE_INVOICE,
+} from './reference-invoices';
 
 type BrokenInvoice = {
   case: string;
@@ -22,6 +27,21 @@ const withLine = (draft: InvoiceDraft, index: number, change: Partial<InvoiceLin
 
 export const BROKEN_INVOICES: BrokenInvoice[] = [
   {
+    case: 'a card payment that shows the full card number',
+    draft: { ...CARD_INVOICE, payment: { kind: 'card', lastFour: '4242424242424242' } },
+    expected: { ruleId: 'BR-51', field: 'payment.lastFour' },
+  },
+  {
+    case: 'an amount due that is not the gross minus the paid amount',
+    draft: CARD_INVOICE,
+    tamper: (xml) =>
+      xml.replace(
+        '<ram:DuePayableAmount>0.00</ram:DuePayableAmount>',
+        '<ram:DuePayableAmount>499.00</ram:DuePayableAmount>',
+      ),
+    expected: { ruleId: 'BR-CO-16', field: 'totals' },
+  },
+  {
     case: 'a seller with neither USt-IdNr. nor Steuernummer charges VAT',
     draft: { ...MIXED_RATE_INVOICE, seller: { ...MIXED_RATE_INVOICE.seller, vatId: null, taxNumber: null } },
     expected: { ruleId: 'BR-S-02', field: 'seller.vatId' },
@@ -30,6 +50,14 @@ export const BROKEN_INVOICES: BrokenInvoice[] = [
     case: 'a seller without USt-IdNr. or Handelsregisternummer cannot be identified',
     draft: { ...EXEMPT_INVOICE, seller: { ...EXEMPT_INVOICE.seller, legalRegistrationId: null } },
     expected: { ruleId: 'BR-CO-26', field: 'seller.vatId' },
+  },
+  {
+    case: 'a seller identifier with the scheme SEPA, which only UBL accepts',
+    draft: {
+      ...CARD_INVOICE,
+      seller: { ...CARD_INVOICE.seller, identifier: { id: 'DE98ZZZ09999999999', scheme: 'SEPA' } },
+    },
+    expected: { ruleId: 'BR-CL-10', field: 'seller.identifier' },
   },
   {
     case: 'a buyer without a name',

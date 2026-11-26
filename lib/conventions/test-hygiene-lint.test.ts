@@ -1,4 +1,4 @@
-// Rule test: the test-hygiene lint rules refuse wall-clock waits, polling loops, per-test timeouts, retries, unpinned clocks and unquarantined skips, in every file family they own.
+// Rule test: the test-hygiene lint rules refuse wall-clock waits, polling loops, per-test timeouts, retries, unpinned clocks, fixed time limits and unquarantined skips, in every file family they own.
 import { describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -121,6 +121,131 @@ describe('test-hygiene/no-per-test-timeout', () => {
       'test.describe.configure({ mode: "serial" });',
     ].join('\n');
     expect(await reported('no-per-test-timeout', source, SPEC)).toEqual([]);
+  });
+});
+
+describe('test-hygiene/no-fixed-time-limit', () => {
+  test('refuses a wall-clock duration held below a fixed number, however the test writes it', async () => {
+    const source = [
+      'const start = performance.now();',
+      'await save();',
+      'const elapsed = performance.now() - start;',
+      'expect(elapsed).toBeLessThan(250);',
+      'expect(Date.now() - start, "save").toBeLessThanOrEqual(LIMIT_MS);',
+      'expect(elapsed).not.toBeGreaterThan(250);',
+      'expect(250).toBeGreaterThan(elapsed);',
+      'expect(elapsed < 250).toBe(true);',
+      'expect(elapsed >= 250).toBe(false);',
+      'expect.soft(Bun.nanoseconds() - begun).toBeLessThan(1e9);',
+      'if (elapsed > 250) throw new Error("slow");',
+      'const took = await page.evaluate(() => performance.now() - window.started);',
+      'expect(took).toBeLessThan(2_000);',
+      'const deadline = Date.now() + 250;',
+      'const limit = deadline;',
+      'expect(Date.now()).toBeLessThan(limit);',
+      'expect(started).toBeGreaterThan(Date.now() - 250);',
+      'const { tookMs } = await page.evaluate(() => ({ tookMs: performance.now() - window.started, rows: 2 }));',
+      'expect(tookMs).toBeLessThan(250);',
+      'let bound = Date.now();',
+      'bound = 0;',
+      'expect(performance.now() - start).toBeLessThan(bound);',
+      'expect(performance.now() - start).toBeLessThan(isCI ? 250 : Date.now());',
+      'const measuredFrom = performance.now();',
+      'expect(performance.now() - measuredFrom).toBeLessThan(isCI ? 250 : Date.now());',
+      'const limits = { bound: isCI ? 250 : Date.now() };',
+      'expect(performance.now() - measuredFrom).toBeLessThan(limits.bound);',
+      'expect(Date.now()).toBeLessThan(start + 250);',
+      'expect(Date.now() - 250).toBeLessThan(start);',
+    ].join('\n');
+    for (const file of [CONTRACT, SPEC, SUPPORT, UNIT])
+      expect(await reported('no-fixed-time-limit', source, file), file).toEqual([
+        4, 5, 6, 7, 8, 9, 10, 11, 13, 16, 17, 19, 22, 23, 25, 27, 28, 29,
+      ]);
+  });
+
+  test('an ordering of clock readings, a lower bound, a count and a controlled clock pass', async () => {
+    const source = [
+      'const before = Date.now();',
+      'await save();',
+      'const after = Date.now();',
+      'const capturedAt = Date.parse(envelope.capturedAt);',
+      'expect(capturedAt).toBeGreaterThanOrEqual(before);',
+      'expect(capturedAt).toBeLessThanOrEqual(after);',
+      'expect(after - before).toBeLessThanOrEqual(Date.now() - before);',
+      'expect(after - before).toBeGreaterThanOrEqual(0);',
+      'let returnedAt = 0;',
+      'await going.then(() => { returnedAt = Date.now(); });',
+      'expect(returnedAt).toBeGreaterThanOrEqual(after);',
+      'expect(rows.length).toBeLessThan(250);',
+      'let counted = { rows: 0 };',
+      'counted = { rows: counted.rows + 1 };',
+      'expect(counted.rows).toBeLessThan(100);',
+      'let tally = { count: 0 };',
+      'tally = { count: tally.count + 1 };',
+      'expect(tally.count).toBeLessThan(5);',
+      'const samples = [Date.now()];',
+      'expect(samples.length).toBeLessThan(3);',
+      'let ceiling = { at: Date.now() };',
+      'ceiling = { at: ceiling.at };',
+      'expect(Date.now() - before).toBeLessThan(ceiling.at);',
+      "test('clocked', async ({ page }) => {",
+      '  await page.clock.install();',
+      '  const age = await page.evaluate(() => Date.now() - Number(localStorage.getItem("at")));',
+      '  expect(age).toBeLessThan(120_000);',
+      '});',
+      "test.describe('fake timers', () => {",
+      '  test.beforeEach(() => setSystemTime(new Date("2026-03-02T08:00:00Z")));',
+      "  test('aged', () => { expect(Date.now() - opened).toBeLessThan(60_000); });",
+      '});',
+      'const sample = await page.evaluate(() => ({ takenAt: Date.now(), rowCount: rows.length }));',
+      'expect(sample.rowCount).toBeLessThan(100);',
+      'const { rowCount } = await page.evaluate(() => ({ takenAt: Date.now(), rowCount: rows.length }));',
+      'expect(rowCount).toBeLessThan(100);',
+      'const nested = { rowCount: rows.length, metadata: { rowCount: Date.now() - start } };',
+      'expect(nested.rowCount).toBeLessThan(100);',
+      'const { rowCount: count } = nested;',
+      'expect(count).toBeLessThan(100);',
+      'expect(Date.now()).toBeGreaterThanOrEqual(start + 250);',
+      'expect(start).toBeLessThan(Date.now() - 250);',
+      // The bound reads the clock after `before`: the elapsed time is only held above -250 ms.
+      'expect(before).toBeLessThan(Date.now() + 250);',
+      'expect(before - 250).toBeLessThan(Date.now());',
+    ].join('\n');
+    expect(await reported('no-fixed-time-limit', source, CONTRACT)).toEqual([]);
+  });
+
+  test("a controlled clock covers only its own reads: the page's in a page function, Date after setSystemTime", async () => {
+    const source = [
+      "test('page clock', async ({ page }) => {",
+      '  expect(await page.evaluate(() => performance.now() - window.opened)).toBeLessThan(250);',
+      '  await page.clock.install();',
+      '  const started = performance.now();',
+      '  await page.clock.fastForward("11:00");',
+      '  expect(performance.now() - started).toBeLessThan(250);',
+      '  expect(await page.evaluate(() => Date.now() - window.opened)).toBeLessThan(120_000);',
+      '});',
+      "test('system time', () => {",
+      '  setSystemTime(new Date("2026-03-02T08:00:00Z"));',
+      '  const started = performance.now();',
+      '  expect(performance.now() - started).toBeLessThan(250);',
+      '  expect(Date.now() - opened).toBeLessThan(60_000);',
+      '});',
+    ].join('\n');
+    expect(await reported('no-fixed-time-limit', source, CONTRACT)).toEqual([2, 6, 12]);
+  });
+
+  test('a seeded fixed limit fails the lint of a real contract and of a shared session helper', async () => {
+    const seed = `
+export async function seeded(page) {
+  const started = Date.now();
+  await page.getByRole('main').click();
+  expect(Date.now() - started).toBeLessThan(250);
+}
+`;
+    for (const file of ['tests/ui-contracts/problem-report.spec.ts', 'tests/golden/support/sessions.ts']) {
+      const source = `${readFileSync(resolve(repositoryRoot, file), 'utf8')}${seed}`;
+      expect(await reported('no-fixed-time-limit', source, file), file).toHaveLength(1);
+    }
   });
 });
 
@@ -306,7 +431,8 @@ describe('test-hygiene scope', () => {
       'tests/canary/support/probe.ts',
     ]) {
       const rules = effectiveLintRules(await eslint.calculateConfigForFile(file));
-      for (const rule of shared) expect(rules[`test-hygiene/${rule}`]?.[0], `${file} ${rule}`).toBe(2);
+      for (const rule of [...shared, 'no-fixed-time-limit'])
+        expect(rules[`test-hygiene/${rule}`]?.[0], `${file} ${rule}`).toBe(2);
       expect(rules['test-hygiene/no-unpinned-clock']?.[0] === 2, file).toBe(file.startsWith('lib/'));
     }
     for (const file of [

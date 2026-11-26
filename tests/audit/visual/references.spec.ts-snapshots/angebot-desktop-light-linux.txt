@@ -13,6 +13,7 @@ Aufträge
 Dokumente
 Inventar
 Angebote
+Rechnungen
 Service
 Arbeitsvorlagen
 Mitarbeiter
@@ -29,6 +30,7 @@ Alle Angebote
 Austausch Gas-Brennwerttherme
 ANG-2026-001 · für Familie Hoffmann
 Entwurf
+Bearbeiten
 Angebotskopf
 Kunde
 Familie Hoffmann

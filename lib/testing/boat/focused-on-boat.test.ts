@@ -4,8 +4,7 @@
 // into a silent local build: it names the reason and the deliberate local command. The references
 // an update rewrote are placed only after a passed update run, except one changed here meanwhile.
 import { expect, spyOn, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import {
@@ -16,6 +15,7 @@ import {
   placeReferenceUpdates,
 } from './focused-on-boat';
 import { REFERENCE_UPDATES, REPLACED_REFERENCES, referenceHashes, updateFolder } from './reference-updates';
+import { temporaryDirectory } from '../temporary-directory';
 
 const UPDATE = { WERKFLOW_UPDATE_VISUAL_REFERENCES: '1' };
 const drift = {
@@ -160,7 +160,7 @@ test('only a passed update run places its references, and a reference changed he
   // `unmarked` returns a failed run's references in the plain update folder, as a run that wrote it itself would.
   type Run = { remote: number; code: number; editHere?: boolean; stray?: boolean; unmarked?: boolean };
   const run = ({ remote, code, editHere = false, stray = false, unmarked = false }: Run) => {
-    const repository = mkdtempSync(join(tmpdir(), 'reference-place-'));
+    const repository = temporaryDirectory('reference-place-');
     write(repository, `${SNAPSHOTS}/a.png`, 'old');
     write(repository, `${SNAPSHOTS}/b.png`, 'old');
     write(repository, `${REFERENCE_UPDATES}/earlier/${SNAPSHOTS}/a.png`, 'earlier');

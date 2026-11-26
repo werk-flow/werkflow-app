@@ -11,7 +11,7 @@ import { signInSupportUser } from '../../golden/support/support-session';
 import { goldenTestEmail } from '../../golden/support/seed';
 import { settled } from '../../golden/support/steps/interaction';
 import { openPage } from '../../golden/support/streamed-content';
-import { simulatedPaymentButton, signUpViaUi } from '../../golden/support/steps/organization';
+import { payForNewOrganization, signUpViaUi } from '../../golden/support/steps/organization';
 import type { TestWorld } from '../../golden/support/world';
 
 // The sessions of the screens outside the app shell
@@ -96,9 +96,7 @@ async function prepareSession(
   }
   const { email } = await signUpNewcomer(page, world);
   if (session === 'subscriber') {
-    await page.goto('/upgrade');
-    await simulatedPaymentButton(page).click();
-    await expect(page).toHaveURL(/\/onboarding\/create-organization/);
+    await payForNewOrganization(page, email);
   }
   if (session === 'prestart') await makePrestartMember(world, email);
   return email;

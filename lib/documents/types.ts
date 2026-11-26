@@ -109,6 +109,7 @@ export type DocumentLink = {
   equipmentId: string | null;
   serviceCaseId: string | null;
   maintenanceCoverageId: string | null;
+  offerId: string | null;
   jobTitle: string | null;
   jobNumber: string | null;
   projectName: string | null;
@@ -123,6 +124,7 @@ export type DocumentLink = {
   serviceCaseNumber: string | null;
   serviceCaseSummary: string | null;
   maintenanceCoverageNumber: string | null;
+  offerNumber: string | null;
   createdBy: string;
   createdAt: string;
 };
@@ -350,6 +352,7 @@ export function toDocumentLink(
     serviceCaseNumber?: string | null;
     serviceCaseSummary?: string | null;
     maintenanceCoverageNumber?: string | null;
+    offerNumber?: string | null;
   },
 ): DocumentLink {
   return {
@@ -364,6 +367,7 @@ export function toDocumentLink(
     equipmentId: row.equipment_id,
     serviceCaseId: row.service_case_id,
     maintenanceCoverageId: row.maintenance_coverage_id,
+    offerId: row.offer_id,
     jobTitle: context?.jobTitle ?? null,
     jobNumber: context?.jobNumber ?? null,
     projectName: context?.projectName ?? null,
@@ -378,6 +382,7 @@ export function toDocumentLink(
     serviceCaseNumber: context?.serviceCaseNumber ?? null,
     serviceCaseSummary: context?.serviceCaseSummary ?? null,
     maintenanceCoverageNumber: context?.maintenanceCoverageNumber ?? null,
+    offerNumber: context?.offerNumber ?? null,
     createdBy: row.created_by,
     createdAt: row.created_at,
   };

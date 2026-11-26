@@ -6,23 +6,52 @@
 # staging.yml applies them to DEV with the `supabase db push --include-all` the release then runs
 # on PROD, so a migration that sorts before one already applied reaches PROD only after it reached
 # DEV (docs/technical/environments.md, "The migration rule"). It reads DEV through the Management
-# API's read-only query endpoint and prints versions only, never a response body: the repository
-# is public. Needs SUPABASE_ACCESS_TOKEN and DEV_PROJECT_REF.
+# API's read-only query endpoint with a token that may only read DEV's database (`database_read`
+# on DEV alone), so the release reads no PROD data with it. A failed read
+# names the HTTP status and a fixed cause, never the response body: the repository is public.
+# Anything but a list of 14-digit versions applies nothing to PROD.
+# Needs SUPABASE_DEV_READ_TOKEN and DEV_PROJECT_REF.
 set -euo pipefail
+# The token stays a shell variable but leaves the environment before any child starts, so curl
+# gets it only from its config.
+export -n SUPABASE_DEV_READ_TOKEN
+source "$(dirname "$0")/curl-headers.sh"
+
+fail() {
+  echo "::error title=DEV migrations::$1"
+  exit 1
+}
+
+unread() {
+  fail "DEV's migration ledger could not be read (HTTP $1): $2 The release applies nothing to PROD."
+}
 
 committed="$(ls supabase/migrations | sed -nE 's/^([0-9]{14})_.+\.sql$/\1/p' | sort -u)"
-test -n "$committed" || { echo "::error title=DEV migrations::supabase/migrations holds no migration."; exit 1; }
-if ! ledger="$(curl --fail --silent --max-time 60 -X POST \
-  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H 'Content-Type: application/json' \
+test -n "$committed" || fail "supabase/migrations holds no migration."
+body="$(mktemp)"
+trap 'rm -f "$body"' EXIT
+sent=0
+# --disable first: no .curlrc adds an option. curl's own error text goes nowhere; its exit code is enough.
+status="$(curl --disable --silent --max-time 60 --output "$body" --write-out '%{http_code}' -X POST \
+  --config <(curl_headers <<< "Authorization: Bearer ${SUPABASE_DEV_READ_TOKEN}") -H 'Content-Type: application/json' \
   --data '{"query":"select version from supabase_migrations.schema_migrations order by version"}' \
-  "https://api.supabase.com/v1/projects/${DEV_PROJECT_REF}/database/query/read-only" \
-  | jq -r '.[].version' 2> /dev/null | sort -u)"; then
-  echo "::error title=DEV migrations::DEV's migration ledger could not be read, so the release applies nothing to PROD. Rerun the release once the Supabase API answers."
-  exit 1
-fi
+  "https://api.supabase.com/v1/projects/${DEV_PROJECT_REF}/database/query/read-only" 2> /dev/null)" || sent=$?
+test "$sent" = 0 || unread "${status:-000}" "Supabase's answer did not arrive (curl exit ${sent}). Rerun the release once the Supabase API answers."
+case "$status" in
+  2??) ;;
+  401) unread "$status" "Supabase rejected SUPABASE_DEV_READ_TOKEN as expired, revoked or malformed. Replace the repository secret SUPABASE_DEV_READ_TOKEN." ;;
+  403) unread "$status" "SUPABASE_DEV_READ_TOKEN may not run read-only queries on DEV. It needs the permission database_read on project ${DEV_PROJECT_REF}. Fix the token behind the repository secret SUPABASE_DEV_READ_TOKEN." ;;
+  404) unread "$status" "Supabase found no project ${DEV_PROJECT_REF} or no read-only query endpoint for SUPABASE_DEV_READ_TOKEN." ;;
+  429) unread "$status" "Supabase rate-limited the token. Rerun the release in a few minutes." ;;
+  5??) unread "$status" "Supabase failed to run the query. Rerun once; if it repeats, DEV's role supabase_read_only_user may lack access to supabase_migrations." ;;
+  *) unread "$status" "Supabase gave an answer the release does not expect." ;;
+esac
+# Only one non-empty JSON array whose rows each carry exactly 14 ASCII digits counts as DEV's
+# ledger. Slurped, so a second document fails it; no regex, since jq's `$` matches before a newline.
+ledger="$(jq -ers 'if length == 1 and (.[0] | type == "array" and length > 0 and all(.[]; .version | type == "string" and length == 14 and (explode | all(. >= 48 and . <= 57)))) then .[0][].version else error end' "$body" 2> /dev/null | sort -u)" \
+  || unread "$status" "Supabase's answer holds no list of migration versions."
 missing="$(comm -23 <(echo "$committed") <(echo "$ledger"))"
 if test -n "$missing"; then
-  echo "::error title=DEV migrations::DEV lacks $(wc -l <<< "$missing" | tr -d ' ') migrations of this commit: $(paste -sd ' ' - <<< "$missing"). PROD receives a migration only after staging applied it to DEV. Wait for the staging run of this commit, or repair it, then release again."
-  exit 1
+  fail "DEV lacks $(wc -l <<< "$missing" | tr -d ' ') migrations of this commit: $(paste -sd ' ' - <<< "$missing"). PROD receives a migration only after staging applied it to DEV. Wait for the staging run of this commit, or repair it, then release again."
 fi
 echo "DEV holds all $(wc -l <<< "$committed" | tr -d ' ') migrations of this commit."

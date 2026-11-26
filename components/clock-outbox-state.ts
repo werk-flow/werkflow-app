@@ -154,7 +154,7 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
   const [firstLook, setFirstLook] = useState<FirstLook>('closed');
   const [deviceFailed, setDeviceFailed] = useState(false);
   const attachRef = useRef<(() => void) | null>(null);
-  // The wipe signal the page started under: after another tab's wipe it keeps nothing more.
+  // The wipe signal the page started under: after another tab's wipe it keeps nothing more, and its outbox holds nothing.
   const signalRef = useRef<string | null>(null);
   const uncheckedRef = useRef(false);
   const holderRef = useRef<OutboxHolder | null>(null);
@@ -183,7 +183,7 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
         return;
       }
       try {
-        detach = await outbox.attachClockOutbox(holder, onView, () => void refresh());
+        detach = await outbox.attachClockOutbox(holder, onView, () => void refresh(), signalRef.current);
         // An attachment that ends after a switch never touches the next holder's state.
         if (ended) return detach();
         setDeviceFailed(false);

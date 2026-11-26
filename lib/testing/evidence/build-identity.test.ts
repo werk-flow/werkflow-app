@@ -1,20 +1,9 @@
-import { afterEach, expect, test } from 'bun:test';
-import {
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { expect, test } from 'bun:test';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import { assertBuildIdentity, calculateBuildInputs, type BuildReceipt } from './build-identity';
-
-const directories: string[] = [];
+import { temporaryDirectory } from '../temporary-directory';
 
 function runtimeToolingImportProblems(repositoryRoot: string): string[] {
   const problems: string[] = [];
@@ -80,13 +69,9 @@ test('root runtime entries receive the same tooling import protection as app fil
     expect(runtimeToolingImportProblems(root)).toContain(`${name}: @/lib/testing/runner/workspace-test-lock`);
   }
 });
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
 
 function fixture(): string {
-  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'werkflow-build-identity-')));
-  directories.push(directory);
+  const directory = realpathSync(temporaryDirectory('werkflow-build-identity-'));
   for (const child of ['app', 'lib', 'docs', 'tests']) mkdirSync(join(directory, child));
   writeFileSync(join(directory, 'app/page.tsx'), 'export default function Page() { return null; }');
   writeFileSync(

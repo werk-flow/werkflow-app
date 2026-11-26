@@ -88,13 +88,14 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     slug: 'abonnement-abrechnung',
     label: 'Abonnement & Abrechnung',
     shortDescription: 'Plan und Abrechnung',
-    description: 'Vertrags-, Rechnungs- und Abonnementinformationen für die Organisation.',
+    description:
+      'Dein WerkFlow-Abo, die nächste Zahlung und alle Rechnungen von WerkFlow an deine Organisation.',
     icon: CreditCard,
     group: 'account',
     scope: 'organization',
-    adminOnlyWrites: true,
-    managersOnly: true,
-    implemented: false,
+    // WerkFlow's invoices and the subscription are the Admin's contract (werk-flow/werkflow-planning#252).
+    adminOnly: true,
+    implemented: true,
   },
   {
     slug: 'dashboard',

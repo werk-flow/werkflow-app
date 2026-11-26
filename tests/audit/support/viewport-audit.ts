@@ -278,7 +278,7 @@ export async function expectAreaHeader(page: Page, route: string): Promise<void>
         '/zeiterfassung/perioden',
         '/zeiterfassung/einstellungen',
       ]
-    : ['/service/faelle', '/service/anlagen', '/service/wartung'];
+    : ['/service/faelle', '/service/anlagen', '/service/wartung', '/service/bereitschaft'];
   const header = pageHeader(page);
   await expect(header).toHaveCount(1);
   await expect(areaHeaderTitle(header, area)).toBeVisible();

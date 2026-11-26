@@ -12,6 +12,7 @@
 # When BREAK_CHECK equals <check-id>, the credential is swapped for an invalid
 # one of the same kind first, to prove that a broken credential fails this step.
 set -euo pipefail
+source "$(dirname "$0")/curl-headers.sh"
 
 environment="$1"
 check="$2"
@@ -45,27 +46,53 @@ if test "${BREAK_CHECK:-}" = "$check"; then
   esac
 fi
 
-# Prints the HTTP status of a GET; the body goes to the file in $body.
+# Prints the HTTP status of a request to $argument, a GET unless the arguments add curl options,
+# with the header lines on stdin; the body goes to the file in $body. The headers reach curl as a
+# config on a file descriptor (curl-headers.sh).
 body="$RUNNER_TEMP/${check}.json"
 # On a timeout or refused connection curl prints 000 itself and exits non-zero.
 get() {
-  curl --silent --max-time 30 --output "$body" --write-out '%{http_code}' "$@" || true
+  curl --silent --max-time 30 "$@" --output "$body" --write-out '%{http_code}' \
+    --config <(curl_headers) "$argument" || true
 }
 
 case "$kind" in
   # A bearer token read: Supabase Management API, Vercel API, GitHub API.
   bearer)
-    status="$(get -H "Authorization: Bearer ${value}" "$argument")"
+    status="$(get <<< "Authorization: Bearer ${value}")"
     test "$status" = 200 || fail "${variable} was refused or unreachable (HTTP ${status})." ;;
 
+  # libpq takes the password from PGPASSWORD, so psql's arguments hold the URL without it. The
+  # URL carries the password percent-encoded in its user info; PGPASSWORD takes it decoded, and
+  # printf -v keeps a decoded trailing newline. Only a postgres URL with one `@` and a query of
+  # the options below passes: any other form could carry a credential into the arguments.
+  # A Supabase Management API read-only query, `select 1`; its answer stays in $body.
+  read-only-query)
+    status="$(get -X POST -H 'Content-Type: application/json' --data '{"query":"select 1"}' <<< "Authorization: Bearer ${value}")"
+    case "$status" in
+      200 | 201) ;;
+      *) fail "${variable} could not run select 1 (HTTP ${status})." ;;
+    esac ;;
+
   database)
-    psql "$value" --no-psqlrc --quiet --tuples-only --command 'select 1' > /dev/null 2>&1 \
+    case "$value" in *$'\n'*) fail "${variable} holds a line break." ;; esac
+    grep -qE '^postgres(ql)?://([^:/@]+(:[^@]*)?@)?[^@]*$' <<< "$value" \
+      || fail "${variable} is no postgres:// URL with a user name before its one @."
+    grep -qE '^[^?]*(\?((sslmode|connect_timeout|application_name)=[A-Za-z0-9_.-]*(&|$))*)?$' <<< "$value" \
+      || fail "${variable} has a query option other than sslmode, connect_timeout or application_name."
+    address="$(sed -E 's#^([^:/]+://[^:/@]+):[^@]*@#\1@#' <<< "$value")"
+    password="$(sed -nE 's#^[^:/]+://[^:/@]+:([^@]*)@.*#\1#p' <<< "$value")"
+    password="${password//\\/\\\\}"
+    printf -v password '%b' "${password//%/\\x}"
+    PGPASSWORD="$password" psql "$address" --no-psqlrc --quiet --tuples-only --command 'select 1' > /dev/null 2>&1 \
       || fail "${variable} could not run select 1." ;;
 
   deploy-key)
     key="$RUNNER_TEMP/deploy-key"
-    printf '%s\n' "$value" > "$key"
-    chmod 600 "$key"
+    # The umask creates the key 0600, so no reader sees it before ssh does. A redirection keeps an
+    # existing file's mode, so a key file left from an earlier run goes first.
+    rm -f "$key"
+    (umask 077; printf '%s\n' "$value" > "$key")
     GIT_SSH_COMMAND="ssh -i ${key} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
       git ls-remote --exit-code "$argument" refs/heads/production > /dev/null 2>&1 \
       || { rm -f "$key"; fail "${variable} could not read the production branch over SSH."; }
@@ -74,12 +101,13 @@ case "$kind" in
   # An app or Supabase health endpoint: the token header, plus the Vercel
   # automation bypass for a protected deployment.
   endpoint | protected-endpoint)
-    headers=(-H "x-health-check-token: ${value}")
     if test "$kind" = protected-endpoint; then
       test -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" || fail "VERCEL_AUTOMATION_BYPASS_SECRET is not configured."
-      headers+=(-H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}")
+      status="$(printf '%s\n' "x-health-check-token: ${value}" \
+        "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" | get)"
+    else
+      status="$(get <<< "x-health-check-token: ${value}")"
     fi
-    status="$(get "${headers[@]}" "$argument")"
     case "$status" in
       200) ;;
       404) fail "The endpoint answered like an unknown route: ${variable} differs between GitHub and the deployment, or the deployment lacks it." ;;

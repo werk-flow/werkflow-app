@@ -63,7 +63,8 @@ const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
     'Redeems an invite code for the verified user; the code names the organization.',
   check_user_exists_by_email:
     'Global account lookup by email for the invite flow; returns no organization data.',
-  create_organization_with_defaults: 'Creates a new organization with the verified user as its first admin.',
+  create_organization_from_subscription:
+    "Creates the organization the verified user's own paid Checkout reserved, with that user as its first admin.",
   consume_rate_limit: 'Counts attempts per keyed subject hash; the limits are global, not per organization.',
   transition_email_change:
     "Changes the verified user's own email-change state, which belongs to no organization.",
@@ -86,6 +87,9 @@ const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
     'Records a Stripe event id that Stripe signed; the ledger holds no organization data, and a handler finds the organization from the Stripe customer.',
   settle_werkflow_billing_signal:
     'Settles, by its Stripe event id, only the signal the same request just claimed.',
+  mark_werkflow_billing_mail_undelivered:
+    'Marks, by the provider message id of a signal Resend signed, only the mails WerkFlow sent under it; each answered row names its own organization, and the handler passes no other.',
+  record_resend_webhook_event: 'Records a Svix id that Resend signed; the record holds no organization data.',
 };
 
 const ORGANIZATION_ARGUMENT_NAMES = ['p_organization_id', 'p_org_id', 'organization_id', 'org_id'];

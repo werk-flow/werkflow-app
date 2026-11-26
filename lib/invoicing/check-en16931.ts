@@ -10,6 +10,7 @@
 
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 import SaxonJS from 'saxon-js';
@@ -42,11 +43,13 @@ const failedAssertsSchema = z.array(
   z.object({ id: z.string(), flag: z.string(), location: z.string(), text: z.string() }),
 );
 
-// Read once per server instance; `new URL(…, import.meta.url)` lets the bundler trace the file.
+// Read once per server instance, by a path from the app root. In a Server Action, Turbopack's
+// production build turns `new URL(…, import.meta.url)` into an object readFile refuses
+// (ERR_INVALID_ARG_TYPE); the build traces the joined path (audit:wave-3:document-pdfs).
 let compiledRules: Promise<unknown> | null = null;
 
 async function loadRules(): Promise<unknown> {
-  const gzipped = await readFile(new URL('./rules/en16931-cii.sef.json.gz', import.meta.url));
+  const gzipped = await readFile(join(process.cwd(), 'lib/invoicing/rules/en16931-cii.sef.json.gz'));
   const digest = createHash('sha256').update(gzipped).digest('hex');
   if (digest !== EN16931_CII_RULES.sefGzipSha256)
     throw new Error('The compiled EN 16931 rules are not the recorded ones.');
@@ -68,6 +71,9 @@ const RULE_FIELDS: Record<string, string> = {
   'BR-Z-02': 'seller.vatId',
   'BR-E-02': 'seller.vatId',
   'BR-CO-25': 'paymentTerms',
+  'BR-49': 'payment',
+  'BR-50': 'payee.iban',
+  'BR-51': 'payment.lastFour',
   'BR-61': 'payee.iban',
   'BR-06': 'seller.name',
   'BR-07': 'buyer.name',
@@ -85,7 +91,11 @@ const LINE_RULE_FIELDS: Record<string, string> = {
   'BR-27': 'unitPriceCents',
 };
 
+/** A party's children; the first on the path wins, so a registration's own `ID` stays the registration. */
 const PARTY_FIELDS: Record<string, string> = {
+  ID: 'identifier',
+  GlobalID: 'identifier',
+  SpecifiedLegalOrganization: 'legalRegistrationId',
   Name: 'name',
   PostalTradeAddress: 'address',
   URIUniversalCommunication: 'email',
@@ -109,13 +119,14 @@ const DOCUMENT_FIELDS: Record<string, string> = {
 };
 
 const HEADER_FIELDS: Record<string, string> = {
+  CreditorReferenceID: 'payment.creditorId',
   BuyerReference: 'buyerReference',
   BuyerOrderReferencedDocument: 'orderReference',
   ShipToTradeParty: 'deliverTo',
   ActualDeliverySupplyChainEvent: 'delivery',
   BillingSpecifiedPeriod: 'delivery',
   InvoiceCurrencyCode: 'currency',
-  SpecifiedTradeSettlementPaymentMeans: 'payee',
+  SpecifiedTradeSettlementPaymentMeans: 'payment',
   SpecifiedTradePaymentTerms: 'paymentTerms',
   SpecifiedTradeSettlementHeaderMonetarySummation: 'totals',
   InvoiceReferencedDocument: 'precedingInvoice',
@@ -136,6 +147,7 @@ const TERM_FIELDS: Record<string, string> = {
   'BT-25': 'precedingInvoice',
   'BG-4': 'seller',
   'BT-27': 'seller.name',
+  'BT-29': 'seller.identifier',
   'BT-30': 'seller.vatId',
   'BT-31': 'seller.vatId',
   'BT-32': 'seller.vatId',
@@ -150,14 +162,18 @@ const TERM_FIELDS: Record<string, string> = {
   'BG-13': 'deliverTo',
   'BT-72': 'delivery',
   'BG-14': 'delivery',
-  'BG-16': 'payee',
-  'BT-81': 'payee',
+  'BG-16': 'payment',
+  'BT-81': 'payment',
   'BT-84': 'payee.iban',
+  'BT-87': 'payment.lastFour',
+  'BT-89': 'payment.mandateReference',
+  'BT-90': 'payment.creditorId',
   'BG-22': 'totals',
   'BT-106': 'totals',
   'BT-109': 'totals',
   'BT-110': 'totals',
   'BT-112': 'totals',
+  'BT-113': 'paidCents',
   'BT-115': 'totals',
   'BG-23': 'taxSubtotals',
   'BG-25': 'lines',

@@ -626,13 +626,40 @@ export function acceptLabChange(input: {
       accepted.reference > bound.reference
         ? { kind: 'raise', target: metric.data, from: bound, to: accepted, runKeys: [runKey], reason }
         : { kind: 'ratchet', target: metric.data, from: bound, to: accepted, runKeys: [runKey], reason };
-    return {
+    const counted: LabStepReference = {
       ...reference,
       counts: { ...reference.counts, [metric.data]: accepted },
       history: [...reference.history, entry],
     };
+    if (metric.data !== 'requests') return counted;
+    // A shape with more requests than its reference prints its bytes ungated (`byteRows`), so a
+    // `requests` accept that left one at its old count would leave its bytes unjudged for good
+    // (2026-11-22: #560 raised Aufgaben from 8 to 14 requests and left `script` at 4 of its 10).
+    return staleLabShapes(counted, observation).reduce(
+      (step, shape) => acceptPayloadChange({ reference: step, observation, shape, runKey, reason }),
+      counted,
+    );
   }
   return acceptPayloadChange({ reference, observation, shape: target, runKey, reason });
+}
+
+/**
+ * The gated shapes whose request count in this observation differs from the
+ * reference's, a shape on one side only included. A prefetch shape never gates.
+ */
+export function staleLabShapes(reference: LabStepReference, observation: LabObservation): string[] {
+  const shapes = new Set([
+    ...observation.payloads.map((payload) => payload.shape),
+    ...Object.keys(reference.payloads),
+  ]);
+  return [...shapes]
+    .filter((shape) => !shape.startsWith('prefetch:'))
+    .filter(
+      (shape) =>
+        (observation.payloads.find((payload) => payload.shape === shape)?.requests ?? 0) !==
+        (reference.payloads[shape]?.requests.reference ?? 0),
+    )
+    .sort();
 }
 
 /** The payload bound a run's observation sets, keeping the tolerances the shape already had. */

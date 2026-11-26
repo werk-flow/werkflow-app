@@ -1,16 +1,16 @@
 // Rule test: a check refuses node_modules installed from another bun.lock, names the install command, and passes once the install stamped the current lockfile.
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import { dependencyStampProblem, writeDependencyStamp } from './dependency-stamp';
+import { temporaryDirectory } from '../temporary-directory';
 
 const INSTALL = '`bun install --frozen-lockfile`';
 const PIN = join('lib', 'inventory', 'wholesaler-reader-pin.json');
 
 function checkout(): string {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-dependency-stamp-'));
+  const root = temporaryDirectory('werkflow-dependency-stamp-');
   mkdirSync(join(root, 'node_modules'));
   writeFileSync(join(root, 'bun.lock'), '{ "lockfileVersion": 1, "packages": {} }\n');
   mkdirSync(join(root, 'lib', 'inventory'), { recursive: true });
@@ -20,41 +20,29 @@ function checkout(): string {
 
 test('a lockfile that changed after the install stops the check with the command, and the install clears it', () => {
   const root = checkout();
-  try {
-    writeDependencyStamp(root);
-    expect(dependencyStampProblem(root)).toBeUndefined();
-    // A merge of main brings a lockfile with a dependency this node_modules lacks.
-    writeFileSync(join(root, 'bun.lock'), '{ "lockfileVersion": 1, "packages": { "fake-indexeddb": [] } }\n');
-    expect(dependencyStampProblem(root)).toContain(INSTALL);
-    writeDependencyStamp(root);
-    expect(dependencyStampProblem(root)).toBeUndefined();
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  writeDependencyStamp(root);
+  expect(dependencyStampProblem(root)).toBeUndefined();
+  // A merge of main brings a lockfile with a dependency this node_modules lacks.
+  writeFileSync(join(root, 'bun.lock'), '{ "lockfileVersion": 1, "packages": { "fake-indexeddb": [] } }\n');
+  expect(dependencyStampProblem(root)).toContain(INSTALL);
+  writeDependencyStamp(root);
+  expect(dependencyStampProblem(root)).toBeUndefined();
 });
 
 test('a moved wholesaler-reader pin stops the check with the command, and the install clears it', () => {
   const root = checkout();
-  try {
-    writeDependencyStamp(root);
-    // A merge of main moves the reader to another commit that vendor/ does not hold yet.
-    writeFileSync(join(root, PIN), `{ "commit": "${'b'.repeat(40)}" }\n`);
-    expect(dependencyStampProblem(root)).toContain(INSTALL);
-    writeDependencyStamp(root);
-    expect(dependencyStampProblem(root)).toBeUndefined();
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  writeDependencyStamp(root);
+  // A merge of main moves the reader to another commit that vendor/ does not hold yet.
+  writeFileSync(join(root, PIN), `{ "commit": "${'b'.repeat(40)}" }\n`);
+  expect(dependencyStampProblem(root)).toContain(INSTALL);
+  writeDependencyStamp(root);
+  expect(dependencyStampProblem(root)).toBeUndefined();
 });
 
 test('node_modules without a stamp stops the check with the command', () => {
   const root = checkout();
-  try {
-    expect(dependencyStampProblem(root)).toContain('no install stamp');
-    expect(dependencyStampProblem(root)).toContain(INSTALL);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  expect(dependencyStampProblem(root)).toContain('no install stamp');
+  expect(dependencyStampProblem(root)).toContain(INSTALL);
 });
 
 test('every install fetches the reader, then stamps, and the checks load the stamp test before any package', () => {

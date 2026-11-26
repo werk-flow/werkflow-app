@@ -2,11 +2,11 @@
 // fails a Vercel production or preview build without the reader, and never shows the key.
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import pin from './wholesaler-reader-pin.json';
 import { installWholesalerReader } from './wholesaler-reader-install';
+import { temporaryDirectory } from '../testing/temporary-directory';
 
 const KEY = 'github_pat_synthetic_key_0123456789';
 const API = `https://api.github.com/repos/${pin.repository}/`;
@@ -69,7 +69,7 @@ function fakeGitHub(
 }
 
 function checkout(): string {
-  return mkdtempSync(join(tmpdir(), 'werkflow-wholesaler-reader-'));
+  return temporaryDirectory('werkflow-wholesaler-reader-');
 }
 
 async function failure(run: Promise<unknown>): Promise<string> {
@@ -89,33 +89,25 @@ test('without a key every machine except a Vercel deployment gets the stand-in, 
     { WERKFLOW_DATANORM_TOKEN: ' ' },
   ]) {
     const root = checkout();
-    try {
-      // A reader from an earlier install with a key does not survive an install without one.
-      mkdirSync(join(root, SOURCE), { recursive: true });
-      writeFileSync(join(root, SOURCE, 'reader.ts'), 'export {};\n');
-      const github = fakeGitHub();
-      expect(await installWholesalerReader({ root, env, fetch: github.fetch })).toEqual({ kind: 'stand-in' });
-      expect(github.requests).toEqual([]);
-      expect(readdirSync(join(root, SOURCE))).toEqual(['index.ts']);
-      expect(await import(join(root, SOURCE, 'index.ts'))).toMatchObject({ readDelivery: undefined });
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    // A reader from an earlier install with a key does not survive an install without one.
+    mkdirSync(join(root, SOURCE), { recursive: true });
+    writeFileSync(join(root, SOURCE, 'reader.ts'), 'export {};\n');
+    const github = fakeGitHub();
+    expect(await installWholesalerReader({ root, env, fetch: github.fetch })).toEqual({ kind: 'stand-in' });
+    expect(github.requests).toEqual([]);
+    expect(readdirSync(join(root, SOURCE))).toEqual(['index.ts']);
+    expect(await import(join(root, SOURCE, 'index.ts'))).toMatchObject({ readDelivery: undefined });
   }
 });
 
 test('a Vercel production or preview build without a key fails and installs nothing', async () => {
   for (const VERCEL_ENV of ['production', 'preview']) {
     const root = checkout();
-    try {
-      const message = await failure(
-        installWholesalerReader({ root, env: { VERCEL: '1', VERCEL_ENV }, fetch: fakeGitHub().fetch }),
-      );
-      expect(message).toContain('WERKFLOW_DATANORM_TOKEN is not set');
-      expect(existsSync(join(root, 'vendor'))).toBe(false);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    const message = await failure(
+      installWholesalerReader({ root, env: { VERCEL: '1', VERCEL_ENV }, fetch: fakeGitHub().fetch }),
+    );
+    expect(message).toContain('WERKFLOW_DATANORM_TOKEN is not set');
+    expect(existsSync(join(root, 'vendor'))).toBe(false);
   }
 });
 
@@ -133,26 +125,22 @@ test('the install script exits non-zero on a Vercel production build without a k
 
 test("a key installs the reader's source files at the pinned commit, without its tests", async () => {
   const root = checkout();
-  try {
-    const github = fakeGitHub();
-    const install = await installWholesalerReader({
-      root,
-      env: { VERCEL: '1', VERCEL_ENV: 'production', WERKFLOW_DATANORM_TOKEN: KEY },
-      fetch: github.fetch,
-    });
-    expect(install).toEqual({ kind: 'reader', repository: pin.repository, commit: pin.commit });
-    expect(readdirSync(join(root, SOURCE)).sort()).toEqual(['index.ts', 'reader.ts']);
-    expect(github.requests.map((request) => request.url.slice(API.length))).toEqual([
-      `git/commits/${pin.commit}`,
-      `git/trees/${TREE}?recursive=1`,
-      `git/blobs/${INDEX_BLOB}`,
-      `git/blobs/${READER_BLOB}`,
-    ]);
-    expect(github.requests.every((request) => request.url.startsWith(API))).toBe(true);
-    expect(existsSync(join(root, 'vendor', 'wholesaler-reader.partial'))).toBe(false);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  const github = fakeGitHub();
+  const install = await installWholesalerReader({
+    root,
+    env: { VERCEL: '1', VERCEL_ENV: 'production', WERKFLOW_DATANORM_TOKEN: KEY },
+    fetch: github.fetch,
+  });
+  expect(install).toEqual({ kind: 'reader', repository: pin.repository, commit: pin.commit });
+  expect(readdirSync(join(root, SOURCE)).sort()).toEqual(['index.ts', 'reader.ts']);
+  expect(github.requests.map((request) => request.url.slice(API.length))).toEqual([
+    `git/commits/${pin.commit}`,
+    `git/trees/${TREE}?recursive=1`,
+    `git/blobs/${INDEX_BLOB}`,
+    `git/blobs/${READER_BLOB}`,
+  ]);
+  expect(github.requests.every((request) => request.url.startsWith(API))).toBe(true);
+  expect(existsSync(join(root, 'vendor', 'wholesaler-reader.partial'))).toBe(false);
 });
 
 test('an answer for another commit, with a malformed SHA or a truncated tree, or a failed request, is refused and keeps the earlier install', async () => {
@@ -168,19 +156,15 @@ test('an answer for another commit, with a malformed SHA or a truncated tree, or
     { unreachable: true },
   ]) {
     const root = checkout();
-    try {
-      await installWholesalerReader({ root, env: {}, fetch: fakeGitHub().fetch });
-      const github = fakeGitHub(answer);
-      const message = await failure(
-        installWholesalerReader({ root, env: { WERKFLOW_DATANORM_TOKEN: KEY }, fetch: github.fetch }),
-      );
-      expect(message.length).toBeGreaterThan(0);
-      expect(github.requests.some((request) => request.url.includes('git/blobs/'))).toBe(false);
-      expect(readdirSync(join(root, SOURCE))).toEqual(['index.ts']);
-      expect(await import(join(root, SOURCE, 'index.ts'))).toMatchObject({ readDelivery: undefined });
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    await installWholesalerReader({ root, env: {}, fetch: fakeGitHub().fetch });
+    const github = fakeGitHub(answer);
+    const message = await failure(
+      installWholesalerReader({ root, env: { WERKFLOW_DATANORM_TOKEN: KEY }, fetch: github.fetch }),
+    );
+    expect(message.length).toBeGreaterThan(0);
+    expect(github.requests.some((request) => request.url.includes('git/blobs/'))).toBe(false);
+    expect(readdirSync(join(root, SOURCE))).toEqual(['index.ts']);
+    expect(await import(join(root, SOURCE, 'index.ts'))).toMatchObject({ readDelivery: undefined });
   }
 });
 
@@ -199,20 +183,16 @@ test('the key reaches GitHub in the Authorization header only and appears in no 
     { unreachable: true },
   ]) {
     const root = checkout();
-    try {
-      const github = fakeGitHub(answer);
-      const run = installWholesalerReader({
-        root,
-        env: { WERKFLOW_DATANORM_TOKEN: KEY },
-        fetch: github.fetch,
-      });
-      shown.push(Object.keys(answer).length === 0 ? JSON.stringify(await run) : await failure(run));
-      for (const request of github.requests) {
-        expect(request.url).not.toContain(KEY);
-        expect(request.authorization).toBe(`Bearer ${KEY}`);
-      }
-    } finally {
-      rmSync(root, { recursive: true, force: true });
+    const github = fakeGitHub(answer);
+    const run = installWholesalerReader({
+      root,
+      env: { WERKFLOW_DATANORM_TOKEN: KEY },
+      fetch: github.fetch,
+    });
+    shown.push(Object.keys(answer).length === 0 ? JSON.stringify(await run) : await failure(run));
+    for (const request of github.requests) {
+      expect(request.url).not.toContain(KEY);
+      expect(request.authorization).toBe(`Bearer ${KEY}`);
     }
   }
   expect(shown).toHaveLength(8);
@@ -221,26 +201,22 @@ test('the key reaches GitHub in the Authorization header only and appears in no 
 
 test("the machine's GitHub login is read only when asked for and no key variable is set", async () => {
   const root = checkout();
-  try {
-    let logins = 0;
-    const githubLogin = () => {
-      logins += 1;
-      return `${KEY}\n`;
-    };
-    const github = fakeGitHub();
-    await installWholesalerReader({
-      root,
-      env: { WERKFLOW_DATANORM_TOKEN: 'variable-key' },
-      githubLogin,
-      fetch: github.fetch,
-    });
-    expect(logins).toBe(0);
-    expect(github.requests[0]?.authorization).toBe('Bearer variable-key');
-    const withLogin = fakeGitHub();
-    await installWholesalerReader({ root, env: {}, githubLogin, fetch: withLogin.fetch });
-    expect(logins).toBe(1);
-    expect(withLogin.requests[0]?.authorization).toBe(`Bearer ${KEY}`);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  let logins = 0;
+  const githubLogin = () => {
+    logins += 1;
+    return `${KEY}\n`;
+  };
+  const github = fakeGitHub();
+  await installWholesalerReader({
+    root,
+    env: { WERKFLOW_DATANORM_TOKEN: 'variable-key' },
+    githubLogin,
+    fetch: github.fetch,
+  });
+  expect(logins).toBe(0);
+  expect(github.requests[0]?.authorization).toBe('Bearer variable-key');
+  const withLogin = fakeGitHub();
+  await installWholesalerReader({ root, env: {}, githubLogin, fetch: withLogin.fetch });
+  expect(logins).toBe(1);
+  expect(withLogin.requests[0]?.authorization).toBe(`Bearer ${KEY}`);
 });

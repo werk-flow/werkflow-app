@@ -5,44 +5,47 @@ import { seedJob, seedProject } from '../../../golden/support/db/work';
 import { acceptanceSet, type OpenSet } from '../acceptance-sets';
 import { surfaceFixture } from '../surface-fixtures';
 
-/** The made-up customer whose name the hit captures search for. */
-const CUSTOMER = 'Hausverwaltung Lindenhof GmbH';
+/**
+ * The made-up customer whose name the hit captures search for. No other set seeds „Kastanienhof“,
+ * so the hits stay the same whichever sets ran before in the shared world.
+ */
+const CUSTOMER = 'Hausverwaltung Kastanienhof GmbH';
 
-/** Seeds a customer with a site, a contact, a project and a job that all match „Lindenhof“, once per world. */
-async function seedLindenhof(world: TestWorld): Promise<void> {
-  await surfaceFixture(world, 'search.lindenhof', async () => {
+/** Seeds a customer with a site, a contact, a project and a job that all match „Kastanienhof“, once per world. */
+async function seedKastanienhof(world: TestWorld): Promise<void> {
+  await surfaceFixture(world, 'search.kastanienhof', async () => {
     const actorId = world.users.admin.id;
     const customer = await seedCustomer({
       orgId: world.orgId,
       actorId,
       name: CUSTOMER,
       clientType: 'gewerblich',
-      address: 'Lindenhofstraße 4, 70173 Stuttgart',
+      address: 'Kastanienhofstraße 4, 70173 Stuttgart',
       contacts: [{ name: 'Erika Musterfrau', role: 'Verwalterin', phone: '0711 4455667', isPrimary: true }],
       sites: [
         {
-          name: 'Wohnanlage Lindenhof',
-          street: 'Lindenhofstraße 4',
+          name: 'Wohnanlage Kastanienhof',
+          street: 'Kastanienhofstraße 4',
           postalCode: '70173',
           city: 'Stuttgart',
           isPrimary: true,
         },
       ],
     });
-    const siteId = customer.siteIds.get('Wohnanlage Lindenhof');
+    const siteId = customer.siteIds.get('Wohnanlage Kastanienhof');
     const projectId = await seedProject({
       orgId: world.orgId,
       actorId,
-      projectNumber: `PRJ-${world.runId}-LINDENHOF`,
-      name: 'Heizungstausch Wohnanlage Lindenhof',
+      projectNumber: `PRJ-${world.runId}-KASTANIENHOF`,
+      name: 'Heizungstausch Wohnanlage Kastanienhof',
       clientId: customer.clientId,
       ...(siteId ? { siteId } : {}),
     });
     await seedJob({
       orgId: world.orgId,
       actorId,
-      jobNumber: `AUF-${world.runId}-LINDENHOF`,
-      title: 'Wartung Gastherme Lindenhof',
+      jobNumber: `AUF-${world.runId}-KASTANIENHOF`,
+      title: 'Wartung Gastherme Kastanienhof',
       clientId: customer.clientId,
       ...(siteId ? { siteId } : {}),
       projectId,
@@ -52,9 +55,9 @@ async function seedLindenhof(world: TestWorld): Promise<void> {
 }
 
 /** Types the query into the open search and waits for the customer's hit. */
-async function searchLindenhof(layer: Locator, world: TestWorld): Promise<void> {
-  await seedLindenhof(world);
-  await layer.getByRole('textbox', { name: 'Suchbegriff', exact: true }).fill('Lindenhof');
+async function searchKastanienhof(layer: Locator, world: TestWorld): Promise<void> {
+  await seedKastanienhof(world);
+  await layer.getByRole('textbox', { name: 'Suchbegriff', exact: true }).fill('Kastanienhof');
   await expect(
     layer
       .getByRole('region', { name: 'Kunden', exact: true })
@@ -90,7 +93,7 @@ function headerSearchCaptures(): OpenSet {
         view: officeSearch,
         widths: [1280],
         schemes: ['light'],
-        inLayer: searchLindenhof,
+        inLayer: searchKastanienhof,
       },
       {
         id: 'admin-search-hits-phone',
@@ -99,7 +102,7 @@ function headerSearchCaptures(): OpenSet {
         view: officeSearch,
         widths: [375],
         schemes: ['dark'],
-        inLayer: searchLindenhof,
+        inLayer: searchKastanienhof,
       },
     ],
     standalone: [],

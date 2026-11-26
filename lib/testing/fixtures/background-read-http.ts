@@ -257,6 +257,10 @@ mock.module('@/lib/installed-equipment/field-history-reads', () => ({
   getFieldEquipmentHistory: seam('equipment-field-history'),
   getFieldEquipmentDocuments: seam('equipment-field-documents'),
 }));
+mock.module('@/lib/installed-equipment/open-findings-reads', () => ({
+  equipmentOpenFindingsInputSchema: z.object({ equipmentId: z.string() }),
+  getEquipmentOpenFindings: seam('equipment-open-findings'),
+}));
 mock.module('@/lib/installed-equipment/source-options-server', () => ({
   getEquipmentSourceOptions: seam('equipment-sources'),
 }));
@@ -264,6 +268,10 @@ mock.module('@/lib/time-tracking/picker-actions', () => ({ getJobsForPicker: sea
 mock.module('@/lib/maintenance/actions', () => ({
   getMaintenanceWorkspace: seam('maintenance-workspace'),
   getMaintenanceEvidenceOptions: seam('maintenance-evidence-options'),
+}));
+mock.module('@/lib/on-call/actions', () => ({ getOnCallOverview: seam('on-call-overview') }));
+mock.module('@/lib/service-reports/page-actions', () => ({
+  getCompletedVisitPage: seam('completed-maintenance-visits'),
 }));
 mock.module('@/lib/work-templates/actions', () => ({
   getWorkTemplates: seam('work-templates'),
@@ -324,6 +332,11 @@ await check(
 );
 await check(
   request('equipment-detail', { organizationId: foreignOrg, equipmentNumber: 'AN-1' }),
+  403,
+  failure('organization_changed'),
+);
+await check(
+  request('equipment-open-findings', { organizationId: foreignOrg, equipmentId: jobId }),
   403,
   failure('organization_changed'),
 );
@@ -474,6 +487,8 @@ const inputs: Record<string, unknown> = {
     planPage: 2,
     coveragePage: 3,
   },
+  'on-call-overview': { organizationId },
+  'completed-maintenance-visits': { organizationId, page: 2 },
   'published-work-templates': { targetType: 'project' },
   'work-template-preview': { versionId: jobId, targetType: 'job', jobId },
   'approved-artifact-actions': { targetType: 'job', targetId: jobId },
@@ -489,6 +504,7 @@ const inputs: Record<string, unknown> = {
   'maintenance-evidence-options': { jobId },
   'equipment-field-history': { jobId, equipmentId: jobId, before: '2026-10-01|visit:1' },
   'equipment-field-documents': { jobId, equipmentId: jobId },
+  'equipment-open-findings': { organizationId, equipmentId: jobId },
   'next-job-number': { organizationId },
   'next-project-number': { organizationId },
   'next-request-number': { organizationId },
@@ -513,10 +529,12 @@ const inputs: Record<string, unknown> = {
 };
 // What each reader receives: some take the bare identifier, the rest the validated object.
 const readerArguments: Record<string, unknown> = {
+  'completed-maintenance-visits': { page: 2 },
   'organization-member-options': organizationId,
   'profiles-by-ids': [jobId],
   'pending-sessions': organizationId,
   'pending-change-requests': organizationId,
+  'on-call-overview': organizationId,
   'time-correction-requests': [organizationId, 'approvals'],
   'time-correction-history': [organizationId, 2],
   'time-correction-form-options': organizationId,
@@ -547,6 +565,7 @@ const readerArguments: Record<string, unknown> = {
   'work-template-detail': jobId,
   'project-job-time-entries': jobId,
   'equipment-detail': 'AN-1',
+  'equipment-open-findings': { equipmentId: jobId },
   'published-work-templates': 'project',
   'assignment-team-options': undefined,
   'client-relations': jobId,
