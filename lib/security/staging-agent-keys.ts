@@ -175,7 +175,7 @@ export function queryErrorSqlState(body: unknown): string | undefined {
 /** A check's outcome: `ok`, or `failed` with the condition that failed. A reason never quotes a body. */
 export type Outcome = { verdict: 'ok' } | { verdict: 'failed'; reason: string };
 
-const failed = (reason: string): Outcome => ({ verdict: 'failed', reason });
+const failedOutcome = (reason: string): Outcome => ({ verdict: 'failed', reason });
 
 const readOnlyStateSchema = z.object({
   enabled: z.unknown().optional(),
@@ -188,13 +188,13 @@ const readOnlyStateSchema = z.object({
  * reason names the status or the field, never a value of another field.
  */
 export function readOnlyModeOffOutcome(status: number, body: unknown): Outcome {
-  if (status !== 200) return failed(`DEV's read-only state answered ${status}, not 200`);
+  if (status !== 200) return failedOutcome(`DEV's read-only state answered ${status}, not 200`);
   const parsed = readOnlyStateSchema.safeParse(body);
-  if (!parsed.success) return failed("DEV's read-only state is no JSON object");
+  if (!parsed.success) return failedOutcome("DEV's read-only state is no JSON object");
   for (const field of ['enabled', 'override_enabled'] as const) {
     const value = parsed.data[field];
     if (value !== false)
-      return failed(
+      return failedOutcome(
         `DEV's read-only state has ${field} ${value === true ? 'true' : 'missing or not a boolean'}`,
       );
   }
@@ -217,9 +217,9 @@ export function writeRefusedOutcome(
   if (status === 400 && sqlState === '25006')
     return readOnlyModeOff.verdict === 'ok'
       ? readOnlyModeOff
-      : failed(`a read-only transaction refused the write, but ${readOnlyModeOff.reason}`);
+      : failedOutcome(`a read-only transaction refused the write, but ${readOnlyModeOff.reason}`);
   const answer = sqlState === undefined ? `${status}` : `${status} with SQLSTATE ${sqlState}`;
-  return failed(`the write answered ${answer}, not 403 or 400 with SQLSTATE 25006`);
+  return failedOutcome(`the write answered ${answer}, not 403 or 400 with SQLSTATE 25006`);
 }
 
 const livemodeSchema = z.object({ livemode: z.boolean() });
