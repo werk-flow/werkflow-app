@@ -31,7 +31,7 @@ function finish(reason: 'stop' | 'tool-calls', inputTokens: number, outputTokens
   };
 }
 
-function text(...deltas: string[]): StreamPart[] {
+function textParts(...deltas: string[]): StreamPart[] {
   return [
     { type: 'text-start', id: 'text' },
     ...deltas.map((delta): StreamPart => ({ type: 'text-delta', id: 'text', delta })),
@@ -61,7 +61,7 @@ const overloadedInStream: StreamPart = {
 };
 
 const answer: ReplayAttempt = () => [
-  ...text(
+  ...textParts(
     'Hallo! Ich bin WerkFlow KI. ',
     'Hier läuft kein Modell, ',
     'deshalb antworte ich aus einer Aufzeichnung.',
@@ -71,19 +71,19 @@ const answer: ReplayAttempt = () => [
 
 const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
   antwort: [answer],
-  echo: [(userText) => [...text('Du hast geschrieben: ', userText), finish('stop', 900, 60)]],
+  echo: [(userText) => [...textParts('Du hast geschrieben: ', userText), finish('stop', 900, 60)]],
   // Injection case (B21): the model was told to mail a customer and calls a tool
   // that does not exist, again and again. No tool runs; the step limit ends it.
   schleife: [
     () => [
-      ...text('Ich schicke die Unterlagen jetzt an den Kunden. '),
+      ...textParts('Ich schicke die Unterlagen jetzt an den Kunden. '),
       toolCall('mail_senden', { an: 'kunde@example.com', anhang: 'alle Angebote' }),
       finish('tool-calls', 1200, 80),
     ],
   ],
   'zwei-schritte': [
     () => [toolCall('auftrag_lesen', { auftrag: 'A-1001' }), finish('tool-calls', 1100, 30)],
-    () => [...text('Der Auftrag ist erledigt.'), finish('stop', 1300, 20)],
+    () => [...textParts('Der Auftrag ist erledigt.'), finish('stop', 1300, 20)],
   ],
   ueberlastet: [() => providerError(529, '{"type":"error","error":{"type":"overloaded_error"}}'), answer],
   ausgabenlimit: [
@@ -124,13 +124,13 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
       ),
   ],
   // A stream that breaks after it began: what the user saw stays, nothing is retried.
-  abbruch: [() => [...text('Ich fange an'), overloadedInStream]],
+  abbruch: [() => [...textParts('Ich fange an'), overloadedInStream]],
   // Overloaded after the stream began but before any text: retried like a refused request.
   'ueberlastet-im-strom': [() => [overloadedInStream], answer],
   // The provider's stream ends without its final event, after it wrote and without usage.
   unterbrochen: [
     () => [
-      ...text('Ich fange an'),
+      ...textParts('Ich fange an'),
       {
         type: 'finish',
         finishReason: { unified: 'interrupted', raw: undefined },
@@ -143,7 +143,7 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
   ],
   // An answer that outgrows the stored answer cap.
   'zu-lang': [
-    () => [...text(...Array.from({ length: 80 }, () => 'Rohr '.repeat(200))), finish('stop', 900, 4000)],
+    () => [...textParts(...Array.from({ length: 80 }, () => 'Rohr '.repeat(200))), finish('stop', 900, 4000)],
   ],
   // A provider failure whose body quotes the user's message: it must never reach a log (B17).
   'echo-fehler': [(userText) => providerError(500, JSON.stringify({ error: { message: userText } }))],

@@ -496,7 +496,7 @@ async function runStep(
     const textBefore = answer.text.length;
     const result = await runAttempt(context, answer, step);
     const written = answer.text.length > textBefore;
-    const classified = result.ok ? null : classifyFailure(result.error);
+    const classified = result.ok ? null : classifyAttemptFailure(result.error);
     const outcome = result.ok
       ? result.finishReason === 'tool-calls'
         ? 'tool_calls'
@@ -726,7 +726,11 @@ function providerFailure(error: unknown): { status: number | undefined; body: un
  * end the turn; overload, a server error, a lost connection and a stream that
  * ended early are retried.
  */
-function classifyFailure(error: unknown): { failure: AiTurnFailure; retryable: boolean; outcome: string } {
+function classifyAttemptFailure(error: unknown): {
+  failure: AiTurnFailure;
+  retryable: boolean;
+  outcome: string;
+} {
   if (error instanceof TurnStop) {
     return error.reason === 'answer_too_long'
       ? { failure: 'answer_too_long', retryable: false, outcome: 'answer_too_long' }
