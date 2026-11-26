@@ -11,8 +11,8 @@ const TREE = 'c'.repeat(40);
 const HEAD = 'd'.repeat(40);
 const OLD = 'e'.repeat(40);
 
-/** A queued PR as the runner's environment reads it: its number and its list-growth approval. */
-const queued = (number: number, listGrowthApproved = false): QueuedPull => ({
+/** A queued PR as the runner's environment reads it: its number and its growth approvals. */
+const queued = (number: number, growthApprovals: readonly string[] = []): QueuedPull => ({
   number,
   title: `PR ${number}`,
   headSha: HEAD,
@@ -20,7 +20,7 @@ const queued = (number: number, listGrowthApproved = false): QueuedPull => ({
   queuedAt: '2026-11-21T08:00:00Z',
   check: 'SUCCESS',
   mergeState: 'BLOCKED',
-  listGrowthApproved,
+  growthApprovals,
 });
 
 test("an integration run names the batch's base, PRs and run, and takes any PR's list-growth approval", () => {
@@ -34,7 +34,7 @@ test("an integration run names the batch's base, PRs and run, and takes any PR's
       resultsDir: '/runs/1',
       repository: '/queue',
     });
-  expect(environment([queued(1), queued(2, true)])).toEqual({
+  expect(environment([queued(1), queued(2, ['approved: list growth'])])).toEqual({
     CI_EVENT: 'integration',
     CI_BASE_SHA: MAIN,
     CI_RUN_URL: 'queue/1',
@@ -76,11 +76,16 @@ test("GitHub's pages give each PR's queue place, its head's Check and its approv
       queuedAt: '2026-11-21T08:00:00Z',
       check: 'SUCCESS',
       mergeState: 'BLOCKED',
-      listGrowthApproved: true,
+      growthApprovals: ['approved: list growth'],
     },
   ]);
   const olderHead = node({ commits: { nodes: [{ commit: { oid: OLD, status: null } }] } });
   expect(pullsFromGitHub(answer([olderHead]))[0]?.check).toBe('MISSING');
+  // The context growth label is a growth approval too: its PR runs in a batch of its own.
+  const contextGrowth = node({ labels: { totalCount: 1, nodes: [{ name: 'approved: context growth' }] } });
+  expect(pullsFromGitHub(answer([contextGrowth]))[0]?.growthApprovals).toEqual(['approved: context growth']);
+  const unlabelled = node({ labels: { totalCount: 1, nodes: [{ name: 'needs-coderabbit' }] } });
+  expect(pullsFromGitHub(answer([unlabelled]))[0]?.growthApprovals).toEqual([]);
   expect(() => pullsFromGitHub(answer([node()], 101))).toThrow('GitHub listed 1 of 101');
   const pages = [...answer([node()], 2), ...answer([node({ number: 8 })], 2)];
   expect(pullsFromGitHub(pages).map((entry) => entry.number)).toEqual([7, 8]);

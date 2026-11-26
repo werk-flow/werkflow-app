@@ -24,11 +24,24 @@ type Extractor =
   | { readonly kind: 'numeric-exports' }
   | { readonly kind: 'sql-object'; readonly name: string };
 
+/**
+ * The owner's labels that let a shrink-only list grow, each on its own lists
+ * (docs/technical/testing.md, "Grow a shrink-only list").
+ */
+export const GROWTH_APPROVAL_LABELS = ['approved: list growth', 'approved: context growth'] as const;
+type GrowthApprovalLabel = (typeof GROWTH_APPROVAL_LABELS)[number];
+
 export type ShrinkOnlyList = {
   readonly id: string;
   readonly file: string;
   readonly extract: Extractor;
+  /** The owner's label that lets this list grow; `approved: list growth` when unnamed. */
+  readonly approval?: GrowthApprovalLabel;
 };
+
+/** The label a list's growth needs. */
+export const approvalLabel = (list: ShrinkOnlyList): GrowthApprovalLabel =>
+  list.approval ?? 'approved: list growth';
 
 /** Properties that explain an entry; editing them is not growth. */
 const EXPLANATION_KEYS = new Set(['reason', 'reasons', 'bound']);
@@ -129,6 +142,13 @@ export const SHRINK_ONLY_LISTS: readonly ShrinkOnlyList[] = [
   variable('role denial groups', 'lib/testing/selection/change-triggers.ts', 'ROLE_DENIAL_GROUPS'),
   variable('interval files', 'eslint.config.mjs', 'intervalAllowList'),
   variable('derived-state effects', 'eslint.config.mjs', 'derivedStateEffectExceptions'),
+  {
+    // What every WerkFlow KI turn sends before the thread (check 2 of werk-flow/werkflow-planning#20).
+    id: 'agent context budget',
+    file: 'lib/ai/agent-context-budget.json',
+    extract: { kind: 'json', path: [] },
+    approval: 'approved: context growth',
+  },
   {
     id: 'browser wait registry',
     file: 'tests/golden/support/timeouts.ts',
