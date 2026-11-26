@@ -45,6 +45,12 @@ let alarmDown = false;
 
 mock.module('server-only', () => ({}));
 // The dispatch table also loads the families that send customer mails; none runs here.
+// The invoice mails after an issue have their own cases (billing-invoice-mails.ts).
+mock.module('@/lib/werkflow-billing/invoice-mails', () => ({
+  sendDebitNotice: async () => {},
+  sendInvoiceMail: async () => {},
+  sendReceiptMail: async () => {},
+}));
 mock.module('@/lib/werkflow-billing/mail-delivery', () => ({
   deliverCustomerBillingMail: async () => assert.fail('a customer mail was sent'),
   describeCustomerMail: () => assert.fail('a customer mail was described'),
