@@ -98,7 +98,8 @@ export async function openCheckout(request: CheckoutRequest): Promise<CheckoutOu
 
   try {
     const stored = await readOrganizationSubscription(request.organizationId);
-    if (stored?.holdsSubscription) return { ok: false, code: 'already_subscribed' };
+    // A subscription Stripe ended after a failed first debit still holds, but a new Checkout restarts it.
+    if (stored?.runsSubscription) return { ok: false, code: 'already_subscribed' };
 
     const customerId =
       stored?.stripeCustomerId ??
@@ -129,7 +130,7 @@ export async function openCheckout(request: CheckoutRequest): Promise<CheckoutOu
           // Read outside the row lock: one Stripe call per start that finds a stored session.
           const stored = await subscriptions.readCheckout(begun.session_id);
           if (stored.open) return { ok: true, url: begun.session_url };
-          if (await recordsHolding(request.organizationId, stored.subscriptionId, subscriptions)) {
+          if (await recordsRunning(request.organizationId, stored.subscriptionId, subscriptions)) {
             return { ok: false, code: 'already_subscribed' };
           }
           closedSessionId = begun.session_id;
@@ -171,16 +172,16 @@ async function beginCheckout(
 
 /**
  * Records the subscription a paid Checkout started, before its signal
- * arrives; answers whether the organization now holds a subscription.
+ * arrives; answers whether the organization now has one that Stripe bills.
  */
-async function recordsHolding(
+async function recordsRunning(
   organizationId: string,
   subscriptionId: string | null,
   subscriptions: StripeSubscriptionGateway,
 ): Promise<boolean> {
   if (!subscriptionId) return false;
   await recordSubscription(await subscriptions.readSubscription(subscriptionId), subscriptions);
-  return (await readOrganizationSubscription(organizationId))?.holdsSubscription === true;
+  return (await readOrganizationSubscription(organizationId))?.runsSubscription === true;
 }
 
 type ClaimedCheckoutConfiguration = {
@@ -227,7 +228,7 @@ async function claimedCheckout(
   let session: StripeCheckoutSession | null = null;
   try {
     const paid = claim.session_id ? await subscriptions.closeCheckout(claim.session_id) : null;
-    if (await recordsHolding(request.organizationId, paid, subscriptions)) {
+    if (await recordsRunning(request.organizationId, paid, subscriptions)) {
       await finishCheckout(request.organizationId, claim.attempt, null);
       return { ok: false, code: 'already_subscribed' };
     }

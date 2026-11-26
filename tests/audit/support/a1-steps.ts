@@ -94,13 +94,10 @@ export async function expectSignedWindowOpen(page: Page, clickDownload: () => Pr
   await popup.close();
 }
 
-/**
- * The active organization's join code, read from Einstellungen › Organisation (an Admin's start
- * page no longer shows it) and back from the organization that owns it.
- */
+/** The active organization's code, where Admin reads it: Einstellungen › Organisation. */
 export async function readOrganizationCode(page: Page): Promise<PersistedJoinCode> {
   await page.goto('/einstellungen/organisation');
-  const code = page.getByLabel('Organisationscode');
+  const code = page.getByRole('textbox', { name: 'Organisationscode', exact: true });
   await expect(code).toBeVisible();
   await expect(code).toHaveValue(/^[A-Z0-9]{6}$/);
   return getOrganizationByJoinCode(await code.inputValue());

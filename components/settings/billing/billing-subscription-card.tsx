@@ -52,7 +52,9 @@ function stateText(state: SubscriptionState): string {
     case 'ending':
       return `Du hast gekündigt. Dein Zugang läuft bis zum ${endDateText(state.endsAt)}, bis dahin kannst du die Kündigung zurücknehmen.`;
     case 'payment_open':
-      return 'Die letzte Zahlung ist nicht eingegangen. Du hast dazu eine E-Mail mit dem nächsten Schritt bekommen.';
+      return state.ended
+        ? 'Die erste Zahlung ist nicht eingegangen, darum hat der Zahlungsdienst das Abo beendet. WerkFlow läuft trotzdem weiter. Schließ das Abo neu ab, am besten mit einer anderen Zahlungsart.'
+        : 'Die letzte Zahlung ist nicht eingegangen. Du hast dazu eine E-Mail mit dem nächsten Schritt bekommen.';
     case 'ended':
       return state.endedAt
         ? `Dein Abo ist am ${formatGermanDate(state.endedAt)} ausgelaufen.`
@@ -115,7 +117,7 @@ export function BillingSubscriptionCard({
   organizationId: string;
   subscription: SubscriptionView;
 }) {
-  const { state, canCancel, canResume } = subscription;
+  const { state, canCancel, canResume, canSubscribe } = subscription;
   const change = useCancellationChange(organizationId);
   const periodEnd = endDateText(paidUntil(state));
 
@@ -129,7 +131,7 @@ export function BillingSubscriptionCard({
         </div>
         <CardDescription>{stateText(state)}</CardDescription>
       </CardHeader>
-      {(canCancel || canResume || state.kind === 'ended') && (
+      {(canCancel || canResume || canSubscribe) && (
         <CardContent className="space-y-2">
           {canCancel && (
             <ConfirmActionDialog
@@ -163,9 +165,11 @@ export function BillingSubscriptionCard({
               <ErrorText>{change.resumeRefusal}</ErrorText>
             </>
           )}
-          {state.kind === 'ended' && (
+          {canSubscribe && (
             <Button asChild>
-              <Link href="/upgrade">Abo abschließen</Link>
+              <Link href="/upgrade">
+                {state.kind === 'ended' ? 'Abo abschließen' : 'Abo neu abschließen'}
+              </Link>
             </Button>
           )}
         </CardContent>
