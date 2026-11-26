@@ -22,11 +22,25 @@ test('the server starts on DEV in read-only mode, with the token only in its env
   expect(started.env).toEqual({ PATH: '/bin', SUPABASE_ACCESS_TOKEN: token });
 });
 
-test('an inherited SUPABASE_ACCESS_TOKEN never reaches the server: the agent token replaces it', () => {
+test('the server inherits only what it needs to run: no other credential, no setting that logs headers', () => {
   const started = launch([`--project-ref=${refs.dev}`], {
-    env: { SUPABASE_ACCESS_TOKEN: 'sbp_account_wide' },
+    env: {
+      PATH: '/bin',
+      HTTPS_PROXY: 'http://proxy.test:3128',
+      SUPABASE_ACCESS_TOKEN: 'sbp_account_wide',
+      SUPABASE_SECRET_KEY: 'sb_secret_made_up',
+      BUN_CONFIG_VERBOSE_FETCH: 'curl',
+      NODE_OPTIONS: '--require ./hook.js',
+    },
   });
-  expect('env' in started && started.env.SUPABASE_ACCESS_TOKEN).toBe(token);
+  if ('refusal' in started) throw new Error(started.refusal);
+  expect(started.env).toEqual({
+    PATH: '/bin',
+    HTTPS_PROXY: 'http://proxy.test:3128',
+    SUPABASE_ACCESS_TOKEN: token,
+  });
+  // Bun reads no .env file from the agent's working directory.
+  expect(started.args[0]).toBe('--no-env-file');
 });
 
 test("PROD's ref, another ref, extra arguments or no ref refuse the start", () => {

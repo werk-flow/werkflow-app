@@ -20,11 +20,13 @@ function bearer(): string {
 }
 
 /** A GET below DEV's project, such as `config/auth`; any status but 200 throws. */
-export async function readDevProject(path: string): Promise<unknown> {
-  const response = await fetch(`${DEV_API}/${path}`, {
+export async function readDevProject(path: string, request: typeof fetch = fetch): Promise<unknown> {
+  const response = await request(`${DEV_API}/${path}`, {
     headers: { Authorization: bearer() },
     signal: AbortSignal.timeout(TIMEOUT_MS),
     redirect: 'error',
+    // BUN_CONFIG_VERBOSE_FETCH in the environment would print the Authorization header.
+    verbose: false,
   });
   if (response.status !== 200) throw new Error(`GET ${path} returned HTTP ${response.status}.`);
   return response.json();
@@ -42,6 +44,7 @@ export async function queryDevReadOnly(
     body: JSON.stringify({ query }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
     redirect: 'error',
+    verbose: false,
   });
   if (response.status !== 201) throw new Error(`DEV ${label} query returned HTTP ${response.status}.`);
   return response.json();

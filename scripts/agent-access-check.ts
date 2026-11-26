@@ -37,7 +37,8 @@ const home = homedir();
 const refs = supabaseProjectRefs(checkout);
 
 async function request(url: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(url, { redirect: 'manual', ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  // `verbose: false`: BUN_CONFIG_VERBOSE_FETCH in the environment would print each key's header.
+  return fetch(url, { redirect: 'manual', ...init, signal: AbortSignal.timeout(TIMEOUT_MS), verbose: false });
 }
 
 /** A check's verdict from a response's status alone; the body is discarded unread. */
