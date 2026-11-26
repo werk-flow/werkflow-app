@@ -22,6 +22,8 @@
   ],
   "exempt": {
     "lib/invoices/actions.ts": "Server Actions: parse, authorize and save; amounts come from amounts.ts.",
+    "lib/invoices/delivery-actions.ts": "Server Actions: authorize, parse and send or record a delivery of a filed original; they compute no amount.",
+    "lib/invoices/delivery-defaults.ts": "Reads the proposed recipient and writes the mail text; the amount it names is the stored gross, formatted, never computed.",
     "lib/invoices/issue-actions.ts": "Server Actions: authorize, check and issue; amounts come from issue-model.ts and the invoice core, numbers from issue_invoice.",
     "lib/invoices/issue-sources.ts": "Reads the issue snapshot and lists the details still missing; it computes no amount.",
     "lib/invoices/line-source-actions.ts": "Server Action that reads a catalog line; it copies the price E1's and E2a's readers return and computes no amount.",

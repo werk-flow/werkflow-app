@@ -20,7 +20,7 @@ import { deliveryHtml, senderHeader } from './mail-content';
 import { DELIVERY_STATES, type DeliveryState, type DeliverySubject } from './delivery-types';
 
 // Sends a filed document by email once, or records that the office sent it
-// itself (supabase/migrations/20261219140000_record_document_deliveries.sql).
+// itself (supabase/migrations/20270310100000_record_document_deliveries.sql).
 // The caller resolved an Admin or Büro context and the subject's filed
 // document. The order of work: the rate limit; the delivery is recorded as
 // sending with its content and the attachment's hash; the attachment is read

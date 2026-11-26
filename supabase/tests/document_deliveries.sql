@@ -1,4 +1,4 @@
--- Deliveries of filed documents (20261219140000_record_document_deliveries.sql,
+-- Deliveries of filed documents (20270310100000_record_document_deliveries.sql,
 -- werk-flow/werkflow-planning#458): no client role writes a delivery or runs a
 -- function, and a session reads only the id, subject and state of its
 -- organization's rows as Admin or Büro; an employee, an outsider and another

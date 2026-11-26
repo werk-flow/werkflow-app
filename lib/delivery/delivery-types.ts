@@ -2,7 +2,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
 // A delivery of a filed document as the office sees it, and the inputs of the
-// send and record actions (supabase/migrations/20261219140000_record_document_deliveries.sql).
+// send and record actions (supabase/migrations/20270310100000_record_document_deliveries.sql).
 // The table checks repeat the limits.
 
 /** What a delivery sends. Invoices now; offers and service reports join as kinds. */

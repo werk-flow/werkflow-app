@@ -168,6 +168,7 @@ create table public.document_delivery_events (
 create index document_delivery_events_delivery_idx
   on public.document_delivery_events (delivery_id, organization_id, created_at);
 create index document_delivery_events_actor_id_idx on public.document_delivery_events (actor_id);
+create index document_delivery_events_organization_id_fk_idx on public.document_delivery_events (organization_id);
 
 alter table public.document_delivery_events enable row level security;
 revoke all on table public.document_delivery_events from public, anon, authenticated, service_role;

@@ -396,7 +396,7 @@ insert into public.organization_capabilities (id, organization_id, kind, name, d
 insert into public.employee_capabilities (organization_id, employee_record_id, capability_id, capability_kind, valid_from)
 select 'cb000000-0000-4000-8000-000000000010', id, 'cb000000-0000-4000-8000-000000000142', 'skill', '2026-01-01'
 from suspended_employee;
--- A delivery of an invoice (20261219140000_record_document_deliveries.sql); a
+-- A delivery of an invoice (20270310100000_record_document_deliveries.sql); a
 -- session reads only its signal columns.
 insert into public.document_deliveries (
   id, organization_id, subject_kind, invoice_id, document_id, attachment_content_hash, channel, note, state,
