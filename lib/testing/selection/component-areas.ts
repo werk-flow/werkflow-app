@@ -46,7 +46,15 @@ const COMPONENT_AREAS: readonly (readonly [string, readonly string[], readonly s
   ['customers', ['billing-parties', 'client-relations', 'customer', 'customer-', 'request-'], ['customers']],
   [
     'organization',
-    ['auth-url-session', 'company-', 'join-requests', 'member-role', 'organization', 'organization-'],
+    [
+      'ai-settings',
+      'auth-url-session',
+      'company-',
+      'join-requests',
+      'member-role',
+      'organization',
+      'organization-',
+    ],
     ['personnel', 'standalone'],
   ],
   ['reports', ['problem-report', 'support-'], ['*']],

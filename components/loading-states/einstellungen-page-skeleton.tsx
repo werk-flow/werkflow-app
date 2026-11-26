@@ -188,6 +188,14 @@ const SECTION_SKELETONS = {
         ))}
       </SettingsCardSkeleton>
       <SettingsCardSkeleton fieldCount={2} columns={1} footer />
+      {/* The admin's WerkFlow KI switch. */}
+      <SettingsCardSkeleton columns={1}>
+        <div className="flex items-center gap-2">
+          <Skeleton className="size-4 rounded-sm" />
+          <Skeleton className="h-4 w-56 max-w-full" />
+        </div>
+        <Skeleton className="h-4 w-full max-w-md" />
+      </SettingsCardSkeleton>
       <SettingsCardSkeleton columns={1}>
         <Skeleton className="h-4 w-full max-w-lg" />
         <Skeleton className="h-8 w-full" />

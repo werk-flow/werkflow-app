@@ -13,6 +13,14 @@ type TableName = keyof PublicTables & string;
 
 /** Tables that hold no record of the organization. */
 type ExcludedTable =
+  // WerkFlow KI: threads are private to their author, and no admin reads
+  // another person's (werk-flow/werkflow-planning#527). Runs, their cost
+  // ledger and the switch are WerkFlow's own usage state, not records.
+  | 'ai_threads'
+  | 'ai_thread_items'
+  | 'ai_runs'
+  | 'ai_run_attempts'
+  | 'ai_organization_settings'
   // Account-wide sign-in codes of a person, no business record.
   | 'email_change_challenges'
   // Rate-limit state of a person before any membership exists.
