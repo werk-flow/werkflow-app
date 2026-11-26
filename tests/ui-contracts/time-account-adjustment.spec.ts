@@ -20,6 +20,16 @@ const kind = (page: Page, label: string): Locator =>
 const reason = (page: Page): Locator =>
   row(page).getByRole('textbox', { name: 'Korrekturgrund für Kevin Kontrakt', exact: true });
 
+const dateGroup = (page: Page): Locator =>
+  row(page).getByRole('group', { name: 'Wirksamkeitsdatum für Kevin Kontrakt' });
+
+/** Picks a day of the suggested month in the row's date picker, by the day's full name. */
+async function pickDay(page: Page, dayName: string): Promise<void> {
+  await dateGroup(page).getByRole('button', { name: 'Kalender öffnen' }).click();
+  await page.getByRole('button', { name: dayName, exact: true }).click();
+  await page.keyboard.press('Escape');
+}
+
 async function fillReason(page: Page): Promise<void> {
   await reason(page).fill('Überstunden aus dem Altsystem');
 }
@@ -118,29 +128,25 @@ test('a draft keeps the account version it was typed against across a live refre
   });
 });
 
-test('an emptied date marks the row, focuses the date and sends nothing', async ({ page }) => {
+test('an emptied date marks the picker, focuses it and sends nothing; a picked date clears the mark', async ({
+  page,
+}) => {
   await fillReason(page);
   await hours(page).fill('+1:00');
-  const date = row(page).getByRole('group', { name: 'Wirksamkeitsdatum für Kevin Kontrakt' });
-  await date.getByRole('button', { name: 'Kalender öffnen' }).click();
+  await dateGroup(page).getByRole('button', { name: 'Kalender öffnen' }).click();
   // Picking the selected day again empties the date.
   await page.getByRole('gridcell', { selected: true }).getByRole('button').click();
   await page.keyboard.press('Escape');
   await kind(page, 'Korrektur').click();
-  await expect(date).toBeFocused();
-  await expect(page.getByRole('table')).toContainText('Wähle das Datum, ab dem die Korrektur gilt.');
+  await expect(dateGroup(page)).toBeFocused();
+  await expect(dateGroup(page)).toHaveAttribute('data-invalid', 'true');
+  await expect(dateGroup(page)).toHaveAccessibleDescription(/Wähle das Datum, ab dem die Korrektur gilt\./);
   expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
+
+  await pickDay(page, 'Donnerstag, 5. November 2026');
+  await expect(dateGroup(page)).not.toHaveAttribute('data-invalid', 'true');
+  await expect(page.getByRole('table')).not.toContainText('Wähle das Datum, ab dem die Korrektur gilt.');
 });
-
-const dateGroup = (page: Page): Locator =>
-  row(page).getByRole('group', { name: 'Wirksamkeitsdatum für Kevin Kontrakt' });
-
-/** Picks a day of the suggested month in the row's date picker, by the day's full name. */
-async function pickDay(page: Page, dayName: string): Promise<void> {
-  await dateGroup(page).getByRole('button', { name: 'Kalender öffnen' }).click();
-  await page.getByRole('button', { name: dayName, exact: true }).click();
-  await page.keyboard.press('Escape');
-}
 
 test('each field error describes its control in the table row and on the phone card', async ({ page }) => {
   // The fixture shows both layouts at once: every hours field and every reason field.
@@ -163,22 +169,6 @@ test('each field error describes its control in the table row and on the phone c
   expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
 });
 
-test('an emptied date describes the picker, and a picked date clears the mark', async ({ page }) => {
-  await fillReason(page);
-  await hours(page).fill('+1:00');
-  await dateGroup(page).getByRole('button', { name: 'Kalender öffnen' }).click();
-  await page.getByRole('gridcell', { selected: true }).getByRole('button').click();
-  await page.keyboard.press('Escape');
-  await kind(page, 'Korrektur').click();
-  await expect(dateGroup(page)).toBeFocused();
-  await expect(dateGroup(page)).toHaveAttribute('data-invalid', 'true');
-  await expect(dateGroup(page)).toHaveAccessibleDescription(/Wähle das Datum, ab dem die Korrektur gilt\./);
-
-  await pickDay(page, 'Donnerstag, 5. November 2026');
-  await expect(dateGroup(page)).not.toHaveAttribute('data-invalid', 'true');
-  await expect(page.getByRole('table')).not.toContainText('Wähle das Datum, ab dem die Korrektur gilt.');
-});
-
 test('a draft that only changed its date keeps the account version it was picked against', async ({
   page,
 }) => {
@@ -199,5 +189,30 @@ test('a draft that only changed its date keeps the account version it was picked
   expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
     expectedVersion: '1',
     effectiveDate: '2026-11-05',
+  });
+});
+
+test('a refusal keeps the draft version even when the hours were emptied while it ran', async ({ page }) => {
+  await fillReason(page);
+  await hours(page).fill('-8:00');
+  await kind(page, 'Auszahlung').click();
+  await expectHeldWrite(page, 'submit-adjustment');
+  await hours(page).fill('');
+  await answerHeldWrite(page, 'stale_version');
+  await expect(page.getByRole('alert')).toContainText('Lade die Seite neu und prüfe den Saldo.');
+  await page.evaluate(() => {
+    window.uiContractTimeAccounts = window.uiContractTimeAccounts.map((account) => ({
+      ...account,
+      currentBalanceMinutes: 120,
+      version: account.version + 1,
+    }));
+    window.dispatchEvent(new Event('ui-contract:route-refresh'));
+  });
+  await expect(row(page)).toContainText('Saldo +2:00 Std.');
+  await hours(page).fill('-8:00');
+  await kind(page, 'Auszahlung').click();
+  await expect.poll(() => page.evaluate(() => window.uiContractWrites.calls.length)).toBe(2);
+  expect(await page.evaluate(() => window.uiContractWrites.calls[1]?.input)).toMatchObject({
+    expectedVersion: '1',
   });
 });

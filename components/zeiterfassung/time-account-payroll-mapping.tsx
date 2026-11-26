@@ -92,8 +92,9 @@ function PayrollMappingForm({ settings }: { settings: TimeAccountSettingsData })
     basedOnVersion: read.version,
     readCodes: read.codes,
     codes: read.codes,
+    saving: false,
   }));
-  // A refresh that brings another version replaces the table unless it holds unsaved edits.
+  // A refresh that brings a newer version replaces the table unless it holds unsaved edits or a save runs.
   const followed = followMappingVersion(draft, read);
   if (followed !== draft) setDraft(followed);
   const { codes } = followed;
@@ -110,11 +111,14 @@ function PayrollMappingForm({ settings }: { settings: TimeAccountSettingsData })
       focusFirstVisibleInvalid(invalid.flatMap((key) => [codeInputId('row', key), codeInputId('card', key)]));
       return;
     }
+    const endSave = () => setDraft((previous) => ({ ...previous, saving: false }));
+    // The table stays editable while the save runs; only these codes become saved.
+    const submitted = codes;
+    setDraft((previous) => ({ ...previous, saving: true }));
     try {
-      // The table stays editable while the save runs; only these codes become saved.
-      const submitted = codes;
       const result = await run({ codes: submitted, basedOnVersion: followed.basedOnVersion });
       if (!result.success) {
+        endSave();
         setError(getTimeAccountFailureMessage('createMapping', result.error));
         return;
       }
@@ -122,6 +126,7 @@ function PayrollMappingForm({ settings }: { settings: TimeAccountSettingsData })
       setDraft((previous) => recordMappingSave(previous, { version: result.version, codes: submitted }));
       showBanner({ variant: 'success', message: 'Die Lohnarten-Zuordnung ist gespeichert.' });
     } catch {
+      endSave();
       setError(getTimeAccountFailureMessage('createMapping', 'mapping_failed'));
     }
   };

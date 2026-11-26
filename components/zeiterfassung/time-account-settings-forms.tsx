@@ -151,7 +151,7 @@ function useAdjustmentFields({
   account: Pick<TimeAccountSettingsData['accounts'][number], 'employeeName' | 'version'>;
   today: string;
   handleKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
-  handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<boolean>;
 }) {
   const ids = { hours: `${formId}-hours`, date: `${formId}-date`, reason: `${formId}-reason` };
   const [errors, setErrors] = useState<AdjustmentErrors>(NO_ADJUSTMENT_ERRORS);
@@ -174,8 +174,7 @@ function useAdjustmentFields({
       focusFirstVisibleInvalid(invalid.map((key) => ids[key]));
       return;
     }
-    await handleSubmit(event);
-    if (!new FormData(form).get('hours')) setDraftVersion(null);
+    if (await handleSubmit(event)) setDraftVersion(null);
   };
   // The table header labels a row's controls; the hidden label keeps the error wiring.
   const field = (key: AdjustmentKey, control: ReactNode) => (

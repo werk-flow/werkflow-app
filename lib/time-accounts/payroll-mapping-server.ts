@@ -14,8 +14,11 @@ import { requireRead } from './read-support';
  * Personalnummer. `basedOnVersion` is the version the Admin's table showed
  * (null before the first one); the database refuses the save with
  * `stale_version` when another version is current by now. Returns the
- * version number it committed, the base of the Admin's next save. Throws a
- * stable code (or a provider error) on every refusal; the action maps it.
+ * version number it committed, the base of the Admin's next save: under the
+ * organization's mapping lock the function accepts only the current version
+ * and numbers the new one after it, so the save from version n made n + 1
+ * (supabase/tests/payroll_mapping_confirmation.sql). Throws a stable code (or
+ * a provider error) on every refusal; the action maps it.
  */
 export async function savePayrollMappingVersion(
   admin: AdminClient,
@@ -39,28 +42,20 @@ export async function savePayrollMappingVersion(
     return { employee_record_id: employee.id, external_employee_reference: employee.employee_number };
   });
   const payload = { employeeMappings, codeMappings, basedOnVersion };
-  const versionId = await admin
-    .rpc(
-      'confirm_payroll_mapping_version',
-      rpcArgs('confirm_payroll_mapping_version', {
-        p_actor_id: context.userId,
-        p_organization_id: context.orgId,
-        p_expected_version: basedOnVersion,
-        p_employee_mappings: employeeMappings,
-        p_code_mappings: codeMappings,
-        p_operation_id: randomUUID(),
-        p_request_hash: hashPayload(payload),
-      }),
-    )
-    .then(requireRead);
-  const { version } = await admin
-    .from('payroll_mapping_versions')
-    .select('version')
-    .eq('organization_id', context.orgId)
-    .eq('id', versionId)
-    .single()
-    .then(requireRead);
-  return version;
+  const { error } = await admin.rpc(
+    'confirm_payroll_mapping_version',
+    rpcArgs('confirm_payroll_mapping_version', {
+      p_actor_id: context.userId,
+      p_organization_id: context.orgId,
+      p_expected_version: basedOnVersion,
+      p_employee_mappings: employeeMappings,
+      p_code_mappings: codeMappings,
+      p_operation_id: randomUUID(),
+      p_request_hash: hashPayload(payload),
+    }),
+  );
+  if (error) throw error;
+  return (basedOnVersion ?? 0) + 1;
 }
 
 /** The current mapping version with the code of each classification. */
