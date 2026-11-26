@@ -49,9 +49,9 @@ test('the office start shows each Aufgaben section with its count, its first thr
   const due = maintenance.getByRole('link', { name: /^Wartung / });
   await expect(due).toHaveCount(3);
   await expect(due).toContainText([
-    'Heizzentrale Lindenhof · fällig seit 02.11.2026',
+    'fällig seit 02.11.2026 · Heizzentrale Lindenhof',
     'fällig seit 12.11.2026',
-    'Heizzentrale Lindenhof · fällig am 30.11.2026',
+    'fällig am 30.11.2026 · Heizzentrale Lindenhof',
   ]);
   await expect(
     maintenance.getByRole('link', {

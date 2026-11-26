@@ -134,8 +134,9 @@ function MaintenanceDueTaskRow({ task }: { task: AttentionMaintenanceDueTask }) 
       sourceId={task.sourceId}
     >
       <p className="truncate text-sm font-medium">{task.equipmentLabel}</p>
-      <p className="text-xs text-muted-foreground tabular-nums">
-        {task.siteName ? `${task.siteName} · ${due}` : due}
+      {/* The due date leads: a long Einsatzort is cut, never the date. */}
+      <p className="truncate text-xs text-muted-foreground tabular-nums">
+        {task.siteName ? `${due} · ${task.siteName}` : due}
       </p>
     </TaskLink>
   );
