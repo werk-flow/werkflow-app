@@ -259,23 +259,33 @@ function paymentIntentIdOf(invoice: Stripe.Invoice): string | null {
  * a charge: the one its payment intent names, else the invoice's, the
  * subscription's or the customer's default, in Stripe's own order. A SEPA
  * renewal is finalized in the same second as its debit starts, and signals of
- * one second come in no reliable order.
+ * one second come in no reliable order. `chargeMandateId` is the mandate the
+ * intent's own charge debits with, once that charge exists.
  */
-async function paymentMethodOf(
+async function invoicePaymentOf(
   client: Stripe,
   invoice: Stripe.Invoice,
-): Promise<Stripe.PaymentMethod | null> {
+): Promise<{ method: Stripe.PaymentMethod | null; chargeMandateId: string | null }> {
   const intentId = paymentIntentIdOf(invoice);
   const intent = intentId
-    ? await client.paymentIntents.retrieve(intentId, { expand: ['payment_method'] })
+    ? await client.paymentIntents.retrieve(intentId, { expand: ['payment_method', 'latest_charge'] })
     : null;
   const customer = expanded(invoice.customer);
-  return (
+  const method =
     expanded(intent?.payment_method) ??
     expanded(invoice.default_payment_method) ??
     expanded(expanded(invoice.parent?.subscription_details?.subscription)?.default_payment_method) ??
-    (customer?.deleted ? null : expanded(customer?.invoice_settings.default_payment_method))
-  );
+    (customer?.deleted ? null : expanded(customer?.invoice_settings.default_payment_method));
+  const charge = expanded(intent?.latest_charge);
+  const chargeMandate =
+    charge?.payment_method === method?.id ? charge?.payment_method_details?.sepa_debit?.mandate : null;
+  return { method, chargeMandateId: typeof chargeMandate === 'string' ? chargeMandate : null };
+}
+
+/** The reference of a SEPA mandate, read by its id. */
+async function referenceOfMandate(client: Stripe, mandateId: string): Promise<string | null> {
+  const mandate = await client.mandates.retrieve(mandateId);
+  return mandate.payment_method_details.sepa_debit?.reference ?? null;
 }
 
 /**
@@ -294,10 +304,7 @@ async function mandateReferenceOf(client: Stripe, method: Stripe.PaymentMethod):
     for await (const charge of client.charges.list({ customer: customerId, limit: 100 })) {
       const mandateId =
         charge.payment_method === method.id ? charge.payment_method_details?.sepa_debit?.mandate : null;
-      if (typeof mandateId === 'string') {
-        const mandate = await client.mandates.retrieve(mandateId);
-        return mandate.payment_method_details.sepa_debit?.reference ?? null;
-      }
+      if (typeof mandateId === 'string') return referenceOfMandate(client, mandateId);
       seen += 1;
       if (seen >= LIST_CAP) throw billingFailure('stripe_list_overflow');
     }
@@ -379,7 +386,7 @@ function debitReads(
           status: invoice.status,
           amountPaidCents: invoice.amount_paid,
           paidAt: invoice.status_transitions.paid_at ?? null,
-          method: await debitMethodOf(client, await paymentMethodOf(client, invoice)),
+          method: await debitMethodOf(client, (await invoicePaymentOf(client, invoice)).method),
           expectedDebitDate:
             expanded(intent?.latest_charge)?.payment_method_details?.sepa_debit?.expected_debit_date ?? null,
         };
@@ -424,9 +431,14 @@ function invoiceReader(client: Stripe): StripeGateway['readInvoiceForIssue'] {
       const lines = await client.invoices
         .listLineItems(invoiceId, { limit: 100 })
         .autoPagingToArray({ limit: 1000 });
-      const paymentMethod = await paymentMethodOf(client, invoice);
+      const { method: paymentMethod, chargeMandateId } = await invoicePaymentOf(client, invoice);
+      // The invoice's own charge names its mandate; before that charge exists, the method's does.
       const mandateReference =
-        paymentMethod?.type === 'sepa_debit' ? await mandateReferenceOf(client, paymentMethod) : null;
+        paymentMethod?.type !== 'sepa_debit'
+          ? null
+          : chargeMandateId
+            ? await referenceOfMandate(client, chargeMandateId)
+            : await mandateReferenceOf(client, paymentMethod);
       return { invoice, lines, paymentMethod, mandateReference };
     });
     return stripeInvoiceForIssue(source);

@@ -7,6 +7,7 @@ import {
   CARD_INVOICE_ANSWERS,
   CHECKOUT_SEPA_BEFORE_CHARGE_ANSWERS,
   CHECKOUT_SEPA_INVOICE_ANSWERS,
+  OWN_CHARGE_MANDATE_ANSWERS,
   REPLACED_MANDATE_ANSWERS,
   SECOND_PAGE_MANDATE_ANSWERS,
   MADE_UP_SELLER,
@@ -258,6 +259,13 @@ describe('the first invoice of a subscription a Checkout started', () => {
     expect(await issue()).toBe('issued');
     const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
     expect(xml).toContain('<ram:DirectDebitMandateID>MUSTERMANDAT0002</ram:DirectDebitMandateID>');
+  });
+
+  test("an invoice read after a later charge names another mandate keeps its own charge's mandate", async () => {
+    const { issue, stored } = world(OWN_CHARGE_MANDATE_ANSWERS);
+    expect(await issue()).toBe('issued');
+    const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
+    expect(xml).toContain('<ram:DirectDebitMandateID>MUSTERMANDAT0001</ram:DirectDebitMandateID>');
   });
 
   test("the mandate's charge on a later page of the customer's charges is found", async () => {

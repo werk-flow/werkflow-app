@@ -191,6 +191,20 @@ export const REPLACED_MANDATE_ANSWERS = {
   'GET /v1/mandates/mandate_test_0002': sepaMandate('mandate_test_0002', 'MUSTERMANDAT0002'),
 };
 
+/**
+ * An invoice read after a later charge of its method named another mandate:
+ * its own payment intent's charge names the mandate it was debited with.
+ */
+export const OWN_CHARGE_MANDATE_ANSWERS = {
+  ...REPLACED_MANDATE_ANSWERS,
+  'GET /v1/payment_intents/pi_test_0001': {
+    ...paymentIntent(SEPA_PAYMENT_METHOD),
+    status: 'succeeded',
+    latest_charge: checkoutCharge('py_test_0001', SEPA_PAYMENT_METHOD.id, 'mandate_test_0001'),
+  },
+  'GET /v1/mandates/mandate_test_0001': sepaMandate('mandate_test_0001', 'MUSTERMANDAT0001'),
+};
+
 /** A customer whose first page of charges holds only another method's: the mandate's charge is on page two. */
 export const SECOND_PAGE_MANDATE_ANSWERS = {
   ...CHECKOUT_SEPA_INVOICE_ANSWERS,
