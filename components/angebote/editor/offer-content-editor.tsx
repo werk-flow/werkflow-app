@@ -55,7 +55,7 @@ type Draft = {
   attemptKey: string;
 };
 
-function loaded(offer: OfferDetail): Draft {
+function contentDraftOf(offer: OfferDetail): Draft {
   return {
     sections: contentFormOf(offer.sections),
     baseVersion: offer.contentVersion,
@@ -72,16 +72,16 @@ function loaded(offer: OfferDetail): Draft {
  * save runs, its rendered answer is no other session's.
  */
 function useContentDraft(offer: OfferDetail, saving: boolean) {
-  const [draft, setDraft] = useState(() => loaded(offer));
+  const [draft, setDraft] = useState(() => contentDraftOf(offer));
   const newer = offer.contentVersion > draft.baseVersion;
-  if (newer && !draft.edited) setDraft(loaded(offer));
+  if (newer && !draft.edited) setDraft(contentDraftOf(offer));
   return {
     draft,
     newerElsewhere: newer && draft.edited && !saving,
     edit: (sections: SectionForm[]) =>
       setDraft({ ...draft, sections, edited: true, attemptKey: crypto.randomUUID() }),
     saved: () => setDraft({ ...draft, edited: false, attemptKey: crypto.randomUUID() }),
-    reload: () => setDraft(loaded(offer)),
+    reload: () => setDraft(contentDraftOf(offer)),
   };
 }
 
