@@ -4,8 +4,9 @@ How to make a workstation or a headless Linux host ready for agent work, which b
 
 ## Set up a new machine
 
-1. Install Bun, Node 22 or later, git, the GitHub CLI, Docker and the Supabase CLI. On Windows, clone and work inside WSL Ubuntu.
-   On an Apple Silicon Mac, run `softwareupdate --install-rosetta` and `brew install colima docker flock`, then `colima start --cpu 4 --memory 6 --disk 40 --vm-type vz --vz-rosetta --mount-type virtiofs` ([why Rosetta](standards-audit.md#keep-accepted-screens-as-visual-references)). Run the repository's pinned CLI with `bunx supabase`. Grow the VM only for a measured need. On AC power, `caffeinate -s` keeps the Mac awake for agents.
+1. Install Bun, Node 22, git, the GitHub CLI and Docker. Every machine runs the same Node major. Install no global Supabase CLI: everyone runs the repository's pinned CLI with `bunx supabase`. On Windows, clone and work inside WSL Ubuntu. On Linux, add the working user to the `docker` group (`sudo usermod -aG docker "$USER"`, then sign in again), so agents run Docker without `sudo`.
+   In every Claude Code user settings file, deny the claude.ai Supabase connector with `"deniedMcpServers": [{ "serverName": "claude.ai Supabase" }]`. On the PC that means both `~/.claude/settings.json` in WSL and `%USERPROFILE%\.claude\settings.json` on Windows. The repository's MCP hook refuses the connector in any session that runs this repository's hooks. The setting covers the sessions that don't, such as the desktop app outside the repository.
+   On an Apple Silicon Mac, run `softwareupdate --install-rosetta` and `brew install colima docker flock`, then `colima start --cpu 4 --memory 6 --disk 40 --vm-type vz --vz-rosetta --mount-type virtiofs` ([why Rosetta](standards-audit.md#keep-accepted-screens-as-visual-references)). Grow the VM only for a measured need. On AC power, `caffeinate -s` keeps the Mac awake for agents.
    After that first start, the launchd agent `app.werk-flow.colima` from `ops/install-mac.py` starts Colima and the local stack at login, without Terminal. Check it with `colima status` and `launchctl print gui/$(id -u)/app.werk-flow.colima | grep state`.
 2. Install the machine's [agent keys](#agent-keys). The machine's thread opens one T3 secret card with a field per key, delivered as files, and the owner creates each key for this machine and pastes it in. The thread runs `bun run agent-keys:install -- <NAME>=<file> …` with the card's files: it writes the keys into the key file and refuses one out of its shape.
    Set the token `werkflow-workstation-dev` as `SUPABASE_ACCESS_TOKEN` in `.env.local`, with a copy in every env backup (a switch overwrites `.env.local`). The owner creates it under Supabase account settings, Access Tokens, as a scoped token: project WerkFlow App Dev only, read-write on every area, no account or organization access, one year; a renewal replaces it everywhere and deletes the old one. The owner stores the same token as the Supabase CLI's login. It reaches DEV only; PROD is read only by the [PROD inspection](environments.md#which-tool-reaches-what). Never sign the CLI in with `supabase login` and its browser, which mints a token for the whole account, PROD included, and never with an account token. Never put an account token or a PROD key on an agent machine outside step 3's one exception, and never commit or print a token: `agent-access:check` fails on a Supabase token that does not reach DEV or that reaches PROD.
@@ -23,6 +24,16 @@ How to make a workstation or a headless Linux host ready for agent work, which b
 - Run T3 Code as the working user, never as root, and run `loginctl enable-linger` for that user, so its services outlive the login.
 - T3 Code runs as a systemd user service with the `PATH` `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin`. Link `bun`, `bunx`, `codex`, `claude` and `t3` into `/usr/local/bin`. Put the `PATH` export at the top of `~/.bashrc` too: Debian's returns early for a non-interactive shell.
 - Docker publishes the local stack on `0.0.0.0`. On a machine with a public address, a firewall outside Docker drops every incoming connection except SSH and the UDP replies from ports 53, 123 and 7844. Without the 7844 rule, T3 Connect falls back to HTTP/2 after three minutes.
+- Docker's published ports skip the host's `INPUT` chain, so the same machine also drops new connections from its public interface to every container. Add the rule to the `DOCKER-USER` chain for IPv4 and IPv6, and keep it across reboots and Docker restarts with a oneshot system unit that runs after `docker.service` and is part of it:
+
+  ```sh
+  for tool in iptables ip6tables; do
+    "$tool" -C DOCKER-USER -i <public interface> -m conntrack --ctstate NEW -j DROP 2>/dev/null ||
+      "$tool" -I DOCKER-USER -i <public interface> -m conntrack --ctstate NEW -j DROP
+  done
+  ```
+
+  Verify after a reboot: `sudo iptables -S DOCKER-USER` and `sudo ip6tables -S DOCKER-USER` each list the rule, `curl -s http://127.0.0.1:54321` still answers on the machine, and a connection to port 54321 from outside fails.
 
 ## Agent keys
 
@@ -42,15 +53,21 @@ Agents hold four keys per machine (`pc`, `mac`, `netcup`) for DEV, staging and t
 
 ## Background jobs
 
-The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-planning`, as systemd user timers on Linux and launchd agents on the Mac (`ops/install-mac.py`).
+The three agent machines (`pc`, `mac`, `netcup`) share one setup. Apart from OS and hardware, they differ only in the jobs below. The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-planning`, as systemd user timers on Linux and launchd agents on the Mac (`ops/install-mac.py`). `werkflow-uptime` is a system timer (`ops/uptime-install.sh`).
 
 | Job | Runs on |
 | --- | --- |
-| `worktree-cleanup`, load watch, [notifier](#keep-the-agents-moving) | Each machine, for itself |
-| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert` | The PC and the Mac; only the lease holder acts. A further machine runs only its own `worktree-cleanup` and load watch |
+| `worktree-cleanup`: removes finished worktrees and their branches, and fast-forwards each root checkout's `main` | Each machine, for itself |
+| Load watch (`workstation-load`), [notifier](#keep-the-agents-moving) | Each machine, for itself |
+| `boat-starts`: counts Boat's machine starts per day and raises an alert before the plan's limit | Each machine; only the lease holder counts |
+| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert` | The PC and the Mac; only the lease holder acts |
 | [Production watcher](recovery-and-incidents.md#monitoring) | Where its [token](environments.md#credentials) is |
 | [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The PC, beside the stack |
-| `report-dispatch`: starts one report thread per waiting [problem report](../features/problem-reports.md#current-product-baseline), blockers first; does nothing while the hand-out is off | The lease holder among the machines with the hand-out [file](environments.md#credentials) |
+| `report-dispatch`: starts one report thread per waiting [problem report](../features/problem-reports.md#current-product-baseline), blockers first; does nothing while the hand-out is off | The netcup VM, the one machine with the hand-out [file](environments.md#credentials). The Mac's installer and the Linux unit skip a machine without it |
+| `werkflow-uptime`: every 5 minutes, checks that PROD's and DEV's login pages and Supabase health endpoints answer | The netcup VM |
+| `dev-deploy-alert`: opens a `CI alert` issue when `werkflow-uptime` misses twice in a row, and closes it on the next green pass | The netcup VM, beside `werkflow-uptime` |
+
+A root checkout (`~/code/<repository>` of each workspace repository) on another branch, with changes, or with commits that `origin/main` lacks keeps its state, and `~/.local/state/worktree-cleanup.log` names it. A thread started at a project's root runs that checkout's hooks and skills, so leave each root on a clean `main`.
 
 A lease is the ref `refs/leases/<job>` (`ops/lease.py`): its holder renews it every pass; another machine takes over once it lapses. A lease is read with `git fetch` and swapped with `git push --force-with-lease`, so it costs no GitHub API call.
 
