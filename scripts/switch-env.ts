@@ -43,10 +43,11 @@ const LOCAL_STACK_ORIGIN = 'http://127.0.0.1:54321';
 const environmentFile = join(repoRoot, '.env.local');
 const siteUrlLine = `NEXT_PUBLIC_SITE_URL=${workspaceAppOrigin(repoRoot)}`;
 // A worktree starts with a link to the main checkout's file; its own switch replaces the link
-// instead of writing through it, right before the new contents land.
+// instead of writing through it, right before the new contents land. The new file is the owner's
+// alone (mode 600): it holds keys, and `bun run agent-access:check` fails on a wider mode.
 const writeEnvironment = (contents: string): void => {
   rmSync(environmentFile, { force: true });
-  writeFileSync(environmentFile, contents);
+  writeFileSync(environmentFile, contents, { mode: 0o600 });
 };
 const withSiteUrl = (contents: string): string =>
   /^NEXT_PUBLIC_SITE_URL=.*$/m.test(contents)

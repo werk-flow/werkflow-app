@@ -2,7 +2,6 @@
 
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
-import { resolveActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
@@ -15,6 +14,7 @@ import {
   type SaveInvoiceDraftInput,
 } from './action-schemas';
 import { draftAmounts, type DraftAmounts } from './amounts';
+import { resolveManagerContext } from '@/lib/org/manager-context';
 import type { InvoiceLineValues } from './types';
 
 // Admin and Büro keep the invoices. Every action resolves the caller's
@@ -36,13 +36,6 @@ const refusal = writeRefusalFor(
   ]),
 );
 
-async function officeCaller() {
-  const caller = await resolveActionContext();
-  if (!caller.success) return caller;
-  if (!caller.context.isManagerOrAbove) return { success: false as const, error: 'not_authorized' };
-  return caller;
-}
-
 /** Creates a draft for a customer, optionally for one of its jobs, projects or Servicefälle. */
 export async function createInvoice(
   rawInput: CreateInvoiceInput,
@@ -51,7 +44,7 @@ export async function createInvoice(
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
   try {
-    const caller = await officeCaller();
+    const caller = await resolveManagerContext();
     if (!caller.success) return caller;
     const { orgId, userId } = caller.context;
     const { data, error } = await createSupabaseAdminClient().rpc(
@@ -90,7 +83,7 @@ export async function saveInvoiceDraft(
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
   try {
-    const caller = await officeCaller();
+    const caller = await resolveManagerContext();
     if (!caller.success) return caller;
     const { orgId, userId } = caller.context;
     // A line the line rule refuses (an amount beyond the safe range) is the office's input to fix.
@@ -128,7 +121,7 @@ export async function deleteInvoiceDraft(rawInput: DeleteInvoiceDraftInput): Pro
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
   try {
-    const caller = await officeCaller();
+    const caller = await resolveManagerContext();
     if (!caller.success) return caller;
     const { orgId, userId } = caller.context;
     const { error } = await createSupabaseAdminClient().rpc('delete_invoice_draft', {

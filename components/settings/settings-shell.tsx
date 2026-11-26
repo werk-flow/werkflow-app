@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { memo } from 'react';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import { AreaNav } from '@/components/shared/area-nav';
@@ -132,36 +133,43 @@ function SettingsNavGroup({
     <div className="space-y-2">
       <p className="px-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
       <nav aria-label={label} className="space-y-1">
-        {slugs.map((slug) => {
-          const section = getSettingsSectionBySlug(slug);
-
-          if (!section) {
-            return null;
-          }
-
-          const Icon = section.icon;
-          const isActive = currentSlug === slug;
-
-          return (
-            <Link
-              key={section.slug}
-              href={getSettingsHref(section.slug)}
-              className={cn(
-                'flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
-                isActive
-                  ? 'bg-accent text-accent-foreground'
-                  : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground',
-              )}
-            >
-              <Icon className="mt-0.5 size-4 shrink-0" />
-              <div className="min-w-0">
-                <p className="font-medium">{section.label}</p>
-                <p className="truncate text-xs text-muted-foreground">{section.shortDescription}</p>
-              </div>
-            </Link>
-          );
-        })}
+        {slugs.map((slug) => (
+          <SettingsNavLink key={slug} slug={slug} isActive={currentSlug === slug} />
+        ))}
       </nav>
     </div>
   );
 }
+
+/**
+ * One section of the sidebar. A navigation re-renders the shell, so the link
+ * is memoized: only the two sections whose active state changes render again.
+ */
+const SettingsNavLink = memo(function SettingsNavLink({
+  slug,
+  isActive,
+}: {
+  slug: string;
+  isActive: boolean;
+}) {
+  const section = getSettingsSectionBySlug(slug);
+  if (!section) return null;
+  const Icon = section.icon;
+  return (
+    <Link
+      href={getSettingsHref(section.slug)}
+      className={cn(
+        'flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
+        isActive
+          ? 'bg-accent text-accent-foreground'
+          : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground',
+      )}
+    >
+      <Icon className="mt-0.5 size-4 shrink-0" />
+      <div className="min-w-0">
+        <p className="font-medium">{section.label}</p>
+        <p className="truncate text-xs text-muted-foreground">{section.shortDescription}</p>
+      </div>
+    </Link>
+  );
+});

@@ -1,5 +1,6 @@
 import { COMPANY_TEXT_LIMITS, type CompanyProfileDetails } from '@/lib/company-profile/profile';
 import { stationeryPageShortages, type MarginShortage } from '@/lib/document-rendering/page-geometry';
+import { parseWholeNumberInput } from '@/lib/ui/decimal';
 
 // The company details form's draft: every field as typed, and its parse into
 // the details the save sends. Numbers stay text while typed, so a half-typed
@@ -160,14 +161,6 @@ export function withSavedMargins(
   };
 }
 
-/** A whole number from typed text within the range, or null. */
-function wholeNumber(text: string, minimum: number, maximum: number): number | null {
-  const trimmed = text.trim();
-  if (!/^\d{1,3}$/.test(trimmed)) return null;
-  const value = Number(trimmed);
-  return value >= minimum && value <= maximum ? value : null;
-}
-
 type ParsedDraft =
   | { kind: 'valid'; details: CompanyProfileDetails }
   | { kind: 'invalid'; errors: Record<string, string> };
@@ -180,13 +173,13 @@ export function parseDraft(draft: ProfileDraft): ParsedDraft {
     const limit = COMPANY_TEXT_LIMITS[key];
     if (draft[key].trim().length > limit) errors[fieldId(key)] = `Höchstens ${limit} Zeichen.`;
   }
-  const validity = wholeNumber(draft.offerValidityDays, 1, 365);
+  const validity = parseWholeNumberInput(draft.offerValidityDays, 1, 365);
   if (validity === null) errors[fieldId('offerValidityDays')] = 'Gib eine Zahl von 1 bis 365 ein.';
   const margins = (page: MarginPage) => {
     const parsed = { topMm: 0, rightMm: 0, bottomMm: 0, leftMm: 0 };
     let complete = true;
     for (const { side, maximum } of MARGIN_SIDES) {
-      const value = wholeNumber(draft[page][side], 0, maximum);
+      const value = parseWholeNumberInput(draft[page][side], 0, maximum);
       if (value === null) {
         errors[fieldId(page, side)] = `Gib einen Rand von 0 bis ${maximum} mm ein.`;
         complete = false;

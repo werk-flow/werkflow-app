@@ -61,10 +61,20 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/billing-parties\/actions$/ }, () => ({
               path: join(import.meta.dir, 'billing-parties-service-boundaries.ts'),
             }));
-            builder.onResolve({ filter: /^(?:@\/lib\/offers\/actions|next\/navigation)$/ }, (args) => {
-              if (args.path === '@/lib/offers/actions' || args.importer.endsWith('create-offer-dialog.tsx'))
-                return { path: join(import.meta.dir, 'offers-service-boundaries.ts') };
-            });
+            builder.onResolve(
+              {
+                filter:
+                  /^(?:@\/lib\/offers\/actions|@\/lib\/invoices\/line-source-actions|next\/navigation)$/,
+              },
+              (args) => {
+                if (
+                  args.path === '@/lib/offers/actions' ||
+                  args.importer.endsWith('create-offer-dialog.tsx') ||
+                  args.importer.endsWith('offer-article-picker.tsx')
+                )
+                  return { path: join(import.meta.dir, 'offers-service-boundaries.ts') };
+              },
+            );
             // The report dialog's contract runs the real launcher, dialog and upload
             // client against stub actions, router, organization and redraw.
             builder.onResolve(
@@ -275,6 +285,19 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.includes('/components/auftraege/handover/'))
                 return { path: join(import.meta.dir, 'work-handover-service-boundaries.ts') };
             });
+            // The invoice editor and settings form: held catalog read and settings save, inert issue and router.
+            builder.onResolve(
+              {
+                filter:
+                  /^(?:@\/lib\/invoices\/(?:line-source-actions|issue-actions|settings-actions)|@\/hooks\/use-realtime-router-refresh|next\/navigation|next\/link)$/,
+              },
+              (args) => {
+                if (
+                  /(?:invoice-(?:editor|catalog-line|issue)|invoice-settings-form)\.tsx$/.test(args.importer)
+                )
+                  return { path: join(import.meta.dir, 'invoice-editor-service-boundaries.tsx') };
+              },
+            );
             // The WerkFlow KI card switches through a held stand-in whose response renders the route.
             builder.onResolve({ filter: /^@\/lib\/ai\/settings-actions$/ }, () => ({
               path: join(import.meta.dir, 'ai-settings-service-boundaries.ts'),
