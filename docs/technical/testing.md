@@ -4,7 +4,7 @@
 
 ## How to work
 
-Write each test at its boundary while you build the behavior.
+Write each test at its boundary while building the behavior.
 
 ### Choose the boundary for a rule
 
@@ -105,7 +105,7 @@ After a failed release run, pass every failed group with `--group` before the ne
 - **Caps.** Target 9,000 job-minutes daily; `lib/testing/ci-caps.test.ts` checks PR cancelling, `max-parallel`, nightly skips, timeouts.
 - **Stand-in.** `scripts/ci/run-commit.ts` runs a commit (mirror: `CI_EXECUTOR=mirror`), `scripts/ci/queue.ts` the queue.
 - **Queue.** `health.yml`'s weekly `CI queue` job fails on a p90 runner wait over its ceiling (`.github/scripts/ci-queue.sh`).
-- **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
+- **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks. [Staging journeys](../../.claude/skills/staging-journey/SKILL.md) gate nothing.
 - **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`.
 
 ## Commands
@@ -204,7 +204,7 @@ Check these before classifying.
 - **Unstable order.** A list ordered by random UUID reorders between runs.
 - **Long tokens at 375 px.** An email address or generated token is one unbreakable word.
 - **Fixture race.** Read-then-insert fixtures race under two workers.
-- **Slow machine.** When every measured scenario slows at once, first replay `HEAD` there.
+- **Slow machine.** When every measured scenario slows, first replay `HEAD` there.
 
 ## Never
 
