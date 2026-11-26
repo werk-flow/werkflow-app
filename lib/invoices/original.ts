@@ -162,11 +162,18 @@ export async function issueUnderCheckedNumber<Result extends ActionResult>(
   invoice: Parameters<typeof checkedIssueOriginal>[1],
   snapshot: IssueSnapshot,
   issue: (next: NextIssue, original: StoredOriginal | null) => Promise<Result>,
-): Promise<Result | InvoiceCheckFailure | ActionFailure<'invoice_incomplete' | 'invoice_numbers_exhausted'>> {
+): Promise<Result | InvoiceCheckFailure | ActionFailure<'invoice_incomplete'>> {
   for (let attempt = 1; ; attempt += 1) {
     const issueDate = getBusinessTodayIso();
     const { nextInvoiceNumber } = await readInvoiceSettings(organizationId);
-    if (nextInvoiceNumber === null) return { success: false, error: 'invoice_numbers_exhausted' };
+    if (nextInvoiceNumber === null) {
+      // A used-up series has no number to check under, so nothing is checked or stored. The function still
+      // answers a retry whose first press took the last number with that issue, before it reads the
+      // series, and refuses anything else as invoice_numbers_exhausted.
+      const result = await issue({ number: '', issueDate }, null);
+      if (attempt >= ISSUE_ATTEMPTS || !isMovedNumber(result)) return result;
+      continue;
+    }
     const next = { number: nextInvoiceNumber, issueDate };
     const original = await checkedIssueOriginal(organizationId, invoice, snapshot, next);
     if (!original) return { success: false, error: 'invoice_incomplete' };

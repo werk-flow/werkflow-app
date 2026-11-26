@@ -39,8 +39,6 @@ const EMAIL_CHANGE_STATE_RECOVERY =
 // Reviewed actions, keyed `file::function`, with the reason their writes stay
 // separate by design. Shrink only; a stale entry fails the test.
 const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
-  'lib/invoices/issue-actions.ts::issueInvoice':
-    'Alternatives, not two writes: the replay calls issue_invoice only after the checked issue answered invoice_numbers_exhausted, which writes nothing, and only for an invoice a first press of the same attempt already issued; issue_invoice answers that replay with the first issue (Sol S3 on #539).',
   'lib/time-tracking/clock-state-actions.ts::clockOutBeforeSignOut':
     'Independent by design: each organization’s open session is clocked out on its own, best effort before sign-out; one refusal must not keep the others running.',
   'lib/org/delete-action.ts::deleteOrganization':
