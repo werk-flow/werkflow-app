@@ -142,8 +142,12 @@ export async function saveOfferContent(
     if (!caller.success) return caller;
     if (!caller.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
     const result = await writeOfferContent(caller.context, parsed.data);
-    // The page renders the saved content into this answer; another session hears it through Realtime.
-    if (result.success) revalidatePath(`/angebote/${result.offerId}`);
+    // The page renders the saved content into this answer, and after a refusal for another
+    // session's newer save that content, so the editor can offer „Neu laden“ at once.
+    // Another session hears a save through Realtime.
+    if (result.success || result.error === 'offer_changed') {
+      revalidatePath(`/angebote/${parsed.data.offerId}`);
+    }
     return result;
   } catch (error) {
     logError('saveOfferContent: unexpected error', error);

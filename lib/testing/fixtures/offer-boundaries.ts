@@ -16,7 +16,12 @@ const ownOfferId = '95000000-0000-4000-8000-000000000001';
 const foreignOfferId = '95000000-0000-4000-8000-000000000009';
 
 const world = await installPageWorld({ offers: [], offer_events: [] });
-mock.module('next/cache', () => ({ updateTag: () => {}, revalidatePath: () => {}, revalidateTag: () => {} }));
+const revalidated: string[] = [];
+mock.module('next/cache', () => ({
+  updateTag: () => {},
+  revalidatePath: (path: string) => revalidated.push(path),
+  revalidateTag: () => {},
+}));
 
 const { createOffer, saveOfferContent, updateOffer } = await import('@/lib/offers/actions');
 const { default: OffersPage } = await import('@/app/(app)/angebote/page');
@@ -233,6 +238,13 @@ assert.deepEqual(
     ],
   ],
 );
+
+// A refusal for another session's newer save renders the offer's page into its
+// answer, so the editor can offer that content at once.
+world.rpc = () => ({ data: null, error: { code: 'P0001', message: 'offer_changed' } });
+revalidated.length = 0;
+assert.deepEqual(await saveOfferContent(content), { success: false, error: 'offer_changed' });
+assert.deepEqual(revalidated, [`/angebote/${ownOfferId}`]);
 
 // The pages read only the caller's organization.
 world.rpc = ({ name }) =>

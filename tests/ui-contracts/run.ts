@@ -62,11 +62,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               path: join(import.meta.dir, 'billing-parties-service-boundaries.ts'),
             }));
             builder.onResolve({ filter: /^(?:@\/lib\/offers\/actions|next\/navigation)$/ }, (args) => {
-              if (
-                args.path === '@/lib/offers/actions' ||
-                args.importer.endsWith('create-offer-dialog.tsx') ||
-                args.importer.endsWith('offer-content-editor.tsx')
-              )
+              if (args.path === '@/lib/offers/actions' || args.importer.endsWith('create-offer-dialog.tsx'))
                 return { path: join(import.meta.dir, 'offers-service-boundaries.ts') };
             });
             // The report dialog's contract runs the real launcher, dialog and upload

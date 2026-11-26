@@ -7,12 +7,10 @@ import { holdWrite } from './held-write-boundary';
 declare global {
   interface Window {
     uiContractOfferCreates: number;
-    uiContractOfferRefreshes: number;
   }
 }
 
 window.uiContractOfferCreates = 0;
-window.uiContractOfferRefreshes = 0;
 
 export async function createOffer(): Promise<{ success: false; error: string }> {
   window.uiContractOfferCreates += 1;
@@ -50,11 +48,6 @@ export async function saveOfferContent(
       };
 }
 
-export function useRouter(): { push: () => void; refresh: () => void } {
-  return {
-    push: () => undefined,
-    refresh: () => {
-      window.uiContractOfferRefreshes += 1;
-    },
-  };
+export function useRouter(): { push: () => void } {
+  return { push: () => undefined };
 }

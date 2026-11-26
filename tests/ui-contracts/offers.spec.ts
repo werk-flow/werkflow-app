@@ -129,8 +129,10 @@ test('a content save marks a Titel without a name, then sends the whole content 
   await expect(editor.getByText(/Jemand hat die Positionen gerade geändert/)).toBeVisible();
   await expect(title).toHaveValue('Wartung');
   await expect(save).toBeEnabled();
-  // The newer content may not have reached the tab: the page reads again, so „Neu laden“ can appear.
-  expect(await page.evaluate(() => window.uiContractOfferRefreshes)).toBe(1);
+  // The refusal renders the newer content, as its revalidated answer does: „Neu laden“ takes it.
+  await page.evaluate(() => window.uiContractOfferContentRender?.(2, [{ title: 'Heizung', positions: [] }]));
+  await editor.getByRole('button', { name: 'Neu laden', exact: true }).click();
+  await expect(title).toHaveValue('Heizung');
 });
 
 // A save confirms only once the page renders the saved content, whether that

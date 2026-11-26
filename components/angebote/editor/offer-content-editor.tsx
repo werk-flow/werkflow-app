@@ -1,7 +1,6 @@
 'use client';
 
 import { Plus, Save } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { move } from '@/components/arbeitsvorlagen/work-template-editor-shared';
@@ -86,7 +85,6 @@ function useContentDraft(offer: OfferDetail, saving: boolean) {
  */
 export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
   const { showBanner } = useBanner();
-  const router = useRouter();
   // The saved content is on screen once the page renders the content version the save answered.
   const settle = useSettleOnChange(offer.contentVersion);
   const { run, isPending: pending } = usePendingTask();
@@ -126,8 +124,6 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
         .catch(() => null);
       if (!result?.success) {
         setError(result ? describeFailure(result.error, CONTENT_FAILURE_MESSAGES, SAVE_FAILED) : SAVE_FAILED);
-        // The newer content may not have reached this tab yet; its render offers „Neu laden“.
-        if (result?.error === 'offer_changed') router.refresh();
         return;
       }
       saved();
