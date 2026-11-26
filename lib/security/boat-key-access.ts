@@ -375,12 +375,14 @@ const GLOB_FLAG = /^(?:-g|--i?glob)(?:=(.*))?$|^-g(.+)$/;
 
 /**
  * Whether an rg include glob brings back the git-ignored `.env.live-backup`, as `-g '.env*'` and
- * `-g 'app/.env*'` do: only its final path segment can name the file it selects.
+ * `-g 'app/.env*'` do: only its final path segment can name the file it selects. A brace group
+ * with a slash in it (`{src/x,.env*}`) has no final segment to split off, so it counts.
  */
 function globIncludesLiveBackup(glob: string, caseless = false): boolean {
   const pattern = caseless ? glob.toLowerCase() : glob;
-  const name = pattern.slice(pattern.lastIndexOf('/') + 1);
-  return !pattern.startsWith('!') && new Bun.Glob(name).match(LIVE_BACKUP);
+  if (pattern.startsWith('!')) return false;
+  if (/\{[^}]*\//.test(pattern)) return true;
+  return new Bun.Glob(pattern.slice(pattern.lastIndexOf('/') + 1)).match(LIVE_BACKUP);
 }
 
 /** Whether a search tool's arguments skip git-ignored files for `.env.live-backup`. */

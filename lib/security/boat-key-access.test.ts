@@ -491,6 +491,9 @@ test('a path-qualified glob counts when its final segment names .env.live-backup
     boatKeyToolRefusal({ tool_name: 'Grep', tool_input: { pattern: 'KEY', path: '/srv/work', glob } }, work);
   expect(grep('app/.env*')).toContain('PROD keys');
   expect(grep('src/**/*.ts')).toBeUndefined();
+  // A slash inside a brace group leaves no final segment to test, so the glob counts.
+  expect(grep('{src/x,.env*}')).toContain('PROD keys');
+  expect(grep('{src,lib}/*.ts')).toBeUndefined();
 });
 
 test('a search for a secret file name in the repository passes, a read of the file does not', () => {
