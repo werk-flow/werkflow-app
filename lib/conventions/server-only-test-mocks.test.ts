@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
-import { repositorySources, resolveProductModule, type SourceHost } from './module-imports';
+import { namedBindings, repositorySources, resolveProductModule, type SourceHost } from './module-imports';
 import { repositoryRoot } from './product-sources';
 
 // Tier 2 (decision 0005) for test isolation. One process runs every unit
@@ -144,18 +144,6 @@ function serverOnlyMockingExports(source: ts.SourceFile): Set<string> {
   );
 }
 
-/** The local names of the named runtime imports whose exported name is in `exported`. */
-function localNamesOf(statement: ts.ImportDeclaration, exported: ReadonlySet<string>): string[] {
-  const clause = statement.importClause;
-  const bindings = clause?.namedBindings;
-  if (!clause || clause.isTypeOnly || !bindings || !ts.isNamedImports(bindings)) return [];
-  return bindings.elements.flatMap((element) =>
-    !element.isTypeOnly && exported.has((element.propertyName ?? element.name).text)
-      ? [element.name.text]
-      : [],
-  );
-}
-
 /**
  * The import chain from `file` to 'server-only', skipping the modules in
  * `mocked`, or null when none exists.
@@ -212,7 +200,11 @@ function unmockedServerOnlyLoads(testFiles: readonly string[], host: SourceHost)
         if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return [];
         const fixture = target(file, statement.moduleSpecifier.text);
         const fixtureSource = fixture && fixture !== 'server-only' ? sourceOf(fixture) : null;
-        return fixtureSource ? localNamesOf(statement, serverOnlyMockingExports(fixtureSource)) : [];
+        if (!fixtureSource) return [];
+        const mocking = serverOnlyMockingExports(fixtureSource);
+        return namedBindings(statement).flatMap(({ local, exported }) =>
+          mocking.has(exported) ? [local] : [],
+        );
       }),
     );
     const own = callsOf(source, fixtureMocks);
