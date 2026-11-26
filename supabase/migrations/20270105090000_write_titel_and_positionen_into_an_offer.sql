@@ -104,8 +104,6 @@ alter table public.offers
   add column tax_cents bigint not null default 0,
   add column gross_cents bigint not null default 0,
   add column content_version integer not null default 1;
-alter table public.offers add constraint offers_totals_check
-  check (gross_cents = net_cents + tax_cents and content_version >= 1) not valid;
 
 -- 3. p_sections is [{title, netCents, positions: [{kind, name, description,
 -- quantity, unit, unitLabel, unitPriceCents, priceQuantity,
