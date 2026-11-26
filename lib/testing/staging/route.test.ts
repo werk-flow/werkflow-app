@@ -19,7 +19,7 @@ type Sent = {
   url: string;
   headers: Record<string, string> | undefined;
   method: string | undefined;
-  postData: string | undefined;
+  postData: string | Buffer | undefined;
 };
 
 /** A route whose network answers from `answers` by URL; it records each hop it sent. */
@@ -123,9 +123,18 @@ test('a 307 after a 303 repeats the GET the 303 made, not the original POST', as
   await route.run();
   expect(route.sent.map(({ url, method, postData }) => ({ url, method, postData }))).toEqual([
     { url: start, method: undefined, postData: undefined },
-    { url: `${STAGING_ORIGIN}/api/done`, method: 'GET', postData: '' },
-    { url: `${STAGING_ORIGIN}/api/final`, method: 'GET', postData: '' },
+    { url: `${STAGING_ORIGIN}/api/done`, method: 'GET', postData: Buffer.alloc(0) },
+    { url: `${STAGING_ORIGIN}/api/final`, method: 'GET', postData: Buffer.alloc(0) },
   ]);
+});
+
+test('a JSON POST redirected by 303 sends its GET with an empty byte body, which Playwright never JSON-encodes', async () => {
+  const start = `${STAGING_ORIGIN}/api/json`;
+  const route = fakeRoute(asset(start, 'POST'), { [start]: { status: 303, location: '/api/next' } });
+  await route.run();
+  const next = route.sent[1];
+  expect(next?.method).toBe('GET');
+  expect(Buffer.isBuffer(next?.postData) && next.postData.length === 0).toBe(true);
 });
 
 test('a PUT redirected by 302 keeps its method and body', async () => {

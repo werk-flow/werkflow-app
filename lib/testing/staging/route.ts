@@ -14,7 +14,7 @@ export type RouteHop<R extends FetchedResponse = FetchedResponse> = {
     maxRedirects: 0;
     url?: string;
     method?: string;
-    postData?: string;
+    postData?: string | Buffer;
     headers?: Record<string, string>;
   }): Promise<R>;
   /** Answers the browser with a fetched response. */
@@ -65,7 +65,7 @@ export async function sendThroughBoundary<R extends FetchedResponse>(
 ): Promise<void> {
   let hop: BrowserRequest = route.request;
   let method = route.request.method;
-  let override: { url?: string; method?: string; postData?: string } = {};
+  let override: { url?: string; method?: string; postData?: string | Buffer } = {};
   for (let count = 0; count <= MAX_HOPS; count += 1) {
     if (requestVerdict(hop, devRef) === 'refused') {
       refuse(hop);
@@ -96,7 +96,8 @@ export async function sendThroughBoundary<R extends FetchedResponse>(
     override =
       nextMethod === method
         ? { ...override, url: target }
-        : { url: target, method: nextMethod, postData: '' };
+        : // An empty Buffer, not '': Playwright JSON-encodes a string body under `Content-Type: application/json`.
+          { url: target, method: nextMethod, postData: Buffer.alloc(0) };
     method = nextMethod;
     hop = next;
   }
