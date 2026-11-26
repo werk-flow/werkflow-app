@@ -138,7 +138,7 @@ function fieldEquipmentSearchCaptures(): OpenSet {
         view: fieldSearch,
         widths: [375, 1280],
         schemes: ['light', 'dark'],
-        inLayer: searchBirkenhof,
+        act: searchBirkenhof,
       },
       {
         id: 'employee-anlage-card',
