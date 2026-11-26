@@ -133,9 +133,9 @@ function MaintenanceDueTaskRow({ task }: { task: AttentionMaintenanceDueTask }) 
       ariaLabel={`Wartung ${task.equipmentLabel}${task.siteName ? ` in ${task.siteName}` : ''} öffnen, ${due}`}
       sourceId={task.sourceId}
     >
-      <p className="truncate text-sm font-medium">{task.equipmentLabel}</p>
-      {/* The due date leads: a long Einsatzort is cut, never the date. */}
-      <p className="truncate text-xs text-muted-foreground tabular-nums">
+      {/* Both lines wrap, even without break points: names that differ only at the end stay apart on a phone. */}
+      <p className="text-sm font-medium wrap-anywhere">{task.equipmentLabel}</p>
+      <p className="text-xs text-muted-foreground tabular-nums wrap-anywhere">
         {task.siteName ? `${due} · ${task.siteName}` : due}
       </p>
     </TaskLink>
