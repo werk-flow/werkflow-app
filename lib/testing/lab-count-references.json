@@ -3465,7 +3465,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 11, "tolerance": 1 },
-        "componentRenders": { "reference": 484, "tolerance": 9 }
+        "componentRenders": { "reference": 465, "tolerance": 9 }
       },
       "payloads": {
         "route:/einstellungen/mitarbeiter": {
@@ -3635,6 +3635,14 @@
           },
           "runKeys": ["2026-11-22T013828858Z-cf6463"],
           "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: code moved from the layout's start-up to the page's first open. #560 raised this step's requests and left its script shape at the old request count, so its bytes printed ungated; fresh main ecc4ba31 measured 3 script requests (was 1) and 20,862 B."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 484, "tolerance": 9 },
+          "to": { "reference": 465, "tolerance": 9 },
+          "runKeys": ["2026-11-26T134230590Z-38499e"],
+          "reason": null
         }
       ]
     }
