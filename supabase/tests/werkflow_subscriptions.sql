@@ -10,7 +10,7 @@
 -- changes nothing, also of a subscription the row does not follow, and a
 -- holding replacement beats an ended predecessor whatever the read times; a failed payment never ends the subscription; and only the payer creates
 -- the reserved organization, with the reserved id, once, while the
--- subscription holds. With 20261221100012 (werk-flow/werkflow-planning#495):
+-- subscription holds. With 20270111100005 (werk-flow/werkflow-planning#495):
 -- one Stripe ended after a failed first debit holds but no longer runs, so a
 -- new Checkout starts and its subscription replaces the ended one; a marked
 -- duplicate answers 'duplicate' until its cleanup is settled, also once

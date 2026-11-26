@@ -60,14 +60,15 @@ alter table public.werkflow_subscriptions
 -- @destructive: after release 55088f06: the deployed build never writes werkflow_billing_mails, and the new rule keeps every kind the old one took
 alter table public.werkflow_billing_mails drop constraint werkflow_billing_mails_kind_check;
 
--- The list also holds the kinds of werk-flow/werkflow-app#508 (20261221100004), so either merge order keeps them.
+-- The list holds every kind on main (20261223100004, 20261221100009, 20270111100004) and this PR's two alarms.
 -- @destructive: after release 55088f06: the deployed build writes no werkflow_billing_mails row, and the rule takes every kind the old one took
 alter table public.werkflow_billing_mails add constraint werkflow_billing_mails_kind_check check (kind in (
-  'payment_failed', 'card_problem', 'mandate_inactive', 'debit_notice', 'invoice', 'receipt',
+  'payment_failed', 'card_problem', 'mandate_inactive', 'debit_notice', 'invoice', 'receipt', 'refund',
   'alarm.debit_failed', 'alarm.debit_reversed', 'alarm.mandate_inactive',
   'alarm.mail_failed', 'alarm.invoice_check_failed', 'alarm.invoice_undelivered',
   'alarm.debit_notice_late', 'alarm.mail_undelivered', 'alarm.signals_quiet',
-  'alarm.reconciliation_missed', 'alarm.duplicate_subscription_cancelled', 'alarm.refund_failed'
+  'alarm.reconciliation_missed', 'alarm.mail_bounced',
+  'alarm.duplicate_subscription_cancelled', 'alarm.refund_failed'
 )) not valid;
 
 -- As 20261218100003, except that only a running subscription answers
