@@ -35,7 +35,7 @@ function FigureRow({
       <p className="min-w-0 text-sm break-words">{label}</p>
       <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm tabular-nums sm:grid-cols-4">
         {cells.map(([term, value]) => (
-          <div key={term} className="flex justify-between gap-2 sm:flex-col sm:items-end">
+          <div key={term} className="flex justify-between gap-2 text-right sm:block">
             <dt className="font-normal text-muted-foreground">{term}</dt>
             <dd>{value}</dd>
           </div>

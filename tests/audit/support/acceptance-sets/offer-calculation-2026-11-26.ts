@@ -16,6 +16,11 @@ function leistungName(world: TestWorld): string {
   return `${LEISTUNG} ${world.runId}`;
 }
 
+/** Its own prefix: the dialog openers seed `L-<runId>` in the same world. */
+function leistungNumber(world: TestWorld): string {
+  return `KAL-${world.runId}`;
+}
+
 /**
  * A made-up customer's draft offer with each Position kind and its cost, as
  * the save stores it. Titel 1 „Montage“: 2,5 h of a Leistung at 72,50 € with
@@ -30,7 +35,7 @@ async function seedCalculatedOffer(world: TestWorld): Promise<string> {
     const leistungId = await seedLeistung({
       orgId: world.orgId,
       actorId: world.users.buero.id,
-      leistungNumber: `L-${world.runId}`,
+      leistungNumber: leistungNumber(world),
       name: leistungName(world),
       prices: [{ validFrom: '2026-01-01', salePriceCents: 7250, costRateCents: 4180 }],
     });
@@ -164,7 +169,9 @@ async function showCalculation(scope: Locator): Promise<void> {
  * its cost rate; a later width shows the added Position again.
  */
 async function addLeistungWithMarkup(scope: Locator, world: TestWorld): Promise<void> {
-  const notes = scope.getByText(`Aus Leistung L-${world.runId} · ${leistungName(world)}`, { exact: true });
+  const notes = scope.getByText(`Aus Leistung ${leistungNumber(world)} · ${leistungName(world)}`, {
+    exact: true,
+  });
   if ((await notes.count()) < 2) {
     await scope.getByRole('combobox', { name: 'Leistung zu Titel 1 hinzufügen' }).click();
     await scope.page().getByRole('textbox', { name: 'Nummer oder Name…' }).fill(LEISTUNG);

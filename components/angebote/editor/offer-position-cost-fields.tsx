@@ -58,7 +58,7 @@ export function PositionCostFields({
           disabled={disabled}
         />
       </Field>
-      <p className="col-span-2 text-sm text-muted-foreground tabular-nums sm:col-span-3 sm:pb-2 sm:text-right">
+      <p className="col-span-2 text-sm text-muted-foreground tabular-nums sm:flex sm:justify-end sm:pb-2">
         {positionMarginSentence(figures)}
       </p>
     </div>
