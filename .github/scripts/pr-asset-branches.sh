@@ -17,7 +17,7 @@ echo "environment=dev" >> "${GITHUB_OUTPUT:-/dev/null}"
 # matching-refs lists every ref that starts with the prefix; a failed request fails the check.
 branches="$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/heads/${prefix}" --jq '.[].ref | ltrimstr("refs/heads/")')"
 if test -n "$branches"; then
-  echo "::error title=${check}::PR images belong in the pr-screenshots prerelease, not in a branch. Delete: $(paste -sd ' ' <<< "$branches")"
+  echo "::error title=${check}::PR images belong in the pr-screenshots prerelease, not in a branch. Delete: $(paste -sd ' ' - <<< "$branches")"
   exit 1
 fi
 echo "${check}: ok"

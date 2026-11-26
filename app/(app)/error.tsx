@@ -8,12 +8,13 @@ import { SectionError } from '@/components/ui/section-error';
  * layout, so the sidebar and the clock button stay usable and the user can
  * move on or retry. `app/error.tsx` remains the boundary for a failure of the
  * layout itself. Next masks the message in production; nothing sensitive renders.
+ * `retry` reads the route again; `reset` would only re-render the payload that failed.
  */
-export default function AppPageError({ reset }: { reset: () => void }) {
+export default function AppPageError({ retry }: { retry: () => void }) {
   return (
     <PageShell>
       <PageBody maxWidth="content">
-        <SectionError title="Diese Seite konnte nicht geladen werden" onRetry={reset}>
+        <SectionError title="Diese Seite konnte nicht geladen werden" onRetry={retry}>
           Beim Laden ist ein Fehler aufgetreten. Deine Daten sind davon nicht betroffen. Versuche es erneut
           oder wechsle über die Navigation in einen anderen Bereich.
         </SectionError>
