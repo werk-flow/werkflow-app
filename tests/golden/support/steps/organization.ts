@@ -4,7 +4,7 @@ import { createAdminClient, getOrganizationByName, type PersistedOrganization } 
 import { seedPaidReservation } from '../db/werkflow-billing';
 import { confirmTestUserEmail } from '../seed';
 import type { TestUser } from '../world';
-import { hydratedAndSettled, pressKey, settledBeforeTimeout } from './interaction';
+import { hydratedAndSettled, settledBeforeTimeout } from './interaction';
 import { openMemberDetailFromList } from './personnel';
 import { listEntry, openDialogWithRetry, openMenuItem, pendingRow, SHARED_COPY, visibleText } from './shared';
 
