@@ -112,6 +112,6 @@ test('a draft keeps the account version it was typed against across a live refre
 test('picking the selected day again keeps the date', async ({ page }) => {
   const date = row(page).getByRole('group', { name: 'Wirksamkeitsdatum für Kevin Kontrakt' });
   await date.getByRole('button', { name: 'Kalender öffnen' }).click();
-  await page.locator('[aria-selected="true"] button').first().click();
+  await page.getByRole('gridcell', { selected: true }).getByRole('button').click();
   await expect(date).toContainText('02.11.2026');
 });
