@@ -60,9 +60,13 @@ export function devMcpLaunch(input: {
       refusal:
         'SUPABASE_DEV_ACCESS_TOKEN is missing from the agent key file or out of its shape. Run `bun run agent-access:check`.',
     };
-  const inherited = INHERITED.flatMap((name) => (env[name] === undefined ? [] : [[name, env[name]]]));
+  const inherited: Record<string, string> = {};
+  for (const name of INHERITED) {
+    const value = env[name];
+    if (value !== undefined) inherited[name] = value;
+  }
   return {
     args: ['--no-env-file', serverEntry, `--project-ref=${refs.dev}`, '--read-only'],
-    env: { ...Object.fromEntries(inherited), SUPABASE_ACCESS_TOKEN: token },
+    env: { ...inherited, SUPABASE_ACCESS_TOKEN: token },
   };
 }
