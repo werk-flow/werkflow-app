@@ -29,6 +29,9 @@ test('a column outside the allowlist, another table, or SQL in an id refuses the
     ['werkflow_invoices', ['buyer']],
     ['werkflow_invoices', ['line_names']],
     ['organizations', ['name']],
+    // Address data and a free-text `_reason` on tables the allowlist does hold.
+    ['organizations', ['postal_code']],
+    ['werkflow_billing_mails', ['failure_reason']],
     // An id-like name on a table the allowlist does not hold, such as free text with a `_reason` suffix.
     ['maintenance_plan_revisions', ['overlap_reason']],
     ['auth.users', ['id']],
