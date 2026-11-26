@@ -12,7 +12,7 @@ import {
   payWithTestCard,
   readDev,
   readStripe,
-  runOrganizationId,
+  runOrganization,
   signIn,
   withStagingBrowser,
 } from './kit';
@@ -51,21 +51,20 @@ async function journey(): Promise<string> {
     ).toBeVisible({ timeout: 30_000 });
     await expect(page).toHaveURL(/\/dashboard/);
 
-    const organizationId = await runOrganizationId(kit, runId);
-    const [subscription] = await readDev(kit, {
+    const organization = await runOrganization(kit, actor);
+    const [subscription] = await readDev(kit, organization, {
       table: 'werkflow_subscriptions',
-      columns: ['status', 'holds_subscription', 'runs_subscription', 'stripe_subscription_id'],
-      organizationId,
+      columns: ['status', 'runs_subscription', 'stripe_subscription_id'],
     });
     const subscriptionId = String(subscription?.stripe_subscription_id ?? '');
     if (!subscription?.runs_subscription || !subscriptionId.startsWith('sub_'))
       throw new Error('The organization holds no running subscription on DEV.');
-    const atStripe = await readStripe(kit, `subscriptions/${subscriptionId}`);
+    const [atStripe] = await readStripe(kit, `subscriptions/${subscriptionId}`);
     kit.log('dashboard shown', {
-      organization: organizationId,
+      organization: organization.id,
       subscription: subscriptionId,
       dev_status: String(subscription.status),
-      stripe_status: String(atStripe.status),
+      stripe_status: String(atStripe?.status),
       livemode: false,
     });
     return subscriptionId;
@@ -85,12 +84,17 @@ try {
 }
 if (subscriptionId) {
   // The deletion ended the subscription at Stripe at once.
-  const ended = await readStripe(kit, `subscriptions/${subscriptionId}`);
-  kit.log('subscription after cleanup', {
-    subscription: subscriptionId,
-    stripe_status: String(ended.status),
-  });
-  passed &&= ended.status === 'canceled';
+  try {
+    const [ended] = await readStripe(kit, `subscriptions/${subscriptionId}`);
+    kit.log('subscription after cleanup', {
+      subscription: subscriptionId,
+      stripe_status: String(ended?.status),
+    });
+    passed &&= ended?.status === 'canceled';
+  } catch (error) {
+    passed = false;
+    kit.log('subscription check failed', { reason: failureLine(kit, error) });
+  }
 }
 kit.log('smoke', { run: runId, result: passed ? 'passed' : 'failed' });
 process.exitCode = passed ? 0 : 1;

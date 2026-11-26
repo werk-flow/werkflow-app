@@ -42,7 +42,7 @@ function runIdOf(value: string, prefix: string, suffix: string): string | null {
 }
 
 export type ActorRow = { id: string; email: string; createdAt: string };
-export type OrganizationRow = { id: string; name: string; adminId: string; createdAt: string };
+export type OrganizationRow = { id: string; name: string; adminId: string };
 
 /** One run's rows a cleanup removes: its actor, and the organizations that actor administers. */
 export type RunRows = { runId: string; actorId: string; organizationIds: string[] };
@@ -77,22 +77,37 @@ export function selectRuns(
 const SECRET_SHAPES =
   /\b(?:sbp|sb_secret|sb_publishable|rk_test|rk_live|sk_test|sk_live|whsec|eyJ)[A-Za-z0-9_.-]*/g;
 
+/** A failure's printed line stays this short: the step's own words, not a provider's page. */
+const FAILURE_LINE_LENGTH = 240;
+
 /**
- * Text a journey prints, with every value it holds as a secret (keys, the actor's password) and every
- * key-shaped or mail-shaped word replaced. A failure's message passes here before it reaches the log.
+ * Text a journey prints, with every value it holds as a secret (keys, the actor's password), every
+ * key-shaped or mail-shaped word and every URL query or fragment replaced, cut to one short line.
+ * A failure's message passes here before it reaches the log.
  */
 export function redact(text: string, secrets: readonly string[]): string {
-  let safe = text;
+  let safe = text.split('\n')[0] ?? '';
   for (const secret of secrets) if (secret) safe = safe.split(secret).join('[redacted]');
-  return safe.replace(SECRET_SHAPES, '[redacted]').replace(/[^\s"'<>()]+@[^\s"'<>()]+/g, '[address]');
+  safe = safe
+    .replace(/(https?:\/\/[^\s"'<>()?#]+)[?#][^\s"'<>()]*/g, '$1?[redacted]')
+    .replace(SECRET_SHAPES, '[redacted]')
+    .replace(/[^\s"'<>()]+@[^\s"'<>()]+/g, '[address]');
+  return safe.length > FAILURE_LINE_LENGTH ? `${safe.slice(0, FAILURE_LINE_LENGTH - 1)}…` : safe;
 }
 
 export type Fact = string | number | boolean | null;
 
-/** One printed line: a step and its ids and states. A value that looks like an address or a key throws. */
-export function factLine(step: string, facts: Readonly<Record<string, Fact>> = {}): string {
+/**
+ * One printed line: a step and its ids and states. A value that holds a secret, or looks like an
+ * address, a key or a URL with a query, throws.
+ */
+export function factLine(
+  step: string,
+  facts: Readonly<Record<string, Fact>> = {},
+  secrets: readonly string[] = [],
+): string {
   const parts = Object.entries(facts).map(([name, value]) => {
-    if (typeof value === 'string' && redact(value, []) !== value)
+    if (typeof value === 'string' && redact(value, secrets) !== value)
       throw new Error(
         `The fact ${name} of ${step} looks like an address or a key; print ids and states only.`,
       );

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
 import { chromium, expect, type Page } from '@playwright/test';
@@ -12,7 +12,13 @@ import {
   refusedOrigin,
   requestVerdict,
 } from '../../lib/testing/staging/boundary';
-import { sandboxAnswer, scopedReadQuery, type ScopedRead } from '../../lib/testing/staging/readers';
+import {
+  sandboxAnswer,
+  scopedReadQuery,
+  type ReadableTable,
+  type ScopedRead,
+  type StripeFacts,
+} from '../../lib/testing/staging/readers';
 import {
   RUN_PATTERNS,
   factLine,
@@ -47,7 +53,10 @@ export type Kit = {
   log(step: string, facts?: Readonly<Record<string, Fact>>): void;
 };
 
-/** The kit with every agent key in its shape, or a throw that names the missing ones. */
+/**
+ * The kit with every agent key in its shape, or a throw that names the missing ones. An error that
+ * escapes a journey prints only its redacted first line: Playwright's messages can list request headers.
+ */
 export function loadKit(): Kit {
   const read = readStagingAgentKeys();
   const refs = supabaseProjectRefs(checkout);
@@ -70,13 +79,25 @@ export function loadKit(): Kit {
     VERCEL_STAGING_BYPASS_SECRET: key('VERCEL_STAGING_BYPASS_SECRET'),
   };
   const secrets = Object.values(keys);
-  return { devRef: refs.dev, keys, secrets, log: (step, facts) => console.log(factLine(step, facts)) };
+  const escaped = (error: unknown) => {
+    console.error(
+      `[staging] unexpected failure: ${redact(error instanceof Error ? error.message : String(error), secrets)}`,
+    );
+    process.exitCode = 1;
+  };
+  process.on('uncaughtException', escaped);
+  process.on('unhandledRejection', escaped);
+  return {
+    devRef: refs.dev,
+    keys,
+    secrets,
+    log: (step, facts) => console.log(factLine(step, facts, secrets)),
+  };
 }
 
-/** A failure's first line, safe to print. */
+/** A failure's first line, safe to print (lib/testing/staging/runs.ts, `redact`). */
 export function failureLine(kit: Kit, error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return redact(message.split('\n')[0] ?? '', kit.secrets);
+  return redact(error instanceof Error ? error.message : String(error), kit.secrets);
 }
 
 async function call(url: string, init: RequestInit): Promise<Response> {
@@ -106,30 +127,41 @@ async function readOnlySql(kit: Kit, query: string, parameters: readonly string[
   return z.array(z.unknown()).parse(await json(response, 'The DEV read'));
 }
 
-/** One table's rows of the run's organization, ids and states only (lib/testing/staging/readers.ts). */
-export async function readDev(kit: Kit, read: ScopedRead): Promise<Record<string, unknown>[]> {
-  const { query, parameters } = scopedReadQuery(read);
-  return z.array(z.record(z.string(), z.unknown())).parse(await readOnlySql(kit, query, parameters));
-}
+/** The run's own organization; only `runOrganization` makes one, so a reader never takes another id. */
+export type RunOrganization = { readonly runId: string; readonly id: string };
+const runOrganizations = new WeakSet<RunOrganization>();
 
-/** The run's organization, found by its exact name. */
-export async function runOrganizationId(kit: Kit, runId: string): Promise<string> {
+/** The organization named for the actor's run that the actor administers, and no other. */
+export async function runOrganization(kit: Kit, actor: Actor): Promise<RunOrganization> {
   const rows = z
     .array(z.object({ id: uuidSchema }))
     .parse(
-      await readOnlySql(kit, 'select id from public.organizations where name = $1', [
-        runOrganizationName(runId),
+      await readOnlySql(kit, 'select id from public.organizations where name = $1 and admin_id = $2::uuid', [
+        runOrganizationName(actor.runId),
+        actor.id,
       ]),
     );
   const [row] = rows;
-  if (!row || rows.length > 1) throw new Error(`Found ${rows.length} organizations for run ${runId}.`);
-  return row.id;
+  if (!row || rows.length > 1) throw new Error(`Found ${rows.length} organizations for run ${actor.runId}.`);
+  const organization = Object.freeze({ runId: actor.runId, id: row.id });
+  runOrganizations.add(organization);
+  return organization;
+}
+
+/** One table's rows of the run's organization, allowlisted columns only (lib/testing/staging/readers.ts). */
+export async function readDev<T extends ReadableTable>(
+  kit: Kit,
+  organization: RunOrganization,
+  read: Omit<ScopedRead<T>, 'organizationId'>,
+): Promise<Record<string, unknown>[]> {
+  if (!runOrganizations.has(organization))
+    throw new Error('Read only the run organization runOrganization found.');
+  const { query, parameters } = scopedReadQuery({ ...read, organizationId: organization.id });
+  return z.array(z.record(z.string(), z.unknown())).parse(await readOnlySql(kit, query, parameters));
 }
 
 const actorRows = z.array(z.object({ id: uuidSchema, email: z.string(), created_at: z.string() }));
-const organizationRows = z.array(
-  z.object({ id: uuidSchema, name: z.string(), admin_id: uuidSchema, created_at: z.string() }),
-);
+const organizationRows = z.array(z.object({ id: uuidSchema, name: z.string(), admin_id: uuidSchema }));
 
 /** Every run's actor and organization on DEV: the database filters, so no other row reaches the kit. */
 async function readRunRows(kit: Kit): Promise<{ actors: ActorRow[]; organizations: OrganizationRow[] }> {
@@ -137,7 +169,7 @@ async function readRunRows(kit: Kit): Promise<{ actors: ActorRow[]; organization
     readOnlySql(kit, 'select id, email, created_at from auth.users where email like $1', [
       RUN_PATTERNS.actorEmail,
     ]),
-    readOnlySql(kit, 'select id, name, admin_id, created_at from public.organizations where name like $1', [
+    readOnlySql(kit, 'select id, name, admin_id from public.organizations where name like $1', [
       RUN_PATTERNS.organizationName,
     ]),
   ]);
@@ -147,12 +179,12 @@ async function readRunRows(kit: Kit): Promise<{ actors: ActorRow[]; organization
       .map((row) => ({ id: row.id, email: row.email, createdAt: row.created_at })),
     organizations: organizationRows
       .parse(organizations)
-      .map((row) => ({ id: row.id, name: row.name, adminId: row.admin_id, createdAt: row.created_at })),
+      .map((row) => ({ id: row.id, name: row.name, adminId: row.admin_id })),
   };
 }
 
-/** A Stripe sandbox object or list; a live answer throws (lib/testing/staging/readers.ts). */
-export async function readStripe(kit: Kit, path: string): Promise<Record<string, unknown>> {
+/** A Stripe sandbox object, or a list's items, as allowed fields; a live answer throws (lib/testing/staging/readers.ts). */
+export async function readStripe(kit: Kit, path: string): Promise<StripeFacts[]> {
   const response = await call(`https://api.stripe.com/v1/${path}`, {
     headers: { Authorization: `Bearer ${kit.keys.STRIPE_SANDBOX_KEY}` },
   });
@@ -214,22 +246,11 @@ export async function createActor(kit: Kit, runId: string): Promise<Actor> {
   return actor;
 }
 
-const keptActor = z.object({ runId: z.string(), id: uuidSchema, email: z.string(), password: z.string() });
-
 /**
- * The run's actor with a password the kit holds: the one this machine kept, or a new one set through the
- * secret key for a run another machine started. The user must carry the run's address.
+ * The run's actor with a new password set through the secret key, so a cleanup works from any machine
+ * and after any other machine's attempt. The user must still carry the run's address.
  */
 async function actorFor(kit: Kit, run: RunRows): Promise<Actor> {
-  try {
-    const kept = keptActor.parse(JSON.parse(readFileSync(join(runFolder(run.runId), 'actor.json'), 'utf8')));
-    if (kept.id === run.actorId) {
-      kit.secrets.push(kept.password);
-      return kept;
-    }
-  } catch {
-    // No kept actor on this machine: set a new password below.
-  }
   const email = runActorEmail(run.runId);
   const user = userAnswer.parse(
     await json(await authAdmin(kit, `users/${run.actorId}`), 'Reading the actor'),
@@ -281,13 +302,27 @@ export async function withStagingBrowser<T>(
         await route.abort('blockedbyclient');
         return;
       }
-      const bypass = bypassHeaders(asked, secret);
-      // Another origin's request passes untouched: a rewritten header set breaks Stripe's own pages.
-      await (Object.keys(bypass).length
-        ? route.continue({ headers: { ...request.headers(), ...bypass } })
-        : route.fallback());
+      if (requestVerdict(asked) === 'elsewhere') {
+        // Another origin's request passes untouched: a rewritten header set breaks Stripe's own pages.
+        await route.fallback();
+        return;
+      }
+      // Staging's request is sent here without following redirects: Playwright would carry the bypass
+      // header to a redirect's target. The browser then requests the target itself, through this route.
+      // A failed fetch's error lists the request's headers, the bypass among them: it is dropped unread,
+      // and the browser sees a failed request.
+      try {
+        const response = await route.fetch({
+          headers: { ...request.headers(), ...bypassHeaders(asked, secret) },
+          maxRedirects: 0,
+        });
+        await route.fulfill({ response });
+      } catch {
+        await route.abort('failed').catch(() => undefined);
+      }
     });
-    // A redirect hop passes no route: a page it leads outside staging ends the journey at once.
+    // Another origin's redirect hop passes no route: a page it leads outside staging ends the journey
+    // at once. It never carries the bypass, which only staging's own requests get.
     context.on('request', (request) => {
       if (!request.redirectedFrom() || !request.isNavigationRequest()) return;
       const asked = {

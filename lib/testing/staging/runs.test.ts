@@ -24,12 +24,7 @@ const actor = (id: string, runId: string, createdAt: string): ActorRow => ({
   email: runActorEmail(runId),
   createdAt,
 });
-const organization = (id: string, name: string, adminId: string): OrganizationRow => ({
-  id,
-  name,
-  adminId,
-  createdAt: OLD,
-});
+const organization = (id: string, name: string, adminId: string): OrganizationRow => ({ id, name, adminId });
 
 test('a run id names its UTC minute and six hex digits, and refuses less randomness', () => {
   expect(newRunId(NOW, 'A1B2C3D4')).toBe('20261126-1600-a1b2c3');
@@ -83,6 +78,25 @@ describe('printing', () => {
       [password, 'MadeUpBypassSecret0123456789abcd'],
     );
     expect(line).toBe('fill [redacted] for [address] with [redacted] and [redacted] and [redacted]');
+  });
+
+  test("a failure line is one short line without a URL's query, and redacting it again changes nothing", () => {
+    const line = redact(
+      'page.goto: net::ERR at https://werkflow.example/auth/callback?code=made-up#token=x\n  call log: payer details',
+      [],
+    );
+    expect(line).toBe('page.goto: net::ERR at https://werkflow.example/auth/callback?[redacted]');
+    const long = redact('x'.repeat(500), []);
+    expect(long).toHaveLength(240);
+    expect(redact(long, [])).toBe(long);
+  });
+
+  test('a fact line refuses a value that holds one of the run secrets', () => {
+    expect(() =>
+      factLine('bypass', { header: 'MadeUpBypassSecret0123456789abcd' }, [
+        'MadeUpBypassSecret0123456789abcd',
+      ]),
+    ).toThrow(/ids and states only/);
   });
 
   test('a fact line holds ids and states, and refuses an address or a key', () => {
