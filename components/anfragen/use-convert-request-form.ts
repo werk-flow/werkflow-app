@@ -7,6 +7,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { useSuggestedRecordNumber } from '@/hooks/use-suggested-record-number';
 import { describeFailure } from '@/lib/action-messages';
 import { convertRequestToJob, convertRequestToProject } from '@/lib/requests/actions';
+import { convertRequestToOffer } from '@/lib/requests/offer-conversion-actions';
 import { requestUrgencyToJobPriority, type ClientRequest } from '@/lib/requests/types';
 import type { JobPriority } from '@/lib/jobs/types';
 import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
@@ -18,10 +19,15 @@ const ERROR_MESSAGES = {
   request_not_found: 'Die Anfrage wurde nicht gefunden.',
   already_converted: 'Diese Anfrage wurde bereits umgewandelt.',
   client_required: 'Bitte wähle einen Kunden aus oder lege ihn an.',
+  client_archived: 'Der Kunde ist archiviert. Hole ihn zuerst aus dem Archiv zurück.',
+  site_not_found: 'Der Einsatzort gehört nicht mehr zu diesem Kunden.',
+  request_changed: 'Der Kunde der Anfrage hat sich gerade geändert. Prüfe die Angaben und wandle erneut um.',
+  contact_not_found: 'Der Ansprechpartner gehört nicht mehr zu diesem Kunden.',
   job_number_required: 'Bitte gib eine Auftragsnummer ein.',
   job_number_taken: 'Diese Auftragsnummer ist bereits vergeben.',
   project_number_taken: 'Diese Projektnummer ist bereits vergeben.',
   title_or_description_required: 'Bitte gib einen Titel ein.',
+  title_required: 'Bitte gib einen Titel ein.',
   name_required: 'Bitte gib einen Projektnamen ein.',
   create_failed: 'Die Umwandlung ist fehlgeschlagen.',
   work_template_version_unavailable: 'Die gewählte Arbeitsvorlage ist nicht mehr verfügbar.',
@@ -29,7 +35,15 @@ const ERROR_MESSAGES = {
   template_apply_failed: 'Die Arbeitsvorlage konnte nicht übernommen werden.',
 } satisfies Record<string, string>;
 
-export const CONVERSION_TARGETS = ['job', 'project'] as const;
+// An offer is for the request's customer, so its client_required asks to assign one to the request.
+// An offer title's limit (offers_title_check); a long request summary is shortened before the conversion.
+const OFFER_TITLE_LIMIT = 200;
+const OFFER_TITLE_TOO_LONG = `Der Titel eines Angebots hat höchstens ${OFFER_TITLE_LIMIT} Zeichen. Kürze ihn bitte.`;
+
+const OFFER_CLIENT_REQUIRED =
+  'Ordne der Anfrage zuerst einen Kunden zu, dann kannst du ein Angebot daraus machen.';
+
+export const CONVERSION_TARGETS = ['job', 'project', 'offer'] as const;
 
 type ConversionTarget = (typeof CONVERSION_TARGETS)[number];
 
@@ -37,13 +51,17 @@ type ConversionFieldId = 'convert-title' | 'convert-number' | 'convert-client';
 
 // The server refusals that name a field show on that field.
 const FIELD_SERVER_MESSAGES: Record<ConversionFieldId, readonly string[]> = {
-  'convert-title': [ERROR_MESSAGES.title_or_description_required, ERROR_MESSAGES.name_required],
+  'convert-title': [
+    ERROR_MESSAGES.title_or_description_required,
+    ERROR_MESSAGES.title_required,
+    ERROR_MESSAGES.name_required,
+  ],
   'convert-number': [
     ERROR_MESSAGES.job_number_required,
     ERROR_MESSAGES.job_number_taken,
     ERROR_MESSAGES.project_number_taken,
   ],
-  'convert-client': [ERROR_MESSAGES.client_required],
+  'convert-client': [ERROR_MESSAGES.client_required, ERROR_MESSAGES.client_archived],
 };
 
 /** The dialog's field checks in visual order, keyed by control id. */
@@ -54,11 +72,13 @@ function conversionFieldErrors(
   clientId: string,
 ): Record<ConversionFieldId, string | undefined> {
   const titleMessage =
-    target === 'job' ? ERROR_MESSAGES.title_or_description_required : ERROR_MESSAGES.name_required;
+    target === 'project' ? ERROR_MESSAGES.name_required : ERROR_MESSAGES.title_or_description_required;
+  const titleTooLong = target === 'offer' && title.trim().length > OFFER_TITLE_LIMIT;
   return {
-    'convert-title': title.trim() ? undefined : titleMessage,
+    'convert-title': !title.trim() ? titleMessage : titleTooLong ? OFFER_TITLE_TOO_LONG : undefined,
     'convert-number': target === 'job' && !number.trim() ? ERROR_MESSAGES.job_number_required : undefined,
-    'convert-client': clientId ? undefined : ERROR_MESSAGES.client_required,
+    // An offer's customer is the request's, no input of the dialog: its absence shows above the actions.
+    'convert-client': clientId || target === 'offer' ? undefined : ERROR_MESSAGES.client_required,
   };
 }
 
@@ -141,14 +161,18 @@ function useSuggestedConversionNumber(
 
   // Apply the suggestion only when the field is empty or still holds a
   // previous suggestion — never overwrite a number the user typed.
-  useSuggestedRecordNumber(target === 'job' ? 'next-job-number' : 'next-project-number', open, (suggestion) =>
-    setNumber((current) => {
-      if (current && current !== lastSuggestedNumberRef.current) {
-        return current;
-      }
-      lastSuggestedNumberRef.current = suggestion;
-      return suggestion;
-    }),
+  // An offer takes its number when it is created, so the dialog suggests none.
+  useSuggestedRecordNumber(
+    target === 'job' ? 'next-job-number' : 'next-project-number',
+    open && target !== 'offer',
+    (suggestion) =>
+      setNumber((current) => {
+        if (current && current !== lastSuggestedNumberRef.current) {
+          return current;
+        }
+        lastSuggestedNumberRef.current = suggestion;
+        return suggestion;
+      }),
   );
 
   return { number, setNumber };
@@ -244,7 +268,7 @@ type ConversionOutcome =
   | { kind: 'qualification_warning'; evaluation: AssignmentEvaluation }
   | { kind: 'failed'; error: string };
 
-/** Sends the conversion under the opening's attempt key to the job or project action and names its outcome. */
+/** Sends the conversion under the opening's attempt key to the job, project or offer action and names its outcome. */
 async function convertRequest(
   requestId: string,
   target: ConversionTarget,
@@ -253,6 +277,18 @@ async function convertRequest(
   attemptKey: string,
 ): Promise<ConversionOutcome> {
   const { title, description, clientId, siteId, contactId, number } = fields;
+  if (target === 'offer') {
+    const result = await convertRequestToOffer(
+      requestId,
+      { clientId, title: title.trim(), ...(siteId ? { siteId } : {}), ...(contactId ? { contactId } : {}) },
+      attemptKey,
+    );
+    if (!result.success) {
+      if (result.error === 'client_required') return { kind: 'failed', error: OFFER_CLIENT_REQUIRED };
+      return { kind: 'failed', error: describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler') };
+    }
+    return { kind: 'converted', message: `Anfrage wurde in Angebot ${result.offerNumber} umgewandelt.` };
+  }
   if (target === 'job') {
     const { priority, plannedDate, plannedTime, location, templateVersionId } = fields;
     const result = await convertRequestToJob(
@@ -305,6 +341,28 @@ async function convertRequest(
   return { kind: 'converted', message: 'Anfrage wurde in ein Projekt umgewandelt.' };
 }
 
+/** The conversion target. A template belongs to one target kind, so switching the target clears it. */
+function useConversionTarget(
+  fields: ConversionFields,
+  request: ClientRequest,
+): { target: ConversionTarget; changeTarget: (target: ConversionTarget) => void } {
+  const [target, setTarget] = useState<ConversionTarget>('job');
+  // An offer goes to the request's customer as it is now, with its site and
+  // contact: after a switch from work, and after a refresh that changed the
+  // customer while the dialog is open. Set during render, never in an effect.
+  if (target === 'offer' && fields.clientId !== (request.clientId ?? '')) {
+    fields.setClientId(request.clientId ?? '');
+    fields.setSiteId(request.siteId ?? '');
+    fields.setContactId(request.contactId ?? '');
+  }
+  const changeTarget = (nextTarget: ConversionTarget) => {
+    if (nextTarget === target) return;
+    setTarget(nextTarget);
+    fields.setTemplateVersionId('');
+  };
+  return { target, changeTarget };
+}
+
 /** Form state of the conversion dialog: prefill, number suggestion, validation and submit. */
 export function useConvertRequestForm({
   request,
@@ -320,8 +378,8 @@ export function useConvertRequestForm({
   onSaved: (() => void) | undefined;
 }): ConvertRequestForm {
   const { showBanner } = useBanner();
-  const [target, setTarget] = useState<ConversionTarget>('job');
   const { fields, prefill } = useConversionFields(request, requestSiteAddress);
+  const { target, changeTarget } = useConversionTarget(fields, request);
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const { run: runConvert, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
@@ -347,13 +405,6 @@ export function useConvertRequestForm({
   const { number, setNumber } = useSuggestedConversionNumber(open, target);
 
   const fieldErrors = conversionFieldErrors(target, fields.title, number, fields.clientId);
-
-  // A template belongs to one target kind, so switching the target clears it.
-  const changeTarget = (nextTarget: ConversionTarget) => {
-    if (nextTarget === target) return;
-    setTarget(nextTarget);
-    fields.setTemplateVersionId('');
-  };
 
   const submitConversion = async (approval?: AssignmentApproval) => {
     setError(null);

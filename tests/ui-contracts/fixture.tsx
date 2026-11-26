@@ -49,6 +49,7 @@ import { OfflineClockContractFixture, UnsentTimeLandingContractFixture } from '.
 import { OfflineTodayContractFixture } from './offline-today-boundaries';
 import { ReturnOnSignal } from '@/app/offline/return-on-signal';
 import { RetryButton } from '@/app/offline/retry-button';
+import { WorkerStartContractFixture } from './worker-start-boundaries';
 import { WorkHandoverContractFixture } from './work-handover-boundaries';
 import { EditJobContractFixture } from './edit-job-boundaries';
 import { SiteAccessProposalContractFixture, SiteAccessReviewContractFixture } from './site-access-boundaries';
@@ -707,6 +708,8 @@ createRoot(root).render(
       <ReturnOnSignal />
       <RetryButton />
     </main>
+  ) : window.uiContractFixture === 'worker-start' ? (
+    <WorkerStartContractFixture />
   ) : window.uiContractFixture === 'offline-clock' ? (
     <OfflineClockContractFixture />
   ) : window.uiContractFixture === 'unsent-time-landing' ? (

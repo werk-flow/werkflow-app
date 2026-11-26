@@ -31,7 +31,7 @@ export type CiJob = (typeof CI_JOBS)[number];
  * composites of .github/actions call them on GitHub Actions, scripts/ci/run-commit.ts everywhere else.
  * - `install`: the pinned Bun and Node, and the locked dependencies.
  * - `siblings`: the sibling clones beside the checkout that docs:check reads.
- * - `approval`: the owner's `approved: list growth` label of the run's pull requests.
+ * - `approval`: the owner's `approved: list growth` label of the pull requests whose growth the run tests.
  * - `stack-environment`: the stack's environment file, starting the stack only when it is missing.
  * - `stack`: a fresh stack with every committed migration, published on loopback only.
  * - `env`: .env.local pointed at the stack.

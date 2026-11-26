@@ -24,13 +24,13 @@ on:
   # left the required `Check` failed or "Expected". The Fast job reads the PR's labels at run
   # time, and list-growth.yml reruns it when the owner's `approved: list growth` label changes.
   # Marking a draft ready starts no run: the draft's run already is the PR's whole run.
-  # A stacked PR runs when GitHub retargets it to main after its base branch merged: an `edited`
-  # event that changed the base. Any other edit (title, body) starts a run in a group of its own,
-  # so it cancels nothing; it skips Plan, so no job runs, and its skipped last job is named
-  # `Ignored edit`, never `Check`, because a skipped Check would count as passed.
+  # Only a new head starts a run: GitHub counts only the newest run of this workflow on a commit, so
+  # a title or body edit's run displaced the head's green Check and left it "Expected" (2026-11-23,
+  # #592). A stacked PR runs on its own base; after GitHub retargets it, retarget-notice.yml asks its
+  # thread for a new head on the new base. A reopened PR whose Check is missing or red takes a new
+  # head too (docs/technical/coderabbit.md, "Babysit a pull request").
   pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize]
   merge_group:
     types: [checks_requested]
   push:
@@ -56,7 +56,7 @@ permissions:
 # list-growth.yml may rerun a commit the PR has just left, and that rerun must neither cancel nor
 # replace the new head's run.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.sha }}-${{ inputs.full && 'full' || 'diff' }}${{ github.run_attempt != '1' && format('-rerun-{0}', github.event.pull_request.head.sha || github.sha) || '' }}${{ github.event.action == 'edited' && !github.event.changes.base && format('-edit-{0}', github.run_id) || '' }}
+  group: ci-${{ github.event.pull_request.number || github.sha }}-${{ inputs.full && 'full' || 'diff' }}${{ github.run_attempt != '1' && format('-rerun-{0}', github.event.pull_request.head.sha || github.sha) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The inputs of scripts/ci/job.ts (its header names them all).
@@ -79,8 +79,6 @@ env:
 jobs:
   plan:
     name: Plan
-    # An edit that kept the base changes no tested input (see `on`).
-    if: github.event.action != 'edited' || github.event.changes.base
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Lists the merge queue's runs of this workflow.
@@ -204,9 +202,33 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup
+      # Maven Central answered 429 to Mustang's download (#516, #539), so the jar comes from this
+      # cache, keyed on its version and SHA-256. mustang-jar.ts verifies the jar either way and
+      # downloads it, with retries, only on a miss; every caller of this workflow shares the cache.
+      - name: Read Mustang's cache key
+        id: mustang
+        run: bun lib/document-rendering/fixtures/mustang-jar.ts >> "$GITHUB_OUTPUT"
+      - name: Restore Mustang's jar
+        id: mustang-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.mustang.outputs.path }}
+          key: ${{ steps.mustang.outputs.key }}
       - uses: ./.github/actions/ci-job
         with:
           job: invoices
+      # Only the pinned jar, verified again here, enters the cache, even when a check failed.
+      - name: Verify Mustang's jar before caching it
+        id: mustang-verified
+        if: always() && steps.mustang-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: bun lib/document-rendering/fixtures/mustang-jar.ts verify
+      - name: Cache Mustang's jar
+        if: always() && steps.mustang-verified.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.mustang.outputs.path }}
+          key: ${{ steps.mustang.outputs.key }}
       - name: Keep the checked PDFs and Mustang's reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -309,8 +331,8 @@ jobs:
   # skips has the plan's reason. `always()`, never `!cancelled()`: a cancelled run reports a failed
   # Check, and a skipped Check would count as passed.
   check:
-    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Ignored edit' || 'Check' }}
-    if: always() && (github.event.action != 'edited' || github.event.changes.base)
+    name: Check
+    if: always()
     needs: [plan, fast, sql, components, invoices, midnight, browser]
     runs-on: ubuntu-24.04
     timeout-minutes: 10

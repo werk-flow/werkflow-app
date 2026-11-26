@@ -103,6 +103,7 @@ begin
       raise exception '% holds a write or history privilege on offers', v_role;
     end if;
     if has_function_privilege(v_role, 'public.create_offer(uuid,uuid,uuid,text,uuid,uuid,uuid,text,uuid)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.update_offer(uuid,uuid,uuid,integer,uuid,text,uuid,uuid,uuid,date,text,text,uuid)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.list_offer_page(uuid,text,text,uuid,integer,integer)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.get_offer(uuid,uuid)', 'EXECUTE')
       or has_function_privilege(v_role, 'app_private.default_billing_recipient(uuid,uuid,uuid)', 'EXECUTE')
@@ -297,6 +298,182 @@ values
  'Fremdes Angebot', 'entwurf', '38040000-0000-4000-8000-000000000029', '38040000-0000-4000-8000-000000000029', '2037-12-31'),
 ('38040000-0000-4000-8000-000000000061', '38040000-0000-4000-8000-000000000010', 'ANG-2037-001',
  'Gesendetes Angebot', 'gesendet', '38040000-0000-4000-8000-000000000021', '38040000-0000-4000-8000-000000000021', '2037-12-31');
+
+-- The header changes (migration 20261230110000_change_the_header_of_a_draft_offer.sql).
+-- A savepoint keeps the offers as created for the reads below.
+savepoint offer_header;
+set local role service_role;
+create function pg_temp.save_header(
+  p_actor uuid, p_offer uuid, p_version integer, p_key uuid, p_title text, p_site uuid, p_contact uuid,
+  p_recipient uuid, p_owner uuid
+) returns integer language sql as $$
+  select (public.update_offer(p_actor, '38040000-0000-4000-8000-000000000010', p_offer, p_version, p_key,
+    p_title, p_site, p_contact, p_recipient, '2037-06-30', 'Hallo', 'Viele Grüße', p_owner) ->> 'version')::integer;
+$$;
+create function pg_temp.header_events() returns bigint language sql as $$
+  select count(*) from public.offer_events
+  where organization_id = '38040000-0000-4000-8000-000000000010' and event_type = 'changed';
+$$;
+
+-- A save writes the header and its history row with each changed field in
+-- one call: the Garage has no Rechnungsempfänger, so the default recipient
+-- becomes the customer.
+do $$
+declare
+  v_offer public.offers;
+  v_event public.offer_events;
+begin
+  if pg_temp.save_header('38040000-0000-4000-8000-000000000002', (select first_offer from ids), 1,
+      '38040000-0000-4000-8000-000000000201', '  Heizungstausch Altbau  ', '38040000-0000-4000-8000-000000000031',
+      '38040000-0000-4000-8000-000000000040', null, '38040000-0000-4000-8000-000000000001') is distinct from 2 then
+    raise exception 'the first save did not answer version 2';
+  end if;
+  select * into v_offer from public.offers where id = (select first_offer from ids);
+  if v_offer.title is distinct from 'Heizungstausch Altbau'
+    or v_offer.site_id is distinct from '38040000-0000-4000-8000-000000000031'::uuid
+    or v_offer.recipient_client_id is distinct from '38040000-0000-4000-8000-000000000020'::uuid
+    or v_offer.recipient_is_default is distinct from true
+    or v_offer.valid_until is distinct from '2037-06-30'::date
+    or v_offer.opening_text is distinct from 'Hallo' or v_offer.closing_text is distinct from 'Viele Grüße'
+    or v_offer.owner_user_id is distinct from '38040000-0000-4000-8000-000000000001'::uuid
+    or v_offer.client_id is distinct from '38040000-0000-4000-8000-000000000020'::uuid
+    or v_offer.job_id is distinct from '38040000-0000-4000-8000-000000000050'::uuid
+    or v_offer.updated_by is distinct from '38040000-0000-4000-8000-000000000002'::uuid
+    or v_offer.version is distinct from 2 then
+    raise exception 'the saved header is %', to_jsonb(v_offer);
+  end if;
+  select * into v_event from public.offer_events
+  where attempt_key = '38040000-0000-4000-8000-000000000201';
+  if v_event.event_type is distinct from 'changed' or v_event.version is distinct from 2
+    or v_event.status is distinct from 'entwurf'
+    or v_event.offer_id is distinct from v_offer.id
+    or v_event.actor_id is distinct from '38040000-0000-4000-8000-000000000002'::uuid
+    or v_event.payload -> 'title' is distinct from '{"old": "Heizungstausch", "new": "Heizungstausch Altbau"}'::jsonb
+    or v_event.payload -> 'recipient_client_id' is distinct from
+      '{"old": "38040000-0000-4000-8000-000000000021", "new": "38040000-0000-4000-8000-000000000020"}'::jsonb
+    or v_event.payload ? 'recipient_is_default' or v_event.payload ? 'contact_id' then
+    raise exception 'the history row of the save is %', to_jsonb(v_event);
+  end if;
+end;
+$$;
+
+-- A retried save under the same key answers its version and writes nothing.
+do $$
+begin
+  if pg_temp.save_header('38040000-0000-4000-8000-000000000002', (select first_offer from ids), 1,
+      '38040000-0000-4000-8000-000000000201', 'Heizungstausch Altbau', '38040000-0000-4000-8000-000000000031',
+      '38040000-0000-4000-8000-000000000040', null, '38040000-0000-4000-8000-000000000001') is distinct from 2
+    or pg_temp.header_events() is distinct from 1::bigint
+    or (select version from public.offers where id = (select first_offer from ids)) is distinct from 2 then
+    raise exception 'a retried save wrote again';
+  end if;
+end;
+$$;
+
+-- A save from a form filled at an older version is refused and changes nothing.
+select pg_temp.expect_refusal('a stale save', format(
+  'select pg_temp.save_header(''38040000-0000-4000-8000-000000000002'', %L, 1, gen_random_uuid(), ''Überholt'', null, null, null, ''38040000-0000-4000-8000-000000000002'')',
+  (select first_offer from ids)), 'offer_changed');
+do $$
+begin
+  if pg_temp.header_events() is distinct from 1::bigint
+    or (select title from public.offers where id = (select first_offer from ids)) is distinct from 'Heizungstausch Altbau' then
+    raise exception 'a stale save wrote';
+  end if;
+end;
+$$;
+
+-- A named recipient stays named; a save that changes nothing writes nothing.
+do $$
+declare
+  v_offer public.offers;
+begin
+  perform pg_temp.save_header('38040000-0000-4000-8000-000000000002', (select first_offer from ids), 2,
+    gen_random_uuid(), 'Heizungstausch Altbau', null, null, '38040000-0000-4000-8000-000000000021',
+    '38040000-0000-4000-8000-000000000002');
+  select * into v_offer from public.offers where id = (select first_offer from ids);
+  if v_offer.recipient_client_id is distinct from '38040000-0000-4000-8000-000000000021'::uuid
+    or v_offer.recipient_is_default is distinct from false or v_offer.site_id is not null
+    or v_offer.contact_id is not null or v_offer.version is distinct from 3 then
+    raise exception 'the named recipient saved as %', to_jsonb(v_offer);
+  end if;
+  if (select payload -> 'contact_id' from public.offer_events
+      where offer_id = v_offer.id and event_type = 'changed' and version = 3)
+    is distinct from '{"old": "38040000-0000-4000-8000-000000000040", "new": null}'::jsonb then
+    raise exception 'the history of the cleared contact is missing';
+  end if;
+  if pg_temp.save_header('38040000-0000-4000-8000-000000000002', (select first_offer from ids), 3,
+      gen_random_uuid(), 'Heizungstausch Altbau', null, null, '38040000-0000-4000-8000-000000000021',
+      '38040000-0000-4000-8000-000000000002') is distinct from 3
+    or pg_temp.header_events() is distinct from 2::bigint then
+    raise exception 'a save without a change wrote';
+  end if;
+end;
+$$;
+
+-- Refusals write nothing: another organization's offer, Objekt, contact or
+-- recipient, another customer's contact, an archived recipient, a sent offer,
+-- a responsible person outside the office, an actor without the office role
+-- in the organization, and a missing title.
+select pg_temp.expect_refusal(label, format(
+  'select public.update_offer(%L, %L, %L, %s, gen_random_uuid(), %L, %L, %L, %L, ''2037-06-30'', '''', '''', %L)',
+  actor, org, offer, version, title, site, contact, recipient, owner), refusal)
+from (select first_offer as draft from ids) mine,
+  lateral (values
+  ('foreign offer', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   '38040000-0000-4000-8000-000000000060'::uuid, 1, 'Titel', null, null, null, '38040000-0000-4000-8000-000000000002', 'offer_not_found'),
+  ('sent offer', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   '38040000-0000-4000-8000-000000000061'::uuid, 1, 'Titel', null, null, null, '38040000-0000-4000-8000-000000000002', 'offer_not_editable'),
+  ('foreign Objekt', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 3, 'Titel', '38040000-0000-4000-8000-000000000039', null, null, '38040000-0000-4000-8000-000000000002', 'site_not_found'),
+  ('foreign contact', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 3, 'Titel', null, '38040000-0000-4000-8000-000000000049', null, '38040000-0000-4000-8000-000000000002', 'contact_not_found'),
+  ('another customer''s contact', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 3, 'Titel', null, '38040000-0000-4000-8000-000000000041', null, '38040000-0000-4000-8000-000000000002', 'contact_not_found'),
+  ('foreign recipient', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 3, 'Titel', null, null, '38040000-0000-4000-8000-000000000029', '38040000-0000-4000-8000-000000000002', 'recipient_not_found'),
+  ('archived recipient', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 3, 'Titel', null, null, '38040000-0000-4000-8000-000000000022', '38040000-0000-4000-8000-000000000002', 'recipient_archived'),
+  ('employee responsible', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 3, 'Titel', null, null, null, '38040000-0000-4000-8000-000000000003', 'owner_not_found'),
+  ('outsider responsible', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 3, 'Titel', null, null, null, '38040000-0000-4000-8000-000000000004', 'owner_not_found'),
+  ('employee', '38040000-0000-4000-8000-000000000003', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 3, 'Titel', null, null, null, '38040000-0000-4000-8000-000000000002', 'not_authorized'),
+  ('outsider', '38040000-0000-4000-8000-000000000004', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 3, 'Titel', null, null, null, '38040000-0000-4000-8000-000000000002', 'not_authorized'),
+  ('Büro in the foreign organization', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000011',
+   '38040000-0000-4000-8000-000000000060'::uuid, 1, 'Titel', null, null, null, '38040000-0000-4000-8000-000000000002', 'not_authorized'),
+  ('blank title', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 3, '   ', null, null, null, '38040000-0000-4000-8000-000000000002', 'invalid_input')
+) as refused(label, actor, org, offer, version, title, site, contact, recipient, owner, refusal);
+do $$
+begin
+  if pg_temp.header_events() is distinct from 2::bigint
+    or (select version from public.offers where id = (select first_offer from ids)) is distinct from 3
+    or (select title from public.offers where id = '38040000-0000-4000-8000-000000000060') is distinct from 'Fremdes Angebot' then
+    raise exception 'a refused save wrote';
+  end if;
+end;
+$$;
+
+-- A kept recipient that was archived and a kept responsible person who left
+-- the office do not stop an unrelated change.
+reset role;
+update public.clients set archived_at = now() where id = '38040000-0000-4000-8000-000000000021';
+update public.organization_members set role = 'employee'
+where organization_id = '38040000-0000-4000-8000-000000000010' and user_id = '38040000-0000-4000-8000-000000000002';
+set local role service_role;
+do $$
+begin
+  if pg_temp.save_header('38040000-0000-4000-8000-000000000001', (select first_offer from ids), 3,
+      gen_random_uuid(), 'Heizungstausch Neubau', null, null, '38040000-0000-4000-8000-000000000021',
+      '38040000-0000-4000-8000-000000000002') is distinct from 4 then
+    raise exception 'a kept archived recipient or former office member stopped the save';
+  end if;
+end;
+$$;
+rollback to savepoint offer_header;
 
 -- The history is append-only, also for a privileged role.
 select pg_temp.expect_refusal('rewriting an offer event',

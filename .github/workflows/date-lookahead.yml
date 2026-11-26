@@ -107,8 +107,9 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      # Seven legs at once leave pull requests most of the account's runners.
-      max-parallel: 7
+      # Four legs at once keep the account's peak well under its 60 jobs (docs/technical/testing.md,
+      # "CI"). Nothing waits on the look-ahead, so the longer run costs no one time.
+      max-parallel: 4
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.legs) }}
     env:

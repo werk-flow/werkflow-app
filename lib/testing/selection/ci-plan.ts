@@ -2,6 +2,7 @@ import ts from 'typescript';
 import { CI_JOBS, type CiJob } from '../ci/dag';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
 import type { DependencyChange } from './dependency-change';
+import type { FastTierPlan } from './fast-tier';
 import { groupSelections, RUNNER_PILOTS } from './group-selection';
 import type { ChangeTrigger } from './change-triggers';
 import type { GroupDurations } from './group-durations';
@@ -520,6 +521,49 @@ export function componentShards(groupIds: readonly string[], durations: GroupDur
 
 const numbered = (shards: readonly string[][]): CiShard[] =>
   shards.map((groups, index) => ({ shard: index + 1, groups: groups.join(',') }));
+
+/**
+ * The planner's `$GITHUB_OUTPUT` keys (scripts/ci-plan.ts) from its plans: the browser plan, the
+ * fast tier, the e-invoice check's step when a change reaches it, and the midnight hold. The static
+ * and SQL lists take every registered group of their kind, so a new group joins CI by registration.
+ * Every key is set, empty when the run needs none (run-plan.ts `missingPlannerOutputs`).
+ */
+export function plannerOutputs(input: {
+  groups: readonly { id: string; kind: string }[];
+  plan: CiPlan;
+  fast: FastTierPlan;
+  /** `step:e-invoices` when the run checks the reference e-invoices, else empty. */
+  selectedInvoices: string;
+  /** When the browser shards may start, as ISO time, or empty to start them now. */
+  midnightUntil: string;
+  componentShards: readonly CiShard[];
+}): Record<string, string> {
+  const { groups, plan, fast } = input;
+  const oneLine = (text: string): string => text.replace(/\s+/g, ' ');
+  return {
+    browser: plan.shards.length ? 'true' : 'false',
+    full: plan.fullReason ? 'true' : 'false',
+    full_reason: oneLine(plan.fullReason ?? ''),
+    tooling_reason: oneLine(plan.fullReason ? '' : (plan.tooling.browser ?? '')),
+    shards: JSON.stringify(plan.shards),
+    midnight_until: input.midnightUntil,
+    static: groups
+      .filter((group) => group.kind === 'static' && group.id !== 'static:lint')
+      .map((group) => group.id)
+      .join(),
+    sql: groups
+      .filter((group) => group.kind === 'sql')
+      .map((group) => group.id)
+      .join(),
+    selected_components: fast.components.join(),
+    component_shards: JSON.stringify(input.componentShards),
+    selected_unit: fast.unit.join(),
+    selected_sql: fast.sql.join(),
+    selected_static: fast.static.join(),
+    selected_lint: fast.lint.join(),
+    selected_invoices: input.selectedInvoices,
+  };
+}
 
 /**
  * The planner's log lines. Every group id, reason and file name prints as one JSON string, so a newline or a

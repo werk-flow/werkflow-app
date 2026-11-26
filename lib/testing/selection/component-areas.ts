@@ -79,6 +79,7 @@ const COMPONENT_AREAS: readonly (readonly [string, readonly string[], readonly s
       'task-section-anchor',
       'task-sections',
       'today-refresh',
+      'worker-start',
     ],
     ['*'],
   ],

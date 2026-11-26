@@ -99,6 +99,15 @@ describe('Supabase advisors', () => {
     ]);
   });
 
+  test('without detail a finding names its level and lint, never the advisor text or key', () => {
+    const lints = [
+      ...reviewedLints,
+      lint('duplicate_index', 'WARN', ['PERFORMANCE'], 'duplicate_index_probe'),
+    ];
+    const problems = advisorProblems(lints, undefined, { detail: false });
+    expect(problems).toEqual(['WARN duplicate_index']);
+  });
+
   test('a security INFO lint outside the accepted names fails', () => {
     const lints = [...reviewedLints, lint('auth_users_exposed', 'INFO', ['SECURITY'], 'auth_users_probe')];
     expect(advisorProblems(lints)).toHaveLength(1);

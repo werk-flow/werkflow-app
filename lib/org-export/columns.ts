@@ -46,9 +46,14 @@ type ExcludedTable =
   // Delivery state of Stripe's signals to WerkFlow's own billing: event ids,
   // no record of the organization.
   | 'werkflow_billing_signals'
+  // Resend's delivery signals, once per Svix id: message ids and the owning
+  // ledger, no record of the organization.
+  | 'resend_webhook_events'
   // WerkFlow's own delivery state of its billing mails and alarms; the
   // Admin sees the mails on the billing page.
   | 'werkflow_billing_mails'
+  // WerkFlow's daily comparison runs with Stripe: counts, no organization.
+  | 'werkflow_billing_reconciliations'
   // WerkFlow's own invoices to the organization: WerkFlow's books, which the
   // Admin downloads on the billing page (werk-flow/werkflow-planning#252).
   | 'werkflow_invoices'

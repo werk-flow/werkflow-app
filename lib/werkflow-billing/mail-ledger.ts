@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 
-import { sendEmail } from '@/lib/delivery/send-email';
+import { type EmailMessage, sendEmail } from '@/lib/delivery/send-email';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { billingFailure } from '@/lib/werkflow-billing/failure';
@@ -18,7 +18,13 @@ import type { RenderedMail } from '@/lib/werkflow-billing/mails/layout';
 // send (quota, rate limit, outage) stays `failed` with its code and is sent on
 // the next claim, which Stripe's next delivery of the signal makes.
 
-export type CustomerMailKind = 'payment_failed' | 'card_problem' | 'mandate_inactive';
+export type CustomerMailKind =
+  | 'payment_failed'
+  | 'card_problem'
+  | 'mandate_inactive'
+  | 'debit_notice'
+  | 'invoice'
+  | 'receipt';
 type MailKind = CustomerMailKind | `alarm.${BillingAlarmKind}`;
 
 export type BillingMailOutcome =
@@ -27,37 +33,97 @@ export type BillingMailOutcome =
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
-function contentHash(recipient: string, mail: RenderedMail, replyTo: string | undefined): string {
-  return createHash('sha256')
-    .update(JSON.stringify([recipient, replyTo ?? null, mail.subject, mail.html, mail.text]))
-    .digest('hex')
-    .slice(0, 32);
+type Attachments = EmailMessage['attachments'];
+
+function contentHash(
+  recipient: string,
+  mail: RenderedMail,
+  replyTo: string | undefined,
+  attachments: Attachments,
+): string {
+  const hash = createHash('sha256').update(
+    JSON.stringify([recipient, replyTo ?? null, mail.subject, mail.html, mail.text]),
+  );
+  for (const attachment of attachments ?? []) hash.update(attachment.filename).update(attachment.content);
+  return hash.digest('hex').slice(0, 32);
+}
+
+type Admin = ReturnType<typeof createSupabaseAdminClient>;
+type MailRow = { kind: MailKind; organizationId: string | null; recipient: string; stripeObjectId: string };
+
+/** The row's id to send under, or null when it was sent before. */
+async function claim(admin: Admin, row: MailRow): Promise<string | null> {
+  const { data: mailId, error } = await admin.rpc(
+    'claim_werkflow_billing_mail',
+    rpcArgs('claim_werkflow_billing_mail', {
+      p_kind: row.kind,
+      p_organization_id: row.organizationId,
+      p_recipient: row.recipient,
+      p_stripe_object_id: row.stripeObjectId,
+    }),
+  );
+  if (error) throw billingFailure('billing_mail_claim_failed');
+  return mailId;
+}
+
+/**
+ * Records a mail that cannot go out at all, such as an alarm without its
+ * address, as `failed` with `code`, so the daily comparison sends it once it can.
+ */
+export async function recordUnsentBillingMail(row: MailRow, code: string): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  const mailId = await claim(admin, row);
+  if (!mailId) return;
+  const { error } = await admin.rpc(
+    'settle_werkflow_billing_mail',
+    rpcArgs('settle_werkflow_billing_mail', {
+      p_mail_id: mailId,
+      p_organization_id: row.organizationId,
+      p_outcome: 'failed',
+      p_provider_message_id: null,
+      p_failure_code: code,
+    }),
+  );
+  if (error) throw billingFailure('billing_mail_settle_failed');
+}
+
+/** Ends a failed debit notice whose renewal has passed, so the daily comparison no longer resends it. */
+export async function expireDebitNotice(mailId: string, organizationId: string): Promise<void> {
+  const { error } = await createSupabaseAdminClient().rpc(
+    'expire_werkflow_billing_mail',
+    rpcArgs('expire_werkflow_billing_mail', { p_mail_id: mailId, p_organization_id: organizationId }),
+  );
+  if (error) throw billingFailure('billing_mail_expire_failed');
+}
+
+/**
+ * Moves a failed mail behind every failed row not yet tried, before the daily
+ * comparison resends it, so a resend that fails before its claim still gives
+ * the next row its turn. False when the row is no longer failed.
+ */
+export async function recordMailAttempt({
+  mailId,
+  organizationId,
+}: {
+  mailId: string;
+  organizationId: string | null;
+}): Promise<boolean> {
+  const { data, error } = await createSupabaseAdminClient().rpc(
+    'record_werkflow_billing_mail_attempt',
+    rpcArgs('record_werkflow_billing_mail_attempt', { p_mail_id: mailId, p_organization_id: organizationId }),
+  );
+  if (error) throw billingFailure('billing_mail_attempt_failed');
+  return data === true;
 }
 
 /** One customer mail (with its organization) or one alarm (with none). */
 export async function deliverBillingMail(
-  input: {
-    kind: MailKind;
-    organizationId: string | null;
-    recipient: string;
-    stripeObjectId: string;
-    mail: RenderedMail;
-    replyTo?: string;
-  },
+  input: MailRow & { mail: RenderedMail; replyTo?: string; attachments?: Attachments },
   environment: Environment = process.env,
 ): Promise<BillingMailOutcome> {
-  const { kind, organizationId, recipient, stripeObjectId, mail } = input;
+  const { organizationId, recipient, mail } = input;
   const admin = createSupabaseAdminClient();
-  const { data: mailId, error: claimError } = await admin.rpc(
-    'claim_werkflow_billing_mail',
-    rpcArgs('claim_werkflow_billing_mail', {
-      p_kind: kind,
-      p_organization_id: organizationId,
-      p_recipient: recipient,
-      p_stripe_object_id: stripeObjectId,
-    }),
-  );
-  if (claimError) throw billingFailure('billing_mail_claim_failed');
+  const mailId = await claim(admin, input);
   if (!mailId) return { status: 'already_sent' };
 
   const result = await sendEmail(
@@ -66,8 +132,9 @@ export async function deliverBillingMail(
       subject: mail.subject,
       html: mail.html,
       text: mail.text,
-      idempotencyKey: `werkflow-billing-mail/${mailId}/${contentHash(recipient, mail, input.replyTo)}`,
+      idempotencyKey: `werkflow-billing-mail/${mailId}/${contentHash(recipient, mail, input.replyTo, input.attachments)}`,
       ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+      ...(input.attachments ? { attachments: input.attachments } : {}),
     },
     environment,
   );
