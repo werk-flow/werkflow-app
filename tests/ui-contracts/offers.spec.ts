@@ -353,3 +353,38 @@ test('an article lands under its Titel when another session reorders them during
   await expect(editor.getByRole('listitem').filter({ hasText: 'Position 2.1' })).toHaveCount(0);
   await expect(editor.getByText(/inzwischen geändert/)).toBeVisible();
 });
+
+// „Neu laden“ discards own changes, a pending article pick too: its price,
+// arriving later, adds no Position to the Titel that now holds its place.
+test('an article read that ends after „Neu laden“ adds no Position', async ({ page }) => {
+  await openContractFixture(page, 'offers');
+  const editor = page.getByRole('form', { name: 'Titel und Positionen' });
+  await page.evaluate(() =>
+    window.uiContractOfferContentRender?.(2, [
+      { title: 'Heizung', positions: [] },
+      { title: 'Material', positions: [] },
+    ]),
+  );
+  await page.evaluate(() => {
+    window.uiContractHoldArticleRead = true;
+  });
+  await editor.getByRole('combobox', { name: 'Artikel zu Titel 2 hinzufügen' }).click();
+  await expect.poll(() => page.evaluate(() => window.optionContract.requests.length)).toBe(1);
+  await page.evaluate(() =>
+    window.optionContract.resolve(0, [{ value: 'contract-article', label: 'KB-15 · Kupferbogen 15 mm' }]),
+  );
+  await page.getByRole('option', { name: 'KB-15 · Kupferbogen 15 mm' }).click();
+  await expect.poll(() => page.evaluate(() => window.uiContractArticleRead !== null)).toBe(true);
+  await page.evaluate(() =>
+    window.uiContractOfferContentRender?.(3, [
+      { title: 'Material', positions: [] },
+      { title: 'Heizung', positions: [] },
+    ]),
+  );
+  await editor.getByRole('button', { name: 'Neu laden', exact: true }).click();
+  await expect(editor.getByRole('textbox', { name: 'Titel 2' })).toHaveValue('Heizung');
+  await page.evaluate(() => window.uiContractArticleRead?.());
+
+  await expect(editor.getByText('Summe Titel 2: 0,00 €')).toBeVisible();
+  await expect(editor.getByRole('textbox', { name: 'Bezeichnung' })).toHaveCount(0);
+});

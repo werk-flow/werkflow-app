@@ -30,13 +30,13 @@ export function contentFieldId(
     : `offer-section-${sectionIndex}-position-${field.position}-${field.field}`;
 }
 
-/** The editor's text state of a stored content. */
-export function contentFormOf(sections: readonly OfferStoredSection[]): SectionForm[] {
+/** The editor's text state of a stored content; `keyPrefix` names one load of it. */
+export function contentFormOf(sections: readonly OfferStoredSection[], keyPrefix = 'stored'): SectionForm[] {
   return sections.map((section, sectionIndex) => ({
-    key: `stored-${sectionIndex}`,
+    key: `${keyPrefix}-${sectionIndex}`,
     title: section.title,
     positions: section.positions.map((position, positionIndex) => {
-      const key = `stored-${sectionIndex}-${positionIndex}`;
+      const key = `${keyPrefix}-${sectionIndex}-${positionIndex}`;
       if (position.kind === 'text') {
         return { ...emptyLine(key), kind: 'text', name: position.name, description: position.description };
       }

@@ -57,9 +57,9 @@ type Draft = {
   attemptKey: string;
 };
 
-function contentDraftOf(offer: OfferDetail): Draft {
+function contentDraftOf(offer: OfferDetail, keyPrefix?: string): Draft {
   return {
-    sections: contentFormOf(offer.sections),
+    sections: contentFormOf(offer.sections, keyPrefix),
     baseVersion: offer.contentVersion,
     savedVersion: offer.contentVersion,
     edited: false,
@@ -99,7 +99,8 @@ function useContentDraft(offer: OfferDetail, saving: boolean) {
         savedVersion: contentVersion,
         ...(current.attemptKey === attemptKey ? { edited: false, attemptKey: crypto.randomUUID() } : {}),
       })),
-    reload: () => setDraft(contentDraftOf(offer)),
+    // New keys: an article pick still pending targets a Titel of the discarded text, which no longer exists.
+    reload: () => setDraft(contentDraftOf(offer, `reload-${crypto.randomUUID()}`)),
   };
 }
 
