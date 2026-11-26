@@ -182,6 +182,8 @@ test('an erased type import is not a server-only runtime boundary', () => {
 const GENERATED_FILE_WRITERS: Record<string, string> = {
   'lib/invoices/original.ts':
     "An issued invoice's ZUGFeRD original, rendered from the caller organization's invoice row and its issue snapshot after the office check.",
+  'lib/offers/sending.ts':
+    "A sent offer revision's PDF, rendered from the caller organization's draft and company profile after the manager check, exactly as its preview.",
   'lib/org-export/build.ts':
     "The organization export's ZIP parts, packed from the Admin's own organization's rows and stored originals.",
   'lib/service-reports/report-file.ts':

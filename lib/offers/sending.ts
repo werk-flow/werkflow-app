@@ -11,6 +11,7 @@ import { getCachedMemberships } from '@/lib/data/cached';
 import { renderBusinessDocument } from '@/lib/document-rendering/render';
 import { buildDocumentStoragePath } from '@/lib/documents/storage-path';
 import { logError } from '@/lib/logging';
+import type { StoredOriginal } from '@/lib/invoices/original';
 import type { ActionContext } from '@/lib/org/action-context';
 import { discardStorageObjects, putStorageObject } from '@/lib/storage/r2';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -88,17 +89,12 @@ export async function renderOfferPdf(
   };
 }
 
-function sha256Hex(bytes: Uint8Array): string {
+function contentHashOf(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-type StoredPdf = {
-  documentId: string;
-  path: string;
-  fileName: string;
-  sizeBytes: number;
-  contentHash: string;
-};
+/** A stored PDF not yet registered, as an invoice original is. */
+type StoredPdf = StoredOriginal;
 
 async function storeOfferPdf(
   organizationId: string,
@@ -108,7 +104,7 @@ async function storeOfferPdf(
   const documentId = randomUUID();
   const path = buildDocumentStoragePath({ organizationId, documentId, fileName });
   await putStorageObject({ organizationId, path, body: bytes, contentType: 'application/pdf' });
-  return { documentId, path, fileName, sizeBytes: bytes.byteLength, contentHash: sha256Hex(bytes) };
+  return { documentId, path, fileName, sizeBytes: bytes.byteLength, contentHash: contentHashOf(bytes) };
 }
 
 const refusal = writeRefusalFor(
@@ -159,7 +155,12 @@ export async function recordOfferSent(
   });
   if (!rendered) return { success: false, error: 'render_failed' };
   // Only the PDF the office saw is filed: a changed customer, profile or day renders other bytes.
-  if (sha256Hex(rendered.bytes) !== input.previewHash) return { success: false, error: 'preview_outdated' };
+  if (contentHashOf(rendered.bytes) !== input.previewHash) {
+    // Another send of this draft may have committed between the reads: it answers its revision.
+    const now = await readOffer(context.orgId, input.offerId);
+    if (now && now.status !== 'entwurf') return sendRendered(context, input, now, null);
+    return { success: false, error: 'preview_outdated' };
+  }
   const fileName = `Angebot ${offer.offerNumber} Revision ${rendered.revision}.pdf`;
   const stored = await storeOfferPdf(context.orgId, fileName, rendered.bytes).catch((error: unknown) => {
     logError('recordOfferSent: PDF not stored', error);

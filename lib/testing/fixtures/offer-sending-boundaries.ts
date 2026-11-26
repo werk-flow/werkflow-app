@@ -174,10 +174,27 @@ let sendAnswer: (args: Record<string, unknown>) => {
   data: unknown;
   error: { code: string; message: string } | null;
 };
+/** Another tab's send that commits right after this request's first read of the draft. */
+let sentElsewhere = false;
+let offerReads = 0;
 world.rpc = ({ name, args }) => {
   if (args.p_organization_id !== ORGANIZATION_A) return { data: null, error: null };
-  if (name === 'get_offer') return { data: args.p_offer_id === offerId ? draft : null, error: null };
-  if (name === 'list_offer_revisions') return { data: [], error: null };
+  if (name === 'get_offer') {
+    offerReads += 1;
+    const status = sentElsewhere && offerReads > 1 ? 'gesendet' : 'entwurf';
+    return { data: args.p_offer_id === offerId ? { ...draft, status } : null, error: null };
+  }
+  if (name === 'list_offer_revisions') {
+    const first = {
+      revision: 1,
+      sentOn: today,
+      channel: 'post',
+      validUntil: '2037-12-20',
+      grossCents: 17136,
+    };
+    const revision = { ...first, recipientName: 'Hausverwaltung Lindenhof GmbH', documentId: sentDocumentId };
+    return { data: sentElsewhere ? [{ ...revision, sentBy: null }] : [], error: null };
+  }
   if (name === 'send_offer') return sendAnswer(args);
   return { data: null, error: { code: 'P0001', message: `${name} is outside this fixture` } };
 };
@@ -310,6 +327,17 @@ assert.deepEqual(discarded, [stored[1]?.path]);
 sendAnswer = () => ({ data: null, error: { code: 'P0001', message: 'offer_expired' } });
 assert.deepEqual(await send(), { success: false, error: 'offer_expired' });
 assert.deepEqual(discarded.slice(1), [stored[2]?.path]);
+
+// Another tab's send of the same draft commits between this request's reads: this one renders the
+// next revision, which differs from its preview, and still answers the first revision, storing nothing.
+sentElsewhere = true;
+offerReads = 0;
+sendAnswer = () => ({ data: { revision: 1, documentId: sentDocumentId, replay: true }, error: null });
+world.rpcCalls.length = 0;
+assert.deepEqual(await send(), { success: true, offerId, revision: 1, documentId: sentDocumentId });
+assert.equal(world.rpcCalls.find((call) => call.name === 'send_offer')?.args.p_document_id, undefined);
+assert.equal(stored.length, 3);
+sentElsewhere = false;
 
 // A draft another session saved meanwhile is refused before anything is rendered or stored.
 assert.deepEqual(await send({ expectedContentVersion: 3 }), { success: false, error: 'offer_changed' });

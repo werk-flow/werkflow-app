@@ -238,15 +238,18 @@ $$;
 select pg_temp.expect_refusal('the server role changes a revision',
   format('update public.offer_revisions set gross_cents = 1 where offer_id = %L', pg_temp.id('first')), '42501');
 reset role;
--- A library copy of the sent PDF, as the document copy makes one.
+-- A copy of a library copy of the sent PDF whose intermediate copy was deleted:
+-- it names no source any more, only the metadata both copy paths carry over.
 insert into public.documents (
   id, organization_id, storage_path, original_file_name, display_name, category, size_bytes, uploaded_by,
-  copied_from_document_id
-) values
-('38070000-0000-4000-8000-000000000320', '38070000-0000-4000-8000-000000000010',
- '38070000-0000-4000-8000-000000000010/38070000-0000-4000-8000-000000000320/Kopie.pdf', 'Kopie.pdf',
- 'Kopie von Angebot.pdf', 'offer', 2048, '38070000-0000-4000-8000-000000000002',
- '38070000-0000-4000-8000-000000000301');
+  copied_from_document_id, metadata
+)
+select '38070000-0000-4000-8000-000000000320', '38070000-0000-4000-8000-000000000010',
+  '38070000-0000-4000-8000-000000000010/38070000-0000-4000-8000-000000000320/Kopie.pdf', 'Kopie.pdf',
+  'Kopie von Kopie von Angebot.pdf', 'offer', 2048, '38070000-0000-4000-8000-000000000002', null, sent.metadata
+from public.documents sent
+where sent.organization_id = '38070000-0000-4000-8000-000000000010'
+  and sent.id = '38070000-0000-4000-8000-000000000301';
 select pg_temp.expect_refusal(label, statement, refusal)
 from (values
   ('change the revision''s amounts', format('update public.offer_revisions set gross_cents = 1 where offer_id = %L',

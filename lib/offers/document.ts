@@ -20,7 +20,7 @@ export type PrintedOffer = Pick<
 > & { recipient: { id: string; name: string; address: string | null } };
 
 /** The lines of an address text, such as „Hofweg 1, 10117 Berlin“, also written over several lines. */
-function addressLines(address: string | null): string[] {
+function addressTextLines(address: string | null): string[] {
   return (address ?? '')
     .split(/[\n,]/)
     .map((part) => part.trim())
@@ -49,7 +49,7 @@ export function offerDocument(
   return {
     issuedOn: sending.issuedOn,
     ...letterhead,
-    recipientLines: [offer.recipient.name, ...addressLines(offer.recipient.address)],
+    recipientLines: [offer.recipient.name, ...addressTextLines(offer.recipient.address)],
     title: `Angebot: ${offer.title}`,
     metaRows: [
       { label: 'Angebot', value: `${offer.offerNumber}, Revision ${sending.revision}` },

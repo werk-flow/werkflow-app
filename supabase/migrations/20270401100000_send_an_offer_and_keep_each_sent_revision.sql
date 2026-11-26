@@ -128,18 +128,17 @@ begin
   then
     return new;
   end if;
-  -- The document itself, or the original a library copy (of a copy) was made from.
+  -- The PDF itself, or a library copy of it: both copy paths carry the
+  -- source's metadata, which names the offer and revision on every copy of a
+  -- copy, also once an intermediate copy is deleted.
   if exists (
-    with recursive copied (document_id) as (
-      select new.document_id
-      union
-      select document.copied_from_document_id from public.documents document
-      join copied on copied.document_id = document.id
-      where document.organization_id = new.organization_id and document.copied_from_document_id is not null
-    )
     select 1 from public.offer_revisions revision
-    join copied on copied.document_id = revision.document_id
     where revision.organization_id = new.organization_id
+      and (revision.document_id = new.document_id or exists (
+        select 1 from public.documents document
+        where document.id = new.document_id and document.organization_id = new.organization_id
+          and document.metadata ->> 'offerId' = revision.offer_id::text
+          and document.metadata ->> 'revision' = revision.revision::text))
   ) then
     raise exception 'document_is_offer_original';
   end if;
