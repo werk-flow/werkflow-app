@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { type ShellWord, SCRIPT_FLAG, SHELLS, program, readShell } from './shell-words';
@@ -15,8 +15,8 @@ import { errorCode } from '../testing/runner/error-code';
 // Threat model: the guard stops accidental and habitual reads, and a read that
 // a report's text prompts a report thread to make. Agents run as the owner's
 // OS user, so deliberate evasion is a rule violation it does not claim to catch.
-// A recursive read finds `.env.live-backup` at the root of every checkout in the
-// tree it reads, up to a bound; a larger tree refuses.
+// A recursive read finds `.env.live-backup` anywhere in the tree it reads, up to
+// a bound; a larger tree refuses.
 
 /** A secret no agent reads, and who reads it instead. */
 type GuardedSecret = {
@@ -148,6 +148,27 @@ function holding(secrets: readonly GuardedSecret[]): string {
 
 /** Search tools, which read every file under a folder operand or the working folder. */
 const SEARCHERS = new Set(['grep', 'egrep', 'fgrep', 'zgrep', 'ugrep', 'rg', 'ag', 'ack']);
+/** grep's and rg's flags that give a pattern or a pattern file in another form than `-e <pattern>`. */
+const PATTERN_SOURCE = /^(?:-[a-zA-Z]*[ef]|--regexp|--file)/;
+
+/**
+ * The words a grep or rg reads as its pattern, never as a file: each `-e` value, else its first
+ * operand. A pattern file or an attached pattern flag gives none, so every word stays a path.
+ */
+function searchPatterns(words: ShellWord[]): ShellWord[] {
+  const run = innerCommand(words);
+  if (!run || !['grep', 'egrep', 'fgrep', 'rg'].includes(run.name)) return [];
+  const { args } = run;
+  const flagged = args.flatMap((arg, index) =>
+    arg.text === '-e' || arg.text === '--regexp' ? (args[index + 1] ?? []) : [],
+  );
+  if (args.some((arg) => PATTERN_SOURCE.test(arg.text) && arg.text !== '-e' && arg.text !== '--regexp'))
+    return [];
+  if (flagged.length) return flagged;
+  const first = args.find((arg) => !arg.text.startsWith('-'));
+  return first ? [first] : [];
+}
+
 /** Search tools that recurse without a flag. */
 const ALWAYS_RECURSIVE = new Set(['rg', 'ag', 'ack']);
 const RECURSE_FLAG =
@@ -212,27 +233,34 @@ const UNWALKED = new Set(['node_modules', '.git', '.next']);
 /** The most folders one walk lists before the guard calls the tree too large to tell. */
 const MAX_WALKED = 4000;
 
+/** A missing path, a path through a file, or one the user cannot reach: nothing a reader would read. */
+const UNREACHABLE = new Set(['ENOENT', 'ENOTDIR', 'EACCES']);
+
+/** Runs a filesystem step, answering `fallback` when its path is unreachable. */
+function reachable<T>(step: () => T, fallback: T): T {
+  try {
+    return step();
+  } catch (error) {
+    if (UNREACHABLE.has(String(errorCode(error)))) return fallback;
+    throw error;
+  }
+}
+
 /**
  * The `.env.live-backup` files in `folder` and the folders below it, at most `depth` levels down,
- * or undefined past MAX_WALKED folders. A checkout keeps the file at its root, so the walk does not
- * enter a folder that holds `.git`.
+ * nested checkouts included, or undefined past MAX_WALKED folders. A file operand holds none.
  */
 export function liveBackupsOnDisk(folder: string, depth: number): string[] | undefined {
   const found: string[] = [];
   const queue = [{ dir: folder, level: 0 }];
   for (const { dir, level } of queue) {
     if (queue.length > MAX_WALKED) return undefined;
-    const backup = join(dir, LIVE_BACKUP);
-    if (lstatSync(backup, { throwIfNoEntry: false })) found.push(backup);
-    if (level >= depth || lstatSync(join(dir, '.git'), { throwIfNoEntry: false })) continue;
-    try {
-      for (const entry of readdirSync(dir, { withFileTypes: true }))
-        if (entry.isDirectory() && !UNWALKED.has(entry.name))
-          queue.push({ dir: join(dir, entry.name), level: level + 1 });
-    } catch (error) {
-      // A missing folder, a file or a folder the user cannot list holds nothing a reader would reach.
-      if (!['ENOENT', 'ENOTDIR', 'EACCES'].includes(String(errorCode(error)))) throw error;
-    }
+    const entries = reachable(() => readdirSync(dir, { withFileTypes: true }), []);
+    if (entries.some((entry) => entry.name === LIVE_BACKUP)) found.push(join(dir, LIVE_BACKUP));
+    if (level >= depth) continue;
+    for (const entry of entries)
+      if (entry.isDirectory() && !UNWALKED.has(entry.name))
+        queue.push({ dir: join(dir, entry.name), level: level + 1 });
   }
   return found;
 }
@@ -290,6 +318,22 @@ function readsWorkingFolder(name: string, args: readonly ShellWord[]): boolean {
 /** Search tools that skip files git ignores, as `.env*` is, unless a flag turns that off. */
 const IGNORE_RESPECTING = new Set(['rg', 'ag']);
 const NO_IGNORE_FLAG = /^(?:-[a-zA-Z]*[uU][a-zA-Z]*|--no-ignore\S*|--unrestricted|--skip-vcs-ignores)$/;
+/** rg's file globs, which override its ignore rules for the files they include. */
+const GLOB_FLAG = /^(?:-g|--i?glob)(?:=(.*))?$|^-g(.+)$/;
+
+/** Whether an rg include glob brings back the git-ignored `.env.live-backup`, as `-g '.env*'` does. */
+function globIncludesLiveBackup(glob: string): boolean {
+  return !glob.startsWith('!') && new Bun.Glob(glob.replace(/^\*\*\//, '')).match(LIVE_BACKUP);
+}
+
+/** Whether a search tool's arguments skip git-ignored files for `.env.live-backup`. */
+function skipsLiveBackup(name: string, args: readonly ShellWord[]): boolean {
+  if (!IGNORE_RESPECTING.has(name) || args.some((arg) => NO_IGNORE_FLAG.test(arg.text))) return false;
+  return !args.some((arg, index) => {
+    const match = GLOB_FLAG.exec(arg.text);
+    return match !== null && globIncludesLiveBackup(match[1] ?? match[2] ?? args[index + 1]?.text ?? '');
+  });
+}
 
 /** The program a simple command runs and its arguments, through launchers such as `env` and `timeout`. */
 function innerCommand(
@@ -415,8 +459,11 @@ function lineRefusal(
   // Every read the line would make, so the refusal names each secret, not only the first.
   const refusals: Refusal[] = [];
   for (const words of commands) {
-    // Every word, redirection targets included: `cat < config.json` reads the file too.
+    // Every word, redirection targets included: `cat < config.json` reads the file too. A search
+    // pattern is text, not a path.
+    const patterns = searchPatterns(words);
     for (const word of words) {
+      if (patterns.includes(word)) continue;
       for (const path of pathsOf(word.text, folders, home)) {
         const named = secretAt(secrets, path);
         if (named)
@@ -479,16 +526,15 @@ function liveBackupFiles(context: Context, folder: string, depth: number, untold
 /**
  * The folders where a recursive reader's `.env.live-backup` counts. A checkout is where agents
  * work, so only a folder the reader surely reads: an operand, or the working folder when it has
- * none. rg and ag skip the file, since git ignores `.env*`, unless a flag says otherwise.
+ * none. rg and ag skip the file, since git ignores `.env*`, unless a flag or a glob brings it back.
  */
 function liveBackupRoots(
   run: { name: string; args: readonly ShellWord[] },
   operands: readonly string[],
   folders: readonly string[],
 ): string[] {
-  const skipsIgnored =
-    IGNORE_RESPECTING.has(run.name) && !run.args.some((arg) => NO_IGNORE_FLAG.test(arg.text));
-  return skipsIgnored ? [] : [...operands, ...(readsWorkingFolder(run.name, run.args) ? folders : [])];
+  if (skipsLiveBackup(run.name, run.args)) return [];
+  return [...operands, ...(readsWorkingFolder(run.name, run.args) ? folders : [])];
 }
 
 /** How many folder levels below its literal folder a glob reaches: one for `~/code/<wildcard>/.env*`. */
@@ -516,7 +562,14 @@ function merged(refusals: readonly Refusal[]): Refusal | undefined {
  * command it cannot read refuses when it names a config folder.
  */
 export function boatKeyCommandRefusal(command: string, context: Context): string | undefined {
-  const mentioned = GUARDED_SECRETS.filter((secret) => secret.mention.test(command));
+  // A search pattern that names a secret file reads nothing; it leaves the text only when it occurs
+  // once, so the same spelling elsewhere in the line still counts.
+  const patterns = (readShell(command)?.commands ?? []).flatMap(searchPatterns).map((word) => word.raw);
+  const text = patterns.reduce(
+    (rest, raw) => (rest.split(raw).length === 2 ? rest.replace(raw, '') : rest),
+    command,
+  );
+  const mentioned = GUARDED_SECRETS.filter((secret) => secret.mention.test(text));
   const line = lineRefusal(command, [context.cwd], context, 0);
   const refusal = merged([
     ...(mentioned.length ? [{ why: `the command names ${holding(mentioned)}.`, secrets: mentioned }] : []),
@@ -547,9 +600,18 @@ export function boatKeyToolRefusal(
   }
   if (call.tool_name === 'Grep') {
     // The Grep tool runs ripgrep, which skips files git ignores, `.env.live-backup` among them,
-    // unless the search names the file itself.
+    // unless the search names the file itself or its glob brings the file back.
     const path = field('path') ?? cwd;
-    const searched = basename(path) === LIVE_BACKUP ? [LIVE_BACKUP_SECRET] : secretsUnder(secrets, path);
+    const glob: unknown = Reflect.get(input, 'glob');
+    const untold: Refusal[] = [];
+    const live =
+      typeof glob === 'string' && globIncludesLiveBackup(glob)
+        ? liveBackupFiles(context, path, Infinity, untold)
+        : [];
+    const [cannotTell] = untold;
+    if (cannotTell) return refusalText(cannotTell);
+    const searched =
+      basename(path) === LIVE_BACKUP ? [LIVE_BACKUP_SECRET] : secretsUnder([...secrets, ...live], path);
     if (searched.length)
       return refusalText({
         why: `the search would read files that hold ${held(searched)}.`,

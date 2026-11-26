@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
@@ -37,6 +37,16 @@ export const STAGING_AGENT_KEY_NAMES: readonly StagingAgentKeyName[] = [
 /** What a check found: never a value. */
 export type Verdict = 'ok' | 'failed' | 'missing';
 
+/**
+ * Every value a file assigns to `name`, `export NAME=` included as Bun reads it: a loader may take
+ * the first or the last, so each counts.
+ */
+export function assignedValues(text: string, name: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .flatMap((line) => parseEnvironmentFile(line.replace(/^\s*export\s+/, ''))[name] ?? []);
+}
+
 /** Whether a value has its key's shape: `missing` when empty or absent. */
 export function keyShapeVerdict(name: StagingAgentKeyName, value: string | undefined): Verdict {
   if (!value) return 'missing';
@@ -74,16 +84,24 @@ export function stagingAgentKeysFrom(text: string): StagingAgentKeys {
   };
 }
 
-/** Reads the machine's key file for the process that uses the keys. It never prints a value. */
+/**
+ * Reads the machine's key file for the process that uses the keys. It never prints a value, and
+ * refuses a path that is no regular file, which could block or fail the read.
+ */
 export function readStagingAgentKeys(home = homedir()): StagingAgentKeys {
-  let text: string;
+  const path = join(home, STAGING_AGENT_KEY_FILE);
+  const unreadable = new Error(
+    `The agent key file ~/${STAGING_AGENT_KEY_FILE} cannot be read as a regular file.`,
+  );
   try {
-    text = readFileSync(join(home, STAGING_AGENT_KEY_FILE), 'utf8');
+    const stat = statSync(path, { throwIfNoEntry: false });
+    if (!stat) return { file: 'missing' };
+    if (stat.isFile()) return stagingAgentKeysFrom(readFileSync(path, 'utf8'));
   } catch (error) {
     if (errorCode(error) === 'ENOENT') return { file: 'missing' };
-    throw new Error(`The agent key file ~/${STAGING_AGENT_KEY_FILE} cannot be read.`);
+    throw unreadable;
   }
-  return stagingAgentKeysFrom(text);
+  throw unreadable;
 }
 
 export function isStagingAgentKeyName(name: string): name is StagingAgentKeyName {

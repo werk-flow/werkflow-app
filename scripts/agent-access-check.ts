@@ -5,7 +5,9 @@ import { dirname, join, resolve } from 'node:path';
 import {
   STAGING_AGENT_KEY_FILE,
   STAGING_AGENT_KEY_NAMES,
+  assignedValues,
   type StagingAgentKeyName,
+  type StagingAgentKeys,
   type Verdict,
   devOnlyVerdict,
   installStagingAgentKeys,
@@ -17,7 +19,6 @@ import {
   sandboxVerdict,
   writeRefusedVerdict,
 } from '../lib/security/staging-agent-keys';
-import { parseEnvironmentFile } from '../lib/testing/evidence/proof-environment';
 import { DEV_PROJECT_REF } from '../lib/testing/local-stack/dev-migration-history';
 
 /**
@@ -117,9 +118,14 @@ function modeVerdict(path: string, kind: 'file' | 'folder'): Verdict {
   return stat ? privateModeVerdict(stat, kind) : 'missing';
 }
 
-/** Every value a file assigns to `name`: a loader may take the first or the last, so each counts. */
-function assignedValues(text: string, name: string): string[] {
-  return text.split(/\r?\n/).flatMap((line) => parseEnvironmentFile(line)[name] ?? []);
+/** The key file's contents, or undefined when it is no regular file or cannot be read. */
+function readKeys(): StagingAgentKeys | undefined {
+  try {
+    return readStagingAgentKeys(home);
+  } catch {
+    // The reader's error names only the file; the verdict says `failed`.
+    return undefined;
+  }
 }
 
 /** Runs every check, prints each verdict, and answers whether all passed. */
@@ -128,7 +134,7 @@ async function check(): Promise<boolean> {
 
   // The key file: present, private, in a private folder, with every key in its shape.
   const keyPath = join(home, STAGING_AGENT_KEY_FILE);
-  const keys = readStagingAgentKeys(home);
+  const keys = readKeys();
   const fileMode = modeVerdict(keyPath, 'file');
   const folderMode = modeVerdict(dirname(keyPath), 'folder');
   lines.push([
@@ -136,7 +142,7 @@ async function check(): Promise<boolean> {
     fileMode === 'missing' ? 'missing' : fileMode === 'ok' && folderMode === 'ok' ? 'ok' : 'failed',
   ]);
   const verdictOf = (name: StagingAgentKeyName): Verdict =>
-    keys.file === 'missing' ? 'missing' : keys.verdicts[name];
+    keys === undefined ? 'failed' : keys.file === 'missing' ? 'missing' : keys.verdicts[name];
   for (const name of STAGING_AGENT_KEY_NAMES) lines.push([`${name} shape`, verdictOf(name)]);
 
   /** A check that needs a key runs only when the key has its shape; otherwise it repeats the shape verdict. */
@@ -144,7 +150,7 @@ async function check(): Promise<boolean> {
     name: StagingAgentKeyName,
     check: (value: string) => Promise<Verdict>,
   ): Verdict | Promise<Verdict> {
-    const value = keys.file === 'present' ? keys.values.get(name) : undefined;
+    const value = keys?.file === 'present' ? keys.values.get(name) : undefined;
     return value === undefined ? verdictOf(name) : check(value);
   }
   lines.push(['SUPABASE_DEV_ACCESS_TOKEN sees DEV only', withKey('SUPABASE_DEV_ACCESS_TOKEN', devOnly)]);

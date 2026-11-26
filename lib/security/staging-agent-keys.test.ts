@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 
 import {
   STAGING_AGENT_KEY_FILE,
+  assignedValues,
   devOnlyVerdict,
   installStagingAgentKeys,
   keyShapeVerdict,
@@ -128,6 +129,29 @@ test('an install writes a private file in a private folder, and a key out of sha
     expect(write).toThrow('STRIPE_SANDBOX_KEY does not have its shape, so nothing was written.');
     expect(readFileSync(path, 'utf8')).not.toContain('VERCEL_STAGING_BYPASS_SECRET');
     expect(readFileSync(path, 'utf8')).not.toContain(live);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('every assignment of a name counts, an exported one too', () => {
+  const text = [
+    `SUPABASE_ACCESS_TOKEN=${MADE_UP.SUPABASE_DEV_ACCESS_TOKEN}`,
+    '# SUPABASE_ACCESS_TOKEN=commented',
+    `export SUPABASE_ACCESS_TOKEN="sbp_${'1f'.repeat(20)}"`,
+    'OTHER=1',
+  ].join('\n');
+  expect(assignedValues(text, 'SUPABASE_ACCESS_TOKEN')).toEqual([
+    MADE_UP.SUPABASE_DEV_ACCESS_TOKEN,
+    `sbp_${'1f'.repeat(20)}`,
+  ]);
+});
+
+test('the reader refuses a key path that is no regular file', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agent-keys-'));
+  try {
+    mkdirSync(join(home, STAGING_AGENT_KEY_FILE), { recursive: true });
+    expect(() => readStagingAgentKeys(home)).toThrow('cannot be read as a regular file');
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

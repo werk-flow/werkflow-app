@@ -374,20 +374,28 @@ test('ordinary work in a checkout that holds .env.live-backup passes', () => {
   ).toBeUndefined();
 });
 
-test('the disk reader finds .env.live-backup at every checkout root in the tree it reads', () => {
+test('the disk reader finds .env.live-backup anywhere in the tree it reads', () => {
   const root = mkdtempSync(join(tmpdir(), 'live-backup-'));
   try {
-    // A workspace with a checkout three levels down, whose own subfolder holds a stray copy.
-    const checkout = join(root, 'worktrees/app/one');
-    mkdirSync(join(checkout, 'nested'), { recursive: true });
-    writeFileSync(join(checkout, '.git'), 'gitdir: /made/up\n');
-    for (const file of [join(checkout, '.env.live-backup'), join(checkout, 'nested/.env.live-backup')])
-      writeFileSync(file, 'MADE_UP=1\n');
-    expect(liveBackupsOnDisk(root, Infinity)).toEqual([join(checkout, '.env.live-backup')]);
+    // A checkout three levels down that holds another checkout, and a node_modules the walk skips.
+    const outer = join(root, 'worktrees/app/one');
+    const inner = join(outer, 'vendor/inner');
+    mkdirSync(join(outer, 'node_modules/pkg'), { recursive: true });
+    mkdirSync(inner, { recursive: true });
+    for (const folder of [outer, inner]) writeFileSync(join(folder, '.git'), 'gitdir: /made/up\n');
+    for (const folder of [outer, inner, join(outer, 'node_modules/pkg')])
+      writeFileSync(join(folder, '.env.live-backup'), 'MADE_UP=1\n');
+    expect(liveBackupsOnDisk(root, Infinity)?.sort()).toEqual([
+      join(outer, '.env.live-backup'),
+      join(inner, '.env.live-backup'),
+    ]);
     // A glob reaches only as deep as its pattern.
     expect(liveBackupsOnDisk(root, 2)).toEqual([]);
-    expect(liveBackupsOnDisk(join(root, 'worktrees/app'), 1)).toEqual([join(checkout, '.env.live-backup')]);
+    expect(liveBackupsOnDisk(join(root, 'worktrees/app'), 1)).toEqual([join(outer, '.env.live-backup')]);
+    // A missing path and a file operand hold none.
     expect(liveBackupsOnDisk(join(root, 'missing'), Infinity)).toEqual([]);
+    expect(liveBackupsOnDisk(join(outer, '.git'), Infinity)).toEqual([]);
+    expect(liveBackupsOnDisk(join(outer, '.git', 'below'), Infinity)).toEqual([]);
     // A tree larger than the walk's bound cannot be told.
     for (let index = 0; index <= 4000; index++)
       mkdirSync(join(root, 'wide', String(index)), { recursive: true });
@@ -408,6 +416,37 @@ test('a recursive read of a tree too large to walk is refused for .env.live-back
   expect(boatKeyCommandRefusal('rg KEY /srv/huge', untold)).toBeUndefined();
 });
 
+test('an rg or Grep glob that brings back .env.live-backup makes the search count it', () => {
+  for (const command of ["rg -g '.env*' KEY .", 'rg --glob=.env.* KEY', "rg --iglob '**/.env.l*' KEY ."])
+    expect(refusedInCheckout(command), command).toContain('PROD keys');
+  for (const command of ["rg -g '*.ts' token .", "rg -g '!.env*' token ."])
+    expect(refusedInCheckout(command), command).toBeUndefined();
+  const grep = (tool_input: unknown) => boatKeyToolRefusal({ tool_name: 'Grep', tool_input }, withLiveBackup);
+  expect(grep({ pattern: 'KEY', glob: '.env*' })).toContain('PROD keys');
+  expect(grep({ pattern: 'KEY', glob: '*.ts' })).toBeUndefined();
+});
+
+test('a search for a secret file name in the repository passes, a read of the file does not', () => {
+  for (const command of [
+    'grep -rn "staging-agents.env" docs/',
+    "rg -n '.env.live-backup' scripts",
+    'grep -rn -e prod-watch.env -e boat-api-key lib/',
+    'git diff | grep .env.live-backup',
+  ])
+    expect(refusedInCheckout(command), command).toBeUndefined();
+  for (const command of [
+    // The name is an operand, a pattern file, or an attached pattern flag hides the operand.
+    'grep -e KEY ~/.config/werkflow/staging-agents.env',
+    'grep --regexp=KEY ~/.config/werkflow/staging-agents.env',
+    'grep -f ~/.config/werkflow/staging-agents.env README.md',
+    'grep -ie KEY .env.live-backup',
+    // The same spelling read elsewhere in the line, or through a variable.
+    'cat .env.live-backup | grep .env.live-backup',
+    'F=~/.config/werkflow/staging-agents.env; grep KEY "$F"',
+  ])
+    expect(refusedInCheckout(command), command).toMatch(/staging keys|PROD keys/);
+});
+
 // The hook itself, as the agent runs it: exit 2 with the reason refuses the call.
 test('the hook refuses a read of the key and passes ordinary work', () => {
   const hook = resolve(import.meta.dir, '../../.claude/hooks/refuse-boat-key-reads.ts');
@@ -417,6 +456,11 @@ test('the hook refuses a read of the key and passes ordinary work', () => {
   expect(refusedRun.status).toBe(2);
   expect(refusedRun.stderr).toContain('Refused');
   expect(run(bash('git status')).status).toBe(0);
+  // A recursive search given a file or a folder operand walks the disk without failing.
+  const inTmp = (command: string) =>
+    run(JSON.stringify({ tool_name: 'Bash', tool_input: { command }, cwd: tmpdir() }));
+  expect(inTmp('grep -r token /dev/null').status).toBe(0);
+  expect(inTmp('grep -r token /proc/self/fdinfo').status).toBe(0);
   const handout = run(bash('cat ~/.config/werkflow/problem-report-handout.env'));
   expect(handout.status).toBe(2);
   expect(handout.stderr).toContain('hand-out secret');
