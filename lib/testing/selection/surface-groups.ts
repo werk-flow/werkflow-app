@@ -49,6 +49,7 @@ type FieldGroup = 'field' | 'field-time';
 const MANAGER_GROUPS: Readonly<Record<InventoriedRoute, Exclude<SurfaceGroup, FieldGroup>>> = {
   '/dashboard': 'settings',
   '/aufgaben': 'settings',
+  '/kennzahlen': 'settings',
   '/kalender': 'planning',
   '/zeiterfassung': 'time',
   '/zeiterfassung/zeitkonto': 'time',

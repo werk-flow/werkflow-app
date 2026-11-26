@@ -16586,6 +16586,7 @@ export type Database = {
         };
         Returns: Record<string, unknown>;
       };
+      berlin_day_end_or_now: { Args: { p_day: string }; Returns: string };
       book_inventory_import: {
         Args: {
           p_actor_id: string;
@@ -17334,6 +17335,14 @@ export type Database = {
           p_request_hash: string;
         };
         Returns: string;
+      };
+      count_berlin_workdays: {
+        Args: { p_from: string; p_to: string };
+        Returns: number;
+      };
+      count_overdue_items_at: {
+        Args: { p_day: string; p_organization_id: string };
+        Returns: Json;
       };
       create_capability_definition: {
         Args: {
@@ -19685,6 +19694,18 @@ export type Database = {
         };
         Returns: Json;
       };
+      measure_handover_turnaround: {
+        Args: { p_from: string; p_organization_id: string; p_to: string };
+        Returns: Json;
+      };
+      measure_own_time_capture_share: {
+        Args: { p_from: string; p_organization_id: string; p_to: string };
+        Returns: Json;
+      };
+      measure_work_report_share: {
+        Args: { p_from: string; p_organization_id: string; p_to: string };
+        Returns: Json;
+      };
       move_document: {
         Args: {
           p_actor_id: string;
@@ -20126,6 +20147,14 @@ export type Database = {
           isOneToOne: false;
           isSetofReturn: true;
         };
+      };
+      read_weekly_outcome_numbers: {
+        Args: {
+          p_organization_id: string;
+          p_today: string;
+          p_week_count: number;
+        };
+        Returns: Json;
       };
       read_work_lead_scope: {
         Args: { p_organization_id: string; p_user_id: string };
