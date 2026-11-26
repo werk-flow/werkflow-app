@@ -333,6 +333,7 @@ async function hasOtherOpenRun(
   runId: string,
 ): Promise<boolean | 'load_failed'> {
   const since = new Date(Date.now() - OPEN_RUN_MINUTES * 60_000).toISOString();
+  // tenant-scope: cross-organization-by-design — B13 allows one open run per person in all their organizations; the read returns only ids of the signed-in user's own runs.
   const { data, error } = await admin
     .from('ai_runs')
     .select('id')
