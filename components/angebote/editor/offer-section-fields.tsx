@@ -114,7 +114,7 @@ export function OfferSectionFields({
   const titleId = contentFieldId(index, 'title');
   const setPositions = (positions: PositionForm[]) => onChange({ ...section, positions });
   return (
-    <li className="space-y-3 rounded-lg border p-4">
+    <li className="space-y-3 rounded-lg border p-3 sm:p-4">
       <div className="flex items-end gap-2">
         <Field
           label={`Titel ${number}`}
@@ -261,12 +261,13 @@ function PositionFields({
 }: PositionProps) {
   const label = number ? `Position ${number}` : 'Text';
   return (
-    <li className="space-y-3 p-4">
-      <div className="flex items-start gap-2">
-        <span className="min-w-8 pt-8 text-sm text-muted-foreground tabular-nums">
+    <li className="space-y-3 p-3 sm:p-4">
+      {/* On a phone the number and the order buttons share a line above the full-width fields. */}
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:items-start">
+        <span className="min-w-8 text-sm text-muted-foreground tabular-nums sm:pt-8">
           {number ?? <Badge variant="secondary">Text</Badge>}
         </span>
-        <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div className="order-last grid w-full min-w-0 gap-3 sm:order-none sm:w-auto sm:flex-1 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <Field label="Bezeichnung" htmlFor={fieldId('name')} required error={errors[fieldId('name')]}>
             <Input
               value={position.name}
@@ -286,7 +287,7 @@ function PositionFields({
             />
           </Field>
         </div>
-        <div className="pt-6">
+        <div className="ml-auto sm:ml-0 sm:pt-6">
           <OrderButtons label={label} {...order} disabled={disabled} />
         </div>
       </div>
