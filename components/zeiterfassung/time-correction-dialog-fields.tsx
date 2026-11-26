@@ -145,7 +145,13 @@ function TimeCorrectionTimeFields({ form }: { form: TimeCorrectionDialogForm }) 
 }
 
 /** Added time: the day, then what happened that day, activity by activity. */
-function AddedTimeFields({ form }: { form: TimeCorrectionDialogForm }) {
+function AddedTimeFields({
+  form,
+  subjectUserId,
+}: {
+  form: TimeCorrectionDialogForm;
+  subjectUserId: string | undefined;
+}) {
   const { dateIso, setDateIso, fieldErrors, timeline, showTimelineErrors } = form;
   return (
     <>
@@ -163,7 +169,11 @@ function AddedTimeFields({ form }: { form: TimeCorrectionDialogForm }) {
           placeholder="Datum wählen"
         />
       </Field>
-      <CorrectionTimelineFields timeline={timeline} showErrors={showTimelineErrors} />
+      <CorrectionTimelineFields
+        timeline={timeline}
+        showErrors={showTimelineErrors}
+        subjectUserId={subjectUserId}
+      />
     </>
   );
 }
@@ -278,10 +288,15 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
     jobId,
     setJobId,
     submitError,
+    subjectEmployeeRecordId,
   } = form;
+  // The person whose time the correction changes: the job pickers mark their jobs.
+  const subjectUserId = options?.people.find(
+    (person) => person.employeeRecordId === subjectEmployeeRecordId,
+  )?.userId;
   // Open jobs of the whole organization, searched on the server; „Ohne Auftrag“ stays first.
   const jobSearch = useJobEntityOptions(
-    { kind: 'jobs', purpose: 'time-correction' },
+    { kind: 'jobs', purpose: 'time-correction', subjectUserId },
     jobId && jobId !== 'none' ? [jobId] : [],
   );
   // Moving time to another person, or choosing whose time is added, is an
@@ -302,7 +317,11 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
 
           <TimeCorrectionPersonFields entry={entry} form={form} canChoosePerson={isOffice} />
 
-          {entry ? <TimeCorrectionTimeFields form={form} /> : <AddedTimeFields form={form} />}
+          {entry ? (
+            <TimeCorrectionTimeFields form={form} />
+          ) : (
+            <AddedTimeFields form={form} subjectUserId={subjectUserId} />
+          )}
 
           {kind === 'reclassify' ? (
             <TimeCorrectionActivityField activityKind={activityKind} setActivityKind={setActivityKind} />
