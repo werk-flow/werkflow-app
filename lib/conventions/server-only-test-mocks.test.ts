@@ -12,12 +12,16 @@ import { repositoryRoot } from './product-sources';
 // earlier file's mock, and fails when run alone, first, or in another part.
 //
 // Such a test calls `mock.module('server-only', () => ({}))`, itself or
-// through a fixture function it imports and calls, and then loads the module
-// with `await import(…)`: a static import runs before any mock. A mock at
-// module level counts for a load inside a function, which runs when a test
-// calls it, and for a later module-level load. A mock inside a function
-// counts only for a later load in the same function. Modules the test mocks
-// are not followed.
+// through an exported fixture function whose body registers it, and then
+// loads the module with `await import(…)`: a static import runs before any
+// mock. A mock at module level counts for a load inside a function, which
+// runs when a test calls it, and for a later module-level load. A mock inside
+// a function counts only for a later load in the same function.
+// Modules the test mocks are not followed.
+//
+// The scan follows no calls: a loader function called at module level
+// before the mock, or a module-level `await import` inside an imported
+// helper, passes it. Neither occurs in the tree; write the mock first.
 
 /** `scope` is the enclosing function, or null at module level. */
 type Load = { specifier: string; position: number; dynamic: boolean; scope: ts.Node | null };
@@ -111,17 +115,45 @@ function mockRunsFirst(mock: Mock, load: Load): boolean {
   return mock.scope === load.scope && mock.position < load.position;
 }
 
-/** The local names an import declaration binds at runtime. */
-function importedNames(statement: ts.ImportDeclaration): string[] {
+const isExported = (statement: ts.FunctionDeclaration | ts.VariableStatement): boolean =>
+  statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) === true;
+
+/** The exported functions of a fixture whose own body calls `mock.module('server-only', …)`. */
+function serverOnlyMockingExports(source: ts.SourceFile): Set<string> {
+  const scopes = new Set(
+    callsOf(source).mocks.flatMap((mock) =>
+      mock.specifier === 'server-only' && mock.scope ? [mock.scope] : [],
+    ),
+  );
+  return new Set(
+    source.statements.flatMap((statement) => {
+      if (
+        ts.isFunctionDeclaration(statement) &&
+        isExported(statement) &&
+        statement.name &&
+        scopes.has(statement)
+      )
+        return [statement.name.text];
+      if (!ts.isVariableStatement(statement) || !isExported(statement)) return [];
+      return statement.declarationList.declarations.flatMap((declaration) =>
+        ts.isIdentifier(declaration.name) && declaration.initializer && scopes.has(declaration.initializer)
+          ? [declaration.name.text]
+          : [],
+      );
+    }),
+  );
+}
+
+/** The local names of the named runtime imports whose exported name is in `exported`. */
+function localNamesOf(statement: ts.ImportDeclaration, exported: ReadonlySet<string>): string[] {
   const clause = statement.importClause;
-  if (!clause || clause.isTypeOnly) return [];
-  const bindings = clause.namedBindings;
-  return [
-    ...(clause.name ? [clause.name.text] : []),
-    ...(bindings && ts.isNamedImports(bindings)
-      ? bindings.elements.filter((element) => !element.isTypeOnly).map((element) => element.name.text)
-      : []),
-  ];
+  const bindings = clause?.namedBindings;
+  if (!clause || clause.isTypeOnly || !bindings || !ts.isNamedImports(bindings)) return [];
+  return bindings.elements.flatMap((element) =>
+    !element.isTypeOnly && exported.has((element.propertyName ?? element.name).text)
+      ? [element.name.text]
+      : [],
+  );
 }
 
 /**
@@ -174,15 +206,13 @@ function unmockedServerOnlyLoads(testFiles: readonly string[], host: SourceHost)
   for (const file of testFiles) {
     const source = sourceOf(file);
     if (!source) continue;
-    // The functions of an imported fixture that registers the mock, by local name.
+    // The imported fixture functions that register the mock, by local name.
     const fixtureMocks = new Set(
       source.statements.flatMap((statement) => {
         if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return [];
         const fixture = target(file, statement.moduleSpecifier.text);
         const fixtureSource = fixture && fixture !== 'server-only' ? sourceOf(fixture) : null;
-        return fixtureSource && callsOf(fixtureSource).mocks.some((mock) => mock.specifier === 'server-only')
-          ? importedNames(statement)
-          : [];
+        return fixtureSource ? localNamesOf(statement, serverOnlyMockingExports(fixtureSource)) : [];
       }),
     );
     const own = callsOf(source, fixtureMocks);
@@ -219,7 +249,8 @@ test('probe: a load reaching server-only fails unless the file mocks it before a
     'lib/area/reader.ts': "import 'server-only';\nexport const read = 1;",
     'lib/area/wrapper.ts': "import { read } from './reader';\nexport const wrapped = read;",
     'lib/area/types.ts': "import type { X } from './reader';\nexport type Y = X;",
-    'lib/area/fixture.ts': "export function isolate() { mock.module('server-only', () => ({})); }",
+    'lib/area/fixture.ts':
+      "export function isolate() { mock.module('server-only', () => ({})); }\nexport const seed = () => 1;\nexport const isolateToo = () => { mock.module('server-only', () => ({})); };",
     'lib/area/static.test.ts': "import { wrapped } from './wrapper';",
     'lib/area/unmocked.test.ts': "test('x', async () => { await import('./wrapper'); });",
     'lib/area/late.test.ts':
@@ -241,6 +272,9 @@ test('probe: a load reaching server-only fails unless the file mocks it before a
       "test('a', async () => { await import('./reader'); });\ntest('b', () => { mock.module('server-only', () => ({})); });",
     'lib/area/same-test.test.ts':
       "test('a', async () => { mock.module('server-only', () => ({})); await import('./reader'); });",
+    'lib/area/other-export.test.ts': "import { seed } from './fixture';\nseed();\nawait import('./reader');",
+    'lib/area/renamed-fixture.test.ts':
+      "import { isolateToo as setUp } from './fixture';\nsetUp();\nawait import('./reader');",
     'lib/area/explicit.test.ts': "import { read } from './reader.ts';",
     'lib/area/plain.test.mjs': "import { read } from './reader';",
   };
@@ -254,6 +288,7 @@ test('probe: a load reaching server-only fails unless the file mocks it before a
     'lib/area/uncalled-fixture.test.ts: ./reader -> lib/area/reader.ts -> server-only',
     'lib/area/fixture-late.test.ts: ./reader -> lib/area/reader.ts -> server-only',
     'lib/area/later-test.test.ts: ./reader -> lib/area/reader.ts -> server-only',
+    'lib/area/other-export.test.ts: ./reader -> lib/area/reader.ts -> server-only',
     'lib/area/explicit.test.ts: ./reader.ts -> lib/area/reader.ts -> server-only',
     'lib/area/plain.test.mjs: ./reader -> lib/area/reader.ts -> server-only',
   ]);
