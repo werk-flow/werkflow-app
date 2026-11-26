@@ -20,6 +20,8 @@ let failingTable: string | null = null;
 let queries: string[] = [];
 // The open jobs past their visits that the office's set read returns, and the organizations it was asked for.
 let overdueJobs: Record<string, unknown>[] = [];
+// The open due maintenance the same read returns.
+let dueMaintenance: Record<string, unknown>[] = [];
 let openRequests: Record<string, unknown>[] = [];
 let managerSetOrganizations: unknown[] = [];
 // Extra rows a case seeds, by table; the viewer's own one-row record read can come back empty.
@@ -92,11 +94,16 @@ function countingQuery(table: string) {
     // The read functions that answer an object: the open absences, here none.
     if (table === 'rpc read_open_absences')
       return Promise.resolve(resolve({ data: { vacations: [], leaverWindows: [] }, error: null, count: 0 }));
-    // The other one: the open requests, access proposals and overdue jobs of the office, here none.
+    // The other one: the open requests, access proposals, overdue jobs and due maintenance of the office.
     if (table === 'rpc read_manager_attention_sets')
       return Promise.resolve(
         resolve({
-          data: { requests: openRequests, access_proposals: [], overdue_jobs: overdueJobs },
+          data: {
+            requests: openRequests,
+            access_proposals: [],
+            overdue_jobs: overdueJobs,
+            due_maintenance: dueMaintenance,
+          },
           error: null,
           count: 0,
         }),
@@ -139,7 +146,7 @@ test.skipIf(ISOLATED)('the attention count read cases pass in an isolated proces
     `${stdout}
 ${stderr}`,
   ).toBe(0);
-  expect(stderr).toContain('8 pass');
+  expect(stderr).toContain('9 pass');
 });
 
 if (ISOLATED) {
@@ -276,6 +283,32 @@ if (ISOLATED) {
         expect(managerSetOrganizations).toEqual([ORG]);
       } finally {
         overdueJobs = [];
+      }
+    });
+
+    test("open due maintenance is a task of the session organization's Admin and Büro and adds no query, never an employee's", async () => {
+      dueMaintenance = [
+        {
+          id: '9e3f5a71-4b2c-4d8e-a1f0-6c7b8d9e0f13',
+          due_date: '2025-01-10',
+          plan_number: 'WPL-2025-0001',
+          site_name: 'Heizzentrale Lindenhof',
+          equipment_names: ['Gasbrennwertkessel'],
+        },
+      ];
+      managerSetOrganizations = [];
+      try {
+        const admin = await readAs('admin', getAttentionCounts);
+        expect(admin.result).toMatchObject({ success: true, counts: { actionableCount: 1 } });
+        // The office's one set read carries it: the same queries as without it.
+        expect(admin.queries).toEqual([...MANAGER_COUNT_QUERIES, 'entry_change_requests'].sort());
+        const buero = await readAs('buero', getAttentionCounts);
+        expect(buero.result).toMatchObject({ success: true, counts: { actionableCount: 1 } });
+        const employee = await readAs('employee', getAttentionCounts);
+        expect(employee.result).toMatchObject({ success: true, counts: { actionableCount: 0 } });
+        expect(managerSetOrganizations).toEqual([ORG, ORG]);
+      } finally {
+        dueMaintenance = [];
       }
     });
 

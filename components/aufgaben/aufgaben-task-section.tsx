@@ -15,6 +15,7 @@ import {
   Send,
   TriangleAlert,
   UserPlus,
+  Wrench,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -56,6 +57,12 @@ export const SECTION_PRESENTATION: Record<
     icon: <AlarmClock className="size-4" />,
     title: 'Überfällige Aufträge',
     testId: 'attention-overdue-job-tasks',
+    previewRows: BACKLOG_PREVIEW_ROWS,
+  },
+  dueMaintenance: {
+    icon: <Wrench className="size-4" />,
+    title: 'Fällige Wartungen',
+    testId: 'attention-due-maintenance-tasks',
     previewRows: BACKLOG_PREVIEW_ROWS,
   },
   request: {

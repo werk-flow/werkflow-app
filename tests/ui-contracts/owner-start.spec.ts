@@ -51,9 +51,14 @@ test('the owner start shows only the exceptions, each with its count, first item
     filled.getByTestId('owner-start-attention-dispatch-challenge-tasks').getByRole('heading'),
   ).toHaveText(/Offene Rückfragen\s*\(1\)/);
 
+  const maintenance = filled.getByTestId('owner-start-attention-due-maintenance-tasks');
+  await expect(maintenance.getByRole('heading', { name: /^Fällige Wartungen\s*\(1\)$/ })).toBeVisible();
+  await expect(maintenance.getByText('Überfällig und noch ohne Wartungsbesuch')).toBeVisible();
   await expect(
-    filled.getByRole('link', { name: '2 Wartungen überfällig: Wartungsliste öffnen' }),
-  ).toHaveAttribute('href', '/service/wartung?faellig=ueberfaellig');
+    maintenance.getByRole('link', { name: 'Wartung Gasbrennwertkessel öffnen, fällig seit 12.11.2026' }),
+  ).toHaveAttribute('href', '/service/wartung?q=WPL-2026-0007');
+  // Due next week, it is the office's task, not an exception.
+  await expect(maintenance.getByText('fällig am', { exact: false })).toHaveCount(0);
 });
 
 test('approvals show only how many wait for Admin, never a name or a date', async ({ page }) => {
@@ -72,7 +77,7 @@ test('approvals show only how many wait for Admin, never a name or a date', asyn
   await expect(filled.getByText('21.12.2026', { exact: false })).toHaveCount(0);
 });
 
-test('with no exception the owner start says so, but only while both reads are current', async ({ page }) => {
+test('with no exception the owner start says so, but only while its read is current', async ({ page }) => {
   await expect(
     page.getByTestId('owner-start-empty').getByText('Keine offenen Entscheidungen.'),
   ).toBeVisible();
@@ -81,17 +86,12 @@ test('with no exception the owner start says so, but only while both reads are c
   ).toHaveCount(0);
 });
 
-test('a failed or loading read shows its own state with a retry and keeps the überfällige Wartung', async ({
-  page,
-}) => {
+test('a failed or loading read shows its own state with a retry', async ({ page }) => {
   const failed = page.getByTestId('owner-start-attention-failed');
   await expect(
     failed.getByText('Was deine Entscheidung braucht, konnte nicht geladen werden.', { exact: false }),
   ).toBeVisible();
   await expect(failed.getByRole('button', { name: 'Erneut laden' })).toHaveCount(1);
-  await expect(
-    failed.getByRole('link', { name: '2 Wartungen überfällig: Wartungsliste öffnen' }),
-  ).toBeVisible();
   const loading = page.getByTestId('owner-start-attention-loading');
   await expect(loading.locator('[data-slot="skeleton"]')).not.toHaveCount(0);
   await expect(loading.getByText('Keine offenen Entscheidungen.')).toHaveCount(0);

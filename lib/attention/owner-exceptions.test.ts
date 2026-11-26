@@ -93,6 +93,20 @@ describe('the exceptions on the owner start', () => {
     expect(exceptionIds(tasks, '2026-11-19')).toEqual([['parkingReview', ['yesterday']]]);
   });
 
+  test('due maintenance is an exception once it is überfällig, never while it is only due within the lead time', () => {
+    const maintenance = (sourceId: string, dueDate: string, overdue: boolean): AttentionTask => ({
+      sourceType: 'maintenance_due',
+      sourceId,
+      equipmentLabel: 'Gasbrennwertkessel',
+      siteName: 'Heizzentrale Lindenhof',
+      dueDate,
+      overdue,
+      href: '/service/wartung?q=WPL-1',
+    });
+    const tasks = [maintenance('overdue', '2026-11-18', true), maintenance('today', '2026-11-19', false)];
+    expect(exceptionIds(tasks, '2026-11-19')).toEqual([['dueMaintenance', ['overdue']]]);
+  });
+
   test('time corrections, vacation requests and open dispatch questions are exceptions; session approvals and other tasks are not', () => {
     const tasks: AttentionTask[] = [
       {

@@ -118,6 +118,22 @@ export function TaskRow({ task }: { task: AttentionTask }) {
           </p>
         </TaskLink>
       );
+    // The Wartung workspace, searched for the item's plan, creates the visit or records an exception.
+    case 'maintenance_due': {
+      const due = `${task.overdue ? 'fällig seit' : 'fällig am'} ${formatGermanDate(task.dueDate)}`;
+      return (
+        <TaskLink
+          href={task.href}
+          ariaLabel={`Wartung ${task.equipmentLabel} öffnen, ${due}`}
+          sourceId={task.sourceId}
+        >
+          <p className="truncate text-sm font-medium">{task.equipmentLabel}</p>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {task.siteName ? `${task.siteName} · ${due}` : due}
+          </p>
+        </TaskLink>
+      );
+    }
   }
 }
 

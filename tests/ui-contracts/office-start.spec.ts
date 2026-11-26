@@ -44,60 +44,54 @@ test('the office start shows each Aufgaben section with its count, its first thr
     overdue.getByRole('link', { name: 'Überfällige Aufträge: alle 5 in Aufgaben' }),
   ).toHaveAttribute('href', '/aufgaben#aufgaben-overdueJob');
 
+  const maintenance = filled.getByTestId('office-start-attention-due-maintenance-tasks');
+  await expect(maintenance.getByRole('heading', { name: /^Fällige Wartungen\s*\(4\)$/ })).toBeVisible();
+  const due = maintenance.getByRole('link', { name: /^Wartung / });
+  await expect(due).toHaveCount(3);
+  await expect(due).toContainText([
+    'Heizzentrale Lindenhof · fällig seit 02.11.2026',
+    'fällig seit 12.11.2026',
+    'Heizzentrale Lindenhof · fällig am 30.11.2026',
+  ]);
   await expect(
-    filled.getByRole('link', { name: '2 Wartungen überfällig: Wartungsliste öffnen' }),
-  ).toHaveAttribute('href', '/service/wartung?faellig=ueberfaellig');
+    maintenance.getByRole('link', {
+      name: 'Wartung Gasbrennwertkessel, Speicher öffnen, fällig seit 02.11.2026',
+    }),
+  ).toHaveAttribute('href', '/service/wartung?q=WPL-2026-0000');
+  await expect(
+    maintenance.getByRole('link', { name: 'Fällige Wartungen: alle 4 in Aufgaben' }),
+  ).toHaveAttribute('href', '/aufgaben#aufgaben-dueMaintenance');
 });
 
-test('with nothing open the office start says so, but only while both reads are current', async ({
-  page,
-}) => {
+test('the due maintenance follows the jobs past their last visit, as in Aufgaben', async ({ page }) => {
+  const headings = page.getByTestId('office-start-filled').getByRole('heading', { level: 3 });
+  await expect(headings).toHaveText([/^Überfällige Aufträge/, /^Fällige Wartungen/]);
+});
+
+test('with nothing open the office start says so, but only while its read is current', async ({ page }) => {
   await expect(page.getByTestId('office-start-empty').getByText('Keine offenen Aufgaben.')).toBeVisible();
-  for (const name of ['maintenance-unknown', 'attention-stale-empty', 'maintenance-stale-empty'])
-    await expect(page.getByTestId(`office-start-${name}`).getByText('Keine offenen Aufgaben.')).toHaveCount(
-      0,
-    );
+  await expect(
+    page.getByTestId('office-start-attention-stale-empty').getByText('Keine offenen Aufgaben.'),
+  ).toHaveCount(0);
 });
 
-test('a failed or loading Aufgaben read keeps the überfällige Wartung and its link', async ({ page }) => {
+test('a failed Aufgaben read shows its retry; a loading one its placeholder', async ({ page }) => {
   const failed = page.getByTestId('office-start-attention-failed');
   await expect(
     failed.getByText('Deine offenen Aufgaben konnten nicht geladen werden.', { exact: false }),
   ).toBeVisible();
   await expect(failed.getByRole('button', { name: 'Erneut laden' })).toHaveCount(1);
-  await expect(
-    failed.getByRole('link', { name: '2 Wartungen überfällig: Wartungsliste öffnen' }),
-  ).toBeVisible();
-  await expect(
-    page
-      .getByTestId('office-start-attention-loading')
-      .getByRole('link', { name: '2 Wartungen überfällig: Wartungsliste öffnen' }),
-  ).toBeVisible();
+  const loading = page.getByTestId('office-start-attention-loading');
+  await expect(loading.locator('[data-slot="skeleton"]')).not.toHaveCount(0);
+  await expect(loading.getByText('Keine offenen Aufgaben.')).toHaveCount(0);
 });
 
-test('a loading maintenance count shows its own placeholder, beside current tasks and with nothing open', async ({
+test('a stale read keeps its last tasks, due maintenance included, marked stale with one retry', async ({
   page,
 }) => {
-  for (const name of ['maintenance-unknown', 'maintenance-loading']) {
-    const placeholder = page
-      .getByTestId(`office-start-${name}`)
-      .getByTestId('office-start-overdue-maintenance-placeholder');
-    await expect(placeholder).toBeVisible();
-    await expect(placeholder.locator('[data-slot="skeleton"]')).not.toHaveCount(0);
-  }
-  await expect(
-    page.getByTestId('office-start-maintenance-loading').getByRole('link', { name: /^Auftrag A-2026-001 / }),
-  ).toBeVisible();
-});
-
-test('a stale maintenance count marks only itself stale; the current task links stay usable', async ({
-  page,
-}) => {
-  const region = page.getByTestId('office-start-maintenance-stale');
-  const task = region.getByRole('link', { name: /^Auftrag A-2026-001 / });
-  await expect(task).toBeVisible();
-  expect(await task.evaluate((element) => element.closest('[inert]') === null)).toBe(true);
-  const maintenance = region.getByRole('link', { name: '2 Wartungen überfällig: Wartungsliste öffnen' });
-  expect(await maintenance.evaluate((element) => element.closest('[data-stale]') !== null)).toBe(true);
+  const region = page.getByTestId('office-start-attention-stale');
+  const due = region.getByRole('link', { name: /^Wartung Gasbrennwertkessel, Speicher / });
+  await expect(due).toBeVisible();
+  expect(await due.evaluate((element) => element.closest('[data-stale]') !== null)).toBe(true);
   await expect(region.getByRole('button', { name: 'Erneut laden' })).toHaveCount(1);
 });
