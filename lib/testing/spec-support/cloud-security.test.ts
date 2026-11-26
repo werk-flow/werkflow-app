@@ -7,7 +7,9 @@ async function withResponse(response: Response): Promise<string[]> {
   try {
     const request = Object.assign(
       async (url: URL | RequestInfo, init?: RequestInit): Promise<Response> => {
-        expect(String(url)).toBe('https://api.supabase.com/v1/projects/mbkkzuqjbdvzelqvuzcn/database/query');
+        expect(String(url)).toBe(
+          'https://api.supabase.com/v1/projects/mbkkzuqjbdvzelqvuzcn/database/query/read-only',
+        );
         expect(init?.redirect).toBe('error');
         expect(JSON.parse(String(init?.body)).query).toBe(CLOUD_SECURITY_QUERY);
         return response;

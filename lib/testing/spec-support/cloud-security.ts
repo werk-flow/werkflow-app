@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { requireEnv } from '../../../tests/golden/support/env';
+import { queryDevReadOnly } from '../../security/dev-management-api';
 
 // Keep this read-only query aligned with sql:security. It detects dashboard-only
 // grant drift, which local migration replay cannot observe.
@@ -70,17 +70,6 @@ and active and schedule='*/5 * * * *' and command='select app_private.prune_real
 const resultSchema = z.array(z.object({ problem: z.string() }));
 
 export async function getDevSecurityProblems(request: typeof fetch = fetch): Promise<string[]> {
-  const response = await request('https://api.supabase.com/v1/projects/mbkkzuqjbdvzelqvuzcn/database/query', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${requireEnv('SUPABASE_ACCESS_TOKEN')}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query: CLOUD_SECURITY_QUERY }),
-    signal: AbortSignal.timeout(30_000),
-    redirect: 'error',
-  });
-  if (response.status !== 201)
-    throw new Error(`DEV security metadata query returned HTTP ${response.status}.`);
-  return resultSchema.parse(await response.json()).map((row) => row.problem);
+  const rows = await queryDevReadOnly('security metadata', CLOUD_SECURITY_QUERY, request);
+  return resultSchema.parse(rows).map((row) => row.problem);
 }

@@ -10,10 +10,10 @@ description: Use for Supabase-related work in this WerkFlow repo: database schem
 ## Steps
 
 1. Inspect the real project before a schema claim or edit. A claim about PROD needs the log of the [PROD inspection](../../../docs/technical/environments.md#which-tool-reaches-what); DEV and the migration files do not stand in for it.
-2. Inspect DEV through the MCP server `supabase` rather than guess from app code or old docs. Agents read no PROD data through any tool, because every tool result goes to the model provider. The one exception is the PROD inspection's log, which holds metadata only. The hook enforces this for MCP calls only.
+2. Inspect DEV through the MCP server `supabase` rather than guess from app code or old docs. It is read-only on DEV: it reads tables, logs and advisors, and a write fails with SQLSTATE 25006. DEV's schema changes only through a merged migration. Agents read no PROD data through any tool, because every tool result goes to the model provider. The one exception is the PROD inspection's log, which holds metadata only. The hook enforces this for MCP calls only.
 3. Before a migration, read the migration rule in [environments](../../../docs/technical/environments.md). For a new table, also follow [security](../../../docs/technical/security.md). Create it with `bunx supabase migration new <name>` and keep that version, even when `main` holds a newer one: DEV and PROD apply it with `--include-all`. Rename it only to the version `bun run migrations:order` names.
 4. With a migration, run `bun run types:generate -- --local`: it writes the types of this tree's migrations and never changes the shared stack. CI fails while `lib/supabase/database.types.ts` is stale.
-5. Deploy an edge function from `supabase/functions/` with `bunx supabase functions deploy <slug> --project-ref <ref> --no-verify-jwt --use-api`.
+5. An edge function from `supabase/functions/` reaches DEV when its PR merges: `staging.yml` deploys it. The agent token cannot deploy one; test it on the local stack first.
 6. Verify on DEV first with MCP queries or the most direct check. Run the SQL group that owns the change (`bun run test:verify --group sql:<name>`). `lib/testing/selection/test-groups.ts` lists each group's files.
 
 ## The shared local stack

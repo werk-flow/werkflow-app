@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 
 import {
   STAGING_AGENT_KEY_FILE,
+  devAccessToken,
   devOnlyVerdict,
   envFileValues,
   installStagingAgentKeys,
@@ -298,6 +299,23 @@ test("a query error's SQLSTATE is the only part of its body read", () => {
   expect(queryErrorSqlState(message('read-only transaction 25006'))).toBeUndefined();
   expect(queryErrorSqlState({ error: 'ERROR:  25006: made up' })).toBeUndefined();
   expect(queryErrorSqlState('ERROR:  25006: made up')).toBeUndefined();
+});
+
+test('a DEV script takes the environment token first, else the agent token from the key file', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agent-keys-'));
+  try {
+    expect(devAccessToken({}, home)).toBeUndefined();
+    const path = join(home, STAGING_AGENT_KEY_FILE);
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    writeFileSync(path, fileText({ SUPABASE_DEV_ACCESS_TOKEN: 'sbp_short' }), { mode: 0o600 });
+    // A token out of its shape is never sent.
+    expect(devAccessToken({}, home)).toBeUndefined();
+    writeFileSync(path, fileText(MADE_UP), { mode: 0o600 });
+    expect(devAccessToken({}, home)).toBe(MADE_UP.SUPABASE_DEV_ACCESS_TOKEN);
+    expect(devAccessToken({ SUPABASE_ACCESS_TOKEN: 'sbp_from_ci' }, home)).toBe('sbp_from_ci');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test('a Stripe answer passes only with livemode false', () => {
