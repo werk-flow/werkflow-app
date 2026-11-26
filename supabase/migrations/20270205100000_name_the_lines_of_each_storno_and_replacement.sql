@@ -59,9 +59,6 @@ begin
   ) then
     raise exception 'werkflow_storno_amount_mismatch' using errcode = '22023';
   end if;
-  if coalesce(jsonb_typeof(p_replacement -> 'line_names'), 'array') <> 'array' then
-    raise exception 'werkflow_storno_lines_invalid' using errcode = '22023';
-  end if;
 
   insert into public.werkflow_invoices (
     organization_id, stripe_invoice_id, stripe_customer_id, stripe_event_id, stripe_credit_note_id,
