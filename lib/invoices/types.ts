@@ -1,4 +1,5 @@
 import { z } from '@/lib/zod';
+import type { InvoiceLineSource } from './line-sources';
 
 // A Rechnung as the office keeps it: customer, recipient, the work it bills,
 // terms, lines and the totals the server computed
@@ -82,5 +83,6 @@ export type InvoiceDetail = InvoiceTerms &
     recipient: { id: string; name: string; address: string | null };
     /** The work it bills, with its label and detail route. */
     work: { kind: InvoiceWorkKind; label: string; href: string } | null;
-    lines: Array<InvoiceLineValues & { netCents: number }>;
+    /** Each line with its amount and the catalog entry it came from, if any. */
+    lines: Array<InvoiceLineValues & { netCents: number; source: InvoiceLineSource | null }>;
   };

@@ -2,7 +2,7 @@
 
 import { Save } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useBanner } from '@/components/ui/banner';
@@ -21,6 +21,7 @@ import {
 } from '@/lib/invoices/draft-form';
 import type { InvoiceDetail, InvoiceWorkKind } from '@/lib/invoices/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { InvoiceCatalogLine } from './invoice-catalog-line';
 import { INVOICE_FAILURE_MESSAGES } from './invoice-failure-messages';
 import { InvoiceLinesFields } from './invoice-lines-fields';
 import { InvoiceTermsFields, InvoiceTextFields } from './invoice-terms-fields';
@@ -78,6 +79,7 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
       focusFirstInvalidField(parsed.errors);
       return;
     }
+    const submittedRevision = draft.revision();
     void run(async () => {
       setError(null);
       const result = await saveInvoiceDraft({
@@ -91,7 +93,7 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
         setError(result ? describeFailure(result.error, INVOICE_FAILURE_MESSAGES, SAVE_FAILED) : SAVE_FAILED);
         return;
       }
-      draft.markSaved(result.version);
+      draft.markSaved(result.version, submittedRevision);
       setAttempted(false);
       showBanner({ variant: 'success', message: 'Entwurf gespeichert.' });
       router.refresh();
@@ -119,6 +121,10 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
         errors={errors}
         disabled={pending}
       />
+      <InvoiceCatalogLine
+        onAdd={(line) => setForm((current) => ({ ...current, lines: [...current.lines, line] }))}
+        disabled={pending}
+      />
       <InvoiceTotals amounts={amounts} />
       <InvoiceTermsFields form={form} onChange={setForm} errors={errors} disabled={pending} />
       <InvoiceTextFields form={form} onChange={setForm} disabled={pending} />
@@ -144,6 +150,8 @@ function useDraftState(invoice: InvoiceDetail) {
   const [baseVersion, setBaseVersion] = useState(invoice.version);
   const [dirty, setDirty] = useState(false);
   const [attemptKey, setAttemptKey] = useState(() => crypto.randomUUID());
+  // Counts the changes, so a save marks saved only the text it sent: a catalog line that lands meanwhile stays unsaved.
+  const revision = useRef(0);
   const newer = invoice.version > baseVersion;
   if (newer && !dirty) {
     setFormState(draftFormOf(invoice));
@@ -154,13 +162,17 @@ function useDraftState(invoice: InvoiceDetail) {
     baseVersion,
     attemptKey,
     newerElsewhere: newer && dirty,
-    setForm: (next: DraftForm) => {
+    /** An update from an answer that arrives later takes the current text, so edits made meanwhile stay. */
+    setForm: (next: DraftForm | ((current: DraftForm) => DraftForm)) => {
+      revision.current += 1;
       setFormState(next);
       setDirty(true);
       setAttemptKey(crypto.randomUUID());
     },
-    markSaved: (version: number) => {
+    revision: () => revision.current,
+    markSaved: (version: number, savedRevision: number) => {
       setBaseVersion(version);
+      if (revision.current !== savedRevision) return;
       setDirty(false);
       setAttemptKey(crypto.randomUUID());
     },

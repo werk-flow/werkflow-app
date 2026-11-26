@@ -20,6 +20,7 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
     targetLabel: 'A-1 · Bad',
     targetHref: href,
     packageState: 'missing',
+    completedOn: '2026-11-02',
     stateVersion: 'job:1:0',
   },
   { sourceType: 'organization_join_request', sourceId: 'join-1', personName: 'Jo Neu', email: null },
@@ -141,6 +142,7 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
     callbackDueAt: '2026-11-07T08:00:00.000Z',
     ownerName: null,
     ownerUnavailable: false,
+    assignedToMe: false,
   },
   {
     sourceType: 'vacation_request_approval',

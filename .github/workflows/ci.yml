@@ -205,6 +205,7 @@ jobs:
       # Maven Central answered 429 to Mustang's download (#516, #539), so the jar comes from this
       # cache, keyed on its version and SHA-256. mustang-jar.ts verifies the jar either way and
       # downloads it, with retries, only on a miss; every caller of this workflow shares the cache.
+      # A queue run reads main's cache, which mustang-cache.yml seeds on every push to main.
       - name: Read Mustang's cache key
         id: mustang
         run: bun lib/document-rendering/fixtures/mustang-jar.ts >> "$GITHUB_OUTPUT"

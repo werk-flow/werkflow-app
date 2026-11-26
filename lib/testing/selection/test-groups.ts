@@ -390,7 +390,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['customer-relationships', ['customer_relationships.sql'], ['customers']],
   ['customer-atomic-writes', ['customer_atomic_writes.sql'], ['customers']],
   ['request-history-writes', ['request_history_writes.sql'], ['customers']],
-  ['request-caller-matches', ['request_caller_matches.sql'], ['customers']],
+  ['request-caller-matches', ['request_caller_matches.sql', 'global_search_matches.sql'], ['customers']],
   [
     'request-retry-results',
     ['request_retry_results.sql', 'request_offer_conversion_concurrency.sql'],
@@ -444,7 +444,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ],
   ['leistung-prices', ['leistung_prices.sql'], ['commercial']],
   ['offers', ['offers.sql', 'offers_concurrency.sql'], ['commercial', 'customers']],
-  ['invoice-drafts', ['invoice_drafts.sql'], ['commercial', 'customers']],
+  ['invoice-drafts', ['invoice_drafts.sql', 'invoice_line_sources.sql'], ['commercial', 'customers']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
   ['own-time-entry-changes', ['own_time_entry_changes.sql', 'pending_entry_withdrawals.sql'], ['time']],

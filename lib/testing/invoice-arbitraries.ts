@@ -3,6 +3,7 @@ import type { PriceQuantity } from '@/lib/inventory/line-amount';
 import { addLocalDays } from '@/lib/date-time/berlin';
 import type { InvoiceDraft, InvoiceTax } from '@/lib/invoicing/model';
 import { STANDARD_RATE_INVOICE } from '@/lib/invoicing/fixtures/reference-invoices';
+import { INVOICE_LINE_SOURCE_KINDS, type InvoiceLineSource } from '@/lib/invoices/line-sources';
 import { INVOICE_TAX_RATES, type InvoiceLineValues, type InvoiceTerms } from '@/lib/invoices/types';
 import { berlinDateArbitrary } from './berlin-arbitraries';
 
@@ -112,6 +113,18 @@ export function draftLineValuesArbitrary(thousandths: fc.Arbitrary<bigint>): fc.
       unit: 'piece',
     }));
 }
+
+/** A stored line's catalog source: none for a free line, else a Leistung or an article, current or archived. */
+export const invoiceLineSourceArbitrary: fc.Arbitrary<InvoiceLineSource | null> = fc.option(
+  fc.record({
+    kind: fc.constantFrom(...INVOICE_LINE_SOURCE_KINDS),
+    id: fc.uuid(),
+    number: fc.option(fc.constantFrom('L-0001', 'A-1042'), { nil: null }),
+    name: fc.constant('Heizkörper tauschen'),
+    archived: fc.boolean(),
+  }),
+  { nil: null },
+);
 
 /** Draft terms the save accepts: an open, one-day or longer service, and a Skonto within the Zahlungsziel. */
 export const invoiceTermsArbitrary: fc.Arbitrary<InvoiceTerms> = fc

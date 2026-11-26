@@ -12,6 +12,7 @@ const HANDOVER_TASKS = toWorkHandoverTasks(
     execution_version: 1,
     project_id: null,
     updated_at: `2026-10-0${day}T08:00:00Z`,
+    actual_completion_date: `2026-10-0${day}`,
   })),
   [],
   [],

@@ -326,7 +326,9 @@ function AttentionClientTaskRow({ task }: { task: AttentionClientTask }) {
             ? ' · Nicht zugewiesen'
             : task.ownerUnavailable
               ? ` · Zuständig: ${task.ownerName} (nicht mehr verfügbar)`
-              : ''}
+              : task.assignedToMe
+                ? ''
+                : ` · Zuständig: ${task.ownerName}`}
         </p>
       </TaskLink>
     );
