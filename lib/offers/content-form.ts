@@ -1,11 +1,11 @@
-import { emptyLine, parseQuantity, quantityInput, type DraftLineForm } from '@/lib/invoices/draft-form';
-import { centsToEuroInput, parseEuroCents } from '@/lib/price-catalog/money';
+import { emptyLine, parsePricedLine, quantityInput, type DraftLineForm } from '@/lib/invoices/draft-form';
+import { centsToEuroInput } from '@/lib/price-catalog/money';
 import { offerAmounts, type OfferAmounts } from './amounts';
 import type { OfferPosition, OfferSection } from './types';
 
 // The content editor's text state and its parse into the Titel and
-// Positionen the save sends. A position's fields are those of an invoice
-// line, read by the same rules. Each refusal is a German sentence keyed by
+// Positionen the save sends. A priced position is read as an invoice line is
+// (parsePricedLine); a text line needs only its Bezeichnung. Each refusal is a German sentence keyed by
 // the control's id, so the editor marks the field and focuses the first
 // (focusFirstInvalidField). The server parses the same limits again
 // (action-schemas.ts).
@@ -64,27 +64,13 @@ function parsePosition(
   fieldId: (field: 'name' | 'quantity' | 'price') => string,
   errors: Record<string, string>,
 ): OfferPosition | null {
-  const name = position.name.trim();
-  const description = position.description.trim();
-  if (!name) errors[fieldId('name')] = 'Gib der Position eine Bezeichnung.';
-  if (position.kind === 'text') return name ? { kind: 'text', name, description } : null;
-  const quantity = parseQuantity(position.quantity);
-  const unitPriceCents = parseEuroCents(position.price);
-  if (quantity === null) errors[fieldId('quantity')] = 'Gib die Menge an, höchstens drei Nachkommastellen.';
-  if (unitPriceCents === null || unitPriceCents === undefined) {
-    errors[fieldId('price')] = 'Gib den Netto-Einzelpreis an, zum Beispiel 72,50.';
+  if (position.kind === 'free') {
+    const values = parsePricedLine(position, fieldId, errors);
+    return values && { kind: 'free', ...values };
   }
-  if (!name || quantity === null || unitPriceCents === null || unitPriceCents === undefined) return null;
-  return {
-    kind: 'free',
-    name,
-    description,
-    quantity,
-    unit: position.unit,
-    unitPriceCents,
-    priceQuantity: position.priceQuantity,
-    taxRateBasisPoints: position.taxRateBasisPoints,
-  };
+  const name = position.name.trim();
+  if (!name) errors[fieldId('name')] = 'Gib der Position eine Bezeichnung.';
+  return name ? { kind: 'text', name, description: position.description.trim() } : null;
 }
 
 /** The Titel and Positionen of the editor's text, or a sentence per field at fault. */
