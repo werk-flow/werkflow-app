@@ -79,6 +79,7 @@ const EQUIPMENT_COPY = {
   voidedSuccessor: 'Dieser Nachfolger wurde durch eine Korrektur als irrtümlich erfasst markiert.',
   customerSection: 'Anlagen & Geräte',
   fieldPackHeading: 'Anlagen am Einsatzort',
+  fieldRecord: 'Verlauf und Dokumente',
 } as const;
 
 /** History entries of the equipment detail (equipment-detail-sections.tsx). */
@@ -240,6 +241,16 @@ export function customerEquipmentSectionTitle(page: Page): Locator {
 /** The equipment heading inside the field work pack. */
 export function fieldPackEquipmentHeading(pack: Locator): Locator {
   return pack.getByText(EQUIPMENT_COPY.fieldPackHeading, { exact: true });
+}
+
+/** Opens „Verlauf und Dokumente“ of one Anlage of the field work pack and returns the dialog. */
+export async function openFieldEquipmentRecord(page: Page, equipmentName: string): Promise<Locator> {
+  await page
+    .getByRole('button', { name: `${EQUIPMENT_COPY.fieldRecord} von ${equipmentName}`, exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', { name: EQUIPMENT_COPY.fieldRecord, exact: true });
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 /** The work picker of the „Arbeit verknüpfen“ dialog. */
