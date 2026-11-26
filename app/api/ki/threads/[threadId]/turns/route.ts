@@ -54,11 +54,12 @@ export async function POST(
   try {
     const auth = await resolveActionContextFor(parsed.data.organizationId);
     if (!auth.success) return refuse(auth.error, auth.error === 'not_authenticated' ? 401 : 403);
-    const { userId, orgId } = auth.context;
+    const { userId, orgId, role } = auth.context;
     const start = await startAiTurn({
       entryPoint: 'chat',
       organizationId: orgId,
       userId,
+      role,
       threadId: threadId.data,
       commandId: parsed.data.commandId,
       receivedAt,

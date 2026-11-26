@@ -25,7 +25,7 @@ export type QueuedPull = {
   check: string;
   /** GitHub's merge state: `DIRTY` conflicts with main; `BEHIND` lacks main while the ruleset requires an up-to-date branch. */
   mergeState: string;
-  /** The owner's `approved: list growth` label. */
+  /** One of the owner's growth labels: `approved: list growth` or `approved: context growth`. */
   listGrowthApproved: boolean;
 };
 

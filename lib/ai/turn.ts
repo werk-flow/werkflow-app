@@ -1,8 +1,8 @@
 import 'server-only';
 
-import { createHash } from 'node:crypto';
 import { type ModelMessage, streamText } from 'ai';
 
+import { type AiContext, type AiThreadMessage, buildAiContext, serializedInput } from '@/lib/ai/context';
 import { AI_MODEL_PRICE, type AiTokenUsage, costMicroUsd } from '@/lib/ai/cost';
 import { AI_TURN_LIMITS, type AiEntryPoint, inputTokenCeiling, maxTurnCostMicroUsd } from '@/lib/ai/limits';
 import { type AiModel, isAllowedModel, resolveAiModel } from '@/lib/ai/model';
@@ -13,22 +13,15 @@ import {
   providerFailure,
 } from '@/lib/ai/attempt-failure';
 import { AI_PRODUCT_NAME } from '@/lib/ai/name';
+import { AI_PROMPT_VERSION } from '@/lib/ai/prompt/system-prompt';
 import { isAiReleasedFor } from '@/lib/ai/release-gate';
 import { readAiOrganizationSwitch } from '@/lib/ai/settings';
 import { AI_TURN_FAILURE_MESSAGES } from '@/lib/ai/turn-messages';
 import { logError } from '@/lib/logging';
+import type { OrgRole } from '@/lib/roles';
 import { consumeRateLimit } from '@/lib/security/rate-limit';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { z } from '@/lib/zod';
-
-// A placeholder until the versioned public prompt (werk-flow/werkflow-planning#529) replaces it.
-const AI_SYSTEM_PROMPT = [
-  `You are ${AI_PRODUCT_NAME}, the AI assistant inside WerkFlow, the operations app of a German SHK business.`,
-  'Answer in natural German and address the user with „du“.',
-  'You have no tools yet: you cannot read or change WerkFlow data, send anything or contact anyone; say so when asked.',
-  'Never rank or evaluate employees.',
-].join(' ');
-const AI_PROMPT_VERSION = createHash('sha256').update(AI_SYSTEM_PROMPT).digest('hex').slice(0, 16);
 
 /** How many earlier messages of the thread the model sees, newest first, within the input cap. */
 const HISTORY_MESSAGES = 20;
@@ -42,6 +35,8 @@ export type AiTurnCommand = {
   entryPoint: AiEntryPoint;
   organizationId: string;
   userId: string;
+  /** The caller's role in the organization, from the server's membership read: it picks the model's tools. */
+  role: OrgRole;
   threadId: string;
   /** The client's idempotency key: a retried command runs at most once and is charged once. */
   commandId: string;
@@ -190,12 +185,16 @@ export async function startAiTurn(command: AiTurnCommand): Promise<AiTurnStart> 
   );
   if (!assistantItem) return refuse('unavailable');
 
-  const messages = fitInputCap(history, { role: 'user', content: command.text }, command.entryPoint);
+  const modelContext = await buildAiContext({
+    role: command.role,
+    thread: [...history, { role: 'user', text: command.text }],
+    inputTokenCap: AI_TURN_LIMITS[command.entryPoint].maxInputTokens,
+  });
   return {
     status: 'started',
     userItem,
     assistantItem,
-    run: (sink) => runTurn({ admin, command, model, runId, runKey, assistantItem, messages, sink }),
+    run: (sink) => runTurn({ admin, command, model, runId, runKey, assistantItem, modelContext, sink }),
   };
 }
 
@@ -291,20 +290,6 @@ async function readItem(
   return { id: data.id, status: data.status, text: body.success ? body.data.text : '' };
 }
 
-/** The newest history that fits the input cap beside the new message; older messages drop first. */
-function fitInputCap(
-  history: ModelMessage[],
-  message: ModelMessage,
-  entryPoint: AiEntryPoint,
-): ModelMessage[] {
-  const cap = AI_TURN_LIMITS[entryPoint].maxInputTokens;
-  let kept = history;
-  while (kept.length > 0 && inputTokenCeiling(JSON.stringify([AI_SYSTEM_PROMPT, kept, message])) > cap) {
-    kept = kept.slice(1);
-  }
-  return [...kept, message];
-}
-
 /** The first line of the first message, up to 80 characters; counted by code point, so none is split. */
 function threadTitle(text: string): string {
   const firstLine = text.trim().split('\n')[0]?.trim() ?? '';
@@ -354,7 +339,7 @@ async function readHistory(
   admin: Admin,
   command: AiTurnCommand,
   beforeSequence: number,
-): Promise<ModelMessage[] | 'load_failed'> {
+): Promise<AiThreadMessage[] | 'load_failed'> {
   const { data, error } = await admin
     .from('ai_thread_items')
     .select('kind, body, sequence')
@@ -371,10 +356,10 @@ async function readHistory(
   }
   return data
     .toSorted((left, right) => left.sequence - right.sequence)
-    .flatMap((item): ModelMessage[] => {
+    .flatMap((item): AiThreadMessage[] => {
       const body = messageBodySchema.safeParse(item.body);
       if (!body.success || !body.data.text) return [];
-      return [{ role: item.kind === 'user_message' ? 'user' : 'assistant', content: body.data.text }];
+      return [{ role: item.kind === 'user_message' ? 'user' : 'assistant', text: body.data.text }];
     });
 }
 
@@ -413,7 +398,8 @@ type RunContext = {
   /** The run's ledger key; each attempt's key extends it. */
   runKey: string;
   assistantItem: ItemRef;
-  messages: ModelMessage[];
+  /** What the model reads: the system prompt, the role's tools and the thread (lib/ai/context.ts). */
+  modelContext: AiContext;
   sink: AiTurnSink;
 };
 
@@ -512,14 +498,14 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
   // The turn's time counts from the request's arrival, so setup cannot eat the time to settle.
   const elapsedMs = Date.now() - context.command.receivedAt;
   const turnSignal = AbortSignal.timeout(Math.max(0, limits.totalTimeoutMs - elapsedMs));
-  let messages = context.messages;
+  let messages = context.modelContext.messages;
   for (let step = 1; ; step += 1) {
     if (step > limits.maxSteps) return failedEnd('cancelled', 'step_limit');
     const gate = await readStepGate(context.command.organizationId);
     if (gate === 'disabled') return failedEnd('cancelled', 'disabled');
     if (gate === 'undecidable') return failedEnd('cancelled', 'undecidable');
     if (!isAllowedModel(context.model)) return failedEnd('failed', 'provider_refused');
-    const prompt = JSON.stringify([AI_SYSTEM_PROMPT, messages]);
+    const prompt = serializedInput(context.modelContext, messages);
     if (inputTokenCeiling(prompt) > limits.maxInputTokens) return failedEnd('failed', 'input_too_large');
 
     const outcome = await runStep(context, answer, { step, messages, prompt, turnSignal });
@@ -600,7 +586,8 @@ async function runAttempt(
   const attemptAbort = new AbortController();
   const result = streamText({
     model: context.model,
-    instructions: AI_SYSTEM_PROMPT,
+    instructions: context.modelContext.instructions,
+    tools: context.modelContext.tools,
     messages: step.messages,
     maxOutputTokens: limits.maxOutputTokens,
     // The harness retries, so it can ledger each attempt and never retry a spend limit.
@@ -649,7 +636,7 @@ async function runAttempt(
       ok: true,
       finishReason,
       responseMessages: response.messages,
-      usage: usage ?? estimatedUsage(JSON.stringify([AI_SYSTEM_PROMPT, step.messages]), true, limits),
+      usage: usage ?? estimatedUsage(serializedInput(context.modelContext, step.messages), true, limits),
     };
   } catch (error) {
     return fail(error);

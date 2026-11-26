@@ -81,6 +81,11 @@ test("GitHub's pages give each PR's queue place, its head's Check and its approv
   ]);
   const olderHead = node({ commits: { nodes: [{ commit: { oid: OLD, status: null } }] } });
   expect(pullsFromGitHub(answer([olderHead]))[0]?.check).toBe('MISSING');
+  // The context growth label is a growth approval too: its PR runs in a batch of its own.
+  const contextGrowth = node({ labels: { totalCount: 1, nodes: [{ name: 'approved: context growth' }] } });
+  expect(pullsFromGitHub(answer([contextGrowth]))[0]?.listGrowthApproved).toBe(true);
+  const unlabelled = node({ labels: { totalCount: 1, nodes: [{ name: 'needs-coderabbit' }] } });
+  expect(pullsFromGitHub(answer([unlabelled]))[0]?.listGrowthApproved).toBe(false);
   expect(() => pullsFromGitHub(answer([node()], 101))).toThrow('GitHub listed 1 of 101');
   const pages = [...answer([node()], 2), ...answer([node({ number: 8 })], 2)];
   expect(pullsFromGitHub(pages).map((entry) => entry.number)).toEqual([7, 8]);

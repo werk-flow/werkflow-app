@@ -400,6 +400,62 @@ test("a pull request run takes only its own PR's approval", () => {
   expect(read('gh.calls')).not.toContain('/issues/7/');
 });
 
+// The agent context budget grows only with the owner's `approved: context growth`; the list label waives it not.
+const BUDGET = 'lib/ai/agent-context-budget.json';
+const CONTEXT_APPROVED = [{ name: 'approved: context growth' }];
+
+function budgetCommit(subject: string, systemPrompt: number): string {
+  mkdirSync(join(repository, 'lib/ai'), { recursive: true });
+  writeFileSync(join(repository, BUDGET), JSON.stringify({ systemPrompt, toolDefinitions: { admin: 2 } }));
+  git('add', BUDGET);
+  git('commit', '--quiet', '--no-verify', '--message', subject);
+  return git('rev-parse', 'HEAD');
+}
+
+test('a pull request that grows the agent context budget is approved only by `approved: context growth`', () => {
+  ratchetCommit('Main ratchet');
+  budgetCommit('Main budget', 1900);
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  budgetCommit('A longer prompt', 1901);
+  const run = { CI_EVENT: 'pr', CI_PRS: '9', GH_TOKEN: 'token' };
+  writeFileSync(join(stub, 'labels-9.json'), JSON.stringify(APPROVED));
+  expect(approval(run)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+  writeFileSync(join(stub, 'labels-9.json'), JSON.stringify(CONTEXT_APPROVED));
+  expect(approval(run)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
+  // Growth of a list beside the budget needs both labels.
+  ratchetCommit('And a new assertion', { 'lib/b.ts': 1 });
+  expect(approval(run)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+  writeFileSync(join(stub, 'labels-9.json'), JSON.stringify([...APPROVED, ...CONTEXT_APPROVED]));
+  expect(approval(run)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
+});
+
+test("a queue entry that grows the agent context budget takes its PR's `approved: context growth`, not the list label", () => {
+  const queue = onMain();
+  const grown = budgetCommit('A longer prompt (#11)', 1901);
+  const entries = (labels: readonly { name: string }[]) =>
+    JSON.stringify({
+      data: {
+        repository: {
+          mergeQueue: {
+            entries: {
+              totalCount: 1,
+              nodes: [
+                {
+                  headCommit: { oid: grown },
+                  pullRequest: { number: 11, labels: { totalCount: labels.length, nodes: labels } },
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+  writeFileSync(join(stub, 'queue.json'), entries(APPROVED));
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+  writeFileSync(join(stub, 'queue.json'), entries(CONTEXT_APPROVED));
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
+});
+
 test('an approval that cannot be read fails the step instead of passing it as unapproved', () => {
   expect(prepare('approval', { CI_EVENT: 'pr', CI_PRS: 'not a number' }).passed).toBe(false);
   expect(read('env')).toBe('');

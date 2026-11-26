@@ -75,6 +75,9 @@ const config: KnipConfig = {
     // reader exists before E2a's article positions import it. Remove this
     // entry with that import.
     'lib/inventory/article-prices.ts!',
+    // The context builder's untrusted-text channel (werk-flow/werkflow-planning#529) exists before
+    // the tool results of #531 and the memory of #538 and #539 use it. Remove this entry with that import.
+    'lib/ai/context.ts!',
     // The Leistung price reader (werk-flow/werkflow-planning#379) exists before
     // the offer calculation imports it. Remove this entry with that import.
     'lib/price-catalog/leistung-prices.ts!',
