@@ -59,6 +59,9 @@ function isOwnerException(task: AttentionTask, businessDate: string): boolean {
       );
     case 'work_blocker_review':
       return task.nextReviewDate < businessDate;
+    // Maintenance due within the lead time is the office's; overdue it reaches the owner.
+    case 'maintenance_due':
+      return task.overdue;
     case 'time_session_approval':
     case 'client_request_open':
     case 'client_follow_up':
