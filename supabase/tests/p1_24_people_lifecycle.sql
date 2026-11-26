@@ -694,7 +694,10 @@ insert into public.employee_records (id, organization_id, first_name, last_name,
 ('24000000-0000-0000-0000-000000000060', '24000000-0000-0000-0000-000000000010', 'Geplant', 'Austritt', '2024-01-01', null),
 ('24000000-0000-0000-0000-000000000061', '24000000-0000-0000-0000-000000000010', 'Wieder', 'Eintritt', '2020-01-01', '2025-06-30'),
 ('24000000-0000-0000-0000-000000000062', '24000000-0000-0000-0000-000000000010', 'Sofort', 'Schritt', '2024-01-01', null),
-('24000000-0000-0000-0000-000000000063', '24000000-0000-0000-0000-000000000010', 'Geändert', 'Austritt', '2024-01-01', null);
+('24000000-0000-0000-0000-000000000063', '24000000-0000-0000-0000-000000000010', 'Geändert', 'Austritt', '2024-01-01', null),
+('24000000-0000-0000-0000-000000000064', '24000000-0000-0000-0000-000000000010', 'Neu', 'Geplant', '2024-01-01', null),
+('24000000-0000-0000-0000-000000000065', '24000000-0000-0000-0000-000000000010', 'Überholt', 'Austritt', '2024-01-01',
+ (clock_timestamp() at time zone 'Europe/Berlin')::date + 20);
 
 do $$
 declare
@@ -704,6 +707,10 @@ declare
   rehire_id constant uuid := '24000000-0000-0000-0000-000000000061';
   immediate_id constant uuid := '24000000-0000-0000-0000-000000000062';
   edited_id constant uuid := '24000000-0000-0000-0000-000000000063';
+  replanned_id constant uuid := '24000000-0000-0000-0000-000000000064';
+  overtaken_id constant uuid := '24000000-0000-0000-0000-000000000065';
+  buero_record_id uuid;
+  configuration_id uuid;
   today constant date := (clock_timestamp() at time zone 'Europe/Berlin')::date;
   lifecycle_id uuid;
   replayed_id uuid;
@@ -760,6 +767,66 @@ begin
   );
   if (select exit_date from public.employee_records where id = edited_id) is distinct from today + 60
     then raise exception 'withdrawing a plan overwrote an exit date changed after it'; end if;
+
+  -- An edit between two plans is what the second plan replaced, and what its withdrawal restores.
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, replanned_id, 0, 'plan_exit', today + 30,
+    'Austritt geplant', '[]'::jsonb, '24000000-0000-0000-0000-000000000078', repeat('4', 64)
+  );
+  update public.employee_records set exit_date = today + 60 where id = replanned_id;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, replanned_id, 1, 'plan_exit', today + 40,
+    'Austritt neu geplant', '[]'::jsonb, '24000000-0000-0000-0000-000000000079', repeat('5', 64)
+  );
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, replanned_id, 2, 'cancel_scheduled', today,
+    'Austritt zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-00000000007a', repeat('6', 64)
+  );
+  if (select exit_date from public.employee_records where id = replanned_id) is distinct from today + 60
+    then raise exception 'withdrawing a second plan dropped the exit date edited before it'; end if;
+
+  -- An earlier exit that an edited entry date overtook does not return, and the withdrawal still succeeds.
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, overtaken_id, 0, 'plan_exit', today + 30,
+    'Austritt geplant', '[]'::jsonb, '24000000-0000-0000-0000-00000000007b', repeat('7', 64)
+  );
+  update public.employee_records set entry_date = today + 25 where id = overtaken_id;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, overtaken_id, 1, 'cancel_scheduled', today,
+    'Austritt zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-00000000007c', repeat('8', 64)
+  );
+  if exists (
+    select 1 from public.employee_records
+    where id = overtaken_id and (entry_date is distinct from today + 25 or exit_date is not null)
+  ) then raise exception 'withdrawing a plan restored an exit before the edited entry date'; end if;
+
+  -- Withdrawing a planned return restores the exit date, so it may not leave a selected group without a holder.
+  select id into buero_record_id from public.employee_records
+  where organization_id = test_organization_id and user_id = '24000000-0000-0000-0000-000000000002';
+  update public.employee_records set entry_date = '2020-01-01', exit_date = '2025-06-30'
+  where id = buero_record_id;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, buero_record_id, 0, 'plan_start', today + 14,
+    'Rückkehr geplant', '[]'::jsonb, '24000000-0000-0000-0000-00000000007d', repeat('9', 64)
+  );
+  -- After the organization's role-default configurations this transaction created.
+  insert into public.organization_responsibility_configurations (
+    organization_id, responsibility, mode, created_by, effective_from
+  ) values (test_organization_id, 'time_approval', 'selected', actor_id, clock_timestamp())
+  returning id into configuration_id;
+  insert into public.organization_responsibility_assignments (organization_id, configuration_id, employee_record_id, source)
+  values (test_organization_id, configuration_id, buero_record_id, 'direct');
+  begin
+    perform public.set_personnel_employment_transition(
+      actor_id, test_organization_id, buero_record_id, 1, 'cancel_scheduled', today,
+      'Rückkehr zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-00000000007e', repeat('a', 64)
+    );
+    raise exception 'withdrawing a planned return left a selected group without a holder';
+  exception when others then
+    if sqlerrm not like '%last_responsibility_holder%' then raise; end if;
+  end;
+  if (select exit_date from public.employee_records where id = buero_record_id) is not null
+    then raise exception 'a refused withdrawal restored the exit date'; end if;
 
   -- A step that acts at once refuses a future date and changes nothing.
   foreach kind in array array['start', 'mark_inactive', 'exit', 'reactivate']::public.personnel_employment_transition_kind[] loop

@@ -8,7 +8,14 @@
 --    before the first planned step (replaced_entry_date, replaced_exit_date; a
 --    second plan of the same step keeps them), and cancel_scheduled writes
 --    them back. It restores a date only while the record still holds the
---    plan's date: a date the office changed on the record since stays.
+--    plan's date: a date the office changed on the record since stays, and an
+--    earlier exit that an edited entry date overtook does not return. The
+--    dates are read under the record's row lock, after the organization lock.
+--    Withdrawing a planned return that restores an exit date takes the
+--    last-holder check of a step that ends the employment.
+-- 3. A duplicate request that waited for the per-person lock answers with
+--    the operation the first one recorded instead of stale_version
+--    (werk-flow/werkflow-planning#352).
 -- 2. A step that acts at once (start, mark_inactive, exit, reactivate) refuses
 --    a date after today (immediate_effective_date_required). It set the state
 --    at once and stored the later date, so „Austritt festhalten“ for next
@@ -65,6 +72,8 @@ declare
   new_version bigint;
   has_stranded_responsibility boolean;
   withdrawn public.personnel_employment_lifecycles;
+  restored_entry date;
+  restored_exit date;
   today constant date := (clock_timestamp() at time zone 'Europe/Berlin')::date;
 begin
   result_id := app_private.p1_24_assert_replay(p_organization_id, p_operation_id, p_request_hash);
@@ -76,6 +85,9 @@ begin
   perform pg_advisory_xact_lock(hashtextextended(
     p_organization_id::text || ':p1-24-employment:' || p_employee_record_id::text, 0
   ));
+  -- A duplicate that waited for the lock answers with what the first one recorded.
+  result_id := app_private.p1_24_assert_replay(p_organization_id, p_operation_id, p_request_hash);
+  if result_id is not null then return result_id; end if;
   select * into employee from public.employee_records
   where id = p_employee_record_id and organization_id = p_organization_id;
   if employee.id is null then raise exception 'employee_record_not_found'; end if;
@@ -126,7 +138,11 @@ begin
      and p_effective_on > today
   then raise exception 'immediate_effective_date_required'; end if;
 
-  if target_state in ('inactive', 'exited') then
+  -- Withdrawing a planned return restores an exit date, which ends the person's holding too.
+  if target_state in ('inactive', 'exited')
+     or (p_transition_kind = 'cancel_scheduled' and lifecycle.scheduled_state = 'active'
+         and lifecycle.replaced_exit_date is not null)
+  then
     if employee.user_id is not null and exists (
       select 1 from public.organizations organization
       where organization.id = p_organization_id and organization.admin_id = employee.user_id
@@ -166,6 +182,11 @@ begin
     if has_stranded_responsibility then raise exception 'last_responsibility_holder'; end if;
   end if;
 
+  -- The dates are snapshotted and written under the record's row lock, taken
+  -- after the organization lock, so an edit of the record cannot fall between.
+  select * into employee from public.employee_records
+  where id = p_employee_record_id for update;
+
   if lifecycle.id is null then
     insert into public.personnel_employment_lifecycles(
       organization_id, employee_record_id, state, state_effective_on,
@@ -182,7 +203,7 @@ begin
         today else p_effective_on end,
       case when p_transition_kind in ('plan_start', 'plan_exit') then target_state end,
       case when p_transition_kind in ('plan_start', 'plan_exit') then p_effective_on end,
-      case when p_transition_kind in ('plan_start', 'plan_exit') then employee.entry_date end,
+      case when p_transition_kind = 'plan_start' then employee.entry_date end,
       case when p_transition_kind in ('plan_start', 'plan_exit') then employee.exit_date end,
       1, p_actor_id, p_actor_id
     ) returning * into lifecycle;
@@ -203,11 +224,19 @@ begin
       end,
       scheduled_state = case when p_transition_kind in ('plan_start', 'plan_exit') then target_state end,
       scheduled_for = case when p_transition_kind in ('plan_start', 'plan_exit') then p_effective_on end,
-      -- A second plan of the same step keeps the dates from before the first.
-      replaced_entry_date = case when p_transition_kind in ('plan_start', 'plan_exit') then
-        case when scheduled_state is null then employee.entry_date else replaced_entry_date end end,
-      replaced_exit_date = case when p_transition_kind in ('plan_start', 'plan_exit') then
-        case when scheduled_state is null then employee.exit_date else replaced_exit_date end end,
+      -- A second plan of the same step keeps the dates from before the first,
+      -- unless the office changed the date on the record in between.
+      replaced_entry_date = case when p_transition_kind = 'plan_start' then
+        case when scheduled_state = 'active' and employee.entry_date is not distinct from scheduled_for
+          then replaced_entry_date else employee.entry_date end end,
+      replaced_exit_date = case
+        when p_transition_kind = 'plan_exit' then
+          case when scheduled_state = 'exited' and employee.exit_date is not distinct from scheduled_for
+            then replaced_exit_date else employee.exit_date end
+        when p_transition_kind = 'plan_start' then
+          case when scheduled_state = 'active' and employee.exit_date is null
+            then replaced_exit_date else employee.exit_date end
+      end,
       version = new_version,
       updated_by = p_actor_id
     where id = lifecycle.id returning * into lifecycle;
@@ -222,16 +251,31 @@ begin
   elsif p_transition_kind in ('reverse', 'reactivate') then
     update public.employee_records set exit_date = null where id = p_employee_record_id;
   elsif p_transition_kind = 'cancel_scheduled' then
-    -- Only a date that still holds what the plan wrote; one the office changed since stays.
-    if withdrawn.scheduled_state = 'exited' then
-      update public.employee_records set exit_date = withdrawn.replaced_exit_date
-      where id = p_employee_record_id and exit_date is not distinct from withdrawn.scheduled_for;
-    elsif withdrawn.scheduled_state = 'active' then
-      update public.employee_records set
-        entry_date = withdrawn.replaced_entry_date,
-        exit_date = coalesce(exit_date, withdrawn.replaced_exit_date)
-      where id = p_employee_record_id and entry_date is not distinct from withdrawn.scheduled_for;
+    -- Each date returns only while it still holds what the plan wrote; one the
+    -- office changed since stays.
+    restored_entry := employee.entry_date;
+    restored_exit := employee.exit_date;
+    if withdrawn.scheduled_state = 'active'
+       and employee.entry_date is not distinct from withdrawn.scheduled_for then
+      restored_entry := withdrawn.replaced_entry_date;
     end if;
+    if (withdrawn.scheduled_state = 'exited'
+        and employee.exit_date is not distinct from withdrawn.scheduled_for)
+       or (withdrawn.scheduled_state = 'active' and employee.exit_date is null) then
+      restored_exit := withdrawn.replaced_exit_date;
+    end if;
+    -- An earlier exit that an edited entry date has overtaken does not return:
+    -- a withdrawn exit leaves none, a withdrawn start keeps the record as it is.
+    if restored_exit < restored_entry then
+      if withdrawn.scheduled_state = 'exited' then
+        restored_exit := null;
+      else
+        restored_entry := employee.entry_date;
+        restored_exit := employee.exit_date;
+      end if;
+    end if;
+    update public.employee_records set entry_date = restored_entry, exit_date = restored_exit
+    where id = p_employee_record_id;
   end if;
 
   insert into public.personnel_employment_transitions(
