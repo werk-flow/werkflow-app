@@ -9,10 +9,13 @@ import { logError } from '@/lib/logging';
 import { resolveActionContext } from '@/lib/org/action-context';
 import { readLeistungPrices } from '@/lib/price-catalog/leistung-prices';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { z } from '@/lib/zod';
 import {
   invoiceLineSourceRefSchema,
   type InvoiceCatalogLine,
   type InvoiceLineSourceRef,
+  type OfferArticleLine,
 } from './line-sources';
 import { INVOICE_TAX_RATES, type InvoiceTaxRate } from './types';
 
@@ -20,9 +23,14 @@ import { INVOICE_TAX_RATES, type InvoiceTaxRate } from './types';
 // and the server reads its name, unit, tax rate and today's net sale price
 // (Berlin) through the readers of E2a (readLeistungPrices) and E1
 // (readArticlePrices). The editor copies the answer into a new line, where
-// the office can still change every value before the save.
+// the office can still change every value before the save. An offer Position
+// from an article takes the same rule (readOfferArticleLine), so offers and
+// invoices price an article alike.
 
 type CatalogLineResult = ActionResult<{ line: InvoiceCatalogLine }>;
+type OfferArticleLineResult = ActionResult<{ line: OfferArticleLine }>;
+/** A unit outside the list: an invoice refuses the entry, an offer asks the office for a unit. */
+type UnitOutsideList = 'refuse' | 'ask';
 
 /** The longest name and description a line keeps (the invoice_lines checks). */
 const NAME_MAX = 200;
@@ -40,10 +48,15 @@ function taxRateOf(basisPoints: number): InvoiceTaxRate | null {
 }
 
 /** The line, or the reason the catalog entry cannot become one today. */
-function catalogLine(ref: InvoiceLineSourceRef, facts: SourceFacts, price: SourcePrice): CatalogLineResult {
+function catalogLine(
+  ref: InvoiceLineSourceRef,
+  facts: SourceFacts,
+  price: SourcePrice,
+  unitOutsideList: UnitOutsideList,
+): OfferArticleLineResult {
   if (facts.archived) return { success: false, error: 'source_archived' };
   if (!price.salePrice) return { success: false, error: 'source_unpriced' };
-  if (!price.unit) return { success: false, error: 'source_unit_unknown' };
+  if (!price.unit && unitOutsideList === 'refuse') return { success: false, error: 'source_unit_unknown' };
   const taxRateBasisPoints = taxRateOf(price.taxRateBasisPoints);
   if (taxRateBasisPoints === null) return { success: false, error: 'source_tax_rate_unsupported' };
   return {
@@ -108,16 +121,12 @@ async function sourcePrice(ref: InvoiceLineSourceRef, today: string): Promise<So
   return read.prices.find((price) => price.articleId === ref.id) ?? null;
 }
 
-/**
- * A new draft line from a Leistung or an article of the caller's
- * organization, priced on today's Berlin date. Admin and Büro only. Refuses
- * an archived entry, one without a sale price today, one with a unit outside
- * the list and one with a VAT rate a line does not offer.
- */
-export async function readInvoiceLineSource(rawInput: InvoiceLineSourceRef): Promise<CatalogLineResult> {
-  const parsed = invoiceLineSourceRefSchema.safeParse(rawInput);
-  if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const ref = parsed.data;
+/** A new line from the source on today's Berlin date, for Admin and Büro of its organization. */
+async function readCatalogLine(
+  ref: InvoiceLineSourceRef,
+  unitOutsideList: UnitOutsideList,
+  action: string,
+): Promise<OfferArticleLineResult> {
   try {
     const caller = await resolveActionContext();
     if (!caller.success) return caller;
@@ -128,13 +137,41 @@ export async function readInvoiceLineSource(rawInput: InvoiceLineSourceRef): Pro
       sourcePrice(ref, getBusinessTodayIso()),
     ]);
     if (facts === 'failed' || price === 'failed') {
-      logError('readInvoiceLineSource: catalog read failed', { code: ref.kind });
+      logError(`${action}: catalog read failed`, { code: ref.kind });
       return { success: false, error: 'load_failed' };
     }
     if (!facts || !price) return { success: false, error: 'source_not_found' };
-    return catalogLine(ref, facts, price);
+    return catalogLine(ref, facts, price, unitOutsideList);
   } catch (error) {
-    logError('readInvoiceLineSource: unexpected error', error);
+    logError(`${action}: unexpected error`, error);
     return { success: false, error: 'unexpected_error' };
   }
+}
+
+/**
+ * A new draft line from a Leistung or an article of the caller's
+ * organization, priced on today's Berlin date. Admin and Büro only. Refuses
+ * an archived entry, one without a sale price today, one with a unit outside
+ * the list and one with a VAT rate a line does not offer.
+ */
+export async function readInvoiceLineSource(rawInput: InvoiceLineSourceRef): Promise<CatalogLineResult> {
+  const parsed = invoiceLineSourceRefSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const read = await readCatalogLine(parsed.data, 'refuse', 'readInvoiceLineSource');
+  if (!read.success) return read;
+  const { unit, ...line } = read.line;
+  return unit ? { success: true, line: { ...line, unit } } : { success: false, error: 'source_unit_unknown' };
+}
+
+/**
+ * A new offer Position from an article of the caller's organization, by the
+ * rule of an invoice line and priced on today's Berlin date, the date a draft
+ * offer carries. Admin and Büro only. Unlike an invoice line, an article
+ * whose stored unit is outside the list answers with `unit: null`: the offer
+ * editor asks the office for a unit before it saves.
+ */
+export async function readOfferArticleLine(rawInput: { articleId: string }): Promise<OfferArticleLineResult> {
+  const parsed = z.object({ articleId: uuidSchema }).safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  return readCatalogLine({ kind: 'article', id: parsed.data.articleId }, 'ask', 'readOfferArticleLine');
 }

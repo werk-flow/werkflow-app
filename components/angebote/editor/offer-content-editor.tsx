@@ -1,7 +1,7 @@
 'use client';
 
 import { Plus, Save } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type SetStateAction } from 'react';
 
 import { move } from '@/components/arbeitsvorlagen/work-template-editor-shared';
 import { InvoiceTotals } from '@/components/rechnungen/invoice-totals';
@@ -78,8 +78,14 @@ function useContentDraft(offer: OfferDetail, saving: boolean) {
   return {
     draft,
     newerElsewhere: newer && draft.edited && !saving,
-    edit: (sections: SectionForm[]) =>
-      setDraft({ ...draft, sections, edited: true, attemptKey: crypto.randomUUID() }),
+    /** An update of the current text: an article's price arrives after other edits may have landed. */
+    edit: (next: SetStateAction<SectionForm[]>) =>
+      setDraft((current) => ({
+        ...current,
+        sections: typeof next === 'function' ? next(current.sections) : next,
+        edited: true,
+        attemptKey: crypto.randomUUID(),
+      })),
     saved: () => setDraft({ ...draft, edited: false, attemptKey: crypto.randomUUID() }),
     reload: () => setDraft(contentDraftOf(offer)),
   };
@@ -222,7 +228,7 @@ function OfferSectionList({
 }: {
   sections: SectionForm[];
   amounts: OfferAmounts | null;
-  onChange: (sections: SectionForm[]) => void;
+  onChange: (sections: SetStateAction<SectionForm[]>) => void;
   newKey: () => string;
   errors: Record<string, string | undefined>;
   disabled: boolean;
@@ -247,6 +253,15 @@ function OfferSectionList({
               onChange={(next) => onChange(sections.map((current, at) => (at === index ? next : current)))}
               onMove={(direction) => onChange(move(sections, index, direction))}
               onRemove={() => onChange(sections.filter((_section, at) => at !== index))}
+              onAddArticle={(position) =>
+                onChange((current) =>
+                  current.map((entry) =>
+                    entry.key === section.key
+                      ? { ...entry, positions: [...entry.positions, position] }
+                      : entry,
+                  ),
+                )
+              }
               newKey={newKey}
               errors={errors}
               disabled={disabled}

@@ -212,3 +212,51 @@ test('a refused save of untouched content names the newer content it now shows',
   await editor.getByRole('button', { name: 'Titel hinzufügen', exact: true }).click();
   await expect(sentence).toHaveCount(0);
 });
+
+// An article whose stored unit is outside the list becomes a Position without
+// a unit: the editor says so at the field, and a save marks the unit, focuses
+// it and sends nothing until the office picks one. The save names the article.
+test('a Position from an article with an unknown unit asks for a unit before it saves', async ({ page }) => {
+  await openContractFixture(page, 'offers');
+  const editor = page.getByRole('form', { name: 'Titel und Positionen' });
+  const save = editor.getByRole('button', { name: 'Speichern', exact: true });
+  await editor.getByRole('button', { name: 'Titel hinzufügen', exact: true }).click();
+  await editor.getByRole('textbox', { name: 'Titel 1' }).fill('Material');
+
+  await editor.getByRole('combobox', { name: 'Artikel zu Titel 1 hinzufügen' }).click();
+  await expect.poll(() => page.evaluate(() => window.optionContract.requests.length)).toBe(1);
+  await page.evaluate(() =>
+    window.optionContract.resolve(0, [{ value: 'contract-article', label: 'KB-15 · Kupferbogen 15 mm' }]),
+  );
+  await page.getByRole('option', { name: 'KB-15 · Kupferbogen 15 mm' }).click();
+  await expect(editor.getByRole('textbox', { name: 'Bezeichnung' })).toHaveValue('Kupferbogen 15 mm');
+  await expect(editor.getByRole('textbox', { name: 'Einzelpreis netto' })).toHaveValue('4,95');
+  await expect(editor.getByText('Aus Artikel KB-15 · Kupferbogen 15 mm')).toBeVisible();
+  await expect(editor.getByText('Die Einheit des Artikels ist unbekannt. Wähle eine.')).toBeVisible();
+
+  await save.click();
+  await expect(editor.getByText('Wähle eine Einheit.')).toBeVisible();
+  const unit = editor.getByRole('combobox', { name: 'Einheit' });
+  await expect(unit).toBeFocused();
+  expect(await page.evaluate(() => window.uiContractWrites.calls)).toEqual([]);
+
+  await unit.click();
+  await page.getByRole('option', { name: 'Stück', exact: true }).click();
+  await save.click();
+  await expectHeldWrite(page, 'save-offer-content');
+  expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
+    sections: [
+      {
+        title: 'Material',
+        positions: [
+          {
+            kind: 'free',
+            unit: 'piece',
+            unitPriceCents: 495,
+            source: { kind: 'article', id: 'contract-article' },
+          },
+        ],
+      },
+    ],
+  });
+});

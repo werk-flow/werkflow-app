@@ -579,7 +579,8 @@ begin
   end if;
   if (public.get_offer('38040000-0000-4000-8000-000000000010', v_offer.id) -> 'sections' -> 0 -> 'positions' -> 1)
       is distinct from '{"kind": "free", "name": "Kupferrohr 15 mm", "description": "", "quantity": "2.125",
-        "unit": "meter", "unitPriceCents": 1249, "priceQuantity": 1, "taxRateBasisPoints": 1900}'::jsonb
+        "unit": "meter", "unitPriceCents": 1249, "priceQuantity": 1, "taxRateBasisPoints": 1900,
+        "source": null}'::jsonb
     or (public.get_offer('38040000-0000-4000-8000-000000000010', v_offer.id) ->> 'contentVersion') is distinct from '2' then
     raise exception 'the offer reads its content as %', public.get_offer('38040000-0000-4000-8000-000000000010', v_offer.id);
   end if;
@@ -685,6 +686,136 @@ $$;
 select pg_temp.content_read_by('38040000-0000-4000-8000-000000000002');
 select pg_temp.content_read_by('38040000-0000-4000-8000-000000000003');
 rollback to savepoint offer_content;
+
+-- A Position taken from an article, with its hidden purchase cost
+-- (migration 20270301090000_take_offer_positions_from_articles.sql).
+savepoint offer_articles;
+
+-- 70: an article, 71: an archived one without a number, 79: another organization's.
+insert into public.inventory_items (id, organization_id, name, item_type, unit, internal_sku, is_active) values
+('38040000-0000-4000-8000-000000000070', '38040000-0000-4000-8000-000000000010', 'Kupferrohr 15 mm',
+ 'material', 'meter', 'KR-15', true),
+('38040000-0000-4000-8000-000000000071', '38040000-0000-4000-8000-000000000010', 'Altes Ventil',
+ 'material', 'piece', null, false),
+('38040000-0000-4000-8000-000000000079', '38040000-0000-4000-8000-000000000011', 'Fremdes Rohr',
+ 'material', 'meter', null, true);
+
+-- The purchase cost carries no grant for a signed-in role: not the table, not one column.
+do $$
+declare
+  v_role text;
+  v_column text;
+begin
+  foreach v_role in array array['anon', 'authenticated'] loop
+    foreach v_column in array array['item_id', 'purchase_cost_cents', 'purchase_price_quantity'] loop
+      if has_column_privilege(v_role, 'public.offer_positions', v_column, 'SELECT')
+        or has_column_privilege(v_role, 'public.offer_positions', v_column, 'INSERT')
+        or has_column_privilege(v_role, 'public.offer_positions', v_column, 'UPDATE') then
+        raise exception '% holds a privilege on offer_positions.%', v_role, v_column;
+      end if;
+    end loop;
+  end loop;
+end;
+$$;
+
+set local role service_role;
+create function pg_temp.article_line(p_item text, p_cost jsonb) returns jsonb language sql as $$
+  select jsonb_build_object('kind', 'free', 'name', 'Kupferrohr 15 mm', 'description', '', 'quantity', '2.125',
+    'unit', 'meter', 'unitLabel', 'm', 'unitPriceCents', 1249, 'priceQuantity', 1, 'taxRateBasisPoints', 1900,
+    'amountCents', 2654, 'source', jsonb_build_object('kind', 'article', 'id', p_item), 'purchaseCost', p_cost);
+$$;
+create function pg_temp.with_lines(p_lines jsonb) returns jsonb language sql as $$
+  select jsonb_build_array(jsonb_build_object('title', 'Material',
+    'netCents', (select coalesce(sum((line ->> 'amountCents')::bigint), 0) from jsonb_array_elements(p_lines) line),
+    'positions', p_lines));
+$$;
+
+-- A save stores the article and its cost per price quantity beside the
+-- Position; a Position typed by hand and one without a cost keep none.
+do $$
+declare
+  v_offer uuid := (select first_offer from ids);
+  v_read jsonb;
+begin
+  perform public.save_offer_content('38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+    v_offer, 1, gen_random_uuid(), pg_temp.with_lines(jsonb_build_array(
+      pg_temp.article_line('38040000-0000-4000-8000-000000000070', '{"amountCents": 812, "priceQuantity": 10}'),
+      pg_temp.article_line('38040000-0000-4000-8000-000000000071', 'null'),
+      pg_temp.article_line('38040000-0000-4000-8000-000000000070', 'null') - 'source' - 'purchaseCost')),
+    '{"netCents": 7962, "taxCents": 1513, "grossCents": 9475}');
+  if (select array_agg(coalesce(line.item_id::text, '-') || ':' || coalesce(line.purchase_cost_cents::text, '-')
+        || ':' || coalesce(line.purchase_price_quantity::text, '-') order by line.position)
+      from public.offer_positions line where line.offer_id = v_offer)
+    is distinct from array['38040000-0000-4000-8000-000000000070:812:10', '38040000-0000-4000-8000-000000000071:-:-',
+      '-:-:-'] then
+    raise exception 'the stored articles and costs are wrong';
+  end if;
+  v_read := public.get_offer('38040000-0000-4000-8000-000000000010', v_offer) -> 'sections' -> 0 -> 'positions';
+  if v_read -> 0 -> 'source' is distinct from '{"kind": "article", "id": "38040000-0000-4000-8000-000000000070",
+      "number": "KR-15", "name": "Kupferrohr 15 mm", "archived": false}'::jsonb
+    or v_read -> 1 -> 'source' is distinct from '{"kind": "article", "id": "38040000-0000-4000-8000-000000000071",
+      "number": null, "name": "Altes Ventil", "archived": true}'::jsonb
+    or v_read -> 2 -> 'source' is distinct from 'null'::jsonb then
+    raise exception 'the offer reads its articles as %', v_read;
+  end if;
+  if v_read::text like '%812%' or v_read::text ilike '%purchase%' then
+    raise exception 'the offer read answers the purchase cost: %', v_read;
+  end if;
+end;
+$$;
+
+-- Refusals write nothing: another organization's article, an unknown one, a
+-- source that is no article id, a cost without an article or per a price
+-- quantity a price never has, and a text line with an article.
+select pg_temp.expect_refusal(label, format(
+  'select public.save_offer_content(%L, %L, %L, 2, gen_random_uuid(), %L, %L)',
+  '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010', (select first_offer from ids),
+  pg_temp.with_lines(jsonb_build_array(line)), '{"netCents": 2654, "taxCents": 504, "grossCents": 3158}'), refusal)
+from (values
+  ('a foreign article', pg_temp.article_line('38040000-0000-4000-8000-000000000079', 'null'), 'article_not_found'),
+  ('an unknown article', pg_temp.article_line('38040000-0000-4000-8000-000000000078', 'null'), 'article_not_found'),
+  ('a source that is no id', pg_temp.article_line('KR-15', 'null'), 'invalid_input'),
+  ('a Leistung as source', jsonb_set(pg_temp.article_line('38040000-0000-4000-8000-000000000070', 'null'),
+    '{source,kind}', '"leistung"'), 'invalid_input'),
+  ('a cost without an article', pg_temp.article_line('38040000-0000-4000-8000-000000000070',
+    '{"amountCents": 812, "priceQuantity": 10}') - 'source', 'invalid_input'),
+  ('a cost per 3', pg_temp.article_line('38040000-0000-4000-8000-000000000070',
+    '{"amountCents": 812, "priceQuantity": 3}'), '23514')
+) as refused(label, line, refusal);
+select pg_temp.expect_refusal('a text line with an article', format(
+  'select public.save_offer_content(%L, %L, %L, 2, gen_random_uuid(), %L, %L)',
+  '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010', (select first_offer from ids),
+  '[{"title": "Material", "netCents": 0, "positions": [{"kind": "text", "name": "Hinweis", "description": "",
+    "source": {"kind": "article", "id": "38040000-0000-4000-8000-000000000070"}}]}]',
+  '{"netCents": 0, "taxCents": 0, "grossCents": 0}'), '23514');
+do $$
+begin
+  if (select content_version from public.offers where id = (select first_offer from ids)) is distinct from 2
+    or (select count(*) from public.offer_positions where offer_id = (select first_offer from ids)) is distinct from 3::bigint then
+    raise exception 'a refused article save wrote';
+  end if;
+end;
+$$;
+reset role;
+
+-- An article a Position names is archived, never deleted.
+select pg_temp.expect_refusal('deleting a named article',
+  'delete from public.inventory_items where id = ''38040000-0000-4000-8000-000000000070''', '23503');
+
+-- No signed-in session reads an article's cost on an offer: neither the
+-- office, whose server reads it after the manager check, nor a field worker.
+create function pg_temp.cost_read_by(p_user uuid) returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_user, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  perform pg_temp.expect_refusal('purchase cost read',
+    'select purchase_cost_cents, purchase_price_quantity from public.offer_positions', '42501');
+  execute 'reset role';
+end;
+$$;
+select pg_temp.cost_read_by('38040000-0000-4000-8000-000000000002');
+select pg_temp.cost_read_by('38040000-0000-4000-8000-000000000003');
+rollback to savepoint offer_articles;
 
 -- The history is append-only, also for a privileged role.
 select pg_temp.expect_refusal('rewriting an offer event',
