@@ -2,7 +2,6 @@ import { type Dirent, readdirSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { type ShellWord, SCRIPT_FLAG, SHELLS, program, readShell } from './shell-words';
-import { errorCode } from '../testing/runner/error-code';
 
 // Only the process that uses a workstation secret reads it
 // (docs/technical/machine-setup.md, "Agent keys"): the Boat API key, the
@@ -281,7 +280,7 @@ export function liveBackupsOnDisk(folder: string, depth: number): string[] | und
     try {
       entries = readdirSync(dir, { withFileTypes: true });
     } catch (error) {
-      if (UNREACHABLE.has(String(errorCode(error)))) continue;
+      if (error instanceof Error && 'code' in error && UNREACHABLE.has(String(error.code))) continue;
       return undefined;
     }
     if (entries.some((entry) => entry.name === LIVE_BACKUP)) found.push(join(dir, LIVE_BACKUP));

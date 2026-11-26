@@ -1,10 +1,9 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { z } from 'zod';
 
-import { parseEnvironmentFile } from '../testing/evidence/proof-environment';
-import { errorCode } from '../testing/runner/error-code';
+import { parseEnvironmentFile } from '../env-file';
+import { z } from '../zod';
 
 // The one owner of the keys agents hold for DEV, staging and the Stripe sandbox
 // (docs/technical/machine-setup.md, "Agent keys"). Each machine keeps its own
@@ -97,7 +96,7 @@ export function readStagingAgentKeys(home = homedir()): StagingAgentKeys {
     if (!stat) return { file: 'missing' };
     if (stat.isFile()) return stagingAgentKeysFrom(readFileSync(path, 'utf8'));
   } catch (error) {
-    if (errorCode(error) === 'ENOENT') return { file: 'missing' };
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return { file: 'missing' };
     throw unreadable;
   }
   throw unreadable;
