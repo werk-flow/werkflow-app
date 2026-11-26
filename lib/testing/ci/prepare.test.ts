@@ -133,6 +133,15 @@ function ratchetCommit(subject: string, extra: Record<string, number> = {}): str
   return git('rev-parse', 'HEAD');
 }
 
+/** A commit that drops `key` from the ratchet's 20 entries: a shrink. */
+function shrinkCommit(subject: string, key: string): string {
+  const kept = Object.entries(LIST).filter(([entry]) => entry !== key);
+  writeFileSync(join(repository, RATCHET), JSON.stringify(Object.fromEntries(kept), null, 1));
+  git('add', RATCHET);
+  git('commit', '--quiet', '--no-verify', '--message', subject);
+  return git('rev-parse', 'HEAD');
+}
+
 /** A commit that moves `from` to `to` with git mv, keeping its content. */
 function moveCommit(subject: string, from: string, to: string): string {
   git('mv', from, to);
@@ -212,7 +221,7 @@ test("a commit subject naming an approved PR is no proof: only GitHub's records 
   expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
 });
 
-test('every commit that touches a list file must be approved: a list moved aside and restored, a rename included', () => {
+test('every commit that grows a list must be approved: a list moved aside and restored, a rename included', () => {
   const queue = onMain();
   // Approved #11 deletes the list; unapproved #12 restores it with a new entry, growth that no
   // comparison per commit sees, since the list is absent below it.
@@ -236,6 +245,75 @@ test('every commit that touches a list file must be approved: a list moved aside
     { commit: back, pr: 11, approved: true },
   ]);
   expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+});
+
+test("an unapproved PR that only shrinks a list leaves the approved PR's growth approved", () => {
+  const queue = onMain();
+  const grown = ratchetCommit('Grows the list (#11)', { 'lib/b.ts': 1 });
+  const shrunk = shrinkCommit('Drops an entry (#12)', 'lib/file-0.ts');
+  mergeQueue([
+    { commit: grown, pr: 11, approved: true },
+    { commit: shrunk, pr: 12, approved: false },
+  ]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
+});
+
+test("an unapproved PR that moves a list aside or renames it keeps the gate strict, an approved PR's growth beside it", () => {
+  const queue = onMain();
+  const grown = ratchetCommit('Grows the list (#11)', { 'lib/b.ts': 1 });
+  const aside = moveCommit('Moves the list aside (#12)', RATCHET, ASIDE);
+  mergeQueue([
+    { commit: grown, pr: 11, approved: true },
+    { commit: aside, pr: 12, approved: false },
+  ]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+
+  // A rename into the list's path, the same entries, is growth too: each entry is new at that path.
+  git('reset', '--quiet', '--hard', 'origin/main');
+  const moved = moveCommit('Moves the list aside (#11)', RATCHET, ASIDE);
+  const renamed = moveCommit('Renames it back (#12)', ASIDE, RATCHET);
+  mergeQueue([
+    { commit: moved, pr: 11, approved: true },
+    { commit: renamed, pr: 12, approved: false },
+  ]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+});
+
+test('an unapproved PR that restores a removed list with a higher ceiling keeps the gate strict', () => {
+  const queue = onMain();
+  git('rm', '--quiet', RATCHET);
+  git('commit', '--quiet', '--no-verify', '--message', 'Removes the list (#11)');
+  const removed = git('rev-parse', 'HEAD');
+  const restored = ratchetCommit('Restores the list (#12)', { 'lib/file-0.ts': 2 });
+  mergeQueue([
+    { commit: removed, pr: 11, approved: true },
+    { commit: restored, pr: 12, approved: false },
+  ]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+});
+
+// Merge-queue run 45741947708: #557, unapproved, edited a list's file outside the list, and the
+// step dropped #512's approval for the commit ahead of it.
+test("the replay of run 45741947708: an unapproved PR that edits a list's file outside the list keeps the approval", () => {
+  const queue = onMain();
+  const VOLUME = 'lib/attention/count-volume.test.ts';
+  const volume = (row: string): string =>
+    `function workRows() {\n  return [{ ${row} }];\n}\nconst HISTORY_READS: Readonly<Record<string, number>> = {};\n`;
+  mkdirSync(join(repository, 'lib/attention'), { recursive: true });
+  writeFileSync(join(repository, VOLUME), volume('updated_at: RECENT'));
+  git('add', VOLUME);
+  git('commit', '--quiet', '--no-verify', '--message', 'Main');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  const approved = ratchetCommit('#512 grows the list (#512)', { 'lib/b.ts': 1 });
+  writeFileSync(join(repository, VOLUME), volume('updated_at: RECENT, work_execution_events: []'));
+  git('add', VOLUME);
+  git('commit', '--quiet', '--no-verify', '--message', '#557 edits the file (#557)');
+  const edited = git('rev-parse', 'HEAD');
+  mergeQueue([
+    { commit: approved, pr: 512, approved: true },
+    { commit: edited, pr: 557, approved: false },
+  ]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
 });
 
 test("a merge commit in the queue's range fails the step: it brings in commits no queue entry names", () => {

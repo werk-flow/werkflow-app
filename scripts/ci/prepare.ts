@@ -159,9 +159,13 @@ function siblings(): void {
  * list"), read now, so a rerun after a label change sees it. A pull request run takes its own PR's
  * label. An integration run tests main plus every PR it serves, and the gate measures their growth
  * from main, so an approval may cover only its own PR: the run is approved only when every commit
- * above the merge base with origin/main, the gate's base, that touches a list file belongs to a PR
- * with the label. GitHub's records name each commit's PR (lib/testing/ci/list-growth-approval.ts);
- * a touching commit they do not bind keeps the gate strict, and an unreadable answer fails the step.
+ * above the merge base with origin/main, the gate's base, that grows a list against its parent
+ * belongs to a PR with the label. A commit grows a list as the gate counts growth, except that a
+ * list its parent lacks counts each entry as added, and a list it removes counts as growth too: a
+ * rename is a delete plus an add, so moving a list aside or back is growth. A commit that only
+ * shrinks a list, or edits its file elsewhere, needs no approval. GitHub's records name each
+ * growing commit's PR (lib/testing/ci/list-growth-approval.ts); a growing commit they do not bind
+ * keeps the gate strict, and an unreadable answer fails the step.
  */
 async function approval(): Promise<void> {
   const event = process.env.CI_EVENT;
@@ -187,7 +191,9 @@ async function approval(): Promise<void> {
       return labels.split('\n').includes('approved: list growth');
     });
   } else {
-    const { SHRINK_ONLY_LISTS } = await import('../../lib/testing/publication/shrink-only-lists');
+    const { committedFileText, SHRINK_ONLY_LISTS, shrinkOnlyProblems } = await import(
+      '../../lib/testing/publication/shrink-only-lists'
+    );
     const { commitLine, landedBinding, QUEUE_QUERY, queueBindings } = await import(
       '../../lib/testing/ci/list-growth-approval'
     );
@@ -200,18 +206,27 @@ async function approval(): Promise<void> {
       base,
     );
     if ('unreadable' in line) fail(line.unreadable);
-    const listFiles = new Set(SHRINK_ONLY_LISTS.map((list) => list.file));
     // Without rename detection a moved file lists its old and its new path: both touch the list.
-    const touching = line.filter((commit) =>
-      (
-        read('git', ['diff', '--name-only', '--no-renames', `${commit}^`, commit]) ??
-        fail(`The files ${commit} changed cannot be read.`)
-      )
-        .split('\n')
-        .some((file) => listFiles.has(file)),
-    );
+    const growing = line.filter((commit) => {
+      const changed = new Set(
+        (
+          read('git', ['diff', '--name-only', '--no-renames', `${commit}^`, commit]) ??
+          fail(`The files ${commit} changed cannot be read.`)
+        ).split('\n'),
+      );
+      const touched = SHRINK_ONLY_LISTS.filter((list) => changed.has(list.file));
+      if (!touched.length) return false;
+      const growth = shrinkOnlyProblems(
+        (file) => committedFileText(checkout, `${commit}^`, file),
+        (file) => committedFileText(checkout, commit, file),
+        touched,
+        { absentBaseGrows: true },
+      );
+      if (!growth.length) console.info(`${commit.slice(0, 9)} touches a shrink-only list and grows none`);
+      return growth.length > 0;
+    });
     const [owner = '', name = ''] = repository.split('/');
-    const queue = touching.length
+    const queue = growing.length
       ? queueBindings(
           read('gh', [
             'api',
@@ -226,8 +241,8 @@ async function approval(): Promise<void> {
         )
       : new Map<string, Binding>();
     if ('unreadable' in queue) fail(queue.unreadable);
-    result = touching.length > 0;
-    for (const commit of touching) {
+    result = growing.length > 0;
+    for (const commit of growing) {
       const binding =
         queue.get(commit) ??
         landedBinding(
@@ -237,7 +252,7 @@ async function approval(): Promise<void> {
         );
       if (binding && 'unreadable' in binding) fail(binding.unreadable);
       console.info(
-        `${commit.slice(0, 9)} touches a shrink-only list: ${binding ? `#${binding.pr}, ${binding.approved ? 'approved' : 'not approved'}` : 'no pull request binds it'}`,
+        `${commit.slice(0, 9)} grows a shrink-only list: ${binding ? `#${binding.pr}, ${binding.approved ? 'approved' : 'not approved'}` : 'no pull request binds it'}`,
       );
       if (!binding?.approved) result = false;
     }

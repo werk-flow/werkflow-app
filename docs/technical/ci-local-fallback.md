@@ -70,7 +70,7 @@ The runner serves PR integration runs only. Before `local` can carry CI unattend
 5. **A real machine run with drills:** a claim race, a moved head, a window edge, a restart, and measured PR-run times.
 6. **The Mac's `colima ssh` argument check:** that the slot prefix hands each argument on unchanged, as the PC's check does.
 7. **The accepted residuals:** a shared Docker daemon within one run, the App key readable by agents on the PC, and no queue-host failover. #603 records each.
-8. **The list growth approval of a batch.** The approval binds a commit to its PR only through GitHub's merge queue or a landed merge (decision 0009, "an approval covers only its own PR's growth"). The runner's local batch commits are in neither, so a batch that touches a shrink-only list fails Fast even for an approved PR alone. The queue must hand the step its batch commits' PRs.
+8. **The list growth approval of a batch.** The approval binds a commit to its PR only through GitHub's merge queue or a landed merge (decision 0009, "an approval covers only its own PR's growth"). The runner's local batch commits are in neither, so a batch that grows a shrink-only list fails Fast even for an approved PR alone. The queue must hand the step its batch commits' PRs.
 
 ## Put the VM release and DEV keys back
 

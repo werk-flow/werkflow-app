@@ -353,12 +353,18 @@ export function committedFileText(repositoryRoot: string, commit: string, file: 
 /**
  * Every growth of a shrink-only list between two versions of the tree. The
  * owner's approval waives growth as `growthProblems` allows, never a list that is gone.
+ * With `absentBaseGrows`, a list the base lacks counts each of its entries as added:
+ * the merge queue's approval (scripts/ci/prepare.ts) compares each commit with its
+ * parent, where a list restored or moved into place is growth, not a new baseline.
  */
 export function shrinkOnlyProblems(
   readBase: (file: string) => string | null,
   readCurrent: (file: string) => string | null,
   lists: readonly ShrinkOnlyList[] = SHRINK_ONLY_LISTS,
-  { growthApproved = false }: { growthApproved?: boolean } = {},
+  {
+    growthApproved = false,
+    absentBaseGrows = false,
+  }: { growthApproved?: boolean; absentBaseGrows?: boolean } = {},
 ): string[] {
   return lists.flatMap((list) => {
     const base = listEntries(list, readBase(list.file));
@@ -368,6 +374,6 @@ export function shrinkOnlyProblems(
     const current = listEntries(list, currentText);
     if (current === null)
       return [`${list.id}: ${list.file} no longer holds the list; update SHRINK_ONLY_LISTS`];
-    return growthProblems(list, base, current, { growthApproved });
+    return growthProblems(list, base ?? (absentBaseGrows ? new Map() : null), current, { growthApproved });
   });
 }
