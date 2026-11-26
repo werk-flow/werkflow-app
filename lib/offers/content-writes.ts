@@ -13,7 +13,7 @@ import { offerContentArgument } from './amounts';
 // The caller has established the actor as Admin or Büro of the organization;
 // the database function checks the actor again under the access lock, refuses
 // an offer outside the organization and writes the history in the same call
-// (supabase/migrations/20270105090000_write_titel_and_positionen_into_an_offer.sql).
+// (supabase/migrations/20270201090000_write_titel_and_positionen_into_an_offer.sql).
 
 const contentRefusal = writeRefusalFor(
   new Set(['invalid_input', 'not_authorized', 'offer_not_found', 'offer_not_editable', 'offer_changed']),

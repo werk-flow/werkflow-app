@@ -475,7 +475,7 @@ end;
 $$;
 rollback to savepoint offer_header;
 
--- Titel and Positionen (migration 20270105090000_write_titel_and_positionen_into_an_offer.sql).
+-- Titel and Positionen (migration 20270201090000_write_titel_and_positionen_into_an_offer.sql).
 savepoint offer_content;
 
 -- Grants: the content and its save are server-only; no signed-in role reads a line.
