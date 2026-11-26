@@ -351,7 +351,9 @@ stripe.refunds.set('re_test_3', { ...refund, id: 're_test_3', duplicateSubscript
 // Pending when the cleanup settled, cancelled afterwards: it paid nothing either.
 stripe.refunds.set('re_test_4', { ...refund, id: 're_test_4', status: 'canceled' });
 assert.equal(signalFamilyFor('refund.failed'), refundSignals);
-assert.equal(signalFamilyFor('charge.refund.updated'), refundSignals);
+assert.equal(signalFamilyFor('refund.updated'), refundSignals);
+// The deprecated per-method event is no longer handled; `refund.updated` covers every refund.
+assert.equal(signalFamilyFor('charge.refund.updated'), undefined);
 alarms.length = 0;
 const failedRefund = await signal('refund.failed', {
   id: 're_test_1',
@@ -361,17 +363,11 @@ const failedRefund = await signal('refund.failed', {
 await refundSignals.handle(failedRefund, gateway);
 await refundSignals.handle(failedRefund, gateway);
 await refundSignals.handle(
-  await signal('charge.refund.updated', { id: 're_test_2', object: 'refund', status: 'failed' }),
+  await signal('refund.updated', { id: 're_test_2', object: 'refund', status: 'failed' }),
   gateway,
 );
-await refundSignals.handle(
-  await signal('charge.refund.updated', { id: 're_test_3', object: 'refund' }),
-  gateway,
-);
-await refundSignals.handle(
-  await signal('charge.refund.updated', { id: 're_test_4', object: 'refund' }),
-  gateway,
-);
+await refundSignals.handle(await signal('refund.updated', { id: 're_test_3', object: 'refund' }), gateway);
+await refundSignals.handle(await signal('refund.updated', { id: 're_test_4', object: 'refund' }), gateway);
 assert.deepEqual(refundFailures[0], {
   p_organization_id: ORGANIZATION,
   p_stripe_subscription_id: 'sub_test_2',
