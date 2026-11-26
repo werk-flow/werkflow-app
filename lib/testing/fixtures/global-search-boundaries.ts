@@ -4,7 +4,8 @@
 // (supabase/tests/global_search_matches.sql, operational_list_pages.sql).
 // Proves: identity, organization and role come from the session; a matching
 // record of another organization is never a hit; an employee reaches only
-// their assigned jobs and no customer, request, Anlage or document; no role
+// their assigned jobs and the live Anlagen linked to them, never another
+// job's or organization's Anlage, and no customer, request or document; no role
 // reads a Mitarbeiter, time, absence, sickness, qualification or price table;
 // a failed source fails only its own groups, and a retry reads only it;
 // Ansprechpartner and Einsatzorte are found under any matching customer, not
@@ -18,6 +19,7 @@ import {
   signInAs,
   tableRows,
 } from './action-boundary-world';
+import { ID_BATCH_SIZE } from '@/lib/supabase/query-batches';
 
 type Row = Record<string, unknown>;
 
@@ -37,6 +39,10 @@ const ids = {
   seventhClient: '34000000-0000-4000-8000-000000000017',
   seventhContact: '37000000-0000-4000-8000-000000000017',
   foreignMuellerContact: '37000000-0000-4000-8000-000000000018',
+  ownEquipment: '39000000-0000-4000-8000-000000000001',
+  coworkerEquipment: '39000000-0000-4000-8000-000000000002',
+  foreignEquipment: '39000000-0000-4000-8000-000000000003',
+  voidedEquipment: '39000000-0000-4000-8000-000000000004',
 } as const;
 let query = 'Lindenhof';
 const createdAt = '2026-11-02T08:00:00.000Z';
@@ -99,6 +105,7 @@ function job(id: string, organizationId: string, title: string, assignee: string
       title,
       description: null,
       status: 'nicht_bearbeitet',
+      planned_date: null,
       created_at: createdAt,
       updated_at: createdAt,
     },
@@ -144,6 +151,31 @@ function request(id: string, organizationId: string): Row {
     created_by: CALLER_ID,
     created_at: createdAt,
     updated_at: createdAt,
+  };
+}
+
+function equipment(id: string, organizationId: string, name: string, voidedAt: string | null = null): Row {
+  return {
+    id,
+    organization_id: organizationId,
+    equipment_number: `ANL-2026-000${id.slice(-1)}`,
+    name,
+    category: 'heat_generation',
+    subtype: null,
+    state: 'active',
+    manufacturer: null,
+    model: null,
+    location_detail: null,
+    voided_at: voidedAt,
+  };
+}
+
+function workLink(n: number, organizationId: string, jobId: string, equipmentId: string): Row {
+  return {
+    id: `3a000000-0000-4000-8000-00000000000${n}`,
+    organization_id: organizationId,
+    job_id: jobId,
+    equipment_id: equipmentId,
   };
 }
 
@@ -199,12 +231,26 @@ const world = installActionWorld({
   job_assignments: [assignedLink, coworkerLink, foreignLink].flatMap((row) => (row ? [row] : [])),
   projects: [],
   client_requests: [request(ids.request, ORGANIZATION_A), request(ids.foreignRequest, ORGANIZATION_B)],
-  installed_equipment: [],
+  // Each Anlage matches the query; only the live one of the caller's own job is theirs.
+  installed_equipment: [
+    equipment(ids.ownEquipment, ORGANIZATION_A, 'Gastherme Lindenhof Keller'),
+    equipment(ids.coworkerEquipment, ORGANIZATION_A, 'Gastherme Lindenhof Dach'),
+    equipment(ids.foreignEquipment, ORGANIZATION_B, 'Gastherme Lindenhof Keller'),
+    equipment(ids.voidedEquipment, ORGANIZATION_A, 'Gastherme Lindenhof Irrtum', createdAt),
+  ],
+  installed_equipment_work_links: [
+    workLink(1, ORGANIZATION_A, ids.assignedJob, ids.ownEquipment),
+    workLink(2, ORGANIZATION_A, ids.coworkerJob, ids.coworkerEquipment),
+    workLink(3, ORGANIZATION_B, ids.foreignJob, ids.foreignEquipment),
+    workLink(4, ORGANIZATION_A, ids.assignedJob, ids.voidedEquipment),
+  ],
   ordinary_documents: [],
 });
 for (const table of NEVER_READ) world.failingTables.add(table);
 
 const failingFunctions = new Set<string>();
+/** The matcher's answer to the batch without the caller's first Anlage: as it is, failed or malformed. */
+let otherMatchBatch: 'answer' | 'error' | 'malformed' = 'answer';
 const matches = (value: unknown): boolean =>
   typeof value === 'string' && value.toLowerCase().includes(query.toLowerCase());
 const limited = <T>(rows: T[], limit: unknown): T[] => rows.slice(0, Number(limit));
@@ -237,6 +283,18 @@ function jobEntriesPage(args: Row) {
     statusCounts: { alle: rows.length, not_started: 0, in_progress: 0, interrupted: 0 },
   });
   return { active: section(entries), parked: section([]), archived: section([]) };
+}
+
+function matchInstalledEquipment(args: Row) {
+  const passed = Array.isArray(args.p_equipment_ids) ? args.p_equipment_ids : [];
+  if (!passed.includes(ids.ownEquipment) && otherMatchBatch === 'error')
+    return { data: null, error: { message: 'private provider detail' } };
+  if (!passed.includes(ids.ownEquipment) && otherMatchBatch === 'malformed')
+    return { data: ['keine-id'], error: null };
+  const matched = inOrganization('installed_equipment', args.p_organization_id)
+    .filter((row) => passed.includes(row.id) && row.voided_at === null && matches(row.name))
+    .map((row) => row.id);
+  return { data: matched, error: null };
 }
 
 world.rpc = ({ name, args }) => {
@@ -308,6 +366,7 @@ world.rpc = ({ name, args }) => {
     return { data: { total: rows.length, hasAny: true, rows }, error: null };
   }
   if (name === 'list_equipment_page') return { data: { total: 0, hasAny: false, ids: [] }, error: null };
+  if (name === 'match_installed_equipment') return matchInstalledEquipment(args);
   if (name === 'list_document_page') return { data: { total: 0, ids: [] }, error: null };
   throw new Error(`The search called ${name}`);
 };
@@ -452,25 +511,106 @@ assert.equal(
 assert.deepEqual(groupHits('ansprechpartner'), [ids.seventhContact]);
 query = 'Lindenhof';
 
-// An employee: only their assigned jobs, through the job list's employee scope.
+// An employee: only their assigned jobs, through the job list's employee scope,
+// and the live Anlagen linked to them, through the work pack's reach.
 signInAs(world, 'employee');
 const own = await search();
 assert.equal(own.success, true);
 if (!own.success) throw new Error('unreachable');
 assert.deepEqual(
   own.groups.map((group) => group.kind),
-  ['auftraege'],
+  ['auftraege', 'anlagen'],
 );
-assert.deepEqual(hitIds(own), [ids.assignedJob], 'no coworker job, no foreign job');
 assert.deepEqual(
-  world.rpcCalls.map((call) => call.name),
-  ['list_job_entries_page'],
+  hitIds(own),
+  [ids.assignedJob, ids.ownEquipment],
+  'no coworker job or Anlage, no foreign job or Anlage, no voided Anlage',
 );
-assert.equal(world.rpcCalls[0]?.args.p_user_id, CALLER_ID);
-assert.equal(world.rpcCalls[0]?.args.p_is_manager, false);
+assert.deepEqual(world.rpcCalls.map((call) => call.name).toSorted(), [
+  'list_job_entries_page',
+  'match_installed_equipment',
+]);
+const jobListCall = world.rpcCalls.find((call) => call.name === 'list_job_entries_page');
+assert.equal(jobListCall?.args.p_user_id, CALLER_ID);
+assert.equal(jobListCall?.args.p_is_manager, false);
+// The server passes only the Anlagen of the caller's own jobs: the match never sees another.
+const matchCall = world.rpcCalls.find((call) => call.name === 'match_installed_equipment');
+assert.equal(matchCall?.args.p_organization_id, ORGANIZATION_A);
+assert.deepEqual(matchCall?.args.p_equipment_ids, [ids.ownEquipment]);
+const equipmentGroup = own.groups.find((group) => group.kind === 'anlagen');
+assert.deepEqual(equipmentGroup, {
+  kind: 'anlagen',
+  source: 'anlagen',
+  status: 'loaded',
+  hits: [
+    {
+      id: ids.ownEquipment,
+      title: 'Gastherme Lindenhof Keller',
+      detail: 'ANL-2026-0001 · Auftrag A-1',
+      href: `/auftraege/A-1#anlage-${ids.ownEquipment}`,
+    },
+  ],
+  total: 1,
+  // The equipment list is the office's: no „Alle anzeigen“.
+  moreHref: null,
+});
+// A failed read of the Anlagen fails their group alone, never an empty one.
+world.failingTables.add('installed_equipment_work_links');
+const failedEquipment = await search();
+assert.equal(failedEquipment.success, true);
+if (!failedEquipment.success) throw new Error('unreachable');
+assert.deepEqual(
+  failedEquipment.groups.map((group) => [group.kind, group.status]),
+  [
+    ['auftraege', 'loaded'],
+    ['anlagen', 'failed'],
+  ],
+);
+world.failingTables.delete('installed_equipment_work_links');
 // Naming the office sources reads nothing: the role decides, not the client.
-const refused = await search({ sources: ['kunden', 'anfragen', 'anlagen', 'dokumente'] });
+const refused = await search({ sources: ['kunden', 'anfragen', 'dokumente'] });
 assert.deepEqual(refused, { success: true, query, groups: [] });
-assert.equal(world.rpcCalls.length, 0, 'an employee reads no customer, request, Anlage or document');
+assert.equal(world.rpcCalls.length, 0, 'an employee reads no customer, request or document');
+
+// The matcher reads the caller's Anlagen in id batches: every batch counts, and one that fails or
+// answers malformed fails the Anlagen group, never shortens it.
+const batchEquipmentIds = Array.from(
+  { length: ID_BATCH_SIZE },
+  (_, index) => `3b000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+);
+for (const [index, id] of batchEquipmentIds.entries()) {
+  tableRows(world, 'installed_equipment').push(equipment(id, ORGANIZATION_A, `Gastherme Lindenhof ${index}`));
+  tableRows(world, 'installed_equipment_work_links').push({
+    id: `3c000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+    organization_id: ORGANIZATION_A,
+    job_id: ids.assignedJob,
+    equipment_id: id,
+  });
+}
+const batched = await search({ sources: ['anlagen'] });
+const batchCalls = world.rpcCalls.filter((call) => call.name === 'match_installed_equipment');
+assert.ok(batchCalls.length > 1, 'the matcher gets every Anlage in one call');
+for (const call of batchCalls)
+  assert.ok(
+    Array.isArray(call.args.p_equipment_ids) && call.args.p_equipment_ids.length <= ID_BATCH_SIZE,
+    'a matcher call carries more ids than one batch',
+  );
+assert.equal(batched.success, true);
+if (!batched.success) throw new Error('unreachable');
+const [batchedGroup] = batched.groups;
+assert.ok(batchedGroup?.status === 'loaded', 'the batched Anlagen search failed');
+assert.equal(batchedGroup.total, ID_BATCH_SIZE + 1, 'a batch of matches went missing');
+for (const answer of ['error', 'malformed'] as const) {
+  otherMatchBatch = answer;
+  const partial = await search({ sources: ['anlagen'] });
+  assert.equal(partial.success, true);
+  if (!partial.success) throw new Error('unreachable');
+  assert.deepEqual(
+    partial.groups.map((group) => [group.kind, group.status]),
+    [['anlagen', 'failed']],
+    `the ${answer} matcher batch left the Anlagen group loaded`,
+  );
+}
+otherMatchBatch = 'answer';
 
 console.info('global search boundaries hold');
