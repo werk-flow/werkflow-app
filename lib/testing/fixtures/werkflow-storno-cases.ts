@@ -224,6 +224,10 @@ describe('a refund of a paid invoice becomes a Storno naming the original', () =
       gross_cents: 39900,
       paid_cents: 39900,
       payment_means: 'direct-debit',
+      // What stays, as the billing page lists it (werk-flow/werkflow-planning#554).
+      line_names: ['WerkFlow Monatsabo', 'Erstattung MUSTER-0001-CN-01'],
+      service_start: '2026-11-15',
+      service_end: '2026-12-14',
     });
     const xml = await xmlOf(record?.p_replacement?.file_key);
     expect(xml).toMatch(/<ram:ID>MUSTER-0001-KR-01<\/ram:ID>\s*<ram:TypeCode>380</);
@@ -246,7 +250,11 @@ describe('several refunds of one invoice, and a replayed one', () => {
       ['cn_test_0002', 'doc-MUSTER-0001-KR-01'],
     ]);
     expect(records[1]?.p_storno).toMatchObject({ number: 'MUSTER-0001-CN-02', gross_cents: -39900 });
-    expect(records[1]?.p_replacement).toMatchObject({ number: 'MUSTER-0001-KR-02', gross_cents: 34900 });
+    expect(records[1]?.p_replacement).toMatchObject({
+      number: 'MUSTER-0001-KR-02',
+      gross_cents: 34900,
+      line_names: ['WerkFlow Monatsabo', 'Erstattung MUSTER-0001-CN-01', 'Erstattung MUSTER-0001-CN-02'],
+    });
   });
 
   test('a replayed credit note issues nothing twice and reads nothing from Stripe again', async () => {
