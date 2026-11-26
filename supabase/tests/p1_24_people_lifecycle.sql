@@ -697,7 +697,9 @@ insert into public.employee_records (id, organization_id, first_name, last_name,
 ('24000000-0000-0000-0000-000000000063', '24000000-0000-0000-0000-000000000010', 'Geändert', 'Austritt', '2024-01-01', null),
 ('24000000-0000-0000-0000-000000000064', '24000000-0000-0000-0000-000000000010', 'Neu', 'Geplant', '2024-01-01', null),
 ('24000000-0000-0000-0000-000000000065', '24000000-0000-0000-0000-000000000010', 'Überholt', 'Austritt', '2024-01-01',
- (clock_timestamp() at time zone 'Europe/Berlin')::date + 20);
+ (clock_timestamp() at time zone 'Europe/Berlin')::date + 20),
+('24000000-0000-0000-0000-000000000066', '24000000-0000-0000-0000-000000000010', 'Später', 'Eintritt',
+ (clock_timestamp() at time zone 'Europe/Berlin')::date + 30, null);
 
 do $$
 declare
@@ -709,6 +711,7 @@ declare
   edited_id constant uuid := '24000000-0000-0000-0000-000000000063';
   replanned_id constant uuid := '24000000-0000-0000-0000-000000000064';
   overtaken_id constant uuid := '24000000-0000-0000-0000-000000000065';
+  conflicting_id constant uuid := '24000000-0000-0000-0000-000000000066';
   buero_record_id uuid;
   configuration_id uuid;
   today constant date := (clock_timestamp() at time zone 'Europe/Berlin')::date;
@@ -800,6 +803,25 @@ begin
     where id = overtaken_id and (entry_date is distinct from today + 25 or exit_date is not null)
   ) then raise exception 'withdrawing a plan restored an exit before the edited entry date'; end if;
 
+  -- An earlier entry after an exit date set since cannot return: the withdrawal is refused and the plan stays.
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, conflicting_id, 0, 'plan_start', today + 14,
+    'Eintritt vorgezogen', '[]'::jsonb, '24000000-0000-0000-0000-00000000007f', repeat('b', 64)
+  );
+  update public.employee_records set exit_date = today + 21 where id = conflicting_id;
+  begin
+    perform public.set_personnel_employment_transition(
+      actor_id, test_organization_id, conflicting_id, 1, 'cancel_scheduled', today,
+      'Eintritt zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-000000000080', repeat('c', 64)
+    );
+    raise exception 'withdrawing a plan left its entry date before an exit date set since';
+  exception when others then
+    if sqlerrm not like '%withdrawal_dates_conflict%' then raise; end if;
+  end;
+  if (select scheduled_for from public.personnel_employment_lifecycles where employee_record_id = conflicting_id)
+     is distinct from today + 14
+    then raise exception 'a refused withdrawal dropped the plan'; end if;
+
   -- Withdrawing a planned return restores the exit date, so it may not leave a selected group without a holder.
   select id into buero_record_id from public.employee_records
   where organization_id = test_organization_id and user_id = '24000000-0000-0000-0000-000000000002';
@@ -872,6 +894,17 @@ begin
     select count(*) from public.personnel_employment_transitions
     where employee_record_id = immediate_id and organization_id = test_organization_id
   ) <> 1 then raise exception 'employment replay recorded a second transition'; end if;
+  -- Only an Admin gets the stored result.
+  begin
+    perform public.set_personnel_employment_transition(
+      '24000000-0000-0000-0000-000000000002', test_organization_id, immediate_id, 0, 'exit', today,
+      'Austritt heute', '[]'::jsonb,
+      '24000000-0000-0000-0000-000000000077', repeat('2', 64)
+    );
+    raise exception 'Büro replayed a recorded employment transition';
+  exception when others then
+    if sqlerrm not like '%forbidden%' then raise; end if;
+  end;
   -- The same operation with another request is refused.
   begin
     perform public.set_personnel_employment_transition(

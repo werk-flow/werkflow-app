@@ -9,13 +9,15 @@
 --    second plan of the same step keeps them), and cancel_scheduled writes
 --    them back. It restores a date only while the record still holds the
 --    plan's date: a date the office changed on the record since stays, and an
---    earlier exit that an edited entry date overtook does not return. The
+--    earlier exit that an edited entry date overtook does not return. An
+--    earlier entry after an exit date the office set since refuses the
+--    withdrawal (withdrawal_dates_conflict) until the dates are corrected. The
 --    dates are read under the record's row lock, after the organization lock.
 --    Withdrawing a planned return that restores an exit date takes the
 --    last-holder check of a step that ends the employment.
 -- 3. A duplicate request that waited for the per-person lock answers with
 --    the operation the first one recorded instead of stale_version
---    (werk-flow/werkflow-planning#352).
+--    (werk-flow/werkflow-planning#352), and a replay answers only an Admin.
 -- 2. A step that acts at once (start, mark_inactive, exit, reactivate) refuses
 --    a date after today (immediate_effective_date_required). It set the state
 --    at once and stored the later date, so „Austritt festhalten“ for next
@@ -76,9 +78,10 @@ declare
   restored_exit date;
   today constant date := (clock_timestamp() at time zone 'Europe/Berlin')::date;
 begin
+  -- The actor's role first: a replay answers only an Admin too.
+  if not app_private.p1_24_is_admin(p_organization_id, p_actor_id) then raise exception 'forbidden'; end if;
   result_id := app_private.p1_24_assert_replay(p_organization_id, p_operation_id, p_request_hash);
   if result_id is not null then return result_id; end if;
-  if not app_private.p1_24_is_admin(p_organization_id, p_actor_id) then raise exception 'forbidden'; end if;
   if p_effective_on is null or nullif(btrim(p_reason), '') is null
      or jsonb_typeof(coalesce(p_unresolved_work, '[]'::jsonb)) <> 'array'
   then raise exception 'invalid_transition'; end if;
@@ -264,18 +267,19 @@ begin
        or (withdrawn.scheduled_state = 'active' and employee.exit_date is null) then
       restored_exit := withdrawn.replaced_exit_date;
     end if;
-    -- An earlier exit that an edited entry date has overtaken does not return:
-    -- a withdrawn exit leaves none, a withdrawn start keeps the record as it is.
+    -- An earlier exit that an edited entry date has overtaken does not return.
+    -- An earlier entry after an exit date the office set since cannot return
+    -- either: the plan stays until the office corrects the dates.
     if restored_exit < restored_entry then
       if withdrawn.scheduled_state = 'exited' then
         restored_exit := null;
       else
-        restored_entry := employee.entry_date;
-        restored_exit := employee.exit_date;
+        raise exception 'withdrawal_dates_conflict';
       end if;
     end if;
     update public.employee_records set entry_date = restored_entry, exit_date = restored_exit
-    where id = p_employee_record_id;
+    where id = p_employee_record_id
+      and (entry_date, exit_date) is distinct from (restored_entry, restored_exit);
   end if;
 
   insert into public.personnel_employment_transitions(
