@@ -74,10 +74,9 @@ describe('origin refusal', () => {
 });
 
 describe('header scoping', () => {
-  test('a document request to staging carries the bypass and asks for its cookie', () => {
+  test('a request to staging carries the bypass, and never asks for a cookie that would keep it', () => {
     expect(bypassHeaders(page(`${STAGING_ORIGIN}/login`), SECRET)).toEqual({
       'x-vercel-protection-bypass': SECRET,
-      'x-vercel-set-bypass-cookie': 'true',
     });
     expect(bypassHeaders(asset(`${STAGING_ORIGIN}/api/background-read`), SECRET)).toEqual({
       'x-vercel-protection-bypass': SECRET,

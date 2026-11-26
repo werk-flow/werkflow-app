@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import { expect } from '@playwright/test';
 
-import { newRunId, runOrganizationName } from '../../lib/testing/staging/runs';
+import { StagingFailure, newRunId, runOrganizationName } from '../../lib/testing/staging/runs';
 import { hydrated } from '../../tests/golden/support/steps/interaction';
 import {
   cleanUp,
@@ -31,7 +31,7 @@ kit.log('run', { run: runId });
 async function journey(): Promise<string> {
   const actor = await createActor(kit, runId);
   kit.log('actor created', { actor: actor.id });
-  return withStagingBrowser(kit, runId, async (page) => {
+  return withStagingBrowser(kit, async (page) => {
     await signIn(page, actor);
     await expect(page).toHaveURL(/\/upgrade|\/onboarding/);
     kit.log('signed in through the bypass');
@@ -58,9 +58,10 @@ async function journey(): Promise<string> {
     });
     const subscriptionId = String(subscription?.stripe_subscription_id ?? '');
     if (subscription?.status !== 'active' || !subscriptionId.startsWith('sub_'))
-      throw new Error('The organization holds no active subscription on DEV.');
+      throw new StagingFailure('The organization holds no active subscription on DEV.');
     const [atStripe] = await readStripe(kit, `subscriptions/${subscriptionId}`);
-    if (atStripe?.status !== 'active') throw new Error('The sandbox subscription is not active at Stripe.');
+    if (atStripe?.status !== 'active')
+      throw new StagingFailure('The sandbox subscription is not active at Stripe.');
     kit.log('dashboard shown', {
       organization: organization.id,
       subscription: subscriptionId,

@@ -42,14 +42,11 @@ export function requestVerdict(request: BrowserRequest, devRef: string): Request
 
 /**
  * The headers a request gets on top of its own: the bypass for a request to staging, nothing for any
- * other origin. A document request also asks Vercel for the bypass cookie, which a redirect back to
- * staging then carries.
+ * other origin. No bypass cookie: the route adds the header to every hop to staging, and a cookie would
+ * leave the bypass in the browser, where Vercel answers its request with one more redirect.
  */
 export function bypassHeaders(request: BrowserRequest, secret: string): Record<string, string> {
-  if (URL.parse(request.url)?.origin !== STAGING_ORIGIN) return {};
-  return request.navigation
-    ? { 'x-vercel-protection-bypass': secret, 'x-vercel-set-bypass-cookie': 'true' }
-    : { 'x-vercel-protection-bypass': secret };
+  return URL.parse(request.url)?.origin === STAGING_ORIGIN ? { 'x-vercel-protection-bypass': secret } : {};
 }
 
 /** A refused request's origin for the journey's failure line; never its path, which may carry a token. */

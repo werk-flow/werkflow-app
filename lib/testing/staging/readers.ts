@@ -3,6 +3,7 @@
 // only, so nothing it hands a journey can print personal data (Tier 1).
 
 import { isUuid } from '../../validation/uuid';
+import { StagingFailure } from './runs';
 import { z } from '../../zod';
 
 /**
@@ -63,13 +64,13 @@ export function scopedReadQuery(read: {
   columns: readonly string[];
   organizationId: string;
 }): { query: string; parameters: string[] } {
-  if (read.columns.length === 0) throw new Error('Name at least one column.');
+  if (read.columns.length === 0) throw new StagingFailure('Name at least one column.');
   for (const column of read.columns)
     if (!isReadable(read.table, column))
-      throw new Error(
+      throw new StagingFailure(
         `${read.table}.${column} is no readable id or state column (lib/testing/staging/readers.ts).`,
       );
-  if (!isUuid(read.organizationId)) throw new Error('The organization id is no UUID.');
+  if (!isUuid(read.organizationId)) throw new StagingFailure('The organization id is no UUID.');
   const scope = read.table === 'organizations' ? 'id' : 'organization_id';
   return {
     query: `select ${read.columns.join(', ')} from public.${read.table} where ${scope} = $1::uuid`,
@@ -133,5 +134,5 @@ export function sandboxAnswer(body: unknown): StripeFacts[] {
       .parse(body)
       .data.map(factsOf);
   if (!isList && sandboxObject.safeParse(body).success) return [factsOf(body)];
-  throw new Error('Stripe answered something other than a sandbox object; the journey stops.');
+  throw new StagingFailure('Stripe answered something other than a sandbox object; the journey stops.');
 }

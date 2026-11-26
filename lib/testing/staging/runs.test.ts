@@ -3,7 +3,9 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  StagingFailure,
   factLine,
+  failureText,
   newRunId,
   redact,
   runActorEmail,
@@ -93,6 +95,32 @@ describe('printing', () => {
     const long = redact('x'.repeat(500), []);
     expect(long).toHaveLength(240);
     expect(redact(long, [])).toBe(long);
+  });
+
+  test("a browser's or provider's error prints as its action and kind only, the kit's own words redacted", () => {
+    const timeout = new Error(
+      'locator.click: Timeout 30000ms exceeded.\nCall log:\n  - x-vercel-protection-bypass: made-up',
+    );
+    timeout.name = 'TimeoutError';
+    expect(failureText(timeout, [])).toBe('locator.click failed (TimeoutError)');
+    expect(
+      failureText(new Error('page.goto: net::ERR_FAILED at https://werkflow.example/private/path'), []),
+    ).toBe('page.goto failed (Error)');
+    expect(
+      failureText(new Error('expect(page).toHaveURL(expected) failed\n\nReceived: https://x.example/a'), []),
+    ).toBe('expect(page).toHaveURL failed (Error)');
+    expect(failureText(new Error('evaluate: Execution context was destroyed'), [])).toBe(
+      'evaluate failed (Error)',
+    );
+    expect(failureText(new SyntaxError('JSON Parse error: Unexpected identifier "Payer"'), [])).toBe(
+      'SyntaxError',
+    );
+    expect(failureText('a string', [])).toBe('unknown failure');
+    expect(
+      failureText(new StagingFailure('The DEV read answered 500 for MadeUpPassword-Aa1.'), [
+        'MadeUpPassword-Aa1',
+      ]),
+    ).toBe('The DEV read answered 500 for [redacted].');
   });
 
   test('a fact line refuses a value that holds one of the run secrets', () => {

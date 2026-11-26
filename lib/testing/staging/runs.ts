@@ -13,7 +13,7 @@ const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 export function newRunId(now: Date, randomHex: string): string {
   const stamp = now.toISOString().replace(/[-:]/g, '');
   const runId = `${stamp.slice(0, 8)}-${stamp.slice(9, 13)}-${randomHex.toLowerCase().slice(0, 6)}`;
-  if (!RUN_ID.test(runId)) throw new Error('A run id needs six random hex digits.');
+  if (!RUN_ID.test(runId)) throw new StagingFailure('A run id needs six random hex digits.');
   return runId;
 }
 
@@ -97,6 +97,28 @@ export function redact(text: string, secrets: readonly string[]): string {
   return safe.length > FAILURE_LINE_LENGTH ? `${safe.slice(0, FAILURE_LINE_LENGTH - 1)}…` : safe;
 }
 
+/** A failure the kit or a journey raises with its own words, which may be printed after `redact`. */
+export class StagingFailure extends Error {
+  override name = 'StagingFailure';
+}
+
+/** Playwright's action or assertion that failed, such as `locator.click` or `expect(page).toHaveURL`. */
+const BROWSER_ACTION =
+  /^(?:[a-z][A-Za-z]*(?:\.[a-z][A-Za-z]*)?(?=:)|expect\((?:page|locator)\)\.(?:not\.)?[a-z][A-Za-z]*)/;
+
+/**
+ * A failure as one printable line. The kit's own failures keep their redacted words. Any other error,
+ * a browser's or a provider's, is named only by its kind and the browser action that raised it: its
+ * text can quote a URL, a page or a response body.
+ */
+export function failureText(error: unknown, secrets: readonly string[]): string {
+  if (error instanceof StagingFailure) return redact(error.message, secrets);
+  if (!(error instanceof Error)) return 'unknown failure';
+  const action = BROWSER_ACTION.exec(error.message.replace(/^Error: /, ''))?.[0];
+  const kind = /^[A-Za-z]+$/.test(error.name) ? error.name : 'Error';
+  return action ? `${action} failed (${kind})` : `${kind}`;
+}
+
 export type Fact = string | number | boolean | null;
 
 /**
@@ -110,7 +132,7 @@ export function factLine(
 ): string {
   const parts = Object.entries(facts).map(([name, value]) => {
     if (typeof value === 'string' && redact(value, secrets) !== value)
-      throw new Error(
+      throw new StagingFailure(
         `The fact ${name} of ${step} looks like an address or a key; print ids and states only.`,
       );
     return `${name}=${String(value)}`;

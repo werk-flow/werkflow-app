@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { chromium, expect, type Page } from '@playwright/test';
 
@@ -8,10 +8,11 @@ import { supabaseProjectRefs } from '../../lib/security/production-access';
 import { readStagingAgentKeys, type StagingAgentKeyName } from '../../lib/security/staging-agent-keys';
 import {
   STAGING_ORIGIN,
-  bypassHeaders,
   refusedOrigin,
   requestVerdict,
+  type BrowserRequest,
 } from '../../lib/testing/staging/boundary';
+import { sendThroughBoundary } from '../../lib/testing/staging/route';
 import {
   sandboxAnswer,
   scopedReadQuery,
@@ -21,9 +22,10 @@ import {
 } from '../../lib/testing/staging/readers';
 import {
   RUN_PATTERNS,
+  StagingFailure,
+  failureText,
   factLine,
   isRunId,
-  redact,
   runActorEmail,
   runOrganizationName,
   selectRuns,
@@ -60,21 +62,21 @@ export type Kit = {
 export function loadKit(): Kit {
   // Playwright's debug log lists request headers, the bypass among them.
   if (process.env.DEBUG || process.env.PWDEBUG || process.env.DEBUG_FILE)
-    throw new Error(
+    throw new StagingFailure(
       'Unset DEBUG, PWDEBUG and DEBUG_FILE: a staging journey runs without Playwright diagnostics.',
     );
   const read = readStagingAgentKeys();
   const refs = supabaseProjectRefs(checkout);
   if (read.file === 'missing' || !refs)
-    throw new Error('No agent key file or no DEV ref: run bun run agent-access:check.');
+    throw new StagingFailure('No agent key file or no DEV ref: run bun run agent-access:check.');
   const missing = Object.entries(read.verdicts).filter(([, verdict]) => verdict !== 'ok');
   if (missing.length)
-    throw new Error(
+    throw new StagingFailure(
       `Keys not in shape: ${missing.map(([name]) => name).join(', ')}. Run bun run agent-access:check.`,
     );
   const key = (name: StagingAgentKeyName): string => {
     const value = read.values.get(name);
-    if (!value) throw new Error(`${name} is missing.`);
+    if (!value) throw new StagingFailure(`${name} is missing.`);
     return value;
   };
   const keys = {
@@ -85,9 +87,7 @@ export function loadKit(): Kit {
   };
   const secrets = Object.values(keys);
   const escaped = (error: unknown) => {
-    console.error(
-      `[staging] unexpected failure: ${redact(error instanceof Error ? error.message : String(error), secrets)}`,
-    );
+    console.error(`[staging] unexpected failure: ${failureText(error, secrets)}`);
     process.exitCode = 1;
   };
   process.on('uncaughtException', escaped);
@@ -100,9 +100,9 @@ export function loadKit(): Kit {
   };
 }
 
-/** A failure's first line, safe to print (lib/testing/staging/runs.ts, `redact`). */
+/** A failure as one printable line (lib/testing/staging/runs.ts, `failureText`). */
 export function failureLine(kit: Kit, error: unknown): string {
-  return redact(error instanceof Error ? error.message : String(error), kit.secrets);
+  return failureText(error, kit.secrets);
 }
 
 async function call(url: string, init: RequestInit): Promise<Response> {
@@ -113,13 +113,13 @@ async function call(url: string, init: RequestInit): Promise<Response> {
 async function json(response: Response, step: string): Promise<unknown> {
   if (!response.ok) {
     await response.body?.cancel();
-    throw new Error(`${step} answered ${response.status}.`);
+    throw new StagingFailure(`${step} answered ${response.status}.`);
   }
   const text = await response.text();
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error(`${step} answered ${response.status} without JSON.`);
+    throw new StagingFailure(`${step} answered ${response.status} without JSON.`);
   }
 }
 
@@ -143,7 +143,7 @@ const runOrganizations = new WeakSet<RunOrganization>();
 
 /** The organization named for the actor's run that the actor administers, and no other. */
 export async function runOrganization(kit: Kit, actor: Actor): Promise<RunOrganization> {
-  if (!issuedActors.has(actor)) throw new Error('Use the actor createActor made.');
+  if (!issuedActors.has(actor)) throw new StagingFailure('Use the actor createActor made.');
   const rows = z
     .array(z.object({ id: uuidSchema }))
     .parse(
@@ -153,7 +153,8 @@ export async function runOrganization(kit: Kit, actor: Actor): Promise<RunOrgani
       ]),
     );
   const [row] = rows;
-  if (!row || rows.length > 1) throw new Error(`Found ${rows.length} organizations for run ${actor.runId}.`);
+  if (!row || rows.length > 1)
+    throw new StagingFailure(`Found ${rows.length} organizations for run ${actor.runId}.`);
   const organization = Object.freeze({ runId: actor.runId, id: row.id });
   runOrganizations.add(organization);
   return organization;
@@ -166,7 +167,7 @@ export async function readDev<T extends ReadableTable>(
   read: Omit<ScopedRead<T>, 'organizationId'>,
 ): Promise<Record<string, unknown>[]> {
   if (!runOrganizations.has(organization))
-    throw new Error('Read only the run organization runOrganization found.');
+    throw new StagingFailure('Read only the run organization runOrganization found.');
   const { query, parameters } = scopedReadQuery({ ...read, organizationId: organization.id });
   return z.array(z.record(z.string(), z.unknown())).parse(await readOnlySql(kit, query, parameters));
 }
@@ -242,7 +243,7 @@ const userAnswer = z.object({
 
 /** The run's folder under the gitignored `.agent-logs/`, private to this user. */
 function runFolder(runId: string): string {
-  if (!isRunId(runId)) throw new Error('No run id.');
+  if (!isRunId(runId)) throw new StagingFailure('No run id.');
   const folder = join(checkout, '.agent-logs', 'staging', runId);
   mkdirSync(folder, { recursive: true, mode: 0o700 });
   chmodSync(folder, 0o700);
@@ -273,7 +274,7 @@ export async function createActor(kit: Kit, runId: string): Promise<Actor> {
     ),
   );
   if (created.email !== email || created.app_metadata[RUN_MARKER] !== runId)
-    throw new Error('The created user carries another address or no run marker.');
+    throw new StagingFailure('The created user carries another address or no run marker.');
   return issue({ runId, id: created.id, email, password });
 }
 
@@ -287,7 +288,7 @@ async function actorFor(kit: Kit, run: RunRows): Promise<Actor> {
     await json(await authAdmin(kit, `users/${run.actorId}`), 'Reading the actor'),
   );
   if (user.email !== email || user.app_metadata[RUN_MARKER] !== run.runId)
-    throw new Error('The user does not carry its run address and marker; nothing changed.');
+    throw new StagingFailure('The user does not carry its run address and marker; nothing changed.');
   const password = newPassword();
   kit.secrets.push(password);
   await json(
@@ -302,13 +303,10 @@ async function actorFor(kit: Kit, run: RunRows): Promise<Actor> {
 /**
  * Runs `journey` on a fresh browser whose pages come from staging only, with the bypass sent to
  * staging's host only (lib/testing/staging/boundary.ts), and closes it after. A refused page fails the
- * journey with its origin, whatever else failed; any failure leaves a screenshot in the run folder.
+ * journey with its origin, whatever else failed. It takes no screenshot: a page may render a provider's
+ * error body.
  */
-export async function withStagingBrowser<T>(
-  kit: Kit,
-  runId: string,
-  journey: (page: Page) => Promise<T>,
-): Promise<T> {
+export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => Promise<T>): Promise<T> {
   const browser = await chromium.launch({ channel: 'chromium' });
   const refused = new Set<string>();
   const blocked = new Set<string>();
@@ -328,24 +326,24 @@ export async function withStagingBrowser<T>(
         navigation: request.isNavigationRequest(),
         mainFrame: request.frame().parentFrame() === null,
       };
-      if (requestVerdict(asked, kit.devRef) === 'refused') {
-        // A refused page fails the journey; a refused asset or frame, such as a wallet button, is left out.
-        (asked.navigation && asked.mainFrame ? refused : blocked).add(refusedOrigin(asked.url));
-        await route.abort('blockedbyclient').catch(() => undefined);
-        return;
-      }
-      // Every request is sent here without following redirects, so each redirect's target comes back
-      // through this route and its verdict before it is requested, and Playwright never carries the
-      // bypass to it. A failed fetch's error lists the request's headers: it is dropped unread.
+      // A refused page fails the journey; a refused asset or frame, such as a wallet button, is left out.
+      const refuse = (hop: BrowserRequest) =>
+        (hop.navigation && hop.mainFrame ? refused : blocked).add(refusedOrigin(hop.url));
       try {
-        const bypass = bypassHeaders(asked, secret);
-        const response = await route.fetch({
-          // Another origin's request keeps its own headers: a rewritten set breaks Stripe's pages.
-          ...(Object.keys(bypass).length ? { headers: { ...request.headers(), ...bypass } } : {}),
-          maxRedirects: 0,
-        });
-        await route.fulfill({ response });
+        await sendThroughBoundary(
+          {
+            request: { ...asked, headers: request.headers() },
+            fetch: (options) => route.fetch(options),
+            fulfill: (response) => route.fulfill({ response }),
+            fulfillPage: (body) => route.fulfill({ status: 200, contentType: 'text/html', body }),
+            abort: () => route.abort('blockedbyclient'),
+          },
+          kit.devRef,
+          secret,
+          refuse,
+        );
       } catch {
+        // A failed fetch's error lists the request's headers, the bypass among them: dropped unread.
         await route.abort('failed').catch(() => undefined);
       }
     });
@@ -364,19 +362,9 @@ export async function withStagingBrowser<T>(
       if (refused.size === 0) return result;
     } catch (error) {
       if (blocked.size) kit.log('blocked', { origins: [...blocked].join(',') });
-      if (refused.size === 0) {
-        const path = join(runFolder(runId), `failure-${Date.now()}.png`);
-        if (
-          await page.screenshot({ path }).then(
-            () => true,
-            () => false,
-          )
-        )
-          kit.log('screenshot', { path: relative(checkout, path) });
-        throw error;
-      }
+      if (refused.size === 0) throw error;
     }
-    throw new Error(`The browser refused pages outside staging: ${[...refused].join(', ')}.`);
+    throw new StagingFailure(`The browser refused pages outside staging: ${[...refused].join(', ')}.`);
   } finally {
     await browser.close();
   }
@@ -443,11 +431,11 @@ async function cleanUpRun(
   organizationNames: ReadonlyMap<string, string>,
 ): Promise<void> {
   const actor = await actorFor(kit, run);
-  await withStagingBrowser(kit, run.runId, async (page) => {
+  await withStagingBrowser(kit, async (page) => {
     await signIn(page, actor);
     for (const id of run.organizationIds) {
       const name = organizationNames.get(id);
-      if (!name) throw new Error(`No name for organization ${id}.`);
+      if (!name) throw new StagingFailure(`No name for organization ${id}.`);
       // Each deletion moves the active organization to the next one, or to the onboarding page.
       await deleteOrganization(page, name);
       kit.log('organization deleted', { run: run.runId, organization: id });
