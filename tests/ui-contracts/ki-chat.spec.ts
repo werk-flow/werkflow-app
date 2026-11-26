@@ -125,10 +125,18 @@ test('the stop button ends the answer on screen and keeps what was written', asy
     assistantItem: { id: 'a', sequence: 2 },
   });
   await emit(page, { type: 'text', delta: 'Zuerst prüfst du den Druck.' });
+  // Enter while the answer runs starts a new line of the next message; it never stops the answer.
+  await composer(page).fill('Und danach?');
+  await composer(page).press('Enter');
+  await expect(composer(page)).toHaveValue('Und danach?\n');
+  await expect(timeline(page).getByText('schreibt …', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Antwort anhalten', exact: true }).click();
   await expect(timeline(page).getByText('Du hast die Antwort angehalten.', { exact: true })).toBeVisible();
   await expect(timeline(page).getByText('Zuerst prüfst du den Druck.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Senden', exact: true })).toBeVisible();
+  // The click that stopped the answer never sends the draft typed meanwhile.
+  await expect(composer(page)).toHaveValue('Und danach?\n');
+  expect(await page.evaluate(() => window.uiContractKiTurn.calls.length)).toBe(1);
 });
 
 test('a message refused before its thread exists goes back into the composer with the reason', async ({
@@ -188,7 +196,7 @@ test('the composer stays and keeps each thread its draft through a switch and a 
 test('a thread that cannot load shows its retry, and the retry opens it', async ({ page }) => {
   await openChat(page);
   await page.evaluate(() => {
-    window.uiContractKiReadsFail = true;
+    window.uiContractKiReadsFail = 'background_read_failed';
   });
   await threadLink(page, 'Entlüften').click();
   const failure = page.getByRole('alert').filter({ hasText: 'Der Chat konnte nicht geladen werden' });
@@ -226,4 +234,28 @@ test('a refusal keeps what was typed meanwhile, and its reason stays with its ow
   await expect(reason).toHaveCount(0);
   await page.goBack();
   await expect(reason).toBeVisible();
+});
+
+test('a thread the person can no longer open leaves the screen with what it showed', async ({ page }) => {
+  await openChat(page);
+  await threadLink(page, 'Material für die Heizung').click();
+  await composer(page).fill('Wie viel Rohr?');
+  await composer(page).press('Enter');
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 5 },
+    assistantItem: { id: 'a', sequence: 6 },
+  });
+  await emit(page, { type: 'end', status: 'complete' });
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'answered' }));
+  await expect(timeline(page).getByText('Wie viel Rohr?', { exact: true })).toBeVisible();
+  await threadLink(page, 'Entlüften').click();
+  await page.evaluate(() => {
+    window.uiContractKiReadsFail = 'not_found';
+  });
+  // Back to a thread of another organization, or one that is gone: nothing of it stays on screen.
+  await page.goBack();
+  await expect(timeline(page)).toHaveCount(0);
+  await expect(page.getByRole('listitem').filter({ hasText: 'Wie viel Rohr?' })).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.get('chat')).toBeNull();
 });

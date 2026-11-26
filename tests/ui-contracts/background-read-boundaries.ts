@@ -52,7 +52,7 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
   if (kind === 'document-view-url') return readSignatureViewContract();
   if (kind === 'own-personnel-actions') return getOwnPersonnelActions();
   // The chat's threads open empty: the spec drives each turn (ki-chat-boundaries.tsx).
-  if (kind === 'ki-thread-window') return readKiThreadWindowContract();
+  if (kind === 'ki-thread-window') return readKiThreadWindowContract(input);
   if (kind === 'on-call-overview') return readOnCallOverviewContract();
   if (kind === 'personnel-lifecycle' && input && typeof input === 'object' && 'employeeRecordId' in input)
     return getPersonnelLifecycle(String(input.employeeRecordId));

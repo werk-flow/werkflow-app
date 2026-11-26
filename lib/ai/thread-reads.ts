@@ -24,7 +24,7 @@ import { z } from '@/lib/zod';
 const THREAD_PAGE_SIZE = 30;
 /** Messages a thread opens with, newest first (brief non-negotiable 5). */
 const WINDOW_MESSAGES = 40;
-/** Bytes of message bodies a window carries at most; older messages page in. */
+/** UTF-8 bytes of message text a window carries at most; older messages page in. */
 const WINDOW_BYTES = 256_000;
 
 const bodySchema = z.object({ text: z.string(), failure: z.string().optional() });
@@ -118,7 +118,7 @@ export async function getAiThreadWindow(
   for (const item of data.slice(0, WINDOW_MESSAGES)) {
     const body = bodySchema.safeParse(item.body);
     const text = body.success ? body.data.text : '';
-    bytes += text.length;
+    bytes += Buffer.byteLength(text, 'utf8');
     if (messages.length > 0 && bytes > WINDOW_BYTES) break;
     messages.push({
       key: item.idempotency_key,

@@ -17,19 +17,21 @@ type HeldTurn = {
 declare global {
   interface Window {
     uiContractKiTurn: HeldTurn;
-    /** Set by the spec: every thread read fails as a lost connection does. */
-    uiContractKiReadsFail: boolean;
+    /** Set by the spec: every thread read fails with this code, as a lost connection or a refusal does. */
+    uiContractKiReadsFail: 'background_read_failed' | 'not_found' | false;
   }
 }
 
 window.uiContractKiTurn = { calls: [], emit: null, resolve: null };
 window.uiContractKiReadsFail = false;
 
-/** A thread opens empty: the spec drives each turn. */
-export function readKiThreadWindowContract() {
-  return window.uiContractKiReadsFail
-    ? { success: false, error: 'background_read_failed' }
-    : { success: true, window: { messages: [], hasOlder: false } };
+/** A listed thread opens empty: the spec drives each turn. Any other thread is not the person's. */
+export function readKiThreadWindowContract(input: unknown) {
+  const threadId = input && typeof input === 'object' && 'threadId' in input ? input.threadId : null;
+  if (window.uiContractKiReadsFail) return { success: false, error: window.uiContractKiReadsFail };
+  return KI_CONTRACT_THREADS.some((thread) => thread.id === threadId)
+    ? { success: true, window: { messages: [], hasOlder: false } }
+    : { success: false, error: 'not_found' };
 }
 
 export function sendTurn(input: {

@@ -79,7 +79,7 @@ function KiThread({
   live: LiveTurn | null;
   onBack: () => void;
   onRetry: (threadId: string) => void;
-  onLoadOlder: (threadId: string, beforeSequence?: number) => Promise<void>;
+  onLoadOlder: (threadId: string, beforeSequence?: number) => Promise<unknown>;
 }): React.JSX.Element {
   const older = usePendingTask();
   const first = view?.window?.messages[0]?.sequence;
@@ -97,10 +97,14 @@ function KiThread({
       {view?.window || live ? (
         <KiTimeline
           messages={shownMessages(view, live)}
-          unconfirmed={view?.confirmed === false && !view.failed}
+          unconfirmed={view?.confirmed === false}
           hasOlder={view?.window?.hasOlder ?? false}
           loadingOlder={older.isPending}
-          onLoadOlder={() => void older.run(() => onLoadOlder(threadId, first))}
+          onLoadOlder={() =>
+            void older.run(async () => {
+              await onLoadOlder(threadId, first);
+            })
+          }
         />
       ) : (
         !view?.failed && <KiTimelineSkeleton />

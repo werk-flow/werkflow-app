@@ -9,47 +9,12 @@ import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { readDraft, subscribeDrafts, writeDraft } from './ki-drafts';
 
 // The composer stays mounted while the person switches threads (brief
-// non-negotiable 8). Each thread keeps its own draft in this tab's
-// sessionStorage, so a draft survives navigation and reload and leaves the
-// device with the tab. A memory copy carries it when storage is refused.
+// non-negotiable 8); its drafts live in ki-drafts.ts.
 
 const COMPOSER_ID = 'ki-composer';
-const memoryDrafts = new Map<string, string>();
-const draftListeners = new Set<() => void>();
-
-function subscribeDrafts(listener: () => void): () => void {
-  draftListeners.add(listener);
-  return () => draftListeners.delete(listener);
-}
-
-export function readDraft(key: string): string {
-  const kept = memoryDrafts.get(key);
-  if (kept !== undefined) return kept;
-  try {
-    return sessionStorage.getItem(key) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-/** Saves or clears the draft under `key`. */
-export function writeDraft(key: string, text: string): void {
-  memoryDrafts.set(key, text);
-  try {
-    if (text) sessionStorage.setItem(key, text);
-    else sessionStorage.removeItem(key);
-  } catch {
-    // best-effort: the memory copy keeps the draft for this page when the browser refuses storage.
-  }
-  for (const listener of draftListeners) listener();
-}
-
-/** One draft per person, organization and thread; the new chat has its own. */
-export function draftKey(userId: string, organizationId: string, threadId: string | null): string {
-  return `werkflow:ki-draft:${userId}:${organizationId}:${threadId ?? 'neu'}`;
-}
 
 /** Enter sends on a keyboard with a mouse; on a phone it starts a new line. */
 function sendsOnEnter(event: React.KeyboardEvent<HTMLTextAreaElement>): boolean {
@@ -73,8 +38,8 @@ export const KiComposer = memo(function KiComposer({
   /** An answer is being written: the composer offers to stop it instead of sending. */
   running: boolean;
   error: string | null;
-  /** Sends the text; the composer has already cleared its draft. */
-  onSend: (text: string) => void;
+  /** Sends the text of the draft under `draft`; the composer has already cleared it. */
+  onSend: (text: string, draft: string) => void;
   onStop: () => void;
 }): React.JSX.Element {
   const text = useSyncExternalStore(
@@ -86,14 +51,15 @@ export const KiComposer = memo(function KiComposer({
 
   function submit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
-    if (running) return onStop();
+    // While an answer runs, the composer only keeps the draft; stopping is its own button.
+    if (running) return;
     if (!text.trim()) {
       setMissing(true);
       focusFirstInvalidField({ [COMPOSER_ID]: 'missing' });
       return;
     }
     writeDraft(draft, '');
-    onSend(text.trim());
+    onSend(text.trim(), draft);
   }
 
   return (
@@ -115,16 +81,25 @@ export const KiComposer = memo(function KiComposer({
               writeDraft(draft, event.target.value);
             }}
             onKeyDown={(event) => {
-              if (!sendsOnEnter(event)) return;
+              if (running || !sendsOnEnter(event)) return;
               event.preventDefault();
               event.currentTarget.form?.requestSubmit();
             }}
           />
         </Field>
-        <Button type="submit" size="icon" variant={running ? 'outline' : 'default'} className="size-11">
-          {running ? <Square /> : <ArrowUp />}
-          <span className="sr-only">{running ? 'Antwort anhalten' : 'Senden'}</span>
-        </Button>
+        {/* Two elements, not one that changes its type: a click that stops the answer must not
+            end as a submit of the button it re-rendered into. */}
+        {running ? (
+          <Button key="stop" type="button" size="icon" variant="outline" className="size-11" onClick={onStop}>
+            <Square />
+            <span className="sr-only">Antwort anhalten</span>
+          </Button>
+        ) : (
+          <Button key="send" type="submit" size="icon" className="size-11">
+            <ArrowUp />
+            <span className="sr-only">Senden</span>
+          </Button>
+        )}
       </div>
       {error && <ErrorText>{error}</ErrorText>}
       <p className="text-xs text-muted-foreground">

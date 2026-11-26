@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useClientRead } from '@/hooks/use-client-read';
 import type { AiThreadSummary, AiThreadWindow } from '@/lib/ai/thread-types';
 import { readInBackground } from '@/lib/data/background-read-client';
-import { draftKey, readDraft, writeDraft } from './ki-composer';
+import { draftKey, readDraft, writeDraft } from './ki-drafts';
 import { kiThreadHref } from './ki-thread-list';
 import type { TimelineMessage } from './ki-timeline';
 import { describeTurnRefusal, sendTurn, type TurnEvent, type TurnOutcome } from './turn-client';
@@ -22,19 +22,42 @@ export type ThreadList = { threads: AiThreadSummary[]; hasMore: boolean };
 export type LiveTurn = {
   threadId: string;
   commandId: string;
+  /** The draft the message came from: a refusal puts it back there. */
+  draft: string;
+  /** A new chat's thread, which exists only once the message is saved. */
+  provisional: boolean;
   /** The person's message: one object for the whole turn, so it never renders again while the answer streams. */
   user: TimelineMessage;
   answer: string;
+  /** The answer's sequence in its thread, from the moment the message is saved. */
+  answerSequence: number;
   started: boolean;
   end: { status: 'complete' | 'failed' | 'cancelled'; message: string | null } | null;
 };
 
+type WindowRead = 'found' | 'missing' | 'failed';
+
+/** A read that says the thread is not this person's here: what the page showed of it goes. */
+const DENIED_READS = new Set([
+  'not_found',
+  'not_authenticated',
+  'not_a_member',
+  'no_active_org',
+  'organization_changed',
+  'not_authorized',
+]);
+
 const EMPTY_WINDOW: AiThreadWindow = { messages: [], hasOlder: false };
 
-function userMessage(commandId: string, text: string, unconfirmed: boolean): TimelineMessage {
+function userMessage(
+  commandId: string,
+  text: string,
+  sequence: number,
+  unconfirmed: boolean,
+): TimelineMessage {
   return {
     key: `${commandId}:user`,
-    sequence: 0,
+    sequence,
     role: 'user',
     status: 'complete',
     text,
@@ -46,7 +69,7 @@ function userMessage(commandId: string, text: string, unconfirmed: boolean): Tim
 export function answerMessage(live: LiveTurn): TimelineMessage {
   return {
     key: `${live.commandId}:assistant`,
-    sequence: 0,
+    sequence: live.answerSequence,
     role: 'assistant',
     status: live.end?.status ?? 'streaming',
     text: live.answer,
@@ -54,30 +77,38 @@ export function answerMessage(live: LiveTurn): TimelineMessage {
   };
 }
 
+function sameMessage(left: TimelineMessage, right: TimelineMessage): boolean {
+  return (
+    left.sequence === right.sequence &&
+    left.status === right.status &&
+    left.text === right.text &&
+    left.failure === right.failure
+  );
+}
+
 /**
- * A read window joined with what the page holds. Older history goes in front,
- * each message once by its key; a fresh latest window replaces the messages
- * and keeps each unchanged message's object, so it does not render again.
+ * A read window joined with what the page holds, each message once by its key
+ * and in sequence order. A read never takes back a finished answer for an
+ * older snapshot of it still being written, and keeps the messages it did not
+ * cover: older pages already shown and turns settled after the read began. An
+ * unchanged message keeps its object, so it does not render again.
  */
-function mergeWindow(previous: AiThreadWindow | null, next: AiThreadWindow, older: boolean): AiThreadWindow {
-  if (older) {
-    const shown = new Set(previous?.messages.map((message) => message.key));
-    return {
-      hasOlder: next.hasOlder,
-      messages: [
-        ...next.messages.filter((message) => !shown.has(message.key)),
-        ...(previous?.messages ?? []),
-      ],
-    };
-  }
-  const known = new Map(previous?.messages.map((message) => [message.key, message]));
-  const messages = next.messages.map((message) => {
-    const old = known.get(message.key);
-    const same =
-      old?.status === message.status && old.text === message.text && old.failure === message.failure;
-    return same ? old : message;
+function mergeWindow(previous: AiThreadWindow | null, next: AiThreadWindow): AiThreadWindow {
+  const held = new Map(previous?.messages.map((message) => [message.key, message]));
+  const read = new Set(next.messages.map((message) => message.key));
+  const first = Math.min(...next.messages.map((message) => message.sequence));
+  const fresh = next.messages.map((message) => {
+    const old = held.get(message.key);
+    if (!old) return message;
+    const outdated = message.status === 'streaming' && old.status !== 'streaming';
+    return outdated || sameMessage(old, message) ? old : message;
   });
-  return { hasOlder: next.hasOlder, messages };
+  const kept = (previous?.messages ?? []).filter((message) => !read.has(message.key));
+  const olderKept = kept.some((message) => message.sequence < first);
+  return {
+    hasOlder: olderKept ? (previous?.hasOlder ?? false) : next.hasOlder,
+    messages: [...kept, ...fresh].toSorted((left, right) => left.sequence - right.sequence),
+  };
 }
 
 /** How a started turn ended when its end event never arrived. */
@@ -133,37 +164,37 @@ function useThreadViews(
   organizationId: string,
   initialThreadId: string | null,
   initialWindow: AiThreadWindow | null,
+  missing: React.RefObject<(threadId: string) => void>,
 ) {
   const [views, setViews] = useState<Record<string, ThreadView>>(() =>
     initialThreadId && initialWindow
       ? { [initialThreadId]: { window: initialWindow, confirmed: true, failed: false } }
       : {},
   );
-  // A thread's settled turn outdates every read that started before it.
-  const generations = useRef(new Map<string, number>());
   const readWindow = useCallback(
-    async (id: string, beforeSequence?: number) => {
-      const generation = generations.current.get(id) ?? 0;
+    async (id: string, beforeSequence?: number): Promise<WindowRead> => {
       const result = await readInBackground('ki-thread-window', {
         organizationId,
         threadId: id,
         ...(beforeSequence ? { beforeSequence } : {}),
       });
-      if (!beforeSequence && (generations.current.get(id) ?? 0) !== generation) return;
+      if (!result.success && DENIED_READS.has(result.error)) {
+        setViews((all) => Object.fromEntries(Object.entries(all).filter(([key]) => key !== id)));
+        missing.current(id);
+        return 'missing';
+      }
       setViews((all) => {
         const current = all[id]?.window ?? null;
+        // A passing failure keeps what was shown, still marked unconfirmed.
         if (!result.success) return { ...all, [id]: { window: current, confirmed: false, failed: true } };
         return {
           ...all,
-          [id]: {
-            window: mergeWindow(current, result.window, beforeSequence !== undefined),
-            confirmed: true,
-            failed: false,
-          },
+          [id]: { window: mergeWindow(current, result.window), confirmed: true, failed: false },
         };
       });
+      return result.success ? 'found' : 'failed';
     },
-    [organizationId],
+    [organizationId, missing],
   );
   /** Shows the last known messages, marked unconfirmed, and reads the thread again. */
   const reopen = useCallback(
@@ -178,7 +209,6 @@ function useThreadViews(
   );
   /** Puts a turn's messages into its thread, in place of earlier copies under the same keys. */
   const settle = useCallback((id: string, turn: readonly TimelineMessage[], confirmed: boolean) => {
-    generations.current.set(id, (generations.current.get(id) ?? 0) + 1);
     setViews((all) => {
       // A thread that just took its first message exists from now on; a known one keeps its state.
       if (turn.length === 0 && all[id]) return all;
@@ -206,13 +236,6 @@ function useShownThread(initialThreadId: string | null, reopen: (id: string) => 
     },
     [showOnly, reopen],
   );
-  const open = useCallback(
-    (id: string | null) => {
-      window.history.pushState(null, '', kiThreadHref(id));
-      show(id);
-    },
-    [show],
-  );
   // A thread the server did not open (another organization's, after a switch) leaves the address.
   useEffect(() => {
     if (initialThreadId === null && new URLSearchParams(window.location.search).has('chat'))
@@ -223,7 +246,7 @@ function useShownThread(initialThreadId: string | null, reopen: (id: string) => 
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, [show]);
-  return { threadId, shownRef, show, showOnly, open };
+  return { threadId, shownRef, show, showOnly };
 }
 
 type TurnHost = {
@@ -231,18 +254,18 @@ type TurnHost = {
   userId: string;
   threadId: string | null;
   shownRef: React.RefObject<string | null>;
-  /** Whether the thread exists for this page: one it read or saw being saved. */
-  known: (threadId: string) => boolean;
   showOnly: (threadId: string | null) => void;
   touch: (threadId: string, text: string) => void;
   settle: (threadId: string, turn: readonly TimelineMessage[], confirmed: boolean) => void;
-  readWindow: (threadId: string) => Promise<void>;
+  readWindow: (threadId: string) => Promise<WindowRead>;
 };
 
 type Refused = { threadId: string; commandId: string; text: string };
 
-function draftOf(host: TurnHost, threadId: string | null): string {
-  return draftKey(host.userId, host.organizationId, threadId);
+/** The draft the composer shows: the thread's own, or the new chat's while a new thread waits to be saved. */
+function draftFor(host: TurnHost, live: LiveTurn | null): string {
+  const provisional = live?.provisional && !live.started && live.threadId === host.threadId;
+  return draftKey(host.userId, host.organizationId, provisional ? null : host.threadId);
 }
 
 /** Moves the address to the thread while it is on screen; a turn of a page the person left never gets here. */
@@ -250,24 +273,25 @@ function showAddress(host: TurnHost, threadId: string): void {
   if (host.shownRef.current === threadId) window.history.replaceState(null, '', kiThreadHref(threadId));
 }
 
-/** The thread and command of a new message: a message sent again unchanged after its refusal is the same command. */
-function commandFor(
-  text: string,
+/**
+ * The turn's message is saved: a new thread takes its address, its place at
+ * the top of the list and what was typed for it while it waited.
+ */
+function markStarted(
+  turn: LiveTurn,
+  event: Extract<TurnEvent, { type: 'started' }>,
   host: TurnHost,
-  refused: Refused | undefined,
-): { target: string; commandId: string } {
-  const target =
-    host.threadId ?? (refused && !host.known(refused.threadId) ? refused.threadId : crypto.randomUUID());
-  const same = refused?.threadId === target && refused.text === text;
-  return { target, commandId: same ? refused.commandId : crypto.randomUUID() };
-}
-
-/** The turn's message is saved: a new thread takes its address and its place at the top of the list. */
-function markStarted(turn: LiveTurn, host: TurnHost): LiveTurn {
+): LiveTurn {
+  if (turn.provisional && host.shownRef.current === turn.threadId) {
+    const typed = readDraft(turn.draft);
+    writeDraft(turn.draft, '');
+    if (typed) writeDraft(draftKey(host.userId, host.organizationId, turn.threadId), typed);
+  }
   showAddress(host, turn.threadId);
   host.settle(turn.threadId, [], true);
   host.touch(turn.threadId, turn.user.text);
-  return { ...turn, started: true, user: userMessage(turn.commandId, turn.user.text, false) };
+  const user = userMessage(turn.commandId, turn.user.text, event.userItem.sequence, false);
+  return { ...turn, started: true, user, answerSequence: event.assistantItem.sequence };
 }
 
 /** Puts a saved turn into its thread and the list; without its end event, the saved answer says how it went on. */
@@ -286,28 +310,40 @@ function restoreDraft(key: string, text: string): void {
   writeDraft(key, typed ? `${text}\n\n${typed}` : text);
 }
 
-function newTurn(threadId: string, commandId: string, text: string): LiveTurn {
+function newTurn(
+  threadId: string,
+  commandId: string,
+  text: string,
+  draft: string,
+  provisional: boolean,
+): LiveTurn {
+  const user = userMessage(commandId, text, 0, true);
   return {
     threadId,
     commandId,
-    user: userMessage(commandId, text, true),
+    draft,
+    provisional,
+    user,
     answer: '',
+    answerSequence: 0,
     started: false,
     end: null,
   };
 }
 
 /**
- * A message refused before its thread took it: its text goes back into its own
- * draft, which keeps the command for an unchanged retry. Returns that draft.
+ * A message refused before its turn started: its text goes back into its own
+ * draft, which keeps the command for an unchanged retry. The route may have
+ * saved the message before it refused, so the thread is read again, and a new
+ * thread that exists after all joins the list.
  */
-function settleRefused(turn: LiveTurn, host: TurnHost, refused: Map<string, Refused>): string {
-  const known = host.known(turn.threadId);
-  const draft = draftOf(host, known ? turn.threadId : null);
-  refused.set(draft, { threadId: turn.threadId, commandId: turn.commandId, text: turn.user.text });
-  restoreDraft(draft, turn.user.text);
-  if (!known && host.shownRef.current === turn.threadId) host.showOnly(null);
-  return draft;
+function settleRefused(turn: LiveTurn, host: TurnHost, refused: Map<string, Refused>): void {
+  refused.set(turn.draft, { threadId: turn.threadId, commandId: turn.commandId, text: turn.user.text });
+  restoreDraft(turn.draft, turn.user.text);
+  if (turn.provisional && host.shownRef.current === turn.threadId) host.showOnly(null);
+  void host.readWindow(turn.threadId).then((read) => {
+    if (read === 'found') host.touch(turn.threadId, turn.user.text);
+  });
 }
 
 /** The one turn that runs at a time: it sends, streams the answer and puts it into its thread when it ends. */
@@ -344,7 +380,7 @@ function useLiveTurn(host: TurnHost) {
       if (event.type === 'text') return update((turn) => ({ ...turn, answer: turn.answer + event.delta }));
       if (event.type === 'end')
         return update((turn) => ({ ...turn, end: { status: event.status, message: event.message ?? null } }));
-      update((turn) => markStarted(turn, hostRef.current));
+      update((turn) => markStarted(turn, event, hostRef.current));
     },
     [update],
   );
@@ -353,30 +389,33 @@ function useLiveTurn(host: TurnHost) {
     (turn: LiveTurn, outcome: TurnOutcome) => {
       if (leftRef.current || liveRef.current?.commandId !== turn.commandId) return;
       const current = liveRef.current;
-      const host = hostRef.current;
       abortRef.current = null;
       update(() => null);
-      if (current.started || outcome.kind === 'already_done') return settleSaved(current, outcome, host);
-      const draft = settleRefused(current, host, refusedRef.current);
-      if (outcome.kind === 'refused') setError({ draft, message: outcome.message });
+      if (current.started || outcome.kind === 'already_done')
+        return settleSaved(current, outcome, hostRef.current);
+      settleRefused(current, hostRef.current, refusedRef.current);
+      if (outcome.kind === 'refused') setError({ draft: current.draft, message: outcome.message });
     },
     [update],
   );
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, draft: string) => {
       const host = hostRef.current;
-      const draft = draftOf(host, host.threadId);
       setError(null);
       if (liveRef.current) {
         restoreDraft(draft, text);
         return setError({ draft, message: describeTurnRefusal('run_active') });
       }
-      const { target, commandId } = commandFor(text, host, refusedRef.current.get(draft));
+      // A message sent again unchanged after its refusal is the same command in the same thread.
+      const refused = refusedRef.current.get(draft);
       refusedRef.current.delete(draft);
+      const target = host.threadId ?? refused?.threadId ?? crypto.randomUUID();
+      const commandId =
+        refused?.threadId === target && refused.text === text ? refused.commandId : crypto.randomUUID();
       const controller = new AbortController();
       abortRef.current = controller;
-      const turn = newTurn(target, commandId, text);
+      const turn = newTurn(target, commandId, text, draft, host.threadId === null);
       liveRef.current = turn;
       setLive(turn);
       if (!host.threadId) host.showOnly(target);
@@ -393,7 +432,7 @@ function useLiveTurn(host: TurnHost) {
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
-  return { live, error, send, stop };
+  return { live, error, send, stop, draft: draftFor(host, live) };
 }
 
 /** Everything the chat page holds, from its first server render on. */
@@ -406,25 +445,39 @@ export function useKiChat(input: {
 }) {
   const { organizationId, userId } = input;
   const list = useThreadList(organizationId, input.initialThreads);
+  // A thread the person cannot open here (gone, or another organization's after Back) leaves the screen.
+  const missing = useRef<(threadId: string) => void>(() => undefined);
   const { views, readWindow, reopen, settle } = useThreadViews(
     organizationId,
     input.initialThreadId,
     input.initialWindow,
+    missing,
   );
-  const { threadId, shownRef, show, showOnly, open } = useShownThread(input.initialThreadId, reopen);
-  const known = (id: string): boolean => views[id] !== undefined;
+  const { threadId, shownRef, show, showOnly } = useShownThread(input.initialThreadId, reopen);
+  useEffect(() => {
+    missing.current = (id) => {
+      if (shownRef.current !== id) return;
+      window.history.replaceState(null, '', kiThreadHref(null));
+      showOnly(null);
+    };
+  });
+  const open = useCallback(
+    (id: string | null) => {
+      window.history.pushState(null, '', kiThreadHref(id));
+      show(id);
+    },
+    [show],
+  );
   const turn = useLiveTurn({
     organizationId,
     userId,
     threadId,
     shownRef,
-    known,
     showOnly,
     touch: list.touch,
     settle,
     readWindow,
   });
-  const draft = draftKey(userId, organizationId, threadId && known(threadId) ? threadId : null);
-  const error = turn.error?.draft === draft ? turn.error.message : null;
-  return { list, views, readWindow, threadId, show, openThread: open, known, turn, draft, error };
+  const error = turn.error?.draft === turn.draft ? turn.error.message : null;
+  return { list, views, readWindow, threadId, show, openThread: open, turn, draft: turn.draft, error };
 }
