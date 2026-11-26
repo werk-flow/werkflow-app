@@ -227,6 +227,20 @@ export function writeRefusedOutcome(
   return failedOutcome(`the write answered ${answer}, not 403 or 400 with SQLSTATE 25006`);
 }
 
+/**
+ * The token a DEV Management API script sends: `SUPABASE_ACCESS_TOKEN` where the environment sets
+ * it (CI, an older `.env.local`), else the machine's agent token from the key file, so no
+ * workstation keeps a token in `.env.local`. Undefined when neither holds one.
+ */
+export function devAccessToken(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  home = homedir(),
+): string | undefined {
+  if (env.SUPABASE_ACCESS_TOKEN) return env.SUPABASE_ACCESS_TOKEN;
+  const keys = readStagingAgentKeys(home);
+  return keys.file === 'present' ? keys.values.get('SUPABASE_DEV_ACCESS_TOKEN') : undefined;
+}
+
 const livemodeSchema = z.object({ livemode: z.boolean() });
 
 /** Whether a Stripe answer says it came from a sandbox: `livemode: false`, nothing else. */

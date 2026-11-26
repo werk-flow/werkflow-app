@@ -46,7 +46,6 @@ This table is the one home of every deployment and workflow credential. No check
 | `SUPABASE_ACCESS_TOKEN` | GitHub repository secret | Staging, release: deploy edge functions; never database read | 2027-10-26 | Supabase account settings, Access Tokens; `gh secret set`; revoke the old one. |
 | `SUPABASE_DEV_READ_TOKEN` | GitHub repository secret | Release: read-only SQL on DEV | 2027-11-16; at most a year | Supabase Account preferences, Access Tokens: `werkflow-dev-ledger-read`, organization WerkFlow, project DEV, Database read only. `gh secret set SUPABASE_DEV_READ_TOKEN` (stdin), run `health.yml`, revoke its predecessor. |
 | `PROD_INSPECT_SUPABASE_TOKEN`, `DEV_INSPECT_SUPABASE_TOKEN`, `DEV_AUTH_SYNC_SUPABASE_TOKEN` | Environment `production` | The [PROD inspection](#which-tool-reaches-what) | One year | Scoped, read only: PROD Database, Advisors, Auth config; DEV Database, Auth config. The third: DEV Auth config and Project settings write. `gh secret set --env production`. |
-| `werkflow-workstation-dev` | Workstations | DEV only | One year | [Machine setup](machine-setup.md#set-up-a-new-machine), step 2 |
 | [Agent keys](machine-setup.md#agent-keys) | Agent machines | Agents | Per key | [There](machine-setup.md#agent-keys) |
 | `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release promotes | 2027-10-26 | Vercel account settings, Tokens, team-scoped; `gh secret set`. |
 | `PROD_WATCH_VERCEL_TOKEN` | Environment `production` | The [production watcher](recovery-and-incidents.md#monitoring), which checks it | 2027-11-26 | Vercel Tokens: `werkflow-PROD-watch-github`, team-scoped; `gh secret set --env production`, run `prod-watch.yml`, revoke the old one ([the PC's](machine-setup.md#background-jobs): after werk-flow/werkflow-planning#573). |
@@ -105,10 +104,10 @@ Agents never read PROD data through any tool: every tool result goes to the mode
 | Access path | Prod | Dev | Notes |
 | --- | --- | --- | --- |
 | claude.ai Supabase connector | no | no | Organization-wide: the MCP hook refuses it here, `deniedMcpServers` in `~/.claude/settings.json` elsewhere. |
-| MCP server `supabase` | never | read and write | `https://mcp.supabase.com/mcp?project_ref=mbkkzuqjbdvzelqvuzcn` |
-| Supabase CLI (`bunx supabase`) | never link or push | yes | The repository links to the DEV ref only. |
+| MCP server `supabase` | never | read only | `scripts/mcp/supabase-dev.ts` on the [agent token](machine-setup.md#agent-keys) ([step 4](machine-setup.md#set-up-a-new-machine)). |
+| Supabase CLI (`bunx supabase`) | never link or push | read only | The repository links to the DEV ref only. Migrations and edge functions reach DEV through `staging.yml`. |
 | PROD inspection (`prod-inspect.yml`) | structure only | compared | Paused while GitHub Actions is off. |
-| Management API | through the PROD inspection only | yes | DEV configuration and the `*:check` scripts. |
+| Management API | through the PROD inspection only | read only | The `*:check` scripts, through `lib/security/dev-management-api.ts`. |
 | R2 tokens | prod bucket only | dev bucket only | Runtime tokens cannot manage bucket settings. `scripts/setup-r2-cors.ts` needs a bucket-admin token. |
 | Local stack | n/a | n/a | The Supabase CLI and psql through `docker exec`. MCP cannot reach it. |
 | Vercel MCP connector | metadata and counts only | yes | Deployment state, aliases and `vercel.request.count` counts by route, status, error code, deployment or Server Action. The MCP hook refuses a decrypted environment value. |

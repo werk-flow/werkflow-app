@@ -401,3 +401,46 @@ test('both registered hook commands refuse when the guard itself fails', () => {
     expect(result.stderr, file).toContain('the MCP guard failed with exit 1');
   }
 });
+
+test("the hook lets the DEV wrapper's Claude Code and Codex configurations through, and refuses them on PROD", () => {
+  const refs = supabaseProjectRefs(repositoryRoot);
+  if (!refs) throw new Error('The environments doc names no Supabase refs.');
+  const script = resolve(repositoryRoot, '.claude/hooks/refuse-production-mcp.ts');
+  const wrapper = join(repositoryRoot, 'scripts/mcp/supabase-dev.ts');
+  // The forms of docs/technical/machine-setup.md, step 4: one Claude Code server, one Codex server.
+  const verdict = (ref: string, tool: 'claude' | 'codex') => {
+    const home = temporaryDirectory('mcp-wrapper-');
+    mkdirSync(join(home, 'project'));
+    if (tool === 'claude')
+      writeFileSync(
+        join(home, '.claude.json'),
+        JSON.stringify({
+          mcpServers: {
+            supabase: { type: 'stdio', command: 'bun', args: [wrapper, `--project-ref=${ref}`], env: {} },
+          },
+        }),
+      );
+    else
+      writeFileSync(
+        join(home, 'config.toml'),
+        `[mcp_servers.supabase]\ncommand = "bun"\nargs = [${JSON.stringify(wrapper)}, "--project-ref=${ref}"]\n`,
+      );
+    const result = Bun.spawnSync({
+      cmd: [process.execPath, script],
+      stdin: Buffer.from(JSON.stringify({ tool_name: 'mcp__supabase__list_tables', tool_input: {} })),
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: {
+        ...process.env,
+        CLAUDE_CONFIG_DIR: home,
+        CODEX_HOME: home,
+        CLAUDE_PROJECT_DIR: join(home, 'project'),
+      },
+    });
+    return result.exitCode;
+  };
+  for (const tool of ['claude', 'codex'] as const) {
+    expect(verdict(refs.dev, tool), tool).toBe(0);
+    expect(verdict(refs.production, tool), tool).toBe(2);
+  }
+});

@@ -15,6 +15,7 @@ import {
 } from '../lib/testing/boat/types-on-boat';
 import { readMigrationDrift } from '../lib/testing/local-stack/migration-drift';
 import { withStackLock } from '../lib/testing/runner/stack-lock';
+import { devAccessToken } from '../lib/security/staging-agent-keys';
 import { getSpawnFailureDetail } from '../lib/testing/runner/spawn-result';
 
 const DEV_PROJECT_ID = 'mbkkzuqjbdvzelqvuzcn';
@@ -46,24 +47,27 @@ function withCommittedHeader(types: string): string {
 }
 
 /** The Supabase CLI in this checkout. */
-function supabase(args: readonly string[]) {
+function supabase(args: readonly string[], env: NodeJS.ProcessEnv) {
   return spawnSync(process.execPath, ['x', 'supabase', ...args], {
     cwd: REPOSITORY_ROOT,
+    env,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
 }
 
-/** The formatted types of one database: `--project-id` for DEV, `--local`, or `--db-url`. */
-async function generatedFrom(database: readonly string[]): Promise<string> {
-  const generated = supabase([
-    'gen',
-    'types',
-    'typescript',
-    ...database,
-    '--schema',
-    'graphql_public,public',
-  ]);
+/**
+ * The formatted types of one database: `--project-id` for DEV, `--local`, or `--db-url`. DEV's
+ * reach the CLI with the DEV token in its environment only (lib/security/staging-agent-keys.ts).
+ */
+async function generatedFrom(
+  database: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string> {
+  const generated = supabase(
+    ['gen', 'types', 'typescript', ...database, '--schema', 'graphql_public,public'],
+    env,
+  );
   if (generated.error || generated.status !== 0) {
     throw new Error(`Supabase type generation failed: ${getSpawnFailureDetail(generated, 'unknown error')}`);
   }
@@ -102,7 +106,17 @@ async function typesHere(): Promise<{ formatted: string; source: string } | { un
 
 /** The formatted types and the stack they come from. */
 async function types(): Promise<{ formatted: string; source: string }> {
-  if (!LOCAL) return { formatted: await generatedFrom(['--project-id', DEV_PROJECT_ID]), source: 'DEV' };
+  if (!LOCAL) {
+    // Never the CLI's own login: a cached one would hide a missing agent key.
+    const token = devAccessToken();
+    if (!token)
+      throw new Error(
+        'No DEV token: set SUPABASE_ACCESS_TOKEN, or install SUPABASE_DEV_ACCESS_TOKEN in the agent key file (bun run agent-access:check).',
+      );
+    // The built-in profile: an inherited SUPABASE_PROFILE could point the CLI's API host elsewhere.
+    const env = { ...process.env, SUPABASE_PROFILE: 'supabase', SUPABASE_ACCESS_TOKEN: token };
+    return { formatted: await generatedFrom(['--project-id', DEV_PROJECT_ID], env), source: 'DEV' };
+  }
   const here = await typesHere();
   if ('formatted' in here) return here;
   console.info(`[types] Not from the shared stack: ${here.unavailable}`);

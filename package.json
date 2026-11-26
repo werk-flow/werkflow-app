@@ -121,6 +121,7 @@
     "@axe-core/playwright": "4.11.0",
     "@eslint-community/eslint-plugin-eslint-comments": "^4.8.1",
     "@playwright/test": "^1.62.1",
+    "@supabase/mcp-server-supabase": "0.18.0",
     "@tailwindcss/node": "4.1.17",
     "@tailwindcss/oxide": "4.1.17",
     "@tailwindcss/postcss": "^4",
