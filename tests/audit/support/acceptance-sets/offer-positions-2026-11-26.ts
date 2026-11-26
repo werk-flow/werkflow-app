@@ -170,9 +170,12 @@ function roleCaptures(role: 'admin' | 'buero'): SetCapture[] {
   const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
   const page = { kind: 'page' } as const;
   const route = '/angebote/[offerId]';
+  const service = { role, route, view: page, destination: offerPage('service'), ...both };
+  const installation = { role, route, view: page, destination: offerPage('installation'), ...both };
   return [
-    { id: `${role}-wartung`, role, route, view: page, destination: offerPage('service'), ...both },
-    { id: `${role}-installation`, role, route, view: page, destination: offerPage('installation'), ...both },
+    { id: `${role}-wartung`, ...service, reveal: 'Summe Titel 1: 126,75 €' },
+    { id: `${role}-installation`, ...installation, reveal: 'Summe Titel 2: 4.323,79 €' },
+    { id: `${role}-installation-summen`, ...installation, reveal: 'Gesamt brutto' },
     { id: stateCaptureId(`${role}-wartung`, 'loading'), role, route, view: page, state: 'loading', ...both },
   ];
 }
