@@ -37,7 +37,6 @@ export function redirectTarget(from: string, status: number, location: string | 
 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' };
 
-/** A page that sends the browser to `target` as a new navigation, which passes the route again. */
 /**
  * The method a redirect's next hop takes, as a browser does: 303 turns all but GET and HEAD into GET,
  * 301 and 302 turn POST into GET, and every other method and status keeps the request as it is.
@@ -48,6 +47,7 @@ export function redirectMethod(method: string, status: number): string {
   return method;
 }
 
+/** A page that sends the browser to `target` as a new navigation, which passes the route again. */
 export function navigationTo(target: string): string {
   const escaped = target.replace(/[&"<>]/g, (character) => HTML_ESCAPES[character] ?? character);
   return `<!doctype html><meta http-equiv="refresh" content="0;url=${escaped}">`;
