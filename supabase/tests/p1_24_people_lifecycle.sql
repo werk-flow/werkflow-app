@@ -699,7 +699,8 @@ insert into public.employee_records (id, organization_id, first_name, last_name,
 ('24000000-0000-0000-0000-000000000065', '24000000-0000-0000-0000-000000000010', 'Überholt', 'Austritt', '2024-01-01',
  (clock_timestamp() at time zone 'Europe/Berlin')::date + 20),
 ('24000000-0000-0000-0000-000000000066', '24000000-0000-0000-0000-000000000010', 'Später', 'Eintritt',
- (clock_timestamp() at time zone 'Europe/Berlin')::date + 30, null);
+ (clock_timestamp() at time zone 'Europe/Berlin')::date + 30, null),
+('24000000-0000-0000-0000-000000000067', '24000000-0000-0000-0000-000000000010', 'Rückkehr', 'Verschoben', '2020-01-01', '2025-06-30');
 
 do $$
 declare
@@ -712,6 +713,7 @@ declare
   replanned_id constant uuid := '24000000-0000-0000-0000-000000000064';
   overtaken_id constant uuid := '24000000-0000-0000-0000-000000000065';
   conflicting_id constant uuid := '24000000-0000-0000-0000-000000000066';
+  returning_id constant uuid := '24000000-0000-0000-0000-000000000067';
   buero_record_id uuid;
   configuration_id uuid;
   today constant date := (clock_timestamp() at time zone 'Europe/Berlin')::date;
@@ -802,6 +804,21 @@ begin
     select 1 from public.employee_records
     where id = overtaken_id and (entry_date is distinct from today + 25 or exit_date is not null)
   ) then raise exception 'withdrawing a plan restored an exit before the edited entry date'; end if;
+
+  -- A withdrawn return keeps an entry date edited since, and an earlier exit it overtook does not return.
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, returning_id, 0, 'plan_start', today + 14,
+    'Rückkehr geplant', '[]'::jsonb, '24000000-0000-0000-0000-000000000081', repeat('d', 64)
+  );
+  update public.employee_records set entry_date = today + 20 where id = returning_id;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, returning_id, 1, 'cancel_scheduled', today,
+    'Rückkehr zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-000000000082', repeat('e', 64)
+  );
+  if exists (
+    select 1 from public.employee_records
+    where id = returning_id and (entry_date is distinct from today + 20 or exit_date is not null)
+  ) then raise exception 'withdrawing a return restored an exit before the edited entry date'; end if;
 
   -- An earlier entry after an exit date set since cannot return: the withdrawal is refused and the plan stays.
   perform public.set_personnel_employment_transition(

@@ -270,13 +270,10 @@ begin
     -- An earlier exit that an edited entry date has overtaken does not return.
     -- An earlier entry after an exit date the office set since cannot return
     -- either: the plan stays until the office corrects the dates.
-    if restored_exit < restored_entry then
-      if withdrawn.scheduled_state = 'exited' then
-        restored_exit := null;
-      else
-        raise exception 'withdrawal_dates_conflict';
-      end if;
+    if restored_exit < restored_entry and restored_exit is distinct from employee.exit_date then
+      restored_exit := null;
     end if;
+    if restored_exit < restored_entry then raise exception 'withdrawal_dates_conflict'; end if;
     update public.employee_records set entry_date = restored_entry, exit_date = restored_exit
     where id = p_employee_record_id
       and (entry_date, exit_date) is distinct from (restored_entry, restored_exit);
