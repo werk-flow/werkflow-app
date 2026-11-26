@@ -85,6 +85,15 @@ function useContentDraft(offer: OfferDetail, saving: boolean) {
   };
 }
 
+/** Keys for added Titel and Positionen, stable while the editor is open. */
+function useNewKey(): () => string {
+  const [next, setNext] = useState(0);
+  return () => {
+    setNext((key) => key + 1);
+    return `new-${next}`;
+  };
+}
+
 /**
  * „Titel und Positionen“ of an offer in „Entwurf“. The amounts follow every
  * keystroke through the same rule the server stores them by; „Speichern“
@@ -100,15 +109,11 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
   const { draft, newerElsewhere, edit, saved, reload } = useContentDraft(offer, pending);
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [nextKey, setNextKey] = useState(0);
   const { sections } = draft;
   const parsed = parseContentForm(sections);
   const errors = attempted && !parsed.ok ? parsed.errors : {};
   const amounts = liveContentAmounts(sections);
-  const newKey = () => {
-    setNextKey((key) => key + 1);
-    return `new-${nextKey}`;
-  };
+  const newKey = useNewKey();
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
