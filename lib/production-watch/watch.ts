@@ -357,25 +357,20 @@ async function findings(io: WatchIo, signal: Signal, now: number): Promise<Error
   const key = (row: Point) => signal.groups.map((name) => row.dimensions[name] ?? '');
   const newKey = (row: Point) => JSON.stringify(signal.newness.map((name) => row.dimensions[name] ?? ''));
   const hits: ErrorHit[] = [];
-  const buckets = [...new Set(series.map((p) => p.at))].sort((a, b) => a - b);
-  for (let index = WINDOW_BUCKETS - 1; index < buckets.length; index++) {
-    const window = new Set(buckets.slice(index - WINDOW_BUCKETS + 1, index + 1));
+  // Each window is WINDOW_BUCKETS consecutive buckets by the clock, so a bucket the answer left
+  // out counts as zero.
+  for (let last = start + (WINDOW_BUCKETS - 1) * BUCKET; last < end; last += BUCKET) {
+    const first = last - (WINDOW_BUCKETS - 1) * BUCKET;
     const rows = new Map<string, [string[], number]>();
     let newest: number | undefined;
     for (const p of series) {
-      if (!window.has(p.at) || !p.count) continue;
+      if (p.at < first || p.at > last || !p.count) continue;
       const id = JSON.stringify(key(p));
       rows.set(id, [key(p), (rows.get(id)?.[1] ?? 0) + p.count]);
       newest = Math.max(newest ?? p.at, p.at);
     }
     const total = [...rows.values()].reduce((sum, [, count]) => sum + count, 0);
-    const first = buckets[index - WINDOW_BUCKETS + 1];
-    if (
-      newest !== undefined &&
-      first !== undefined &&
-      total >= BURST_FLOOR &&
-      total >= BURST_RATIO * baseline
-    )
+    if (newest !== undefined && total >= BURST_FLOOR && total >= BURST_RATIO * baseline)
       // Its end is its newest error, not the window's: a later window over the same errors is no new finding.
       hits.push({
         rule: 'burst',

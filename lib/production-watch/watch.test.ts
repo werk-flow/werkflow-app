@@ -52,6 +52,8 @@ class FakeProduction implements WatchIo {
   sent: Sent[] = [];
   refuse: string | undefined;
   refuseWrite: Title | undefined;
+  // Vercel may leave out a bucket without a count; a sparse answer does.
+  sparse = false;
 
   vercel = async (path: string, body?: unknown): Promise<unknown> => {
     this.paths.push(path);
@@ -111,11 +113,12 @@ class FakeProduction implements WatchIo {
     for (const [key, buckets] of groups) {
       const dimensions: unknown = JSON.parse(key);
       for (let moment = start; moment < end; moment += size)
-        series.push({
-          timestamp: new Date(moment).toISOString(),
-          dimensions,
-          values: { value: buckets.get(moment) ?? 0 },
-        });
+        if (!this.sparse || buckets.has(moment))
+          series.push({
+            timestamp: new Date(moment).toISOString(),
+            dimensions,
+            values: { value: buckets.get(moment) ?? 0 },
+          });
       summary.push({
         dimensions,
         values: { value: [...buckets.values()].reduce((sum, count) => sum + count, 0) },
@@ -297,6 +300,21 @@ test('S1: a count within four times the weekly mean is no burst', async () => {
   error(9, 1);
   await check();
   expect(sent(ERRORS, 'keep')).toHaveLength(1);
+});
+
+test('S1: a window is 15 minutes by the clock, even when the answer leaves out empty buckets', async () => {
+  const burst = setup();
+  burst.fake.sparse = true;
+  burst.error(12, 6);
+  await burst.check();
+  expect(one(burst.sent(ERRORS, 'keep')).note).toContain('| burst |');
+
+  const spread = setup();
+  spread.fake.sparse = true;
+  for (const minutes of [12, 62, 122]) spread.error(minutes, 2);
+  spread.oldError(NOW - 3 * DAY); // an old route, so S2 stays quiet
+  await spread.check();
+  expect(spread.fake.sent).toEqual([]);
 });
 
 test('S1: errors in the newest incomplete bucket wait for the next pass', async () => {

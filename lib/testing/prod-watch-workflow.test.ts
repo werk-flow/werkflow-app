@@ -3,7 +3,7 @@
 // (.github/workflows/prod-watch.yml, docs/technical/recovery-and-incidents.md#monitoring).
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { readWorkflow, workflowsFolder } from './ci-workflow';
@@ -59,51 +59,42 @@ test('each pass restores the newest saved state and saves its own, a failed pass
   expect(steps()).toHaveLength(5);
 });
 
-test('the pass runs from the sparse checkout without an install: it imports only Node and its own folders', () => {
+/** A copy of the job's sparse checkout, root files included and no dependency installed, with a stub gh that records its calls. */
+function sparseCheckout() {
   const sparse = String(watcher.at('jobs', 'watch', 'steps', 0, 'with', 'sparse-checkout'))
     .trim()
     .split('\n');
   expect(sparse).toEqual(['.github/scripts', 'lib/production-watch', 'scripts']);
-  const sources = [
-    'scripts/prod-watch.ts',
-    ...readdirSync(join(repositoryRoot, 'lib/production-watch'))
-      .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
-      .map((name) => `lib/production-watch/${name}`),
-  ];
-  for (const source of sources) {
-    const imports = [...readFileSync(join(repositoryRoot, source), 'utf8').matchAll(/from '([^']+)'/g)].map(
-      (m) => m[1] ?? '',
-    );
-    for (const target of imports) {
-      if (target.startsWith('node:')) continue;
-      const resolved = resolve(repositoryRoot, source, '..', target);
-      expect(
-        sparse.some((folder) => resolved.startsWith(join(repositoryRoot, folder))),
-        `${source} imports ${target}`,
-      ).toBe(true);
-    }
-  }
-  expect(existsSync(join(repositoryRoot, '.github/scripts/alert-issue.sh'))).toBe(true);
-});
-
-test('without its token a pass fails with a fixed verdict, counts the failure and writes no alert', () => {
   const folder = temporaryDirectory('prod-watch-');
+  const root = join(folder, 'checkout');
+  for (const path of [...sparse, 'package.json', 'tsconfig.json', 'bunfig.toml'])
+    cpSync(join(repositoryRoot, path), join(root, path), { recursive: true });
   const calls = join(folder, 'calls');
-  // gh answers with no open alert; the pass must stop at the token before any Vercel call.
+  // gh answers with no open alert.
   writeFileSync(join(folder, 'gh'), `#!/usr/bin/env bash\necho "gh $*" >> '${calls}'\n`);
   chmodSync(join(folder, 'gh'), 0o755);
+  const pass = (state: string) =>
+    spawnSync('bun', [SCRIPT, state], {
+      cwd: root,
+      encoding: 'utf8',
+      env: {
+        NODE_ENV: 'test',
+        PATH: `${folder}:${process.env.PATH}`,
+        GH_REPO: 'owner/repo',
+        PROD_WATCH_VERCEL_TOKEN: '',
+      },
+    });
+  return { folder, root, calls, pass };
+}
+
+test('without its token a pass from the sparse checkout fails with a fixed verdict, counts the failure and writes no alert', () => {
+  const { folder, root, calls, pass } = sparseCheckout();
   const state = join(folder, 'state', 'state.json');
-  const run = spawnSync('bun', [SCRIPT, state], {
-    cwd: repositoryRoot,
-    encoding: 'utf8',
-    env: {
-      NODE_ENV: 'test',
-      PATH: `${folder}:${process.env.PATH}`,
-      GH_REPO: 'owner/repo',
-      PROD_WATCH_VERCEL_TOKEN: '',
-    },
-  });
+  const run = pass(state);
+  expect(existsSync(join(root, 'node_modules'))).toBe(false);
+  expect(run.stderr).toBe('');
   expect(run.status).toBe(1);
+  // The pass stops at the token before any Vercel call.
   expect(run.stdout).toBe(
     'production: production watcher failed (1 in a row): PROD_WATCH_VERCEL_TOKEN is not set; the GitHub environment production holds it\n' +
       'production: the pass failed\n',
@@ -112,4 +103,14 @@ test('without its token a pass fails with a fixed verdict, counts the failure an
   expect(readFileSync(calls, 'utf8')).toBe(
     'gh api --paginate repos/owner/repo/issues?state=open&labels=ci-alert&per_page=100 --jq .[].title\n',
   );
+});
+
+test('a state the pass cannot save fails the run with a fixed verdict, never a path or a stack', () => {
+  const { folder, pass } = sparseCheckout();
+  writeFileSync(join(folder, 'blocked'), '');
+  const run = pass(join(folder, 'blocked', 'state.json'));
+  expect(run.status).toBe(1);
+  expect(run.stderr).toBe('');
+  expect(run.stdout).toMatch(/\nproduction: the state was not saved: \w+\n$/);
+  expect(run.stdout).not.toContain(folder);
 });

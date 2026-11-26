@@ -27,11 +27,24 @@ async function main(): Promise<number> {
   }
   const state = readState(saved);
   const { notes, failed } = await watch(liveIo(process.env, fetch, runProgram), state, Date.now());
-  mkdirSync(dirname(statePath), { recursive: true });
-  writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
   for (const note of notes) console.log(note);
+  try {
+    mkdirSync(dirname(statePath), { recursive: true });
+    writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
+  } catch (error) {
+    console.log(`production: the state was not saved: ${failureName(error)}`);
+    return 1;
+  }
   console.log(failed ? 'production: the pass failed' : 'production: the pass is done');
   return failed ? 1 : 0;
 }
 
-process.exit(await main());
+/** An error's kind only: its message may hold a path or a response, and the log is public. */
+const failureName = (error: unknown): string => (error instanceof Error ? error.name : 'unknown failure');
+
+process.exit(
+  await main().catch((error: unknown) => {
+    console.log(`production: the pass stopped: ${failureName(error)}`);
+    return 1;
+  }),
+);
