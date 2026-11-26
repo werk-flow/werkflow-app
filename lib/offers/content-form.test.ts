@@ -228,6 +228,18 @@ describe('cost and markup', () => {
     expect(withUnit(costed, 'piece')).toBe(costed);
   });
 
+  test('a markup whose price would exceed the price limit keeps the price and says so', () => {
+    const fitting = { ...typed, quantity: '1000', priceQuantity: 1000 as const, price: '980000,00' };
+    const marked = withCostOrMarkup(withCostOrMarkup(fitting, { cost: '950000' }), { markup: '10' });
+    expect(marked.price).toBe('980000,00');
+    expect(markupSentence(marked)).toBe(
+      'Der Preis läge über 1.000.000 € je Preismenge. Der Preis bleibt, wie er ist.',
+    );
+    expect(
+      liveContentFigures([{ key: 's', title: 'Heizung', positions: [marked] }])?.amounts.totals.lineNetCents,
+    ).toBe(98_000_000);
+  });
+
   test('a cost still being typed leaves the sale amounts and totals standing', () => {
     const figures = liveContentFigures([
       { key: 's', title: 'Heizung', positions: [{ ...typed, cost: '41,' }] },

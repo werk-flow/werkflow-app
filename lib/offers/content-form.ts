@@ -2,7 +2,7 @@ import type { PriceQuantity } from '@/lib/inventory/line-amount';
 import { isInventoryUnitCode } from '@/lib/inventory/units';
 import { emptyLine, parsePricedLine, quantityInput, type DraftLineForm } from '@/lib/invoices/draft-form';
 import type { OfferCatalogLine } from '@/lib/invoices/line-sources';
-import { centsToEuroInput, parseEuroCents } from '@/lib/price-catalog/money';
+import { centsToEuroInput, MAX_PRICE_CENTS, parseEuroCents } from '@/lib/price-catalog/money';
 import { offerAmounts, type OfferAmounts } from './amounts';
 import {
   lineCostCents,
@@ -124,43 +124,55 @@ function parseMarkupTenths(text: string): number | null {
 }
 
 /**
+ * The price a markup on the cost sets, by the shared line rule: null while
+ * the markup or the cost does not read, `too_high` above a price's limit.
+ */
+function markupPrice(position: PositionForm): number | 'too_high' | null {
+  const costCents = costCentsOf(position.cost);
+  const markupTenths = parseMarkupTenths(position.markup);
+  if (costCents === null || costCents === undefined || markupTenths === null) return null;
+  try {
+    const priceCents = markupPriceCents(
+      { amountCents: costCents, priceQuantity: position.costPriceQuantity },
+      position.priceQuantity,
+      markupTenths,
+    );
+    return priceCents <= MAX_PRICE_CENTS ? priceCents : 'too_high';
+  } catch (error) {
+    if (error instanceof RangeError) return 'too_high';
+    throw error;
+  }
+}
+
+/**
  * The position after its cost or markup changed: a markup that reads on a
- * cost that reads sets the price by the shared line rule. Otherwise the
- * price stays as typed, and the parse names the field at fault.
+ * cost that reads sets the price. Otherwise, and above a price's limit, the
+ * price stays as it was.
  */
 export function withCostOrMarkup(
   position: PositionForm,
   change: { cost: string } | { markup: string },
 ): PositionForm {
   const next = { ...position, ...change };
-  const costCents = costCentsOf(next.cost);
-  const markupTenths = parseMarkupTenths(next.markup);
-  if (costCents === null || costCents === undefined || markupTenths === null) return next;
-  try {
-    const priceCents = markupPriceCents(
-      { amountCents: costCents, priceQuantity: next.costPriceQuantity },
-      next.priceQuantity,
-      markupTenths,
-    );
-    return { ...next, price: centsToEuroInput(priceCents) };
-  } catch (error) {
-    // A price beyond the safe range stays as typed; the save names the price field.
-    if (error instanceof RangeError) return next;
-    throw error;
-  }
+  const price = markupPrice(next);
+  return typeof price === 'number' ? { ...next, price: centsToEuroInput(price) } : next;
 }
 
 /**
  * Why a typed markup sets no price, while the office types: it does not read,
- * or there is no cost to put it on. Null when it applies or is empty. A
- * markup is never saved, so it never stops a save.
+ * there is no cost to put it on, or the price would exceed a price's limit.
+ * Null when it applies or is empty. A markup is never saved, so it never
+ * stops a save.
  */
 export function markupSentence(position: PositionForm): string | null {
   if (!position.markup.trim()) return null;
   if (parseMarkupTenths(position.markup) === null) {
     return 'Gib den Aufschlag in Prozent von 0 bis 999,9 an, zum Beispiel 25 oder 12,5.';
   }
-  return costCentsOf(position.cost) === null ? 'Trag zuerst die Kosten ein.' : null;
+  if (costCentsOf(position.cost) === null) return 'Trag zuerst die Kosten ein.';
+  return markupPrice(position) === 'too_high'
+    ? 'Der Preis läge über 1.000.000 € je Preismenge. Der Preis bleibt, wie er ist.'
+    : null;
 }
 
 /** The position in another unit: a cost and a markup stated in the old unit no longer apply. */
