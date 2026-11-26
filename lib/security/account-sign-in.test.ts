@@ -208,7 +208,7 @@ test('everyday commands, other subcommands and mentions as data pass', () => {
     'echo "vercel list" > note.md && bash -n ./check.sh',
     // A -c script takes precedence over piped input.
     'echo "vercel list" | bash -c \'wc -l\'',
-    'claude mcp add --scope user --transport http supabase "https://example.test/mcp"',
+    'claude mcp add --scope user supabase -- bun "$HOME/code/werkflow-app/scripts/mcp/supabase-dev.ts" --project-ref=devdevdevdevdevdevde',
     'brew uninstall vercel-cli',
     'which vercel',
     'ls -l /usr/local/bin/vercel /opt/homebrew/bin/vercel',

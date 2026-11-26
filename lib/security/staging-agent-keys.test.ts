@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import {
   STAGING_AGENT_KEY_FILE,
   assignedValues,
+  devAccessToken,
   devOnlyVerdict,
   installStagingAgentKeys,
   keyShapeVerdict,
@@ -193,10 +194,34 @@ test('a Supabase token passes only when it reaches DEV and is refused PROD', () 
 });
 
 test('a write passes only when Supabase refuses it', () => {
-  expect(writeRefusedVerdict(403)).toBe('ok');
-  // A write that ran, a refused sign-in, or an answer that proves nothing, fails.
-  for (const status of [200, 201, 400, 401, 404, 429, 500])
-    expect(writeRefusedVerdict(status), String(status)).toBe('failed');
+  // A read-only token's query runs in a read-only transaction; a token without Database access gets 403.
+  const readOnly =
+    '{"message":"Failed to run sql query: ERROR:  25006: cannot execute CREATE TABLE in a read-only transaction\\n"}';
+  expect(writeRefusedVerdict(400, readOnly)).toBe('ok');
+  expect(writeRefusedVerdict(403, '')).toBe('ok');
+  // A write that ran, a refused sign-in, another 400, or an answer that proves nothing, fails.
+  expect(writeRefusedVerdict(400, '{"message":"Failed to run sql query: ERROR:  42601: syntax error"}')).toBe(
+    'failed',
+  );
+  for (const status of [200, 201, 401, 404, 429, 500])
+    expect(writeRefusedVerdict(status, readOnly), String(status)).toBe('failed');
+});
+
+test('a DEV script takes the environment token first, else the agent token from the key file', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agent-keys-'));
+  try {
+    expect(devAccessToken({}, home)).toBeUndefined();
+    const path = join(home, STAGING_AGENT_KEY_FILE);
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    writeFileSync(path, fileText({ SUPABASE_DEV_ACCESS_TOKEN: 'sbp_short' }), { mode: 0o600 });
+    // A token out of its shape is never sent.
+    expect(devAccessToken({}, home)).toBeUndefined();
+    writeFileSync(path, fileText(MADE_UP), { mode: 0o600 });
+    expect(devAccessToken({}, home)).toBe(MADE_UP.SUPABASE_DEV_ACCESS_TOKEN);
+    expect(devAccessToken({ SUPABASE_ACCESS_TOKEN: 'sbp_from_ci' }, home)).toBe('sbp_from_ci');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test('a Stripe answer passes only with livemode false', () => {

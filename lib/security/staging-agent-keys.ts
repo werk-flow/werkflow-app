@@ -157,11 +157,28 @@ export function devOnlyVerdict(devStatus: number, productionStatus: number): Ver
 }
 
 /**
- * A write the token must be refused: only Supabase's permission denial (403) proves it. A refused
- * sign-in (401), a write that ran, or any other answer fails.
+ * A write the token must be refused. Supabase runs a read-only token's query in a read-only
+ * transaction, which answers 400 with SQLSTATE 25006; a token without Database access gets 403.
+ * Only those prove it. A refused sign-in (401), a write that ran, another 400 such as a syntax
+ * error, or any other answer fails.
  */
-export function writeRefusedVerdict(status: number): Verdict {
-  return status === 403 ? 'ok' : 'failed';
+export function writeRefusedVerdict(status: number, body: string): Verdict {
+  const readOnlyTransaction = status === 400 && /\b25006\b/.test(body);
+  return status === 403 || readOnlyTransaction ? 'ok' : 'failed';
+}
+
+/**
+ * The token a DEV Management API script sends: `SUPABASE_ACCESS_TOKEN` where the environment sets
+ * it (CI, an older `.env.local`), else the machine's agent token from the key file, so no
+ * workstation keeps a token in `.env.local`. Undefined when neither holds one.
+ */
+export function devAccessToken(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  home = homedir(),
+): string | undefined {
+  if (env.SUPABASE_ACCESS_TOKEN) return env.SUPABASE_ACCESS_TOKEN;
+  const keys = readStagingAgentKeys(home);
+  return keys.file === 'present' ? keys.values.get('SUPABASE_DEV_ACCESS_TOKEN') : undefined;
 }
 
 const livemodeSchema = z.object({ livemode: z.boolean() });

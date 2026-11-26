@@ -72,21 +72,20 @@ async function devOnly(token: string): Promise<Verdict> {
 }
 
 /**
- * A temporary table through the query endpoint: it needs write access, vanishes with its session if
- * it ran, and Supabase denies it (403) to a token without Database write.
+ * A temporary table through the read-write query endpoint: it needs write access and vanishes with
+ * its session if it ran. A read-only token's query fails in a read-only transaction. The body is
+ * an error message about this query; only its SQLSTATE is read, and nothing is printed.
  */
 async function writeRefused(token: string): Promise<Verdict> {
   if (!refs) return 'failed';
-  return probe(async () =>
-    statusVerdict(
-      await request(`${MANAGEMENT_API}/projects/${refs.dev}/database/query`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'create temporary table agent_access_write_probe (id int)' }),
-      }),
-      writeRefusedVerdict,
-    ),
-  );
+  return probe(async () => {
+    const response = await request(`${MANAGEMENT_API}/projects/${refs.dev}/database/query`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'create temporary table agent_access_write_probe (id int)' }),
+    });
+    return writeRefusedVerdict(response.status, await response.text());
+  });
 }
 
 /** One row of DEV's Auth users; the body holds personal data, so only the status counts. */
