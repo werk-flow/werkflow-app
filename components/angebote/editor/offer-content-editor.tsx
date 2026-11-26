@@ -49,6 +49,8 @@ type Draft = {
   sections: SectionForm[];
   /** The content version the text was filled from; the save names it. */
   baseVersion: number;
+  /** The version this tab's last save stored: its render is no other session's change. */
+  savedVersion: number;
   /** Typed since the last load, or not yet saved. */
   edited: boolean;
   /** One per change: only a repeat of the same press answers with the first save. */
@@ -59,6 +61,7 @@ function contentDraftOf(offer: OfferDetail): Draft {
   return {
     sections: contentFormOf(offer.sections),
     baseVersion: offer.contentVersion,
+    savedVersion: offer.contentVersion,
     edited: false,
     attemptKey: crypto.randomUUID(),
   };
@@ -75,6 +78,9 @@ function useContentDraft(offer: OfferDetail, saving: boolean) {
   const [draft, setDraft] = useState(() => contentDraftOf(offer));
   const newer = offer.contentVersion > draft.baseVersion;
   if (newer && !draft.edited) setDraft(contentDraftOf(offer));
+  // Text changed after the own save started, such as an article whose price arrived, stays on its version.
+  else if (newer && offer.contentVersion === draft.savedVersion)
+    setDraft({ ...draft, baseVersion: draft.savedVersion });
   return {
     draft,
     newerElsewhere: newer && draft.edited && !saving,
@@ -86,17 +92,13 @@ function useContentDraft(offer: OfferDetail, saving: boolean) {
         edited: true,
         attemptKey: crypto.randomUUID(),
       })),
-    /**
-     * The save under `attemptKey` was stored as `contentVersion`. Text changed
-     * since, such as an article whose price arrived meanwhile, stays edited
-     * on the saved version, so it is neither lost nor taken for another session's.
-     */
+    /** The save under `attemptKey` was stored as `contentVersion`; text changed since stays edited. */
     saved: (attemptKey: string, contentVersion: number) =>
-      setDraft((current) =>
-        current.attemptKey === attemptKey
-          ? { ...current, edited: false, attemptKey: crypto.randomUUID() }
-          : { ...current, baseVersion: contentVersion },
-      ),
+      setDraft((current) => ({
+        ...current,
+        savedVersion: contentVersion,
+        ...(current.attemptKey === attemptKey ? { edited: false, attemptKey: crypto.randomUUID() } : {}),
+      })),
     reload: () => setDraft(contentDraftOf(offer)),
   };
 }

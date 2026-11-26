@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -25,34 +26,43 @@ const ARTICLE_FAILURE_MESSAGES: Record<string, string> = {
  * „Artikel hinzufügen“ under a Titel: the picked article becomes a new
  * Position with today's net sale price, unit and VAT rate, read on the
  * server by the rule of an invoice line. The office can change every value
- * before it saves.
+ * before it saves. A read that failed for no reason of the article offers
+ * „Erneut versuchen“ with the same article.
  */
 export function OfferArticlePicker({
   id,
   label,
+  onPick,
   onAdd,
   disabled,
 }: {
   id: string;
   /** The accessible name, naming the Titel, because every Titel has one. */
   label: string;
+  /** The pick is an own change at once, so another session's content cannot move its Titel meanwhile. */
+  onPick: () => void;
   onAdd: (line: OfferArticleLine) => void;
   disabled: boolean;
 }) {
   const [picked, setPicked] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [retryId, setRetryId] = useState<string | null>(null);
   const { run, isPending } = usePendingTask();
   const search = useJobEntityOptions({ kind: 'inventory-items' }, picked ? [picked] : []);
 
   const add = (articleId: string) => {
     if (!articleId) return;
     setPicked(articleId);
+    onPick();
     void run(async () => {
       setError(null);
+      setRetryId(null);
       const result = await readOfferArticleLine({ articleId }).catch(() => null);
       setPicked('');
       if (!result?.success) {
         setError(result ? describeFailure(result.error, ARTICLE_FAILURE_MESSAGES, ADD_FAILED) : ADD_FAILED);
+        // A reason of the article stays; any other failure may pass on a second try.
+        if (!result || !Object.hasOwn(ARTICLE_FAILURE_MESSAGES, result.error)) setRetryId(articleId);
         return;
       }
       onAdd(result.line);
@@ -80,6 +90,11 @@ export function OfferArticlePicker({
         <InlinePending active={isPending} label="Preis wird übernommen" />
       </div>
       <ErrorText>{error}</ErrorText>
+      {retryId && (
+        <Button type="button" variant="outline" size="sm" onClick={() => add(retryId)} disabled={disabled}>
+          Erneut versuchen
+        </Button>
+      )}
     </div>
   );
 }

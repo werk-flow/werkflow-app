@@ -161,6 +161,7 @@ export function OfferSectionFields({
         number={number}
         netCents={amounts?.netCents ?? null}
         onAdd={(kind) => setPositions([...section.positions, emptyPosition(newKey(), kind)])}
+        onPickArticle={() => onChange(section)}
         onAddArticle={onAddArticle}
         disabled={disabled}
       />
@@ -218,6 +219,7 @@ function SectionFooter({
   number,
   netCents,
   onAdd,
+  onPickArticle,
   onAddArticle,
   disabled,
 }: {
@@ -225,6 +227,7 @@ function SectionFooter({
   number: string;
   netCents: number | null;
   onAdd: (kind: OfferPosition['kind']) => void;
+  onPickArticle: () => void;
   onAddArticle: (position: PositionForm) => void;
   disabled: boolean;
 }) {
@@ -242,6 +245,7 @@ function SectionFooter({
         <OfferArticlePicker
           id={`offer-section-${sectionIndex}-article`}
           label={`Artikel zu Titel ${number} hinzufügen`}
+          onPick={onPickArticle}
           // The answer arrives after other edits may have changed the Titel: the editor appends it to the current one.
           onAdd={(line) => onAddArticle(articlePositionForm(`article-${crypto.randomUUID()}`, line))}
           disabled={disabled}

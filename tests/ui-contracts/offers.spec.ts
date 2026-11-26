@@ -261,43 +261,95 @@ test('a Position from an article with an unknown unit asks for a unit before it 
   });
 });
 
-// An article's price can arrive while a save of the earlier content runs: the
-// save confirms, and the added Position stays to save on the saved version.
-test('a Position whose article arrives during a save stays after the save', async ({ page }) => {
+// An article's price can arrive while a save of the earlier content runs,
+// before or after its answer: the save confirms, no other session's change is
+// claimed, and the added Position stays to save on the saved version.
+for (const order of ['article first', 'answer first'] as const) {
+  test(`a Position whose article arrives during a save stays after the save (${order})`, async ({ page }) => {
+    await openContractFixture(page, 'offers');
+    const editor = page.getByRole('form', { name: 'Titel und Positionen' });
+    const save = editor.getByRole('button', { name: 'Speichern', exact: true });
+    await editor.getByRole('button', { name: 'Titel hinzufügen', exact: true }).click();
+    await editor.getByRole('textbox', { name: 'Titel 1' }).fill('Material');
+
+    await page.evaluate(() => {
+      window.uiContractHoldArticleRead = true;
+    });
+    await editor.getByRole('combobox', { name: 'Artikel zu Titel 1 hinzufügen' }).click();
+    await expect.poll(() => page.evaluate(() => window.optionContract.requests.length)).toBe(1);
+    await page.evaluate(() =>
+      window.optionContract.resolve(0, [{ value: 'contract-article', label: 'KB-15 · Kupferbogen 15 mm' }]),
+    );
+    await page.getByRole('option', { name: 'KB-15 · Kupferbogen 15 mm' }).click();
+    await expect.poll(() => page.evaluate(() => window.uiContractArticleRead !== null)).toBe(true);
+
+    await save.click();
+    await expectHeldWrite(page, 'save-offer-content');
+    const name = editor.getByRole('textbox', { name: 'Bezeichnung' });
+    if (order === 'article first') {
+      await page.evaluate(() => window.uiContractArticleRead?.());
+      await expect(name).toHaveValue('Kupferbogen 15 mm');
+      await answerHeldWrite(page, null);
+    } else {
+      await answerHeldWrite(page, null);
+      await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer)).toBeNull();
+      await page.evaluate(() => window.uiContractArticleRead?.());
+      await expect(name).toHaveValue('Kupferbogen 15 mm');
+    }
+    await page.evaluate(() =>
+      window.uiContractOfferContentRender?.(2, [{ title: 'Material', positions: [] }]),
+    );
+    await expect(visibleText(page, 'Positionen gespeichert.', true)).toBeVisible();
+    await expect(name).toHaveValue('Kupferbogen 15 mm');
+    await expect(editor.getByText(/inzwischen geändert/)).toHaveCount(0);
+
+    await editor.getByRole('combobox', { name: 'Einheit' }).click();
+    await page.getByRole('option', { name: 'Stück', exact: true }).click();
+    await save.click();
+    await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
+    expect(await page.evaluate(() => window.uiContractWrites.calls[1]?.input)).toMatchObject({
+      expectedContentVersion: 2,
+      sections: [{ title: 'Material', positions: [{ source: { kind: 'article', id: 'contract-article' } }] }],
+    });
+  });
+}
+
+// Another session reorders the Titel while an article's price is read: the
+// pick counts as an own change, so the editor offers „Neu laden“ instead of
+// taking the new order, and the article lands under the Titel it was picked for.
+test('an article lands under its Titel when another session reorders them during the read', async ({
+  page,
+}) => {
   await openContractFixture(page, 'offers');
   const editor = page.getByRole('form', { name: 'Titel und Positionen' });
-  const save = editor.getByRole('button', { name: 'Speichern', exact: true });
-  await editor.getByRole('button', { name: 'Titel hinzufügen', exact: true }).click();
-  await editor.getByRole('textbox', { name: 'Titel 1' }).fill('Material');
+  await page.evaluate(() =>
+    window.uiContractOfferContentRender?.(2, [
+      { title: 'Heizung', positions: [] },
+      { title: 'Material', positions: [] },
+    ]),
+  );
+  await expect(editor.getByRole('textbox', { name: 'Titel 2' })).toHaveValue('Material');
 
   await page.evaluate(() => {
     window.uiContractHoldArticleRead = true;
   });
-  await editor.getByRole('combobox', { name: 'Artikel zu Titel 1 hinzufügen' }).click();
+  await editor.getByRole('combobox', { name: 'Artikel zu Titel 2 hinzufügen' }).click();
   await expect.poll(() => page.evaluate(() => window.optionContract.requests.length)).toBe(1);
   await page.evaluate(() =>
     window.optionContract.resolve(0, [{ value: 'contract-article', label: 'KB-15 · Kupferbogen 15 mm' }]),
   );
   await page.getByRole('option', { name: 'KB-15 · Kupferbogen 15 mm' }).click();
   await expect.poll(() => page.evaluate(() => window.uiContractArticleRead !== null)).toBe(true);
-
-  await save.click();
-  await expectHeldWrite(page, 'save-offer-content');
+  await page.evaluate(() =>
+    window.uiContractOfferContentRender?.(3, [
+      { title: 'Material', positions: [] },
+      { title: 'Heizung', positions: [] },
+    ]),
+  );
   await page.evaluate(() => window.uiContractArticleRead?.());
-  const name = editor.getByRole('textbox', { name: 'Bezeichnung' });
-  await expect(name).toHaveValue('Kupferbogen 15 mm');
-  await answerHeldWrite(page, null);
-  await page.evaluate(() => window.uiContractOfferContentRender?.(2, [{ title: 'Material', positions: [] }]));
-  await expect(visibleText(page, 'Positionen gespeichert.', true)).toBeVisible();
-  await expect(name).toHaveValue('Kupferbogen 15 mm');
-  await expect(editor.getByText(/inzwischen geändert/)).toHaveCount(0);
 
-  await editor.getByRole('combobox', { name: 'Einheit' }).click();
-  await page.getByRole('option', { name: 'Stück', exact: true }).click();
-  await save.click();
-  await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
-  expect(await page.evaluate(() => window.uiContractWrites.calls[1]?.input)).toMatchObject({
-    expectedContentVersion: 2,
-    sections: [{ title: 'Material', positions: [{ source: { kind: 'article', id: 'contract-article' } }] }],
-  });
+  await expect(editor.getByRole('textbox', { name: 'Bezeichnung' })).toHaveValue('Kupferbogen 15 mm');
+  await expect(editor.getByRole('textbox', { name: 'Titel 2' })).toHaveValue('Material');
+  await expect(editor.getByRole('listitem').filter({ hasText: 'Position 2.1' })).toHaveCount(0);
+  await expect(editor.getByText(/inzwischen geändert/)).toBeVisible();
 });
