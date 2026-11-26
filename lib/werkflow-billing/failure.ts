@@ -1,5 +1,7 @@
 import type Stripe from 'stripe';
 
+import { logError } from '@/lib/logging';
+
 // The one failure of WerkFlow's own billing code. Its stable `code` is what
 // receive.ts keeps with the signal, the alarm names and lib/logging.ts may
 // log; the message is fixed text, never personal data or a provider body. A
@@ -7,6 +9,12 @@ import type Stripe from 'stripe';
 
 export function billingFailure(code: string): Error {
   return Object.assign(new Error('A WerkFlow billing step failed.'), { code });
+}
+
+/** A failed read of `werkflow_invoices`: logged under `scope`, thrown as `werkflow_invoice_record_failed`. */
+export function werkflowInvoiceReadFailed(scope: string, error: unknown): never {
+  logError(`${scope}: werkflow_invoices read failed`, error);
+  throw billingFailure('werkflow_invoice_record_failed');
 }
 
 /** The stable code of a thrown billing failure, or null for any other error. */

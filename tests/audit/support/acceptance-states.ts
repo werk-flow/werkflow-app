@@ -186,7 +186,7 @@ async function reachState(
     const { layer } = await openLayerAt(context, view.opener, width, {
       fresh: true,
       beforeOpen: interception.arm,
-      settleLayer: plan.shows === 'failed-region',
+      settleLayer: plan.shows !== 'skeleton',
     });
     return { scope: layer, interception };
   }
@@ -227,8 +227,8 @@ async function expectState(
   await expect(page, 'a capture of a sign-in or onboarding screen is missing evidence').not.toHaveURL(
     /\/(login|signup|onboarding)(\/|$)/,
   );
-  const failed = scope.locator(FAILED_REGION_SELECTOR);
   if (plan.shows === 'skeleton') {
+    const failed = scope.locator(FAILED_REGION_SELECTOR);
     await expect(
       scope.locator(SKELETON_SELECTOR).first(),
       'the held request shows its skeleton',
@@ -239,12 +239,20 @@ async function expectState(
         0,
       );
   } else {
+    // A dialog over a failed page shows the page's failure behind it, which
+    // the open modal hides from the accessibility tree.
+    const behind = plan.shows === 'failed-region-behind';
+    const failed = (behind ? page.locator('[data-page-body]').filter({ visible: true }) : scope)
+      .locator(FAILED_REGION_SELECTOR)
+      .first();
     await expect(
-      failed.first(),
-      'a failed client read shows its failure; a region the server renders cannot fail from the browser',
+      failed,
+      behind
+        ? 'the page behind the dialog shows its failure'
+        : 'a failed client read shows its failure; a region the server renders cannot fail from the browser',
     ).toBeVisible();
     await expect(
-      failed.first().getByRole('button', { name: SHARED_COPY.action.retry, exact: true }),
+      failed.getByRole('button', { name: SHARED_COPY.action.retry, exact: true, includeHidden: behind }),
     ).toBeVisible();
     await settled(scope);
   }

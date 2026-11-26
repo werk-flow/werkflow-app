@@ -47,6 +47,8 @@ export function contentFormOf(sections: readonly OfferSection[]): SectionForm[] 
         price: centsToEuroInput(position.unitPriceCents),
         priceQuantity: position.priceQuantity,
         taxRateBasisPoints: position.taxRateBasisPoints,
+        // Positionen from the catalog come with K4c and K6.
+        source: null,
       };
     }),
   }));

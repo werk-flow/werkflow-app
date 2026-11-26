@@ -99,6 +99,8 @@ export const REALTIME_TABLES = [
   'inventory_movements',
   'inventory_asset_instances',
   'problem_report_signals',
+  // The billing page's signal: a change of WerkFlow's subscription or invoices reaches the Admin's open page.
+  'werkflow_billing_page_signals',
 ] as const;
 
 export type RealtimeTable = (typeof REALTIME_TABLES)[number];

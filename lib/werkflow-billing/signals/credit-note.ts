@@ -2,8 +2,9 @@ import 'server-only';
 
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { billingFailure } from '@/lib/werkflow-billing/failure';
+import { billingFailure, werkflowInvoiceReadFailed } from '@/lib/werkflow-billing/failure';
 import { issueWerkflowStorno, type StornoDependencies } from '@/lib/werkflow-billing/issue-storno';
+import { sendRefundMail } from '@/lib/werkflow-billing/refund-mail';
 import type { SignalFamily } from '@/lib/werkflow-billing/signals/family';
 import { alarmedIssue, liveIssueDependencies } from '@/lib/werkflow-billing/signals/issue-original';
 import type { StripeGateway } from '@/lib/werkflow-billing/stripe';
@@ -14,7 +15,10 @@ import { z } from '@/lib/zod';
 // (werk-flow/werkflow-planning#491, issue-storno.ts). Contract (family.ts):
 // the handler re-reads the credit note and its invoice from Stripe by id, is
 // idempotent through `werkflow_invoices`, and throws a stable code on failure
-// so Stripe delivers again; a check failure also raises the alarm once.
+// so Stripe delivers again; a check failure also raises the alarm once. Once
+// the credit note's Storno stands, issued now or before, the customer gets its
+// refund mail (refund-mail.ts), at most once, so a delivery after a refused
+// send sends it then.
 
 const creditNoteEventSchema = z.object({
   id: z.string(),
@@ -33,11 +37,6 @@ const documentSchema = z.object({
   stripe_credit_note_id: z.string().nullable(),
 });
 
-function readFailed(error: unknown): never {
-  logError('creditNoteSignals: werkflow_invoices read failed', error);
-  throw billingFailure('werkflow_invoice_record_failed');
-}
-
 function liveStornoDependencies(stripe: StripeGateway): StornoDependencies {
   const admin = createSupabaseAdminClient();
   const { readInvoice, seller, storeOriginal } = liveIssueDependencies(stripe);
@@ -54,7 +53,7 @@ function liveStornoDependencies(stripe: StripeGateway): StornoDependencies {
         .eq('stripe_credit_note_id', creditNoteId)
         .eq('type_code', '384')
         .maybeSingle();
-      if (error) readFailed(error);
+      if (error) werkflowInvoiceReadFailed('creditNoteSignals', error);
       return data !== null;
     },
     documents: async (stripeInvoiceId) => {
@@ -64,7 +63,7 @@ function liveStornoDependencies(stripe: StripeGateway): StornoDependencies {
         .select('id, number, issue_date, type_code, gross_cents, stripe_credit_note_id')
         .eq('stripe_invoice_id', stripeInvoiceId)
         .limit(DOCUMENTS_CAP + 1);
-      if (error) readFailed(error);
+      if (error) werkflowInvoiceReadFailed('creditNoteSignals', error);
       const rows = z.array(documentSchema).safeParse(data);
       if (!rows.success) throw billingFailure('werkflow_invoice_record_failed');
       if (rows.data.length > DOCUMENTS_CAP) throw billingFailure('werkflow_storno_documents_overflow');
@@ -106,9 +105,11 @@ export const creditNoteSignals: SignalFamily = {
   handle: async (event, stripe) => {
     const parsed = creditNoteEventSchema.safeParse(event);
     if (!parsed.success) throw billingFailure('werkflow_invoice_unreadable');
+    const stripeCreditNoteId = parsed.data.data.object.id;
     await issueWerkflowStorno(
-      { stripeCreditNoteId: parsed.data.data.object.id, stripeEventId: parsed.data.id },
+      { stripeCreditNoteId, stripeEventId: parsed.data.id },
       liveStornoDependencies(stripe),
     );
+    await sendRefundMail(stripeCreditNoteId, stripe);
   },
 };

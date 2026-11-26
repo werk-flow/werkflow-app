@@ -4,6 +4,7 @@ A-2026-0101
 Gastherme warten und Abgasmessung
 Nicht begonnen
 Mittel
+Rechnung erstellen
 Arbeitsstand
 Nächster Schritt:
 Mitarbeiter zuweisen und einplanen
