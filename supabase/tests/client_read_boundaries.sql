@@ -400,7 +400,7 @@ from suspended_employee;
 -- session reads only its signal columns.
 insert into public.document_deliveries (
   id, organization_id, subject_kind, invoice_id, document_id, attachment_content_hash, channel, note, state,
-  attempt_key, sent_at
+  attempt_key, dispatched_at
 ) values
 ('cb000000-0000-4000-8000-000000000143', 'cb000000-0000-4000-8000-000000000010', 'invoice',
  'cb000000-0000-4000-8000-000000000144', 'cb000000-0000-4000-8000-000000000145', repeat('a', 64), 'manual',

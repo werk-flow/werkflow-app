@@ -138,7 +138,7 @@ async function emailed(
         p_email_subject: `Rechnung ${invoice.number} – Haustechnik Sonnenberg GmbH`,
         p_message_text: `Guten Tag,\n\nanbei die Rechnung ${invoice.number}.`,
         p_sender_name: 'Haustechnik Sonnenberg GmbH',
-        p_from_header: null,
+        p_from_header: '"Haustechnik Sonnenberg GmbH" <noreply@werkflow.test>',
         p_reply_to: null,
       }),
     )
@@ -147,7 +147,6 @@ async function emailed(
     .rpc(
       'settle_document_delivery',
       rpcArgs('settle_document_delivery', {
-        p_actor_id: world.users.buero.id,
         p_organization_id: world.orgId,
         p_delivery_id: field(data, 'deliveryId'),
         p_attempt: 1,

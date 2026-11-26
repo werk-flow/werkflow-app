@@ -59,7 +59,7 @@ const payloadSchema = z.object({
   subject: z.string(),
   text: z.string(),
   senderName: z.string(),
-  fromHeader: z.string().nullable(),
+  fromHeader: z.string(),
   replyTo: z.string().nullable(),
   storagePath: z.string(),
   fileName: z.string(),
@@ -127,7 +127,7 @@ async function transmit(caller: DeliveryCaller, payload: DeliveryPayload): Promi
           html: deliveryHtml(payload.text),
           text: payload.text,
           idempotencyKey: `document-delivery/${payload.deliveryId}`,
-          ...(payload.fromHeader ? { from: payload.fromHeader } : {}),
+          from: payload.fromHeader,
           ...(payload.replyTo ? { replyTo: payload.replyTo } : {}),
           attachments: [
             { filename: payload.fileName, content: attachment, contentType: payload.contentType },
@@ -138,7 +138,6 @@ async function transmit(caller: DeliveryCaller, payload: DeliveryPayload): Promi
       ? { p_outcome: 'sent', p_provider_message_id: result.messageId }
       : { p_outcome: 'failed', p_failure_code: result.code };
   const { data: settled, error } = await createSupabaseAdminClient().rpc('settle_document_delivery', {
-    p_actor_id: caller.userId,
     p_organization_id: caller.orgId,
     p_delivery_id: payload.deliveryId,
     p_attempt: payload.attempt,
@@ -231,6 +230,11 @@ export async function sendDocument(
   if (limited) return (await recordedOutcome(caller, request)) ?? limited;
   const sender = await readDeliverySender(caller);
   if (!sender) return { success: false, error: 'load_failed' };
+  const fromHeader = senderHeader(sender.name, process.env);
+  if (!fromHeader) {
+    logError('sendDocument: no sending address', 'email_not_configured');
+    return SEND_UNAVAILABLE;
+  }
   const answer = await createSupabaseAdminClient().rpc(
     'request_document_delivery',
     rpcArgs('request_document_delivery', {
@@ -244,7 +248,7 @@ export async function sendDocument(
       p_email_subject: request.emailSubject,
       p_message_text: request.text,
       p_sender_name: sender.name,
-      p_from_header: senderHeader(sender.name, process.env) ?? null,
+      p_from_header: fromHeader,
       p_reply_to: sender.replyTo,
     }),
   );

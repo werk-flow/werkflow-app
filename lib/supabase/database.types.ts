@@ -1572,6 +1572,7 @@ export type Database = {
           channel: string;
           created_at: string;
           created_by: string | null;
+          dispatched_at: string | null;
           document_id: string;
           email_subject: string | null;
           failure_code: string | null;
@@ -1586,7 +1587,6 @@ export type Database = {
           recipient_email: string | null;
           reply_to: string | null;
           sender_name: string | null;
-          sent_at: string | null;
           state: string;
           subject_kind: string;
           updated_at: string;
@@ -1598,6 +1598,7 @@ export type Database = {
           channel: string;
           created_at?: string;
           created_by?: string | null;
+          dispatched_at?: string | null;
           document_id: string;
           email_subject?: string | null;
           failure_code?: string | null;
@@ -1612,7 +1613,6 @@ export type Database = {
           recipient_email?: string | null;
           reply_to?: string | null;
           sender_name?: string | null;
-          sent_at?: string | null;
           state: string;
           subject_kind: string;
           updated_at?: string;
@@ -1624,6 +1624,7 @@ export type Database = {
           channel?: string;
           created_at?: string;
           created_by?: string | null;
+          dispatched_at?: string | null;
           document_id?: string;
           email_subject?: string | null;
           failure_code?: string | null;
@@ -1638,7 +1639,6 @@ export type Database = {
           recipient_email?: string | null;
           reply_to?: string | null;
           sender_name?: string | null;
-          sent_at?: string | null;
           state?: string;
           subject_kind?: string;
           updated_at?: string;
@@ -22771,7 +22771,6 @@ export type Database = {
       };
       settle_document_delivery: {
         Args: {
-          p_actor_id: string;
           p_attempt: number;
           p_delivery_id: string;
           p_failure_code?: string;

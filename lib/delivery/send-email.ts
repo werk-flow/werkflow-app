@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { memoryOutbox } from '@/lib/delivery/memory-outbox';
+import { configuredSender } from '@/lib/delivery/sender-address';
 import { logError } from '@/lib/logging';
 import { z } from '@/lib/zod';
 
@@ -41,7 +42,6 @@ type EmailEnvironment = Readonly<Record<string, string | undefined>>;
 
 const RESEND_URL = 'https://api.resend.com/emails';
 const RESEND_TIMEOUT_MS = 10_000;
-const LOCAL_SENDER = 'WerkFlow <noreply@werkflow.test>';
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_.:/-]{1,256}$/;
 
 // Only the id leaves Resend's answer; its error body is read for its `name`,
@@ -144,7 +144,7 @@ export async function sendEmail(
     return { status: 'permanent', code: 'email_idempotency_key_invalid' };
   }
   const hosted = Boolean(environment.VERCEL_ENV);
-  const from = message.from || environment.FROM_EMAIL?.trim() || (hosted ? '' : LOCAL_SENDER);
+  const from = message.from || configuredSender(environment);
   const apiKey = environment.RESEND_API_KEY?.trim();
   if (hosted && (!apiKey || !from)) {
     // Missing configuration is ours to fix; the caller keeps the message and retries.

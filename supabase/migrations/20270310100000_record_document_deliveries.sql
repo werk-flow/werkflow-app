@@ -51,8 +51,8 @@ create table public.document_deliveries (
   email_subject text,
   message_text text,
   sender_name text,
-  -- The From header the first attempt sent, so every retry sends the same
-  -- payload under its key; null leaves the sender to the transport.
+  -- The From header of every attempt, set when the email is requested, so a
+  -- retry sends the same payload under its key; an email always has one.
   from_header text,
   reply_to text,
   -- How a manual delivery went out, in the office's words.
@@ -69,7 +69,8 @@ create table public.document_deliveries (
   created_by uuid references auth.users (id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  sent_at timestamptz,
+  -- When the provider accepted the mail, or the office recorded a manual send: server time.
+  dispatched_at timestamptz,
   constraint document_deliveries_id_organization_key unique (id, organization_id),
   constraint document_deliveries_attempt_unique unique (organization_id, attempt_key),
   constraint document_deliveries_subject_check check (subject_kind = 'invoice' and invoice_id is not null),
@@ -82,14 +83,14 @@ create table public.document_deliveries (
       and char_length(message_text) <= 5000
       and btrim(sender_name) <> '' and char_length(sender_name) <= 200
       and (reply_to is null or reply_to ~ '^[^@\s<>,;"]{1,64}@[^@\s<>,;"]{1,255}$')
-      and (from_header is null or (char_length(from_header) <= 520 and from_header !~ '[[:cntrl:]]'))
+      and from_header is not null and char_length(from_header) <= 520 and from_header !~ '[[:cntrl:]]'
       and note = '')
     or (channel = 'manual'
       and num_nulls(recipient_email, email_subject, message_text, sender_name, from_header, reply_to) = 6
       and state = 'sent' and char_length(note) <= 500)
   ),
   constraint document_deliveries_state_check check (state in ('sending', 'sent', 'failed')),
-  constraint document_deliveries_sent_check check ((state = 'sent') = (sent_at is not null)),
+  constraint document_deliveries_sent_check check ((state = 'sent') = (dispatched_at is not null)),
   constraint document_deliveries_failed_check check (
     (state = 'failed') = (failure_code is not null) and failure_code ~ '^[a-z0-9_]{1,64}$'
   ),
@@ -355,6 +356,9 @@ as $$
 declare
   v_delivery public.document_deliveries;
   v_document public.documents;
+  -- The claim's time, read once the locks are held: a wait for them neither
+  -- admits a retry past its window nor backdates the attempt it starts.
+  v_claimed_at timestamptz;
 begin
   if p_actor_id is null or p_organization_id is null or p_delivery_id is null or p_expected_attempt is null then
     raise exception 'invalid_input';
@@ -365,13 +369,14 @@ begin
   for update;
   if not found then raise exception 'delivery_not_found'; end if;
   if v_delivery.channel <> 'email' then raise exception 'delivery_not_retryable'; end if;
-  if v_delivery.created_at <= now() - interval '23 hours' and v_delivery.state <> 'sent' then
-    raise exception 'delivery_retry_expired';
-  end if;
   v_document := app_private.lock_delivery_document(
     p_organization_id, v_delivery.subject_kind, v_delivery.invoice_id, v_delivery.document_id);
+  v_claimed_at := clock_timestamp();
+  if v_delivery.created_at <= v_claimed_at - interval '23 hours' and v_delivery.state <> 'sent' then
+    raise exception 'delivery_retry_expired';
+  end if;
   if v_delivery.state = 'sent' or v_delivery.attempts <> p_expected_attempt
-    or (v_delivery.state = 'sending' and v_delivery.updated_at > now() - interval '10 minutes')
+    or (v_delivery.state = 'sending' and v_delivery.updated_at > v_claimed_at - interval '10 minutes')
   then
     return app_private.delivery_payload(v_delivery, v_document, false);
   end if;
@@ -379,10 +384,10 @@ begin
   update public.document_deliveries delivery
   set state = 'sending', attempts = delivery.attempts + 1, failure_code = null,
       outcome_unknown_at = case
-        when v_delivery.state = 'sending' then coalesce(delivery.outcome_unknown_at, now())
+        when v_delivery.state = 'sending' then coalesce(delivery.outcome_unknown_at, v_claimed_at)
         else delivery.outcome_unknown_at
       end,
-      updated_at = now()
+      updated_at = v_claimed_at
   where delivery.id = v_delivery.id and delivery.organization_id = p_organization_id
     and delivery.attempts = v_delivery.attempts
   returning * into v_delivery;
@@ -399,8 +404,9 @@ grant execute on function public.retry_document_delivery(uuid, uuid, uuid, integ
 -- never changes, and a late answer of an older attempt answers false. A
 -- failure without the provider's answer (lib/delivery/send-email.ts:
 -- unreachable, or an answer without a message id) marks the outcome unknown.
+-- The history names the person who requested or retried that attempt, also
+-- when they have left the office since: the answer belongs to their attempt.
 create function public.settle_document_delivery(
-  p_actor_id uuid,
   p_organization_id uuid,
   p_delivery_id uuid,
   p_attempt integer,
@@ -415,6 +421,7 @@ set search_path to ''
 as $$
 declare
   v_delivery public.document_deliveries;
+  v_actor_id uuid;
 begin
   if p_organization_id is null or p_delivery_id is null or p_attempt is null
     or p_outcome is null or p_outcome not in ('sent', 'failed')
@@ -432,25 +439,30 @@ begin
           then coalesce(delivery.outcome_unknown_at, now())
         else delivery.outcome_unknown_at
       end,
-      sent_at = case when p_outcome = 'sent' then now() end,
+      dispatched_at = case when p_outcome = 'sent' then now() end,
       updated_at = now()
   where delivery.id = p_delivery_id and delivery.organization_id = p_organization_id
     and delivery.channel = 'email' and delivery.state = 'sending' and delivery.attempts = p_attempt
   returning * into v_delivery;
   if not found then return false; end if;
+  select event.actor_id into v_actor_id from public.document_delivery_events event
+  where event.organization_id = p_organization_id and event.delivery_id = v_delivery.id
+    and event.attempt = p_attempt and event.event_type in ('requested', 'retried')
+  order by event.created_at desc, event.id desc
+  limit 1;
   insert into public.document_delivery_events (
     organization_id, delivery_id, event_type, state, attempt, failure_code, actor_id
   ) values (
-    p_organization_id, v_delivery.id, p_outcome, p_outcome, p_attempt, p_failure_code, p_actor_id
+    p_organization_id, v_delivery.id, p_outcome, p_outcome, p_attempt, p_failure_code, v_actor_id
   );
   return true;
 exception
   when check_violation then raise exception 'invalid_input';
 end;
 $$;
-revoke all on function public.settle_document_delivery(uuid, uuid, uuid, integer, text, text, text)
+revoke all on function public.settle_document_delivery(uuid, uuid, integer, text, text, text)
   from public, anon, authenticated;
-grant execute on function public.settle_document_delivery(uuid, uuid, uuid, integer, text, text, text)
+grant execute on function public.settle_document_delivery(uuid, uuid, integer, text, text, text)
   to service_role;
 
 -- Records a delivery the office made by post or by hand: sent, manual, with
@@ -497,7 +509,7 @@ begin
   v_document := app_private.lock_delivery_document(p_organization_id, p_subject_kind, p_subject_id, p_document_id);
   insert into public.document_deliveries (
     organization_id, subject_kind, invoice_id, document_id, attachment_content_hash, channel, note, state,
-    attempt_key, created_by, sent_at
+    attempt_key, created_by, dispatched_at
   ) values (
     p_organization_id, p_subject_kind, p_subject_id, p_document_id, v_document.metadata ->> 'contentHash',
     'manual', p_note, 'sent', p_attempt_key, p_actor_id, now()
@@ -551,7 +563,7 @@ as $$
           'failureCode', delivery.failure_code,
           'outcomeUnknown', delivery.outcome_unknown_at is not null,
           'createdAt', delivery.created_at,
-          'sentAt', delivery.sent_at,
+          'sentAt', delivery.dispatched_at,
           'createdBy', nullif(btrim(concat_ws(' ', profile.first_name, profile.last_name)), ''),
           'retryFrom', case
             when delivery.channel = 'email' and delivery.state = 'failed' then delivery.updated_at

@@ -1,3 +1,4 @@
+import { configuredSender } from '@/lib/delivery/sender-address';
 import { escapeHtml } from '@/lib/format/html';
 
 // The parts of a document mail the delivery builds from stored values: the
@@ -17,15 +18,15 @@ const ADDRESS_IN_SENDER = /<([^<>\s]+@[^<>\s]+)>\s*$/;
 const BARE_ADDRESS = /^[^<>\s]+@[^<>\s]+$/;
 
 /**
- * The company name over WerkFlow's sending address (`FROM_EMAIL`), quoted
- * for the header; none without a sending address, so the transport answers
- * what it lacks.
+ * The company name over WerkFlow's sending address (`configuredSender`),
+ * quoted for the header; none without a sending address,
+ * so no delivery is recorded that a retry could send from another one.
  */
 export function senderHeader(
   companyName: string,
   environment: Readonly<Record<string, string | undefined>>,
 ): string | undefined {
-  const configured = environment.FROM_EMAIL?.trim() ?? '';
+  const configured = configuredSender(environment);
   const address =
     ADDRESS_IN_SENDER.exec(configured)?.[1] ?? (BARE_ADDRESS.test(configured) ? configured : '');
   if (!address) return undefined;

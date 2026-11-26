@@ -7,7 +7,9 @@
 -- nothing again; a failed attempt is retried once, a sent one never; manual
 -- sending is recorded once; an attempt without the provider's answer marks
 -- the delivery for good, past a later failure of another kind; the history
--- and that mark refuse changes.
+-- and that mark refuse changes; an email without its From header is refused;
+-- a retry reads its window and stamps its attempt at the claim, not at the
+-- start of its transaction; a settlement names the attempt's own sender.
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
 
@@ -82,7 +84,7 @@ begin
         'public.request_document_delivery(uuid,uuid,uuid,text,uuid,uuid,text,text,text,text,text,text)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.retry_document_delivery(uuid,uuid,uuid,integer)', 'EXECUTE')
       or has_function_privilege(v_role,
-        'public.settle_document_delivery(uuid,uuid,uuid,integer,text,text,text)', 'EXECUTE')
+        'public.settle_document_delivery(uuid,uuid,integer,text,text,text)', 'EXECUTE')
       or has_function_privilege(v_role,
         'public.record_manual_delivery(uuid,uuid,uuid,text,uuid,uuid,text)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.list_document_deliveries(uuid,text,uuid,integer)', 'EXECUTE')
@@ -181,6 +183,11 @@ from (values
    '38070000-0000-4000-8000-000000000010', 'invoice', '38070000-0000-4000-8000-000000000301',
    'erika@example.com, otto@example.com', 'invalid_input')
 ) as cases(label, actor, org, invoice, document, recipient, refusal);
+select pg_temp.expect_refusal('an email without its From header', format(
+  'select public.request_document_delivery(%L, %L, gen_random_uuid(), ''invoice'', %L, %L, %L, %L, %L, %L, null, null)',
+  '38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010', pg_temp.id('invoice'),
+  '38070000-0000-4000-8000-000000000301', 'erika.musterfrau@example.com', 'Rechnung RE-1', 'Guten Tag.',
+  'Haustechnik Sonnenberg GmbH'), 'invalid_input');
 do $$
 begin
   if exists (select 1 from public.document_deliveries where organization_id = '38070000-0000-4000-8000-000000000010')
@@ -229,8 +236,8 @@ $sql$, 'invalid_input');
 -- failure (an older expected attempt) claims nothing.
 create function pg_temp.settle(p_attempt integer, p_outcome text, p_message text, p_code text) returns boolean
 language sql as $$
-  select public.settle_document_delivery('38070000-0000-4000-8000-000000000002',
-    '38070000-0000-4000-8000-000000000010', pg_temp.id('delivery'), p_attempt, p_outcome, p_message, p_code)
+  select public.settle_document_delivery('38070000-0000-4000-8000-000000000010', pg_temp.id('delivery'), p_attempt,
+    p_outcome, p_message, p_code)
 $$;
 create function pg_temp.retry(p_expected integer, p_actor uuid default '38070000-0000-4000-8000-000000000002')
 returns jsonb language sql as $$
@@ -276,7 +283,7 @@ begin
   if pg_temp.retry(3) ->> 'claimed' is distinct from 'false' or pg_temp.settle(3, 'failed', null, 'email_provider_503') then
     raise exception 'a sent delivery was claimed or changed again';
   end if;
-  if (select (state, provider_message_id, failure_code, attempts, sent_at is not null)
+  if (select (state, provider_message_id, failure_code, attempts, dispatched_at is not null)
       from public.document_deliveries where id = pg_temp.id('delivery'))
     is distinct from ('sent'::text, '4ef9a417-02e9-4d39-ad75-9611e0fcc33c'::text, null::text, 3, true) then
     raise exception 'the sent delivery reads wrong';
@@ -318,13 +325,37 @@ begin
   if (v_retry ->> 'claimed')::boolean is distinct from true or (v_retry ->> 'attempt')::integer is distinct from 2 then
     raise exception 'a stale attempt was not claimed: %', v_retry;
   end if;
+  -- The new attempt starts at the claim, later than this transaction began.
+  if (select updated_at from public.document_deliveries where id = (v_stale ->> 'deliveryId')::uuid) <= now() then
+    raise exception 'the taken-over attempt is stamped with its transaction''s start';
+  end if;
+  -- The Admin retried attempt 2, so its answer names the Admin, not the Büro member who requested the email.
+  if public.settle_document_delivery('38070000-0000-4000-8000-000000000010', (v_stale ->> 'deliveryId')::uuid, 2,
+      'sent', 'stale-attempt-2', null) is distinct from true then
+    raise exception 'the taken-over attempt did not settle';
+  end if;
+  if (select array_agg(event_type || ':' || attempt || ':' || actor_id order by attempt, event_type)
+      from public.document_delivery_events where delivery_id = (v_stale ->> 'deliveryId')::uuid)
+    is distinct from array[
+      'requested:1:38070000-0000-4000-8000-000000000002', 'retried:2:38070000-0000-4000-8000-000000000001',
+      'sent:2:38070000-0000-4000-8000-000000000001'] then
+    raise exception 'the settlement named another actor: %', (select array_agg(event_type || ':' || attempt || ':'
+      || coalesce(actor_id::text, 'none')) from public.document_delivery_events
+      where delivery_id = (v_stale ->> 'deliveryId')::uuid);
+  end if;
   insert into ids values ('old', (v_old ->> 'deliveryId')::uuid);
-  perform public.settle_document_delivery('38070000-0000-4000-8000-000000000002',
-    '38070000-0000-4000-8000-000000000010', pg_temp.id('old'), 1, 'failed', null, 'email_provider_unreachable');
-  update public.document_deliveries set created_at = now() - interval '23 hours'
-  where id = pg_temp.id('old');
+  perform public.settle_document_delivery('38070000-0000-4000-8000-000000000010', pg_temp.id('old'), 1, 'failed',
+    null, 'email_provider_unreachable');
 end;
 $$;
+-- 23 hours after the request by the clock, though not yet by this transaction's start.
+update public.document_deliveries set created_at = now() - interval '23 hours' + interval '1 microsecond'
+where id = pg_temp.id('old');
+select pg_temp.expect_refusal('a retry 23 hours after the request by the clock', format(
+  'select public.retry_document_delivery(%L, %L, %L, 1)', '38070000-0000-4000-8000-000000000002',
+  '38070000-0000-4000-8000-000000000010', pg_temp.id('old')), 'delivery_retry_expired');
+update public.document_deliveries set created_at = now() - interval '23 hours'
+where id = pg_temp.id('old');
 select pg_temp.expect_refusal('a retry 23 hours after the request', format(
   'select public.retry_document_delivery(%L, %L, %L, 1)', '38070000-0000-4000-8000-000000000002',
   '38070000-0000-4000-8000-000000000010', pg_temp.id('old')), 'delivery_retry_expired');
@@ -394,7 +425,7 @@ begin
       pg_temp.id('invoice'), 1) -> 'rows') is distinct from 1 then
     raise exception 'the list passed its limit';
   end if;
-  if (v_foreign ->> 'total')::integer is distinct from 0 then
+  if (v_foreign ->> 'total')::integer is distinct from 0 or v_foreign -> 'rows' is distinct from '[]'::jsonb then
     raise exception 'another organization listed the deliveries';
   end if;
 end;
@@ -414,16 +445,21 @@ declare
   v_rows jsonb;
 begin
   insert into ids values ('unknown', v_unknown);
-  if not public.settle_document_delivery('38070000-0000-4000-8000-000000000002',
-      '38070000-0000-4000-8000-000000000010', v_unknown, 1, 'failed', null, 'email_provider_unreachable')
-    or (public.retry_document_delivery('38070000-0000-4000-8000-000000000002',
-      '38070000-0000-4000-8000-000000000010', v_unknown, 1) ->> 'claimed')::boolean is distinct from true
-    or not public.settle_document_delivery('38070000-0000-4000-8000-000000000002',
-      '38070000-0000-4000-8000-000000000010', v_unknown, 2, 'failed', null, 'attachment_unavailable')
-    or not public.settle_document_delivery('38070000-0000-4000-8000-000000000002',
-      '38070000-0000-4000-8000-000000000010', v_refused, 1, 'failed', null, 'email_provider_503')
-  then
-    raise exception 'the unknown-outcome sequence did not settle';
+  if public.settle_document_delivery('38070000-0000-4000-8000-000000000010', v_unknown, 1, 'failed', null,
+      'email_provider_unreachable') is distinct from true then
+    raise exception 'the unanswered attempt did not settle';
+  end if;
+  if (public.retry_document_delivery('38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010',
+      v_unknown, 1) ->> 'claimed')::boolean is distinct from true then
+    raise exception 'the unanswered attempt was not retried';
+  end if;
+  if public.settle_document_delivery('38070000-0000-4000-8000-000000000010', v_unknown, 2, 'failed', null,
+      'attachment_unavailable') is distinct from true then
+    raise exception 'the retry''s failure before the provider did not settle';
+  end if;
+  if public.settle_document_delivery('38070000-0000-4000-8000-000000000010', v_refused, 1, 'failed', null,
+      'email_provider_503') is distinct from true then
+    raise exception 'the answered failure did not settle';
   end if;
   v_rows := public.list_document_deliveries('38070000-0000-4000-8000-000000000010', 'invoice',
     pg_temp.id('invoice'), 50) -> 'rows';
@@ -432,6 +468,12 @@ begin
     is distinct from ('attachment_unavailable'::text, true)
   then
     raise exception 'a failure before the provider hid the earlier unknown outcome: %', v_rows;
+  end if;
+  if (select (row_data ->> 'failureCode', (row_data ->> 'outcomeUnknown')::boolean)
+      from jsonb_array_elements(v_rows) row_data where row_data ->> 'id' = v_refused::text)
+    is distinct from ('email_provider_503'::text, false)
+  then
+    raise exception 'a failure the provider answered reads as unknown: %', v_rows;
   end if;
   if (select array_agg(row_data ->> 'id' order by row_data ->> 'id') from jsonb_array_elements(v_rows) row_data
       where (row_data ->> 'outcomeUnknown')::boolean)

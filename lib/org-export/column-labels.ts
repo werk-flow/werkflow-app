@@ -230,6 +230,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   discount_days: 'Skontofrist (Tage)',
   dispatch_id: 'Einsatz-ID',
   dispatch_note: 'Einsatzhinweis',
+  dispatched_at: 'Versendet am (Server)',
   display_name: 'Anzeigename',
   dissolved_at: 'Aufgelöst am',
   do_not_contact_instruction: 'Hinweis „Nicht kontaktieren“',

@@ -310,6 +310,17 @@ limiterAllows = true;
 // The provider fails: the delivery is failed with its code; the retry sends it once, a second retry not at all.
 const realFetch = globalThis.fetch;
 Object.assign(process.env, { VERCEL_ENV: 'preview', RESEND_API_KEY: 're_test_synthetic' });
+// A deployment without a sending address records nothing: a stored From is what every retry sends
+// under the delivery's key, so the transport never picks one per attempt.
+delete process.env.FROM_EMAIL;
+world.rpcCalls.length = 0;
+assert.deepEqual(await send(crypto.randomUUID()), { success: false, error: 'send_unavailable' });
+assert.equal(
+  callsNamed('request_document_delivery').length,
+  0,
+  'a send without a sending address was recorded',
+);
+process.env.FROM_EMAIL = 'WerkFlow <rechnung@werkflow.example>';
 globalThis.fetch = Object.assign(async () => new Response('Service Unavailable', { status: 503 }), {
   preconnect: realFetch.preconnect,
 });
