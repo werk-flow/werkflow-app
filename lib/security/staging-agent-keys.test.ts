@@ -15,9 +15,10 @@ import {
   privateModeVerdict,
   protectionVerdict,
   queryErrorSqlState,
+  readOnlyModeOffOutcome,
   readStagingAgentKeys,
   sandboxVerdict,
-  writeRefusedVerdict,
+  writeRefusedOutcome,
 } from './staging-agent-keys';
 
 const MADE_UP = {
@@ -216,16 +217,55 @@ test('a Supabase token passes only when it reaches DEV and is refused PROD', () 
   for (const status of [429, 500, 503]) expect(devOnlyVerdict(200, status), String(status)).toBe('failed');
 });
 
-test('a write passes only when Supabase refuses it', () => {
-  expect(writeRefusedVerdict(403, undefined)).toBe('ok');
-  // A read-only token's query runs in a read-only transaction, which refuses the write.
-  expect(writeRefusedVerdict(400, '25006')).toBe('ok');
+const OK = { verdict: 'ok' } as const;
+const OFF = { enabled: false, override_enabled: false, override_active_until: '2026-01-01T00:00:00Z' };
+
+test("DEV's read-only mode is off only on 200 with both flags false", () => {
+  expect(readOnlyModeOffOutcome(200, OFF)).toEqual(OK);
+  const reason = (status: number, body: unknown) => {
+    const outcome = readOnlyModeOffOutcome(status, body);
+    return outcome.verdict === 'failed' ? outcome.reason : 'ok';
+  };
+  expect(reason(200, { ...OFF, enabled: true })).toBe("DEV's read-only state has enabled true");
+  expect(reason(200, { ...OFF, override_enabled: true })).toBe(
+    "DEV's read-only state has override_enabled true",
+  );
+  expect(reason(200, { override_enabled: false })).toBe(
+    "DEV's read-only state has enabled missing or not a boolean",
+  );
+  expect(reason(200, { enabled: false, override_enabled: 'false' })).toBe(
+    "DEV's read-only state has override_enabled missing or not a boolean",
+  );
+  expect(reason(200, [OFF])).toBe("DEV's read-only state is no JSON object");
+  expect(reason(200, null)).toBe("DEV's read-only state is no JSON object");
+  // A token that may not read the mode, or an answer that proves nothing, fails without its body.
+  for (const status of [401, 403, 404, 429, 500])
+    expect(reason(status, OFF), String(status)).toBe(`DEV's read-only state answered ${status}, not 200`);
+});
+
+test('a write passes only when Supabase refuses it, and 25006 only while DEV is not read-only', () => {
+  const readOnly = readOnlyModeOffOutcome(200, { ...OFF, enabled: true });
+  expect(writeRefusedOutcome(403, undefined, readOnly)).toEqual(OK);
+  // A read-only token's query runs in a read-only transaction, which refuses the write. DEV's own
+  // read-only mode answers the same to a write-capable token, so the mode must read as off.
+  expect(writeRefusedOutcome(400, '25006', OK)).toEqual(OK);
+  expect(writeRefusedOutcome(400, '25006', readOnly)).toEqual({
+    verdict: 'failed',
+    reason: "a read-only transaction refused the write, but DEV's read-only state has enabled true",
+  });
+  expect(writeRefusedOutcome(400, '25006', readOnlyModeOffOutcome(404, undefined))).toEqual({
+    verdict: 'failed',
+    reason: "a read-only transaction refused the write, but DEV's read-only state answered 404, not 200",
+  });
   // Another query error, a 400 without a code, a write that ran, a refused sign-in, or an answer
   // that proves nothing, fails.
-  expect(writeRefusedVerdict(400, '42601')).toBe('failed');
-  expect(writeRefusedVerdict(400, undefined)).toBe('failed');
+  expect(writeRefusedOutcome(400, '42601', OK)).toEqual({
+    verdict: 'failed',
+    reason: 'the write answered 400 with SQLSTATE 42601, not 403 or 400 with SQLSTATE 25006',
+  });
+  expect(writeRefusedOutcome(400, undefined, OK).verdict).toBe('failed');
   for (const status of [200, 201, 401, 404, 429, 500])
-    expect(writeRefusedVerdict(status, '25006'), String(status)).toBe('failed');
+    expect(writeRefusedOutcome(status, '25006', OK).verdict, String(status)).toBe('failed');
 });
 
 test("a query error's SQLSTATE is the only part of its body read", () => {

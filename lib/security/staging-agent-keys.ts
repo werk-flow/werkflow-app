@@ -172,14 +172,54 @@ export function queryErrorSqlState(body: unknown): string | undefined {
   return parsed.success ? SQLSTATE.exec(parsed.data.message)?.[1] : undefined;
 }
 
+/** A check's outcome: `ok`, or `failed` with the condition that failed. A reason never quotes a body. */
+export type Outcome = { verdict: 'ok' } | { verdict: 'failed'; reason: string };
+
+const failed = (reason: string): Outcome => ({ verdict: 'failed', reason });
+
+const readOnlyStateSchema = z.object({
+  enabled: z.unknown().optional(),
+  override_enabled: z.unknown().optional(),
+});
+
+/**
+ * Whether DEV is out of Supabase's read-only mode, from `GET /v1/projects/{ref}/readonly`: only 200
+ * with `enabled: false` and `override_enabled: false` proves it. Any other answer fails, and its
+ * reason names the status or the field, never a value of another field.
+ */
+export function readOnlyModeOffOutcome(status: number, body: unknown): Outcome {
+  if (status !== 200) return failed(`DEV's read-only state answered ${status}, not 200`);
+  const parsed = readOnlyStateSchema.safeParse(body);
+  if (!parsed.success) return failed("DEV's read-only state is no JSON object");
+  for (const field of ['enabled', 'override_enabled'] as const) {
+    const value = parsed.data[field];
+    if (value !== false)
+      return failed(
+        `DEV's read-only state has ${field} ${value === true ? 'true' : 'missing or not a boolean'}`,
+      );
+  }
+  return { verdict: 'ok' };
+}
+
 /**
  * A write the token must be refused. Supabase denies a token without Database write either with 403,
  * or by running its query in a read-only transaction, which answers 400 with SQLSTATE 25006
- * (`read_only_sql_transaction`). A refused sign-in (401), a write that ran, another query error, or
- * any other answer fails.
+ * (`read_only_sql_transaction`). DEV's own read-only mode answers 25006 to any token, so 25006 passes
+ * only while the same token reads that mode as off (`readOnlyModeOffOutcome`). A refused sign-in (401), a
+ * write that ran, another query error, or any other answer fails.
  */
-export function writeRefusedVerdict(status: number, sqlState: string | undefined): Verdict {
-  return status === 403 || (status === 400 && sqlState === '25006') ? 'ok' : 'failed';
+export function writeRefusedOutcome(
+  status: number,
+  sqlState: string | undefined,
+  readOnlyModeOff: Outcome,
+): Outcome {
+  if (status === 403) return { verdict: 'ok' };
+  if (status === 400 && sqlState === '25006')
+    return readOnlyModeOff.verdict === 'ok'
+      ? readOnlyModeOff
+      : failed(`a read-only transaction refused the write, but ${readOnlyModeOff.reason}`);
+  const answer = sqlState === undefined ? `${status}` : `${status} with SQLSTATE ${sqlState}`;
+  return failed(`the write answered ${answer}, not 403 or 400 with SQLSTATE 25006`);
 }
 
 const livemodeSchema = z.object({ livemode: z.boolean() });
