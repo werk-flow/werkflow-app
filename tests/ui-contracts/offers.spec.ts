@@ -350,7 +350,10 @@ test('an article lands under its Titel when another session reorders them during
 
   await expect(editor.getByRole('textbox', { name: 'Bezeichnung' })).toHaveValue('Kupferbogen 15 mm');
   await expect(editor.getByRole('textbox', { name: 'Titel 2' })).toHaveValue('Material');
-  await expect(editor.getByRole('listitem').filter({ hasText: 'Position 2.1' })).toHaveCount(0);
+  const material = editor
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('textbox', { name: 'Titel 2' }) });
+  await expect(material.getByRole('textbox', { name: 'Bezeichnung' })).toHaveValue('Kupferbogen 15 mm');
   await expect(editor.getByText(/inzwischen geändert/)).toBeVisible();
 });
 
