@@ -37,6 +37,18 @@ export function providerFailure(error: unknown): { status: number | undefined; b
 }
 
 /**
+ * Whether the provider accepted the request before the attempt failed, so it
+ * bills it: a failure under a success status, or a stream it opened and closed
+ * without output (the SDK raises NoOutputGeneratedError only after the
+ * provider's response began).
+ */
+export function acceptedByProvider(error: unknown): boolean {
+  if (NoOutputGeneratedError.isInstance(error)) return true;
+  const status = providerFailure(error)?.status;
+  return status !== undefined && status < 400;
+}
+
+/**
  * Sorts a failed attempt. A spend limit (402, or 429 with a spend-limit
  * code) and every other refusal of the request
  * (400 and the rest of 4xx) are never retried; a timeout and a full answer

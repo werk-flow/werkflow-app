@@ -210,6 +210,38 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
   assert.ok(Number(attempts()[0]?.p_cost_micro_usd) > 0, 'an accepted request must be charged');
 }
 
+// A stream opened under a success status and closed before its first event is retried and charged at its caps (B15).
+{
+  resetAiTables(world);
+  const events = await readTurn(world, await postTurn('[replay:leerer-strom] Hallo'));
+  assert.deepEqual(
+    events.at(-1),
+    { type: 'end', status: 'complete' },
+    'an empty accepted stream must be retried',
+  );
+  assert.deepEqual(
+    attempts().map((row) => row.p_outcome),
+    ['provider_error', 'completed'],
+  );
+  assert.equal(
+    attempts()[0]?.p_output_tokens,
+    AI_TURN_LIMITS.chat.maxOutputTokens,
+    'a stream the provider opened must be charged at its output cap',
+  );
+}
+
+// A new thread's title ends on a whole character, never half of one.
+{
+  resetAiTables(world);
+  const threadId = crypto.randomUUID();
+  await readTurn(world, await postTurn(`${'a'.repeat(79)}🔧 Heizung`, { threadId }));
+  assert.equal(
+    rows('ai_threads').find((row) => row.id === threadId)?.title,
+    `${'a'.repeat(79)}🔧`,
+    'a thread title must not split a character',
+  );
+}
+
 // The turn has two retries in all, not two per step (B15).
 {
   resetAiTables(world);
@@ -374,18 +406,39 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
   });
   assert.equal((await postTurn('Wie lege ich einen Auftrag an?')).status, 409);
   assert.equal(attempts().length, 0);
+  // An open run in another organization of the same person blocks too.
+  resetAiTables(world);
+  rows('ai_runs').push({
+    id: 'run-other-organization',
+    organization_id: ORGANIZATION_B,
+    thread_id: crypto.randomUUID(),
+    user_id: world.callerId,
+    idempotency_key: 'other-organization-command',
+    reserved_micro_usd: 1,
+    status: 'reserved',
+    created_at: new Date(Date.now() - 60_000).toISOString(),
+  });
+  assert.equal(
+    (await postTurn('Wie lege ich einen Auftrag an?')).status,
+    409,
+    "a person's open run in another organization must block a second run",
+  );
+  assert.equal(attempts().length, 0);
 }
 
-// The per-person limit refuses the 61st turn of an hour (O3).
+// The per-person limit lets 60 turns of an hour run and refuses the 61st before any write (O3).
 {
   resetAiTables(world);
-  let last = 0;
-  for (let turn = 0; turn <= 60; turn += 1) {
+  for (let turn = 1; turn <= 60; turn += 1) {
     const response = await postTurn('Hallo');
-    last = response.status;
-    if (response.status === 200) await readTurn(world, response);
+    assert.equal(response.status, 200, `turn ${turn} of an hour must run`);
+    await readTurn(world, response);
   }
-  assert.equal(last, 429, 'the 61st turn of an hour must be refused');
+  const threads = rows('ai_threads').length;
+  const refusedThread = crypto.randomUUID();
+  const refused = await postTurn('Hallo', { threadId: refusedThread });
+  assert.equal(refused.status, 429, 'the 61st turn of an hour must be refused');
+  assert.equal(rows('ai_threads').length, threads, 'a turn refused by the limit must create no thread');
 }
 
 // The boundary: a foreign organization, a signed-out caller, a cross-site post,

@@ -6,7 +6,12 @@ import { type ModelMessage, streamText } from 'ai';
 import { AI_MODEL_PRICE, type AiTokenUsage, costMicroUsd } from '@/lib/ai/cost';
 import { AI_TURN_LIMITS, type AiEntryPoint, inputTokenCeiling, maxTurnCostMicroUsd } from '@/lib/ai/limits';
 import { type AiModel, isAllowedModel, resolveAiModel } from '@/lib/ai/model';
-import { TurnStop, classifyAttemptFailure, providerFailure } from '@/lib/ai/attempt-failure';
+import {
+  TurnStop,
+  acceptedByProvider,
+  classifyAttemptFailure,
+  providerFailure,
+} from '@/lib/ai/attempt-failure';
 import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import { isAiReleasedFor } from '@/lib/ai/release-gate';
 import { readAiOrganizationSwitch } from '@/lib/ai/settings';
@@ -101,11 +106,12 @@ const messageBodySchema = z.object({ text: z.string() });
 const AI_TURN_FAILURE_BODY: { text: string; failure: AiTurnFailure } = { text: '', failure: 'interrupted' };
 
 /**
- * Starts one turn: the thread is the caller's, the per-person limits allow
- * it, the organization's budget holds the turn's most expensive outcome, and
- * no other run of the person is open. Then the user's message and an empty
- * answer are saved. `run` writes the answer; it finishes when the client
- * leaves, so the caller keeps the invocation alive until it settles.
+ * Starts one turn: the per-person limits allow it, the thread is the
+ * caller's, the organization's budget holds the turn's most expensive outcome,
+ * and no other run of the person is open. Then the user's message and an
+ * empty answer are saved. `run` writes the answer and goes on after the client
+ * leaves, so the caller keeps the invocation alive until it saved the answer
+ * and settled.
  */
 export async function startAiTurn(command: AiTurnCommand): Promise<AiTurnStart> {
   const { organizationId, userId, commandId } = command;
@@ -165,9 +171,10 @@ export async function startAiTurn(command: AiTurnCommand): Promise<AiTurnStart> 
     await settleRun(admin, organizationId, runId, 'cancelled');
     return refused(refusal);
   };
-  // One active run per person: a run that sees another open run of its person
-  // yields. Both reservations are committed before either looks, so two runs
-  // never both pass; under a tie both yield, and the client sends again.
+  // One active run per person, in any organization: a run that sees another
+  // open run of its person yields. Both reservations are committed before
+  // either looks, so two runs never both pass; under a tie both yield, and
+  // the client sends again.
   const other = await hasOtherOpenRun(admin, command, runId);
   if (other !== false) return refuse(other === true ? 'run_active' : 'unavailable');
 
@@ -298,9 +305,10 @@ function fitInputCap(
   return [...kept, message];
 }
 
+/** The first line of the first message, up to 80 characters; counted by code point, so none is split. */
 function threadTitle(text: string): string {
   const firstLine = text.trim().split('\n')[0]?.trim() ?? '';
-  return firstLine.slice(0, 80) || AI_PRODUCT_NAME;
+  return Array.from(firstLine).slice(0, 80).join('') || AI_PRODUCT_NAME;
 }
 
 async function settleRun(
@@ -318,6 +326,7 @@ async function settleRun(
   if (error) logError('aiTurn: settlement failed', error);
 }
 
+/** Whether the person has another open run, in any of their organizations (B13). */
 async function hasOtherOpenRun(
   admin: Admin,
   command: AiTurnCommand,
@@ -327,7 +336,6 @@ async function hasOtherOpenRun(
   const { data, error } = await admin
     .from('ai_runs')
     .select('id')
-    .eq('organization_id', command.organizationId)
     .eq('user_id', command.userId)
     .eq('status', 'reserved')
     .gt('created_at', since)
@@ -547,9 +555,7 @@ async function runStep(
         : 'completed'
       : (classified?.outcome ?? 'provider_error');
     const provider = result.ok ? null : providerFailure(result.error);
-    // A failure under a success status came after the provider accepted the request, so it bills it.
-    const billed =
-      !result.ok && (result.started || (provider?.status !== undefined && provider.status < 400));
+    const billed = !result.ok && (result.started || acceptedByProvider(result.error));
     // Every attempt is ledgered at its cost before anything else, so a retry never goes uncounted (B15).
     const usage = result.ok ? result.usage : (result.usage ?? estimatedUsage(step.prompt, billed, limits));
     const key = `${context.runKey}:${step.step}:${attempt}`;

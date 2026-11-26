@@ -104,6 +104,8 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
   'verbindung-weg': [() => providerError(200, ''), answer],
   // The provider accepted the request and closed the stream before its first event.
   'nur-start': [() => [{ type: 'response-metadata', id: 'msg-replay', modelId: 'claude-haiku-5-5' }], answer],
+  // The provider answered with a success status and closed the stream before message_start.
+  'leerer-strom': [() => [], answer],
   // Overloaded in the first step, once in the second and again: the turn's two retries are spent.
   'mehrfach-ueberlastet': [
     () => [overloadedInStream],

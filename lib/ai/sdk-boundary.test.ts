@@ -96,7 +96,7 @@ test('the file search finds a specifier in single quotes, double quotes and back
   ]);
 });
 
-test('every import form of the SDK is caught, over several lines too, and lookalikes are not', () => {
+test('every import and re-export form of the SDK is caught, over several lines too, and lookalikes and comments are not', () => {
   const caught = [
     "import { streamText } from 'ai';",
     "import type { LanguageModel } from 'ai';",
@@ -110,6 +110,9 @@ test('every import form of the SDK is caught, over several lines too, and lookal
     "const sdk = await import(\n  'ai'\n);",
     "const sdk = require(\n  '@ai-sdk/anthropic',\n);",
     "import {\n  streamText,\n} from 'ai';",
+    "export * from\n  'ai';",
+    "export * as sdk from\n  '@ai-sdk/anthropic';",
+    "export type {\n  LanguageModel,\n} from 'ai';",
   ];
   for (const text of caught) expect(sdkImportLines('probe.ts', text), text).toHaveLength(1);
   const allowed = [
@@ -117,6 +120,8 @@ test('every import form of the SDK is caught, over several lines too, and lookal
     "const label = 'ai';",
     "import x from './ai';",
     'const sdk = await import(name);',
+    "// const sdk = await import('ai');",
+    "/* import { streamText } from 'ai'; */",
   ];
   for (const text of allowed) expect(sdkImportLines('probe.ts', text), text).toEqual([]);
 });
