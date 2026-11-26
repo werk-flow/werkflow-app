@@ -113,7 +113,8 @@ async function types(): Promise<{ formatted: string; source: string }> {
       throw new Error(
         'No DEV token: set SUPABASE_ACCESS_TOKEN, or install SUPABASE_DEV_ACCESS_TOKEN in the agent key file (bun run agent-access:check).',
       );
-    const env = { ...process.env, SUPABASE_ACCESS_TOKEN: token };
+    // The built-in profile: an inherited SUPABASE_PROFILE could point the CLI's API host elsewhere.
+    const env = { ...process.env, SUPABASE_PROFILE: 'supabase', SUPABASE_ACCESS_TOKEN: token };
     return { formatted: await generatedFrom(['--project-id', DEV_PROJECT_ID], env), source: 'DEV' };
   }
   const here = await typesHere();
