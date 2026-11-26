@@ -38,7 +38,11 @@ export const cancelInvoiceSchema = z.object({
 });
 export type CancelInvoiceInput = z.input<typeof cancelInvoiceSchema>;
 
-/** `1.500` → `-1.500`, `-1` → `1`; a zero stays as it is. */
+/**
+ * `1.500` → `-1.500`, `-1` → `1`; a zero stays as it is. The unit table pins the text rule, and the
+ * property test negates a Storno line back with it.
+ * @internal
+ */
 export function negatedQuantity(quantity: string): string {
   if (quantity.startsWith('-')) return quantity.slice(1);
   return /^0*(?:\.0*)?$/.test(quantity) ? quantity : `-${quantity}`;
