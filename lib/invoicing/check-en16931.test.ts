@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 import { calculateInvoice } from './calculate';
 import { BROKEN_INVOICES } from './fixtures/broken-invoices';
+import { importLoadingSaxon } from './fixtures/saxon-import';
 import { REFERENCE_INVOICES } from './fixtures/reference-invoices';
 import { EN16931_CII_RULES } from './rules/manifest';
 import { toEn16931 } from './to-en16931';
@@ -17,16 +18,7 @@ const sha256 = (path: string) =>
     .update(readFileSync(new URL(path, import.meta.url)))
     .digest('hex');
 
-// Bun's Error.captureStackTrace refuses a non-Error object once a module set
-// Error.prepareStackTrace, as ESLint does in earlier test files of the same
-// unit run. follow-redirects, which SaxonJS loads through axios, calls it on a
-// prototype object at load; Node, which serves the app, accepts that.
-// Assigning undefined restores Bun's own behavior; deleting the property does not.
-const prepareStackTrace = Error.prepareStackTrace;
-Reflect.set(Error, 'prepareStackTrace', undefined);
-const { checkEn16931 } = await import('./check-en16931').finally(() => {
-  Reflect.set(Error, 'prepareStackTrace', prepareStackTrace);
-});
+const { checkEn16931 } = await importLoadingSaxon(() => import('./check-en16931'));
 
 describe('checkEn16931', () => {
   test('the compiled rules are the recorded compilation of the vendored CEN release', () => {

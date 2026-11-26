@@ -12,6 +12,7 @@ import { z } from '../../zod';
  */
 const READABLE_COLUMNS = {
   organizations: ['id', 'created_at'],
+  organization_members: ['user_id', 'role'],
   werkflow_subscriptions: [
     'status',
     'holds_subscription',
@@ -78,6 +79,31 @@ export function scopedReadQuery(read: {
   };
 }
 
+/** The roles a run's member actors join its organization with (`org_role`, an Admin cannot be invited). */
+export const MEMBER_ROLES = ['buero', 'employee'] as const;
+export type MemberRole = (typeof MEMBER_ROLES)[number];
+
+function isMemberRole(role: string): role is MemberRole {
+  return MEMBER_ROLES.some((known) => known === role);
+}
+
+/**
+ * The read of the run organization's pending invite codes for `role`. A code is a capability, not an
+ * id: no other reader returns one, and the kit adds it to the values no printed line may hold.
+ */
+export function pendingInviteCodeQuery(
+  organizationId: string,
+  role: string,
+): { query: string; parameters: string[] } {
+  if (!isUuid(organizationId)) throw new StagingFailure('The organization id is no UUID.');
+  if (!isMemberRole(role)) throw new StagingFailure('Invite a member as buero or employee only.');
+  return {
+    query:
+      "select invite_code from public.organization_invites where organization_id = $1::uuid and invited_role = $2::public.org_role and status = 'pending'",
+    parameters: [organizationId, role],
+  };
+}
+
 /** The Stripe fields a journey may read: ids, states, amounts and times, never a customer's details. */
 const STRIPE_FIELDS = [
   'id',
@@ -88,6 +114,7 @@ const STRIPE_FIELDS = [
   'canceled_at',
   'cancel_at_period_end',
   'currency',
+  'amount',
   'amount_due',
   'amount_paid',
   'amount_refunded',
@@ -101,7 +128,18 @@ const STRIPE_FIELDS = [
   'latest_invoice',
 ] as const;
 
-export type StripeFacts = Partial<Record<(typeof STRIPE_FIELDS)[number], string | number | boolean | null>>;
+/**
+ * Ids and kinds a journey reads from one level down, by the name it gets them under: an invoice
+ * payment's PaymentIntent, and the kind of method a charge was paid with (`card`, `sepa_debit`).
+ */
+const NESTED_STRIPE_FIELDS = {
+  payment_intent: ['payment', 'payment_intent'],
+  payment_method_type: ['payment_method_details', 'type'],
+} as const;
+
+export type StripeFacts = Partial<
+  Record<(typeof STRIPE_FIELDS)[number] | keyof typeof NESTED_STRIPE_FIELDS, string | number | boolean | null>
+>;
 
 const sandboxObject = z.object({ livemode: z.literal(false) });
 const sandboxList = z.object({ object: z.literal('list'), data: z.array(sandboxObject) });
@@ -117,6 +155,11 @@ function factsOf(body: unknown): StripeFacts {
     if (value === null || ['string', 'number', 'boolean'].includes(typeof value))
       facts[field] = z.union([z.string(), z.number(), z.boolean(), z.null()]).parse(value);
     else if (expandedId.safeParse(value).success) facts[field] = expandedId.parse(value).id;
+  }
+  for (const name of ['payment_intent', 'payment_method_type'] as const) {
+    const [parent, child] = NESTED_STRIPE_FIELDS[name];
+    const value = record.safeParse(source[parent]).data?.[child];
+    if (facts[name] === undefined && typeof value === 'string') facts[name] = value;
   }
   return facts;
 }

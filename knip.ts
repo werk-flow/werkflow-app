@@ -46,7 +46,7 @@ const config: KnipConfig = {
     'scripts/*.ts!',
     'scripts/migration/*.ts!',
     // The staging journeys and their cleanup, run by package scripts (scripts/staging/kit.ts).
-    'scripts/staging/{smoke,cleanup}.ts!',
+    'scripts/staging/{smoke,invoice,cleanup}.ts!',
     // MCP servers Claude Code and Codex start by path (docs/technical/machine-setup.md, step 4).
     'scripts/mcp/*.ts!',
     // Run by .github/scripts/main-full-run.sh and the stand-in's scheduler.

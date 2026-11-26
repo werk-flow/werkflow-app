@@ -1,5 +1,5 @@
 // A staging journey's browser reaches staging, DEV and Stripe's sandbox Checkout only, loads no page
-// outside staging but a sandbox Checkout, and sends the Vercel bypass to staging's host only. Every
+// outside staging but a sandbox Checkout or a signed billing download, and sends the Vercel bypass to staging's host only. Every
 // value here is made up.
 import { describe, expect, test } from 'bun:test';
 
@@ -47,6 +47,43 @@ describe('origin refusal', () => {
     expect(verdict(page('https://dashboard.stripe.com/test/payments'))).toBe('refused');
   });
 
+  test("a signed download of a WerkFlow invoice original loads as a page, from R2's signed URL only", () => {
+    const host = `https://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com`;
+    const key = `werkflow-billing/invoices/in_1MadeUp/${'ab'.repeat(32)}.pdf`;
+    const signature = `X-Amz-Signature=${'cd'.repeat(32)}`;
+    const query = `?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=300&${signature}`;
+    expect(verdict(page(`${host}/werkflow-documents-dev/${key}${query}`))).toBe('elsewhere');
+    expect(verdict(page(`${host}/werkflow-documents-dev/${key}?${signature}&x-id=GetObject`))).toBe(
+      'elsewhere',
+    );
+    for (const url of [
+      // No signature, an empty one, or one that is no SigV4 hex digest.
+      `${host}/werkflow-documents-dev/${key}`,
+      `${host}/werkflow-documents-dev/${key}?X-Amz-Algorithm=AWS4-HMAC-SHA256`,
+      `${host}/werkflow-documents-dev/${key}?X-Amz-Signature=`,
+      `${host}/werkflow-documents-dev/${key}?X-Amz-Signature=0abc`,
+      `${host}/werkflow-documents-dev/${key}?X-Amz-Signature=${'cd'.repeat(32)}0`,
+      // Any other key: another prefix, another object under werkflow-billing/, a path trick.
+      `${host}/werkflow-documents-dev/organisations/x/${'ab'.repeat(32)}.pdf${query}`,
+      `${host}/werkflow-documents-dev/werkflow-billing/storno/in_1/${'ab'.repeat(32)}.pdf${query}`,
+      `${host}/werkflow-documents-dev/werkflow-billing/invoices/in_1/x.pdf${query}`,
+      `${host}/werkflow-documents-dev/werkflow-billing/invoices/in_1/../${'ab'.repeat(32)}.pdf${query}`,
+      `${host}/${key}${query}`,
+      // PROD's bucket, or any other bucket, even with a valid key and signature.
+      `${host}/werkflow-documents-prod/${key}${query}`,
+      `${host}/made-up-bucket/${key}${query}`,
+      // Another host, R2 outside the EU jurisdiction, or plain http.
+      `https://${'0a'.repeat(16)}.r2.cloudflarestorage.com/werkflow-documents-dev/${key}${query}`,
+      `https://made-up.eu.r2.cloudflarestorage.com/werkflow-documents-dev/${key}${query}`,
+      `${host}.evil.example/werkflow-documents-dev/${key}${query}`,
+      `http://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com/werkflow-documents-dev/${key}${query}`,
+    ])
+      expect(verdict(page(url)), url).toBe('refused');
+    // Only as the page a click opens: never as an asset, a frame or a socket.
+    expect(verdict(asset(`${host}/werkflow-documents-dev/${key}${query}`))).toBe('refused');
+    expect(verdict(embedded(`${host}/werkflow-documents-dev/${key}${query}`))).toBe('refused');
+  });
+
   test("DEV's project and the sandbox Checkout's hosts load as assets and frames", () => {
     for (const request of [
       asset(`https://${DEV}.supabase.co/rest/v1/profiles`),
@@ -88,6 +125,9 @@ describe('header scoping', () => {
   test('no other origin ever sees the bypass: Stripe, Supabase, production or a look-alike', () => {
     for (const request of [
       page('https://checkout.stripe.com/c/pay/cs_test_a1B2c3'),
+      page(
+        `https://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com/werkflow-documents-dev/werkflow-billing/invoices/in_1/${'ab'.repeat(32)}.pdf?X-Amz-Signature=${'cd'.repeat(32)}`,
+      ),
       asset('https://api.stripe.com/v1/payment_pages'),
       asset(`https://${DEV}.supabase.co/auth/v1/token`),
       page('https://app.werk-flow.app/login'),
