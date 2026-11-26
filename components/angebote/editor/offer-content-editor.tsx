@@ -144,12 +144,14 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
         Titel und Positionen
       </SectionTitle>
       {newerElsewhere && (
-        <StaleContentNotice
+        <ReloadNotice
           onReload={() => {
             reload();
             setError(null);
           }}
-        />
+        >
+          Jemand hat die Positionen inzwischen geändert. Lade sie neu, deine Eingaben gehen dabei verloren.
+        </ReloadNotice>
       )}
       <OfferSectionList
         sections={sections}
@@ -171,12 +173,11 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
   );
 }
 
-function StaleContentNotice({ onReload }: { onReload: () => void }) {
+/** A newer version is on the page while own input waits: the sentence names what changed. */
+function ReloadNotice({ children, onReload }: { children: React.ReactNode; onReload: () => void }) {
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warning bg-warning-soft p-3 text-sm text-warning-soft-foreground">
-      <p className="min-w-0 flex-1">
-        Jemand hat die Positionen inzwischen geändert. Lade sie neu, deine Eingaben gehen dabei verloren.
-      </p>
+      <p className="min-w-0 flex-1">{children}</p>
       <Button type="button" variant="outline" size="sm" onClick={onReload}>
         Neu laden
       </Button>
