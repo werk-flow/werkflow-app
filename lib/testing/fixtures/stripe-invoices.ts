@@ -93,6 +93,8 @@ export const SEPA_INVOICE_ANSWERS = {
   'GET /v1/invoices/in_test_0001': STRIPE_INVOICE,
   'GET /v1/invoices/in_test_0001/lines': STRIPE_INVOICE_LINES,
   'GET /v1/payment_intents/pi_test_0001': paymentIntent(SEPA_PAYMENT_METHOD),
+  // A method set up through the API before its first debit: no charge names a mandate yet.
+  'GET /v1/charges': { object: 'list', url: '/v1/charges', has_more: false, data: [] },
   'GET /v1/setup_intents': {
     object: 'list',
     url: '/v1/setup_intents',
@@ -155,6 +157,54 @@ export const CHECKOUT_SEPA_INVOICE_ANSWERS = {
       type: 'sepa_debit',
       sepa_debit: { reference: 'MUSTERMANDAT0001', url: 'https://example.test' },
     },
+  },
+};
+
+const checkoutCharge = (id: string, paymentMethod: string, mandate: string) => ({
+  id,
+  object: 'charge',
+  customer: 'cus_test_0001',
+  payment_method: paymentMethod,
+  payment_method_details: { type: 'sepa_debit', sepa_debit: { last4: '3000', mandate } },
+});
+
+const sepaMandate = (id: string, reference: string) => ({
+  id,
+  object: 'mandate',
+  status: 'active',
+  payment_method: SEPA_PAYMENT_METHOD.id,
+  payment_method_details: { type: 'sepa_debit', sepa_debit: { reference, url: 'https://example.test' } },
+});
+
+/**
+ * A method whose SetupIntent named one mandate and whose newer charge debits
+ * with another: the charge names the mandate Stripe debits with.
+ */
+export const REPLACED_MANDATE_ANSWERS = {
+  ...SEPA_INVOICE_ANSWERS,
+  'GET /v1/charges': {
+    object: 'list',
+    url: '/v1/charges',
+    has_more: false,
+    data: [checkoutCharge('py_test_0002', SEPA_PAYMENT_METHOD.id, 'mandate_test_0002')],
+  },
+  'GET /v1/mandates/mandate_test_0002': sepaMandate('mandate_test_0002', 'MUSTERMANDAT0002'),
+};
+
+/** A customer whose first page of charges holds only another method's: the mandate's charge is on page two. */
+export const SECOND_PAGE_MANDATE_ANSWERS = {
+  ...CHECKOUT_SEPA_INVOICE_ANSWERS,
+  'GET /v1/charges': {
+    object: 'list',
+    url: '/v1/charges',
+    has_more: true,
+    data: [checkoutCharge('py_test_0009', 'pm_test_sepa_other', 'mandate_test_other')],
+  },
+  'GET /v1/charges?starting_after=py_test_0009': {
+    object: 'list',
+    url: '/v1/charges',
+    has_more: false,
+    data: [checkoutCharge('py_test_0001', SEPA_PAYMENT_METHOD.id, 'mandate_test_0001')],
   },
 };
 

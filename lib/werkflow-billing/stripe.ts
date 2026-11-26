@@ -279,13 +279,29 @@ async function paymentMethodOf(
 }
 
 /**
- * The reference of the SEPA mandate behind a payment method. A method set up
- * through the API carries it on its SetupIntent; one a Checkout collected has
- * no SetupIntent, and its mandate is named by the customer's first charge with
- * it, which exists before Stripe sends that invoice's signals. Null while
- * neither names one.
+ * The reference of the SEPA mandate behind a payment method. The customer's
+ * newest charge with the method names the mandate Stripe debits with: a method
+ * a Checkout collected has no SetupIntent, and its first charge exists before
+ * Stripe sends that invoice's signals. Without such a charge, the method's
+ * SetupIntent names the mandate it was set up with. Null while neither names
+ * one; a customer with more charges than WerkFlow reads fails the read.
  */
 async function mandateReferenceOf(client: Stripe, method: Stripe.PaymentMethod): Promise<string | null> {
+  const customerId = idOf(method.customer);
+  if (customerId) {
+    let seen = 0;
+    // Stripe lists charges newest first; the iteration pages until the first match.
+    for await (const charge of client.charges.list({ customer: customerId, limit: 100 })) {
+      const mandateId =
+        charge.payment_method === method.id ? charge.payment_method_details?.sepa_debit?.mandate : null;
+      if (typeof mandateId === 'string') {
+        const mandate = await client.mandates.retrieve(mandateId);
+        return mandate.payment_method_details.sepa_debit?.reference ?? null;
+      }
+      seen += 1;
+      if (seen >= LIST_CAP) throw billingFailure('stripe_list_overflow');
+    }
+  }
   const setups = await client.setupIntents.list({
     payment_method: method.id,
     limit: 10,
@@ -294,18 +310,7 @@ async function mandateReferenceOf(client: Stripe, method: Stripe.PaymentMethod):
   const references = setups.data.map(
     (setup) => expanded(setup.mandate)?.payment_method_details.sepa_debit?.reference,
   );
-  const reference = references.find((found) => found !== undefined);
-  if (reference !== undefined) return reference;
-  const customerId = idOf(method.customer);
-  if (!customerId) return null;
-  const charges = await client.charges.list({ customer: customerId, limit: 100 });
-  const mandateId = charges.data
-    .filter((charge) => charge.payment_method === method.id)
-    .map((charge) => charge.payment_method_details?.sepa_debit?.mandate)
-    .find((found) => typeof found === 'string');
-  if (!mandateId) return null;
-  const mandate = await client.mandates.retrieve(mandateId);
-  return mandate.payment_method_details.sepa_debit?.reference ?? null;
+  return references.find((found) => found !== undefined) ?? null;
 }
 
 async function debitMethodOf(
