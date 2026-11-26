@@ -29,6 +29,8 @@ const HISTORY_MESSAGES = 20;
 /** Saves of a streaming answer: at most one per interval (brief non-negotiable 4). */
 const PARTIAL_SAVE_INTERVAL_MS = 750;
 const OPEN_RUN_MINUTES = 15;
+/** Runs one command may reserve: its first and the retries after refusals before its answer existed. */
+const COMMAND_RUN_CAP = 20;
 
 export type AiTurnCommand = {
   entryPoint: AiEntryPoint;
@@ -89,7 +91,8 @@ type Admin = ReturnType<typeof createSupabaseAdminClient>;
 type Refused = Extract<AiTurnStart, { status: 'refused' }>;
 type Reservation =
   | Exclude<AiTurnStart, { status: 'started' }>
-  | { status: 'reserved'; runId: string; runKey: string };
+  | { status: 'reserved'; runId: string; runKey: string }
+  | { status: 'closed' };
 
 const refused = (refusal: AiTurnRefusal): Refused => ({ status: 'refused', refusal });
 
@@ -145,7 +148,14 @@ export async function startAiTurn(command: AiTurnCommand): Promise<AiTurnStart> 
   if (!saved || saved === 'load_failed') return refused('unavailable');
   if (saved.text !== command.text) return refused('command_conflict');
 
-  const reserved = await reserveRun(admin, command, commandId);
+  let reserved = await reserveRun(admin, command, commandId);
+  if (reserved.status === 'closed') {
+    const resumed = await resumeClosedCommand(admin, command);
+    if (resumed.status !== 'retry') return resumed;
+    reserved = await reserveRun(admin, command, resumed.runKey);
+    // Closed already: another retry of this command took the key first.
+    if (reserved.status === 'closed') return refused('run_active');
+  }
   if (reserved.status !== 'reserved') return reserved;
   const { runId, runKey } = reserved;
   // Refused before its answer exists, the command stays open: a retry under
@@ -197,10 +207,7 @@ async function reserveRun(admin: Admin, command: AiTurnCommand, runKey: string):
     })
     .single();
   if (reservation.error) {
-    // Only the command's first run resumes; a closed later run is a race with a retry of the same command.
-    if (reservation.error.message === 'ai_run_closed' && runKey === command.commandId) {
-      return resumeClosedCommand(admin, command);
-    }
+    if (reservation.error.message === 'ai_run_closed') return { status: 'closed' };
     logError('startAiTurn: reservation failed', reservation.error);
     return refused('unavailable');
   }
@@ -222,7 +229,10 @@ async function reserveRun(admin: Admin, command: AiTurnCommand, runKey: string):
  * its answer existed, it is still open and reserves again, keyed by the
  * command id and the count of its earlier runs.
  */
-async function resumeClosedCommand(admin: Admin, command: AiTurnCommand): Promise<Reservation> {
+async function resumeClosedCommand(
+  admin: Admin,
+  command: AiTurnCommand,
+): Promise<Refused | { status: 'already_done' } | { status: 'retry'; runKey: string }> {
   // The answer first: a run that wrote one was reserved before it, so the run read below sees it.
   const answer = await readItem(admin, command, `${command.commandId}:assistant`);
   if (answer === 'load_failed') return refused('unavailable');
@@ -230,16 +240,19 @@ async function resumeClosedCommand(admin: Admin, command: AiTurnCommand): Promis
     .from('ai_runs')
     .select('status, created_at')
     .eq('organization_id', command.organizationId)
-    .like('idempotency_key', `${command.commandId}%`);
+    .like('idempotency_key', `${command.commandId}%`)
+    .limit(COMMAND_RUN_CAP);
   if (runs.error) {
     logError('startAiTurn: command runs read failed', runs.error);
     return refused('unavailable');
   }
+  // A command refused this often is not retried again; the client sends a new one.
+  if (runs.data.length >= COMMAND_RUN_CAP) return refused('too_many_turns');
   const openSince = Date.now() - OPEN_RUN_MINUTES * 60_000;
   if (runs.data.some((run) => run.status === 'reserved' && Date.parse(run.created_at) > openSince)) {
     return refused('run_active');
   }
-  if (!answer) return reserveRun(admin, command, `${command.commandId}:retry-${runs.data.length}`);
+  if (!answer) return { status: 'retry', runKey: `${command.commandId}:retry-${runs.data.length}` };
   if (answer.status !== 'streaming') return { status: 'already_done' };
   const finished = await saveAnswer(admin, command, answer.id, 'failed', {
     ...AI_TURN_FAILURE_BODY,
