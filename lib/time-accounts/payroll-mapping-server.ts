@@ -13,15 +13,19 @@ import { requireRead } from './read-support';
  * Saves a new mapping version: the Admin's codes, and every person's current
  * Personalnummer. `basedOnVersion` is the version the Admin's table showed
  * (null before the first one); the database refuses the save with
- * `stale_version` when another version is current by now. Throws a stable
- * code (or a provider error) on every refusal; the action maps it.
+ * `stale_version` when another version is current by now. Returns the
+ * version number it committed, the base of the Admin's next save: under the
+ * organization's mapping lock the function accepts only the current version
+ * and numbers the new one after it, so the save from version n made n + 1
+ * (supabase/tests/payroll_mapping_confirmation.sql). Throws a stable code (or
+ * a provider error) on every refusal; the action maps it.
  */
 export async function savePayrollMappingVersion(
   admin: AdminClient,
   context: { orgId: string; userId: string },
   codeMappings: PayrollCodeMapping[],
   basedOnVersion: number | null,
-): Promise<void> {
+): Promise<number> {
   const { data: employees } = await readCompleteRows(
     (from, to) =>
       admin
@@ -51,6 +55,7 @@ export async function savePayrollMappingVersion(
     }),
   );
   if (error) throw error;
+  return (basedOnVersion ?? 0) + 1;
 }
 
 /** The current mapping version with the code of each classification. */

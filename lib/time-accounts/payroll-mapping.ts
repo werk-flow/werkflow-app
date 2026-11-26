@@ -105,3 +105,52 @@ export function toPayrollCodeMappings(
     output_code: codes[codeRow.key]?.trim() ?? '',
   }));
 }
+
+/**
+ * The code table an Admin edits: the version it was read from, its codes then,
+ * the typed codes, and whether a save of them still runs.
+ */
+export type PayrollMappingDraft = {
+  basedOnVersion: number | null;
+  readCodes: Readonly<Record<string, string>>;
+  codes: Readonly<Record<string, string>>;
+  saving: boolean;
+};
+
+const sameCodes = (
+  left: Readonly<Record<string, string>>,
+  right: Readonly<Record<string, string>>,
+): boolean => PAYROLL_CODE_ROWS.every((codeRow) => (left[codeRow.key] ?? '') === (right[codeRow.key] ?? ''));
+
+/** Version numbers only grow, so a read of an older one is a refresh that arrived late. */
+const isNewerVersion = (version: number | null, basedOn: number | null): boolean =>
+  version !== null && (basedOn === null || version > basedOn);
+
+/**
+ * The draft after a read of the current mapping. Only a newer version replaces
+ * the table, and only a table without edits. A table with unsaved edits keeps
+ * them and the version they were read from, so their save is refused with
+ * `stale_version` and its reload sentence instead of losing them to a live
+ * refresh (werk-flow/werkflow-planning#360). While the own save runs, no read
+ * replaces the table: its result says which version it made (`recordMappingSave`).
+ */
+export function followMappingVersion(
+  draft: PayrollMappingDraft,
+  current: { version: number | null; codes: Readonly<Record<string, string>> },
+): PayrollMappingDraft {
+  if (draft.saving || !isNewerVersion(current.version, draft.basedOnVersion)) return draft;
+  if (!sameCodes(draft.codes, draft.readCodes)) return draft;
+  return { basedOnVersion: current.version, readCodes: current.codes, codes: current.codes, saving: false };
+}
+
+/**
+ * The draft after its own save of `saved.codes` was accepted as
+ * `saved.version`. Codes typed while the save ran stay as edits based on that
+ * version, so only a version another session commits later makes them stale.
+ */
+export function recordMappingSave(
+  draft: PayrollMappingDraft,
+  saved: { version: number; codes: Readonly<Record<string, string>> },
+): PayrollMappingDraft {
+  return { ...draft, basedOnVersion: saved.version, readCodes: saved.codes, saving: false };
+}

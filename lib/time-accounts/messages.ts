@@ -1,6 +1,6 @@
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
-import { BALANCE_INPUT_ERROR } from './balance-input';
+import { BALANCE_INPUT_ERROR, HOURS_INPUT_ERROR } from './balance-input';
 import { OPENING_DATE_TOO_OLD } from './opening-dates';
 import { PAYROLL_CODE_MAX_LENGTH } from './payroll-mapping';
 
@@ -48,6 +48,7 @@ const FAILURE_CODES = {
     'forbidden',
     'not_authorized',
     'account_not_found',
+    'invalid_hours',
     'invalid_adjustment',
     'stale_version',
     'adjustment_failed',
@@ -219,7 +220,8 @@ const MESSAGES: ActionMessages = {
     messages: {
       forbidden: 'Nur Admin und Büro können Korrekturen beantragen.',
       account_not_found: 'Dieses Zeitkonto gibt es nicht mehr. Lade die Seite neu.',
-      invalid_adjustment: 'Prüfe Minuten, Datum und Grund der Korrektur.',
+      invalid_hours: `Prüfe die Stunden. ${HOURS_INPUT_ERROR}`,
+      invalid_adjustment: 'Prüfe Stunden, Datum und Grund der Korrektur.',
       stale_version: STALE_ACCOUNT,
     },
     fallback: 'Der Antrag konnte nicht gespeichert werden. Versuche es erneut.',

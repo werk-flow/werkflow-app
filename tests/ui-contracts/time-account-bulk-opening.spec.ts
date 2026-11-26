@@ -119,3 +119,19 @@ test('an opening date more than ten years back marks and focuses the date and se
   await expect(form(page)).toContainText('Das Eröffnungsdatum darf höchstens zehn Jahre zurückliegen.');
   expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
 });
+
+test('an untouched opening date follows a moved suggestion, a picked date stays', async ({ page }) => {
+  const date = form(page).getByRole('group', { name: 'Eröffnungsdatum' });
+  const moveSuggestion = (start: string) =>
+    page.evaluate((value) => {
+      window.uiContractSuggestedStart = value;
+      window.dispatchEvent(new Event('ui-contract:route-refresh'));
+    }, start);
+  // A month closed in another session moves the suggestion.
+  await moveSuggestion('2026-10-01');
+  await expect(date).toContainText('01.10.2026');
+
+  await typeIntoDatePicker(form(page), 'Eröffnungsdatum', datePickerDigits('2026-10-15'));
+  await moveSuggestion('2026-11-01');
+  await expect(date).toContainText('15.10.2026');
+});

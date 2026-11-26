@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
 import { EmptyState } from '@/components/ui/empty-state';
 import { ListRow } from '@/components/ui/list-row';
@@ -10,8 +10,9 @@ import {
   type SkeletonColumn,
 } from '@/components/ui/skeleton-table';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
-import { formatMinutes, formatPeriod } from '@/lib/time-accounts/presentation';
+import { FINDING_LABELS, formatMinutes, formatPeriod } from '@/lib/time-accounts/presentation';
 import type { TimeAccountOverview } from '@/lib/time-accounts/overview-queries';
+import type { PeriodResultValues } from '@/lib/time-accounts/period-results';
 import { formatBerlin } from '@/lib/utils';
 import { TimePeriodStateBadge } from './time-period-list';
 
@@ -36,11 +37,32 @@ const ACCOUNT_EVENT_COLUMNS: readonly SkeletonColumn[] = [
   { id: 'minutes', header: 'Stunden', className: 'w-[120px]', skeleton: MINUTES_CELL },
 ];
 
-const PERIOD_MINUTES: ReadonlyArray<{ label: string; minutes: (period: AccountPeriod) => number }> = [
-  { label: 'Soll', minutes: (period) => period.targetMinutes },
-  { label: 'Gewertet', minutes: (period) => period.creditedMinutes },
-  { label: 'Differenz', minutes: (period) => period.deltaMinutes },
+const PERIOD_MINUTES: ReadonlyArray<{ label: string; key: keyof PeriodResultValues }> = [
+  { label: 'Soll', key: 'targetMinutes' },
+  { label: 'Gewertet', key: 'creditedMinutes' },
+  { label: 'Differenz', key: 'periodDeltaMinutes' },
 ];
+
+/** A month's value, or „—“ for a month that was not calculated for you: not computed is not zero. */
+function periodMinutes(period: AccountPeriod, key: keyof PeriodResultValues): ReactNode {
+  if (period.outcome.computed) return formatMinutes(period.outcome[key]);
+  return (
+    <>
+      <span aria-hidden="true">—</span>
+      <span className="sr-only">nicht berechnet</span>
+    </>
+  );
+}
+
+/** Why a month has no values: the setup gaps the office still has to close. */
+function NotCalculatedNote({ period }: { period: AccountPeriod }): ReactNode {
+  if (period.outcome.computed) return null;
+  return (
+    <span className="block text-sm font-normal normal-case text-muted-foreground">
+      Nicht berechnet: {period.outcome.causes.map((cause) => FINDING_LABELS[cause]).join(' · ')}
+    </span>
+  );
+}
 
 /** The employee's monthly results: a table from the tablet breakpoint, cards below it. */
 export function TimeAccountPeriodList({ periods }: { periods: AccountPeriod[] }): ReactElement {
@@ -57,14 +79,17 @@ export function TimeAccountPeriodList({ periods }: { periods: AccountPeriod[] })
         {periods.map((period) => (
           <ListRow key={period.id} className="block space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="font-medium capitalize">{formatPeriod(period.startDate)}</p>
+              <p className="font-medium">
+                <span className="capitalize">{formatPeriod(period.startDate)}</span>
+                <NotCalculatedNote period={period} />
+              </p>
               <TimePeriodStateBadge state={period.state} />
             </div>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
               {PERIOD_MINUTES.map((item) => (
                 <div key={item.label} className="contents">
                   <dt className="text-muted-foreground">{item.label}</dt>
-                  <dd className="text-right tabular-nums">{formatMinutes(item.minutes(period))}</dd>
+                  <dd className="text-right tabular-nums">{periodMinutes(period, item.key)}</dd>
                 </div>
               ))}
             </dl>
@@ -77,10 +102,13 @@ export function TimeAccountPeriodList({ periods }: { periods: AccountPeriod[] })
           <TableBody>
             {periods.map((period) => (
               <TableRow key={period.id}>
-                <TableCell className="font-medium capitalize">{formatPeriod(period.startDate)}</TableCell>
+                <TableCell className="font-medium">
+                  <span className="capitalize">{formatPeriod(period.startDate)}</span>
+                  <NotCalculatedNote period={period} />
+                </TableCell>
                 {PERIOD_MINUTES.map((item) => (
                   <TableCell key={item.label} className="tabular-nums">
-                    {formatMinutes(item.minutes(period))}
+                    {periodMinutes(period, item.key)}
                   </TableCell>
                 ))}
                 <TableCell>
