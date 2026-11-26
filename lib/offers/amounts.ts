@@ -24,9 +24,12 @@ export function offerAmounts(sections: readonly OfferSection[]): OfferAmounts {
   return {
     ...amounts,
     sections: sections.map((section) => {
-      const positionCents = section.positions.map((position) =>
-        position.kind === 'free' ? (lineCents.pop() ?? 0) : null,
-      );
+      const positionCents = section.positions.map((position) => {
+        if (position.kind === 'text') return null;
+        const cents = lineCents.pop();
+        if (cents === undefined) throw new RangeError('A priced position has no computed amount.');
+        return cents;
+      });
       return { netCents: positionCents.reduce<number>((sum, cents) => sum + (cents ?? 0), 0), positionCents };
     }),
   };

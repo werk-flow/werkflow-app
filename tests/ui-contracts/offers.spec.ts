@@ -168,3 +168,33 @@ test('a content save confirms with the rendered content, before or after its ans
   await expect(title).toHaveValue('Wartung Heizung');
   await expect(editor.getByText(/inzwischen geändert/)).toHaveCount(0);
 });
+
+// A retry after a lost answer answers the version of the first save; when the
+// page already shows a later version of another session, the save is on
+// screen already and confirms at once instead of waiting for a further change.
+test('a retried content save whose version the page has passed confirms at once', async ({ page }) => {
+  await openContractFixture(page, 'offers');
+  const editor = page.getByRole('form', { name: 'Titel und Positionen' });
+  const save = editor.getByRole('button', { name: 'Speichern', exact: true });
+  await editor.getByRole('button', { name: 'Titel hinzufügen', exact: true }).click();
+  await editor.getByRole('textbox', { name: 'Titel 1' }).fill('Wartung');
+  await page.evaluate(() => window.uiContractOfferContentRender?.(3, [{ title: 'Heizung', positions: [] }]));
+
+  await save.click();
+  await expectHeldWrite(page, 'save-offer-content');
+  await answerHeldWrite(page, null);
+  await expect(visibleText(page, 'Positionen gespeichert.', true)).toBeVisible();
+  await expect(save).not.toHaveAttribute('aria-busy', 'true');
+});
+
+// Untouched text takes another session's newer content by itself, so a
+// refused save of it says so instead of pointing to „Neu laden“.
+test('a refused save of untouched content names the newer content it now shows', async ({ page }) => {
+  await openContractFixture(page, 'offers');
+  const editor = page.getByRole('form', { name: 'Titel und Positionen' });
+  await editor.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expectHeldWrite(page, 'save-offer-content');
+  await answerHeldWrite(page, 'offer_changed');
+  await expect(editor.getByText('Du siehst jetzt die aktuelle Fassung.', { exact: false })).toBeVisible();
+  await expect(editor.getByText(/Neu laden/)).toHaveCount(0);
+});

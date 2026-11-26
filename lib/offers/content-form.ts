@@ -99,6 +99,18 @@ export function parseContentForm(sections: readonly SectionForm[]): ParsedConten
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, sections: parsed };
 }
 
+/**
+ * Below Next's 1 MB body limit of a Server Action, with room for the request's
+ * own fields: a larger content never reaches the server, so the editor says
+ * what to shorten instead.
+ */
+const MAX_CONTENT_BYTES = 900_000;
+
+/** Whether the parsed content is too large to send in one save. */
+export function contentTooLarge(sections: readonly OfferSection[]): boolean {
+  return new TextEncoder().encode(JSON.stringify(sections)).length > MAX_CONTENT_BYTES;
+}
+
 /** The live amounts of the content as typed; null while a position cannot be read or the line rule refuses it. */
 export function liveContentAmounts(sections: readonly SectionForm[]): OfferAmounts | null {
   const parsed = parseContentForm(

@@ -16,6 +16,7 @@ import { describeFailure } from '@/lib/action-messages';
 import { saveOfferContent } from '@/lib/offers/actions';
 import {
   contentFormOf,
+  contentTooLarge,
   liveContentAmounts,
   parseContentForm,
   type SectionForm,
@@ -35,6 +36,14 @@ const CONTENT_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   offer_not_editable: 'Das Angebot ist kein Entwurf mehr. Seine Positionen kannst du nicht mehr ändern.',
   offer_not_found: 'Das Angebot gibt es nicht mehr.',
 };
+
+/** The sentence of a failed save; another session's newer content replaces untouched text by itself. */
+function failureSentence(error: string | null, edited: boolean): string {
+  if (error === 'offer_changed' && !edited) {
+    return 'Jemand hat die Positionen gerade geändert. Du siehst jetzt die aktuelle Fassung.';
+  }
+  return error ? describeFailure(error, CONTENT_FAILURE_MESSAGES, SAVE_FAILED) : SAVE_FAILED;
+}
 
 type Draft = {
   sections: SectionForm[];
@@ -108,6 +117,10 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
       focusFirstInvalidField(parsed.errors);
       return;
     }
+    if (contentTooLarge(parsed.sections)) {
+      setError('Die Positionen sind zu lang für eine Speicherung. Kürze lange Beschreibungen.');
+      return;
+    }
     void run(async () => {
       setError(null);
       const since = settle.markChange();
@@ -123,13 +136,13 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
         )
         .catch(() => null);
       if (!result?.success) {
-        setError(result ? describeFailure(result.error, CONTENT_FAILURE_MESSAGES, SAVE_FAILED) : SAVE_FAILED);
+        setError(failureSentence(result?.error ?? null, draft.edited));
         return;
       }
       saved();
       setAttempted(false);
-      // A retry after a lost answer can name the version the page already shows.
-      const confirmed = result.contentVersion === offer.contentVersion || (await settle.confirmChange(since));
+      // A retry after a lost answer can name a version the page already shows or has passed.
+      const confirmed = result.contentVersion <= offer.contentVersion || (await settle.confirmChange(since));
       if (confirmed) showBanner({ variant: 'success', message: 'Positionen gespeichert.' });
     });
   };
