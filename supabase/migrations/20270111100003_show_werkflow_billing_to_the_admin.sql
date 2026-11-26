@@ -138,8 +138,12 @@ create unique index werkflow_billing_page_signals_replident_idx
 alter table public.werkflow_billing_page_signals
   replica identity using index werkflow_billing_page_signals_replident_idx;
 alter publication supabase_realtime add table public.werkflow_billing_page_signals;
+-- An organization's deletion skips the per-row notice (20270111100001).
 create trigger emit_realtime_deletion after delete on public.werkflow_billing_page_signals
-  for each row execute function app_private.emit_realtime_deletion();
+  for each row
+  when (not coalesce(old.organization_id::text = any (pg_catalog.string_to_array(
+    pg_catalog.current_setting('app.deleting_organization_ids', true), ',')), false))
+  execute function app_private.emit_realtime_deletion();
 
 create function app_private.signal_werkflow_billing_page()
 returns trigger
