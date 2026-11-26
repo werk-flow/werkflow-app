@@ -12,6 +12,7 @@ import { z } from '../../zod';
  */
 const READABLE_COLUMNS = {
   organizations: ['id', 'created_at'],
+  organization_members: ['user_id', 'role'],
   werkflow_subscriptions: [
     'status',
     'holds_subscription',

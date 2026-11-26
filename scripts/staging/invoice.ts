@@ -61,7 +61,7 @@ async function newActor(): Promise<Actor> {
   return actor;
 }
 
-type Paid = { organization: RunOrganization; subscriptionId: string; customerId: string };
+type Paid = { organization: RunOrganization; subscriptionId: string };
 
 /** Steps 1 and 2: the Admin pays in the sandbox Checkout and creates the run's organization. */
 async function payAndCreateOrganization(page: Page, admin: Actor, method: CheckoutMethod): Promise<Paid> {
@@ -91,13 +91,12 @@ async function payAndCreateOrganization(page: Page, admin: Actor, method: Checko
     SIGNAL_WAIT_MS,
   );
   const subscriptionId = String(subscription.stripe_subscription_id);
-  const customerId = String(subscription.stripe_customer_id);
   kit.log(`${method}: paid in the sandbox Checkout`, {
     organization: organization.id,
     subscription: subscriptionId,
-    customer: customerId,
+    customer: String(subscription.stripe_customer_id),
   });
-  return { organization, subscriptionId, customerId };
+  return { organization, subscriptionId };
 }
 
 type Issued = { stripeInvoiceId: string; number: string; totalCents: number };
@@ -222,14 +221,20 @@ async function billingPageAndOriginal(page: Page, method: CheckoutMethod, issued
   const original = await readOriginal(new Uint8Array(await readFile(await download.path())));
   // Fixed words and rule ids only: the original's own text never reaches a printed line.
   const rules = original.failedRules.filter((rule) => /^[A-Z]+(?:-[A-Z0-9]+)+$/.test(rule));
-  if (original.number !== issued.number || original.typeCode !== '380' || original.failedRules.length)
+  if (
+    original.number !== issued.number ||
+    original.typeCode !== '380' ||
+    original.failedRules.length ||
+    original.missingContainerMarks.length
+  )
     throw new StagingFailure(
-      `The original of ${issued.number} matches its number: ${original.number === issued.number}, is type 380: ${original.typeCode === '380'}, fails ${original.failedRules.length} EN 16931 rules (${rules.join(',')}).`,
+      `The original of ${issued.number} matches its number: ${original.number === issued.number}, is type 380: ${original.typeCode === '380'}, fails ${original.failedRules.length} EN 16931 rules (${rules.join(',')}), lacks ${original.missingContainerMarks.join(',') || 'no container mark'}.`,
     );
   kit.log(`${method}: original downloaded and checked`, {
     number: original.number,
     type_code: original.typeCode,
     en16931: 'passed',
+    container: 'PDF/A-3 Factur-X',
     rules_release: original.rulesRelease,
   });
 }
@@ -267,6 +272,12 @@ async function memberRefused(member: Actor, role: MemberRole, organization: RunO
     await page.getByRole('button', { name: 'Einladung annehmen' }).click();
     // Joined the run's organization, with the role its role-scoped invite code grants.
     await expect(page).toHaveURL(`/dashboard?joined=${organization.id}`, { timeout: 30_000 });
+    const memberships = await readDev(kit, organization, {
+      table: 'organization_members',
+      columns: ['user_id', 'role'],
+    });
+    if (!memberships.some((row) => row.user_id === member.id && row.role === role))
+      throw new StagingFailure(`Member ${member.id} holds no ${role} membership in the run organization.`);
     await page.goto(BILLING_PATH);
     // The server sends a role the section is closed to to its profile (lib/settings/section-access.ts).
     await expect(page).toHaveURL(getSettingsHref(DEFAULT_SETTINGS_SECTION_SLUG));
@@ -309,21 +320,32 @@ async function membersRefused(admin: Actor, organization: RunOrganization): Prom
   for (const [role, member] of members) await memberRefused(member, role, organization);
 }
 
-let passed = false;
+let failures = 0;
+/** Runs one part of the journey; a failure prints its step and lets the parts after it run. */
+async function part<T>(run: () => Promise<T>): Promise<T | null> {
+  try {
+    return await run();
+  } catch (error) {
+    failures += 1;
+    kit.log('failed', {
+      step: step.name,
+      reason: failureLine(kit, error),
+      next: `get_runtime_logs environment=preview since=${started} query=${step.logs}`,
+    });
+    return null;
+  }
+}
+
 kit.log('invoice journey', { started });
+let passed = false;
 try {
-  const sepa = await invoiceJourney('sepa');
-  await invoiceJourney('card');
-  // Last, so a member's failure leaves both invoices proven.
-  await membersRefused(sepa.admin, sepa.organization);
-  passed = true;
-} catch (error) {
-  kit.log('failed', {
-    step: step.name,
-    reason: failureLine(kit, error),
-    next: `get_runtime_logs environment=preview since=${started} query=${step.logs}`,
-  });
+  const sepa = await part(() => invoiceJourney('sepa'));
+  await part(() => invoiceJourney('card'));
+  // On the SEPA organization, whatever the card's result; last, so a member's failure leaves both
+  // invoices proven.
+  if (sepa) await part(() => membersRefused(sepa.admin, sepa.organization));
 } finally {
+  passed = failures === 0;
   begin('cleanup', 'deleteAccount');
   const failed: string[] = [];
   for (const runId of runIds) if (!(await cleanUp(kit, runId))) failed.push(runId);

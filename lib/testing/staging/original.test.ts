@@ -12,12 +12,25 @@ import { toEn16931 } from '../../invoicing/to-en16931';
 
 const { readOriginal } = await importLoadingSaxon(() => import('./original'));
 
-test('an original names its number and type and passes the EN 16931 rules', async () => {
-  const facts = await readOriginal(await pdfCarrying(toEn16931(calculateInvoice(STANDARD_RATE_INVOICE))));
-  expect(facts).toMatchObject({ number: STANDARD_RATE_INVOICE.number, typeCode: '380', failedRules: [] });
+test('an original names its number and type, passes the EN 16931 rules and is a ZUGFeRD container', async () => {
+  const facts = await readOriginal(
+    await pdfCarrying(toEn16931(calculateInvoice(STANDARD_RATE_INVOICE)), { zugferd: true }),
+  );
+  expect(facts).toMatchObject({
+    number: STANDARD_RATE_INVOICE.number,
+    typeCode: '380',
+    failedRules: [],
+    missingContainerMarks: [],
+  });
   expect(facts.rulesRelease).toMatch(/^\d+\.\d+\.\d+$/);
   const storno = await readOriginal(await pdfCarrying(toEn16931(calculateInvoice(STORNO_INVOICE))));
   expect(storno).toMatchObject({ number: STORNO_INVOICE.number, typeCode: '384' });
+});
+
+test('intact XML in a bare PDF lacks the PDF/A-3 and Factur-X container marks', async () => {
+  const facts = await readOriginal(await pdfCarrying(toEn16931(calculateInvoice(STANDARD_RATE_INVOICE))));
+  expect(facts.failedRules).toEqual([]);
+  expect(facts.missingContainerMarks).toEqual(['PDF/A-3', 'Factur-X', 'OutputIntent']);
 });
 
 test('a number in a comment never stands in for the document number', async () => {

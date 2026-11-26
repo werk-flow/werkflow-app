@@ -11,13 +11,14 @@ const SANDBOX_CHECKOUT = /^https:\/\/checkout\.stripe\.com\/(?:[a-z]+\/)*cs_test
 
 /**
  * A signed R2 download of a WerkFlow invoice original, which the billing page opens as its PDF button's
- * page (lib/storage/r2.ts, `createWerkflowBillingDownloadUrl`): an account host, a bucket, the
- * original's key `werkflow-billing/invoices/<Stripe invoice>/<sha256>.pdf` (lib/werkflow-billing/
- * issue-invoice.ts) and a SigV4 signature only staging's server can make. The bucket is server
- * configuration the kit cannot know; an R2 signature holds for one bucket and key only.
+ * page (lib/storage/r2.ts, `createWerkflowBillingDownloadUrl`): DEV's EU bucket `werkflow-documents-dev`
+ * (docs/technical/environments.md), never PROD's, the original's key
+ * `werkflow-billing/invoices/<Stripe invoice>/<sha256>.pdf` (lib/werkflow-billing/issue-invoice.ts) and
+ * a SigV4 signature only staging's server can make. The R2 account id is server configuration the kit
+ * cannot know; bucket names are unique within it.
  */
 const SIGNED_BILLING_DOWNLOAD =
-  /^https:\/\/[0-9a-f]{32}\.(?:eu\.)?r2\.cloudflarestorage\.com\/[a-z0-9][a-z0-9-]{1,61}[a-z0-9]\/werkflow-billing\/invoices\/in_[A-Za-z0-9]+\/[0-9a-f]{64}\.pdf\?(?:[^#&]+&)*X-Amz-Signature=[0-9a-f]{64}(?:&[^#]*)?$/;
+  /^https:\/\/[0-9a-f]{32}\.eu\.r2\.cloudflarestorage\.com\/werkflow-documents-dev\/werkflow-billing\/invoices\/in_[A-Za-z0-9]+\/[0-9a-f]{64}\.pdf\?(?:[^#&]+&)*X-Amz-Signature=[0-9a-f]{64}(?:&[^#]*)?$/;
 
 export type BrowserRequest = {
   url: string;

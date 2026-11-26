@@ -392,8 +392,11 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
     await browser.close();
   }
   // Read after the close, so a hop refused while the browser closed still fails the journey.
-  if (refused.size)
+  if (refused.size) {
+    // The refusal wins, but the journey's own failure still names the step it stopped at.
+    if ('error' in outcome) kit.log('journey failure', { reason: failureLine(kit, outcome.error) });
     throw new StagingFailure(`The browser refused pages outside staging: ${[...refused].join(', ')}.`);
+  }
   if ('error' in outcome) throw outcome.error;
   return outcome.result;
 }
@@ -538,7 +541,11 @@ async function cleanUpRun(
 export async function cleanUp(kit: Kit, runId: string | null): Promise<boolean> {
   try {
     const before = await readRunRows(kit);
-    const runs = selectRuns(before.actors, before.organizations, runId, new Date());
+    // An Admin's run first: its organization's deletion ends its members' memberships, which their
+    // account deletion waits for.
+    const runs = selectRuns(before.actors, before.organizations, runId, new Date()).sort(
+      (first, second) => second.organizationIds.length - first.organizationIds.length,
+    );
     const names = new Map(before.organizations.map((row) => [row.id, row.name]));
     let passed = true;
     for (const run of runs) {
