@@ -18,6 +18,7 @@ import { clockSlot, heldUntil, type ScheduleAnswer, scheduleDue, type ScheduleSt
 import { workflowsFolder } from '../ci-workflow';
 
 const repository = resolve(import.meta.dir, '../../..');
+const fixedClock = join(repository, 'lib/testing/fixtures/fixed-clock.ts');
 const at = (iso: string): Date => new Date(iso);
 const MINUTE = 60_000;
 
@@ -280,7 +281,8 @@ function schedulerFixture(folder: string): {
   return {
     root,
     run: (...args) =>
-      spawnSync(process.execPath, ['scripts/ci/schedule.ts', ...args], {
+      // The midnight start rule lets a held run start by the time of day, so the CLI reads a fixed one.
+      spawnSync(process.execPath, ['--preload', fixedClock, 'scripts/ci/schedule.ts', ...args], {
         cwd: root,
         encoding: 'utf8',
         env: {

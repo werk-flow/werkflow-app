@@ -176,6 +176,9 @@ test('the scheduler never names a held run its run-commit holds; that run starts
     const answer = spawnSync(
       process.execPath,
       [
+        // The midnight start rule lets a held run start by the time of day, so the CLI reads a fixed one.
+        '--preload',
+        join(repository, 'lib/testing/fixtures/fixed-clock.ts'),
         join(repository, 'scripts/ci/schedule.ts'),
         'due',
         '--state',
