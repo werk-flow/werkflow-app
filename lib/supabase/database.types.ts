@@ -22745,6 +22745,14 @@ export type Database = {
         };
         Returns: undefined;
       };
+      settle_ai_run: {
+        Args: {
+          p_organization_id: string;
+          p_run_id: string;
+          p_status: Database["public"]["Enums"]["ai_run_status"];
+        };
+        Returns: number;
+      };
       settle_document_delivery: {
         Args: {
           p_actor_id: string;
@@ -22756,14 +22764,6 @@ export type Database = {
           p_provider_message_id?: string;
         };
         Returns: boolean;
-      };
-      settle_ai_run: {
-        Args: {
-          p_organization_id: string;
-          p_run_id: string;
-          p_status: Database["public"]["Enums"]["ai_run_status"];
-        };
-        Returns: number;
       };
       settle_werkflow_billing_mail: {
         Args: {
