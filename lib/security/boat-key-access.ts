@@ -267,9 +267,11 @@ const UNREACHABLE = new Set(['ENOENT', 'ENOTDIR', 'EACCES']);
 
 /**
  * The `.env.live-backup` files in `folder` and the folders below it, at most `depth` levels down,
- * nested checkouts included. A file operand or an unreachable path holds none. Undefined past
- * MAX_WALKED folders, or when a folder fails to list for another reason, such as a symlink loop or
- * an I/O error: the guard then cannot tell, and refuses.
+ * nested checkouts included. The walk enters a symlink as `grep -R` does, so a backup behind a
+ * linked folder counts; a link to a file or to nothing holds none. A file operand or an unreachable
+ * path holds none. Undefined past MAX_WALKED folders, which a link back up the tree soon passes, or
+ * when a folder fails to list for another reason, such as a symlink loop or an I/O error: the guard
+ * then cannot tell, and refuses.
  */
 export function liveBackupsOnDisk(folder: string, depth: number): string[] | undefined {
   const found: string[] = [];
@@ -286,7 +288,7 @@ export function liveBackupsOnDisk(folder: string, depth: number): string[] | und
     if (entries.some((entry) => entry.name === LIVE_BACKUP)) found.push(join(dir, LIVE_BACKUP));
     if (level >= depth) continue;
     for (const entry of entries)
-      if (entry.isDirectory() && !UNWALKED.has(entry.name))
+      if ((entry.isDirectory() || entry.isSymbolicLink()) && !UNWALKED.has(entry.name))
         queue.push({ dir: join(dir, entry.name), level: level + 1 });
   }
   return found;
@@ -371,10 +373,14 @@ const NO_IGNORE_FLAG = /^(?:-[a-zA-Z]*[uU][a-zA-Z]*|--no-ignore\S*|--unrestricte
 /** rg's file globs, which override its ignore rules for the files they include. */
 const GLOB_FLAG = /^(?:-g|--i?glob)(?:=(.*))?$|^-g(.+)$/;
 
-/** Whether an rg include glob brings back the git-ignored `.env.live-backup`, as `-g '.env*'` does. */
+/**
+ * Whether an rg include glob brings back the git-ignored `.env.live-backup`, as `-g '.env*'` and
+ * `-g 'app/.env*'` do: only its final path segment can name the file it selects.
+ */
 function globIncludesLiveBackup(glob: string, caseless = false): boolean {
-  const pattern = (caseless ? glob.toLowerCase() : glob).replace(/^\*\*\//, '');
-  return !pattern.startsWith('!') && new Bun.Glob(pattern).match(LIVE_BACKUP);
+  const pattern = caseless ? glob.toLowerCase() : glob;
+  const name = pattern.slice(pattern.lastIndexOf('/') + 1);
+  return !pattern.startsWith('!') && new Bun.Glob(name).match(LIVE_BACKUP);
 }
 
 /** Whether a search tool's arguments skip git-ignored files for `.env.live-backup`. */

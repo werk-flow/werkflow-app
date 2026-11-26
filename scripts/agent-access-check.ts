@@ -5,16 +5,17 @@ import { dirname, join, resolve } from 'node:path';
 import {
   STAGING_AGENT_KEY_FILE,
   STAGING_AGENT_KEY_NAMES,
-  assignedValues,
   type StagingAgentKeyName,
   type StagingAgentKeys,
   type Verdict,
   devOnlyVerdict,
+  envFileValues,
   installStagingAgentKeys,
   isStagingAgentKeyName,
   keyShapeVerdict,
   privateModeVerdict,
   protectionVerdict,
+  queryErrorSqlState,
   readStagingAgentKeys,
   sandboxVerdict,
   writeRefusedVerdict,
@@ -73,20 +74,21 @@ async function devOnly(token: string): Promise<Verdict> {
 
 /**
  * A temporary table through the query endpoint: it needs write access, vanishes with its session if
- * it ran, and Supabase denies it (403) to a token without Database write.
+ * it ran, and Supabase refuses it to a token without Database write (writeRefusedVerdict). Only a
+ * 400's SQLSTATE is read; every other body is discarded unread.
  */
 async function writeRefused(token: string): Promise<Verdict> {
   if (!refs) return 'failed';
-  return probe(async () =>
-    statusVerdict(
-      await request(`${MANAGEMENT_API}/projects/${refs.dev}/database/query`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'create temporary table agent_access_write_probe (id int)' }),
-      }),
-      writeRefusedVerdict,
-    ),
-  );
+  return probe(async () => {
+    const response = await request(`${MANAGEMENT_API}/projects/${refs.dev}/database/query`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'create temporary table agent_access_write_probe (id int)' }),
+    });
+    if (response.status !== 400)
+      return statusVerdict(response, (status) => writeRefusedVerdict(status, undefined));
+    return writeRefusedVerdict(400, queryErrorSqlState(await response.json()));
+  });
 }
 
 /** One row of DEV's Auth users; the body holds personal data, so only the status counts. */
@@ -199,9 +201,12 @@ async function check(): Promise<boolean> {
     .filter((name) => name.startsWith('.env'))
     .sort();
   for (const name of envFiles) {
-    const path = join(checkout, name);
-    if (!statSync(path, { throwIfNoEntry: false })?.isFile()) continue;
-    const tokens = assignedValues(readFileSync(path, 'utf8'), 'SUPABASE_ACCESS_TOKEN');
+    const tokens = envFileValues(join(checkout, name), 'SUPABASE_ACCESS_TOKEN');
+    // A file the check cannot read may hold a token it cannot vouch for; the others are still checked.
+    if (tokens === 'failed') {
+      lines.push([`${name} readable`, 'failed']);
+      continue;
+    }
     tokens.forEach((token, index) => {
       const which = tokens.length > 1 ? ` #${index + 1}` : '';
       lines.push([`${name} SUPABASE_ACCESS_TOKEN${which} reaches DEV and not PROD`, tokenVerdict(token)]);

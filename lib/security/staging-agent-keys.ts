@@ -36,13 +36,19 @@ export const STAGING_AGENT_KEY_NAMES: readonly StagingAgentKeyName[] = [
 export type Verdict = 'ok' | 'failed' | 'missing';
 
 /**
- * Every value a file assigns to `name`, `export NAME=` included as Bun reads it: a loader may take
- * the first or the last, so each counts.
+ * Every value an env file assigns to `name`, `export NAME=` included as Bun reads it: a loader may
+ * take the first or the last, so each counts. A path that is no regular file assigns none; a file
+ * that cannot be stat'ed or read is `failed`, and the error, which may name the path, is dropped.
  */
-export function assignedValues(text: string, name: string): string[] {
-  return text
-    .split(/\r?\n/)
-    .flatMap((line) => parseEnvironmentFile(line.replace(/^\s*export\s+/, ''))[name] ?? []);
+export function envFileValues(path: string, name: string): string[] | 'failed' {
+  try {
+    if (!statSync(path, { throwIfNoEntry: false })?.isFile()) return [];
+    return readFileSync(path, 'utf8')
+      .split(/\r?\n/)
+      .flatMap((line) => parseEnvironmentFile(line.replace(/^\s*export\s+/, ''))[name] ?? []);
+  } catch {
+    return 'failed';
+  }
 }
 
 /** Whether a value has its key's shape: `missing` when empty or absent. */
@@ -156,12 +162,24 @@ export function devOnlyVerdict(devStatus: number, productionStatus: number): Ver
   return devStatus === 200 && [401, 403, 404].includes(productionStatus) ? 'ok' : 'failed';
 }
 
+/** The SQLSTATE in a query error's message, as Supabase spells it: `ERROR:  25006: cannot execute …`. */
+const SQLSTATE = /\bERROR:\s+([0-9A-Z]{5}):/;
+const queryErrorSchema = z.object({ message: z.string() });
+
+/** The SQLSTATE a Management API query error names, and nothing else of its body. */
+export function queryErrorSqlState(body: unknown): string | undefined {
+  const parsed = queryErrorSchema.safeParse(body);
+  return parsed.success ? SQLSTATE.exec(parsed.data.message)?.[1] : undefined;
+}
+
 /**
- * A write the token must be refused: only Supabase's permission denial (403) proves it. A refused
- * sign-in (401), a write that ran, or any other answer fails.
+ * A write the token must be refused. Supabase denies a token without Database write either with 403,
+ * or by running its query in a read-only transaction, which answers 400 with SQLSTATE 25006
+ * (`read_only_sql_transaction`). A refused sign-in (401), a write that ran, another query error, or
+ * any other answer fails.
  */
-export function writeRefusedVerdict(status: number): Verdict {
-  return status === 403 ? 'ok' : 'failed';
+export function writeRefusedVerdict(status: number, sqlState: string | undefined): Verdict {
+  return status === 403 || (status === 400 && sqlState === '25006') ? 'ok' : 'failed';
 }
 
 const livemodeSchema = z.object({ livemode: z.boolean() });

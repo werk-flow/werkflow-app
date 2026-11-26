@@ -2,18 +2,19 @@
 // machine, and `bun run agent-access:check` fails on a key that reaches anything else. Every value
 // here is made up.
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import {
   STAGING_AGENT_KEY_FILE,
-  assignedValues,
   devOnlyVerdict,
+  envFileValues,
   installStagingAgentKeys,
   keyShapeVerdict,
   privateModeVerdict,
   protectionVerdict,
+  queryErrorSqlState,
   readStagingAgentKeys,
   sandboxVerdict,
   writeRefusedVerdict,
@@ -145,17 +146,40 @@ test('an install writes a private file in a private folder, and a key out of sha
   }
 });
 
-test('every assignment of a name counts, an exported one too', () => {
-  const text = [
-    `SUPABASE_ACCESS_TOKEN=${MADE_UP.SUPABASE_DEV_ACCESS_TOKEN}`,
-    '# SUPABASE_ACCESS_TOKEN=commented',
-    `export SUPABASE_ACCESS_TOKEN="sbp_${'1f'.repeat(20)}"`,
-    'OTHER=1',
-  ].join('\n');
-  expect(assignedValues(text, 'SUPABASE_ACCESS_TOKEN')).toEqual([
-    MADE_UP.SUPABASE_DEV_ACCESS_TOKEN,
-    `sbp_${'1f'.repeat(20)}`,
-  ]);
+test('every assignment of a name in an env file counts, an exported one too', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'env-file-'));
+  try {
+    const path = join(folder, '.env.local');
+    writeFileSync(
+      path,
+      [
+        `SUPABASE_ACCESS_TOKEN=${MADE_UP.SUPABASE_DEV_ACCESS_TOKEN}`,
+        '# SUPABASE_ACCESS_TOKEN=commented',
+        `export SUPABASE_ACCESS_TOKEN="sbp_${'1f'.repeat(20)}"`,
+        'OTHER=1',
+      ].join('\n'),
+    );
+    expect(envFileValues(path, 'SUPABASE_ACCESS_TOKEN')).toEqual([
+      MADE_UP.SUPABASE_DEV_ACCESS_TOKEN,
+      `sbp_${'1f'.repeat(20)}`,
+    ]);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test('an env file that cannot be read fails, and a path that is no file holds nothing', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'env-file-'));
+  try {
+    // A symlink loop fails its stat, as an unreadable file fails its read, even for root.
+    symlinkSync(join(folder, '.env.loop'), join(folder, '.env.loop'));
+    expect(envFileValues(join(folder, '.env.loop'), 'SUPABASE_ACCESS_TOKEN')).toBe('failed');
+    mkdirSync(join(folder, '.env.folder'));
+    expect(envFileValues(join(folder, '.env.folder'), 'SUPABASE_ACCESS_TOKEN')).toEqual([]);
+    expect(envFileValues(join(folder, '.env.missing'), 'SUPABASE_ACCESS_TOKEN')).toEqual([]);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });
 
 test('the reader refuses a key path that is no regular file', () => {
@@ -193,10 +217,27 @@ test('a Supabase token passes only when it reaches DEV and is refused PROD', () 
 });
 
 test('a write passes only when Supabase refuses it', () => {
-  expect(writeRefusedVerdict(403)).toBe('ok');
-  // A write that ran, a refused sign-in, or an answer that proves nothing, fails.
-  for (const status of [200, 201, 400, 401, 404, 429, 500])
-    expect(writeRefusedVerdict(status), String(status)).toBe('failed');
+  expect(writeRefusedVerdict(403, undefined)).toBe('ok');
+  // A read-only token's query runs in a read-only transaction, which refuses the write.
+  expect(writeRefusedVerdict(400, '25006')).toBe('ok');
+  // Another query error, a 400 without a code, a write that ran, a refused sign-in, or an answer
+  // that proves nothing, fails.
+  expect(writeRefusedVerdict(400, '42601')).toBe('failed');
+  expect(writeRefusedVerdict(400, undefined)).toBe('failed');
+  for (const status of [200, 201, 401, 404, 429, 500])
+    expect(writeRefusedVerdict(status, '25006'), String(status)).toBe('failed');
+});
+
+test("a query error's SQLSTATE is the only part of its body read", () => {
+  const message = (text: string) => ({ message: `Failed to run sql query: ${text}\n` });
+  expect(
+    queryErrorSqlState(message('ERROR:  25006: cannot execute CREATE TABLE in a read-only transaction')),
+  ).toBe('25006');
+  expect(queryErrorSqlState(message('ERROR:  42601: syntax error at or near "creat"'))).toBe('42601');
+  // A code elsewhere in the text, or a body of another shape, names none.
+  expect(queryErrorSqlState(message('read-only transaction 25006'))).toBeUndefined();
+  expect(queryErrorSqlState({ error: 'ERROR:  25006: made up' })).toBeUndefined();
+  expect(queryErrorSqlState('ERROR:  25006: made up')).toBeUndefined();
 });
 
 test('a Stripe answer passes only with livemode false', () => {
