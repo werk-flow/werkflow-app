@@ -13,7 +13,7 @@ WerkFlow runs on two cloud backends ([decision 0003](../decisions/0003-dev-prod-
 | Serves | The deployed app and real customers | Local development, the cloud canary, the partner preview, scoped provider checks |
 | Auth site URL | `https://app.werk-flow.app` | `http://localhost:3000` |
 
-Both projects deploy the edge functions from `supabase/functions/`; each keeps its own Resend key.
+Both projects deploy the edge functions from `supabase/functions/`.
 
 Both run Micro compute, whose latency rises steeply with concurrency, accepted while one beta business is the traffic. Cloud canary timings are no capacity proof.
 
@@ -70,9 +70,9 @@ This table is the one home of every deployment and workflow credential. No check
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
 | `RESEND_API_KEY`, `FROM_EMAIL` | Supabase secrets, one key per project; Vercel | Mail functions; `lib/delivery/send-email.ts` | Never | Resend, API keys: a sending key per project, `supabase secrets set RESEND_API_KEY` on DEV, PROD's dashboard, or Vercel, delete the old one. |
 | `WERKFLOW_ALARM_EMAIL`, `WERKFLOW_BILLING_REPLY_TO`, `RESEND_WEBHOOK_SECRET` | Vercel | Alarm, reply-to, webhook | Never | Set, redeploy. |
-| `WERKFLOW_KI_ANTHROPIC_KEY` | Vercel, Sensitive: Production holds the key of the production Anthropic workspace, Preview the key of the dev workspace | WerkFlow KI's model calls (`lib/ai/model.ts`). Without it a Vercel deployment refuses every turn; every other machine replays recorded answers and never calls a model | As set in the Anthropic Console | Anthropic Console, the workspace's API keys: create a key, set it, redeploy, revoke the old key. Revoking the key is the fastest global stop of WerkFlow KI. |
+| `WERKFLOW_KI_ANTHROPIC_KEY` | Vercel, Sensitive | WerkFlow KI | Never | Anthropic Console: new key, redeploy, revoke old. |
 
-The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the workstation tokens, `WERKFLOW_DATANORM_TOKEN`, whose failure fails the next Vercel build by name, and `WERKFLOW_KI_ANTHROPIC_KEY`, whose failure fails the next turn with a German message.
+The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the workstation tokens, `WERKFLOW_DATANORM_TOKEN`, whose failure fails the next Vercel build by name, and `WERKFLOW_KI_ANTHROPIC_KEY`.
 
 ## The local test stack
 
@@ -100,7 +100,7 @@ bun run env:prod   # PRODUCTION (loud warning; no tests)
 
 ## Which tool reaches what
 
-Agents never read PROD data through any tool: every tool result goes to the model provider. Metadata is allowed: the PROD inspection's log, and through the Vercel MCP connector Vercel's deployment state and `vercel.request.count` counts. Hooks enforce this in Claude Code and Codex; the [backlog](enforcement-ladder-backlog.md) records the other shell and `env:prod` paths. `.claude/hooks/refuse-production-mcp.ts` refuses an MCP tool that reaches the production Supabase project, or returns Vercel's logs, build events or traces. Preview runtime logs pass. No agent signs in ([security](security.md#never)): `.claude/hooks/refuse-account-sign-in.ts` refuses the sign-in commands it lists and every Vercel CLI call; the [backlog](enforcement-ladder-backlog.md) records the rest. Keep the `Supabase project` row's shape: the MCP hook reads the production ref there.
+Agents never read PROD data through any tool: every tool result goes to the model provider; the table lists allowed metadata. Hooks enforce this in Claude Code and Codex; the [backlog](enforcement-ladder-backlog.md) records the other shell and `env:prod` paths. `.claude/hooks/refuse-production-mcp.ts` refuses an MCP tool that reaches the production Supabase project, or returns Vercel's logs, build events or traces. Preview runtime logs pass. No agent signs in ([security](security.md#never)): `.claude/hooks/refuse-account-sign-in.ts` refuses the sign-in commands it lists and every Vercel CLI call; the [backlog](enforcement-ladder-backlog.md) records the rest. Keep the `Supabase project` row's shape: the MCP hook reads the production ref there.
 
 | Access path | Prod | Dev | Notes |
 | --- | --- | --- | --- |
