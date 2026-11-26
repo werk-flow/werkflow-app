@@ -66,7 +66,7 @@ const { deriveMaintenanceDueTasks } = await import('@/lib/attention/maintenance-
 async function derivedForCaller() {
   const auth = await resolveActionContext();
   assert.ok(auth.success, JSON.stringify(auth));
-  return deriveMaintenanceDueTasks(auth.context, readManagerAttentionSets(auth.context));
+  return deriveMaintenanceDueTasks(auth.context, readManagerAttentionSets(auth.context), '2026-11-26');
 }
 
 async function tasksOfCaller() {

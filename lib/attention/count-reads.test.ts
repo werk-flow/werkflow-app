@@ -297,6 +297,8 @@ if (ISOLATED) {
         },
       ];
       managerSetOrganizations = [];
+      // Thu 26.11.2026 in Berlin: the item is long overdue.
+      setSystemTime(new Date('2026-11-26T09:00:00Z'));
       try {
         const admin = await readAs('admin', getAttentionCounts);
         expect(admin.result).toMatchObject({ success: true, counts: { actionableCount: 1 } });
@@ -309,6 +311,7 @@ if (ISOLATED) {
         expect(managerSetOrganizations).toEqual([ORG, ORG]);
       } finally {
         dueMaintenance = [];
+        setSystemTime();
       }
     });
 

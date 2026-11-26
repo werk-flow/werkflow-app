@@ -4,7 +4,6 @@
 // office's other pending sets (`./manager-sets`); the rule is
 // lib/maintenance/overdue.ts, the Wartung workspace's own.
 
-import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { isMaintenanceDueForAufgaben, isMaintenanceDueOverdue } from '@/lib/maintenance/overdue';
 import { maintenancePlanSearchHref } from '@/lib/maintenance/workspace-page';
 import type { ActionContext } from '@/lib/org/action-context';
@@ -47,13 +46,18 @@ function toMaintenanceDueTasks(rows: readonly DueMaintenanceRow[], today: string
     );
 }
 
-/** Planning a visit or recording an exception is office work, so only Admin and Büro get these tasks. */
+/**
+ * Planning a visit or recording an exception is office work, so only Admin and
+ * Büro get these tasks. `businessDate` is the Berlin day the overview reports,
+ * so a read across midnight never classifies on another day than it shows.
+ */
 export async function deriveMaintenanceDueTasks(
   context: ActionContext,
   managerSets: ManagerAttentionSetsRead,
+  businessDate: string,
 ): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
   if (context.role !== 'admin' && context.role !== 'buero') return { tasks: [], failed: false };
   const sets = await managerSets;
   if (sets.failed) return { tasks: [], failed: true };
-  return { tasks: toMaintenanceDueTasks(sets.dueMaintenance, getBusinessTodayIso()), failed: false };
+  return { tasks: toMaintenanceDueTasks(sets.dueMaintenance, businessDate), failed: false };
 }

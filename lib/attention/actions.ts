@@ -287,7 +287,12 @@ function toSicknessNotification(
 // Overview and counts
 // ============================================
 
-type DerivedAttention = { tasks: AttentionTask[]; notifications: AttentionNotification[] };
+type DerivedAttention = {
+  /** The Berlin day the due maintenance was classified on, which the overview reports. */
+  businessDate: string;
+  tasks: AttentionTask[];
+  notifications: AttentionNotification[];
+};
 
 /**
  * Every task and notification the viewer may see, or null when any part
@@ -296,6 +301,7 @@ type DerivedAttention = { tasks: AttentionTask[]; notifications: AttentionNotifi
  * counts share this one derivation.
  */
 async function deriveAttention(context: ActionContext): Promise<DerivedAttention | null> {
+  const businessDate = getBusinessTodayIso();
   const ownRecord = readOwnEmployeeRecord(context);
   // One read of the open requests, access proposals, overdue jobs and due maintenance serves four derivations.
   const managerSets = readManagerAttentionSets(context);
@@ -313,7 +319,7 @@ async function deriveAttention(context: ActionContext): Promise<DerivedAttention
       deriveVisitReplanTasks(context),
       deriveSiteAccessProposalTasks(context, managerSets),
       deriveOverdueJobTasks(context, managerSets),
-      deriveMaintenanceDueTasks(context, managerSets),
+      deriveMaintenanceDueTasks(context, managerSets, businessDate),
     ]),
     Promise.all([
       deriveOwnNotifications(context, ownRecord),
@@ -323,6 +329,7 @@ async function deriveAttention(context: ActionContext): Promise<DerivedAttention
   ]);
   if (taskParts.some((part) => part.failed) || notificationParts.some((part) => part.failed)) return null;
   return {
+    businessDate,
     tasks: dedupeAttentionItems(taskParts.flatMap((part) => part.tasks)),
     notifications: sortNotificationsNewestFirst(
       dedupeAttentionItems(notificationParts.flatMap((part) => part.notifications)),
@@ -361,7 +368,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
     return {
       success: true,
       overview: {
-        businessDate: getBusinessTodayIso(),
+        businessDate: derived.businessDate,
         tasks: derived.tasks,
         notifications: derived.notifications,
         ownRequests,
