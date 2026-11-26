@@ -4,7 +4,7 @@ import { z } from '@/lib/zod';
 import type { InvoiceDetail } from './types';
 
 // The Stornorechnung of an issued invoice as cancel_invoice stores it
-// (supabase/migrations/20261219130000_cancel_and_correct_issued_invoices.sql):
+// (supabase/migrations/20270310090000_cancel_and_correct_issued_invoices.sql):
 // the original's lines with each quantity negated, its Leistungszeitraum and
 // references, nothing due, the reason, and the invoice it cancels. The server
 // checks this shape with the EN 16931 rules before the function gives it a

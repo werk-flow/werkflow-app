@@ -57,6 +57,7 @@ const entrySchema = z
       'newcomer',
       'subscriber',
       'prestart',
+      'further-checkout',
       'support',
     ]),
     view: z.enum(['page', 'tab', 'dialog', 'standalone']),
@@ -196,7 +197,12 @@ async function captureState(
   route: string,
 ): Promise<void> {
   const { page, world, businessDate, testInfo } = input;
-  const plan = stateCapturePlan(capture.state, capture.view.kind);
+  const plan = stateCapturePlan(
+    capture.state,
+    capture.view.kind === 'dialog' && capture.view.overFailedPage
+      ? 'dialog-over-failed-page'
+      : capture.view.kind,
+  );
   const context = { page, role: capture.role, world, businessDate, route };
   const identity = { id: capture.id, role: capture.role, view: capture.view.kind };
   try {
@@ -219,6 +225,8 @@ export type CaptureSources = {
   openers: Partial<Record<DialogOpenerId, DialogOpener>>;
   /** Opens a record the set seeds instead of the route's layout record (acceptance-sets/). */
   destination?: ((world: TestWorld) => Promise<SurfaceDestination>) | undefined;
+  /** Drives the opened view into the state the capture shows, such as a search query or a refused submit (acceptance-sets/). */
+  act?: ((scope: Locator, world: TestWorld) => Promise<void>) | undefined;
 };
 
 function openedView(capture: CaptureSpec, openers: CaptureSources['openers']): OpenedView {
@@ -242,6 +250,8 @@ export async function captureAcceptance(
   sources: CaptureSources,
 ): Promise<void> {
   const { page, world, businessDate, testInfo } = input;
+  if (!capture.state && capture.view.kind === 'dialog' && capture.view.overFailedPage)
+    throw new Error(`${capture.id} opens over a failed page, so it is captured in its error state.`);
   const view = openedView(capture, sources.openers);
   await page.setViewportSize(DESKTOP);
   const destination = sources.destination
@@ -275,6 +285,7 @@ export async function captureAcceptance(
           await expect(tab).toHaveAttribute('data-state', 'active');
         }
       }
+      if (sources.act) await sources.act(scope, world);
       if (capture.reveal) {
         await scope
           .getByText(capture.reveal, { exact: true })

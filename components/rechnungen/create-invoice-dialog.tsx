@@ -48,6 +48,12 @@ const OPTION_KIND: Record<InvoiceWorkKind, 'jobs' | 'projects' | 'service-cases'
 
 type Form = { client: ClientSelectItem | null; workKind: InvoiceWorkKind | null; workId: string };
 
+/** What a page's „Rechnung erstellen“ fills in: its customer and, on a work's page, that work. */
+export type InvoicePreset = {
+  client: ClientSelectItem;
+  work: { kind: InvoiceWorkKind; id: string } | null;
+};
+
 function formErrors(form: Form): Record<string, string | undefined> {
   return {
     [CLIENT_FIELD]: form.client ? undefined : 'Wähle den Kunden.',
@@ -62,11 +68,15 @@ function formErrors(form: Form): Record<string, string | undefined> {
  * filled in. A press repeated after a lost answer sends the same key and
  * opens the first draft.
  */
-export function CreateInvoiceDialog({ onClose }: { onClose: () => void }) {
+export function CreateInvoiceDialog({ onClose, preset }: { onClose: () => void; preset?: InvoicePreset }) {
   const router = useRouter();
   // A changed form gets a new key: only a repeat of the same press answers with the first draft.
   const [attemptKey, setAttemptKey] = useState(() => crypto.randomUUID());
-  const [form, setFormState] = useState<Form>({ client: null, workKind: null, workId: '' });
+  const [form, setFormState] = useState<Form>({
+    client: preset?.client ?? null,
+    workKind: preset?.work?.kind ?? null,
+    workId: preset?.work?.id ?? '',
+  });
   const setForm = (next: Form) => {
     setFormState(next);
     setAttemptKey(crypto.randomUUID());
@@ -201,4 +211,17 @@ function WorkFields({
       )}
     </>
   );
+}
+
+/** The dialog behind a page's „Rechnung erstellen“, opened with that page's customer and work. */
+export function PresetCreateInvoiceDialog({
+  open,
+  onOpenChange,
+  preset,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  preset: InvoicePreset;
+}) {
+  return open ? <CreateInvoiceDialog onClose={() => onOpenChange(false)} preset={preset} /> : null;
 }

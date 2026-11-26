@@ -32,8 +32,10 @@ export async function seedInstalledEquipment(
     manufacturer?: string;
     model?: string;
     serialNumber?: string;
+    /** The „Nummer im Altsystem“ the previous program gave it. */
+    sourceNumber?: string;
   },
-): Promise<{ id: string; equipmentNumber: string }> {
+): Promise<{ id: string; equipmentNumber: string; version: number }> {
   const payload = equipmentCreateSchema.parse({
     equipmentId: randomUUID(),
     idempotencyKey: randomUUID(),
@@ -45,6 +47,7 @@ export async function seedInstalledEquipment(
     state: input.state ?? 'active',
     manufacturer: input.manufacturer ?? null,
     model: input.model ?? null,
+    sourceNumber: input.sourceNumber ?? null,
     identifiers: input.serialNumber
       ? [{ identifierType: 'serial_number', value: input.serialNumber, issuer: input.manufacturer ?? null }]
       : [],
@@ -59,7 +62,29 @@ export async function seedInstalledEquipment(
     })
     .throwOnError();
   if (!data) throw new Error(`Equipment seed returned no record for ${input.name}.`);
-  return { id: data.id, equipmentNumber: data.equipment_number };
+  return { id: data.id, equipmentNumber: data.equipment_number, version: data.version };
+}
+
+/** Links an equipment to a job, as the office's „Arbeit verknüpfen“ does; the job's field worker then reaches it. */
+export async function seedEquipmentJobLink(
+  input: SeedActor & { equipment: { id: string; version: number }; jobId: string },
+): Promise<void> {
+  await createAdminClient()
+    .rpc(
+      'set_installed_equipment_work_link',
+      rpcArgs('set_installed_equipment_work_link', {
+        p_organization_id: input.orgId,
+        p_equipment_id: input.equipment.id,
+        p_expected_version: input.equipment.version,
+        p_job_id: input.jobId,
+        p_project_id: null,
+        p_linked: true,
+        p_reason: 'Anlage für den Einsatz',
+        p_actor_id: input.actorId,
+        p_idempotency_key: randomUUID(),
+      }),
+    )
+    .throwOnError();
 }
 
 /**

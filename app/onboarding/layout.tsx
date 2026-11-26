@@ -5,7 +5,7 @@ import { StandaloneScreen } from '@/components/shared/standalone-screen';
 import { BannerProvider } from '@/components/ui/banner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getAuthenticatedUser } from '@/lib/data/cached';
-import { userHasOrganizations } from '@/lib/subscription/helpers';
+import { memberLeavesOnboarding } from '@/lib/subscription/helpers';
 
 // The prestart page's own-task section confirms and reports through the
 // banner, so onboarding provides it as the app layout does: without it the
@@ -29,8 +29,7 @@ async function OnboardingGuard({ children }: { children: React.ReactNode }) {
     redirect('/login');
   }
 
-  const hasOrgs = await userHasOrganizations(user.id);
-  if (hasOrgs) {
+  if (await memberLeavesOnboarding(user.id)) {
     redirect('/dashboard');
   }
 

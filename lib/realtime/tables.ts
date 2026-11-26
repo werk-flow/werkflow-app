@@ -21,6 +21,7 @@ export const REALTIME_TABLES = [
   'organization_join_requests',
   'organization_members',
   'organization_settings',
+  'ai_organization_settings',
   'profiles',
   'employee_records',
   'personnel_access_lifecycles',
@@ -60,6 +61,7 @@ export const REALTIME_TABLES = [
   'maintenance_coverages',
   'maintenance_plans',
   'maintenance_due_work',
+  'on_call_shifts',
   'installed_equipment',
   'service_cases',
   'jobs',
@@ -98,6 +100,8 @@ export const REALTIME_TABLES = [
   'inventory_movements',
   'inventory_asset_instances',
   'problem_report_signals',
+  // The billing page's signal: a change of WerkFlow's subscription or invoices reaches the Admin's open page.
+  'werkflow_billing_page_signals',
 ] as const;
 
 export type RealtimeTable = (typeof REALTIME_TABLES)[number];
@@ -121,8 +125,8 @@ export const UNFILTERED_REALTIME_TABLES: readonly RealtimeTable[] = ['profiles']
 export const OWN_USER_REALTIME_TABLES: readonly RealtimeTable[] = ['problem_report_signals'];
 
 // Published tables whose DEFAULT replica identity is already minimal:
-// organization_settings and organization_qualification_settings
-// have organization_id as their primary key; profiles has no organization
+// organization_settings, organization_qualification_settings and
+// ai_organization_settings have organization_id as their primary key; profiles has no organization
 // column at all. Every other published table uses the committed
 // unique (id, organization_id) index. Raw DELETE delivery is disabled; these
 // identities retain the minimal logical-decoding contract for other changes.
@@ -130,6 +134,7 @@ export const DEFAULT_IDENTITY_REALTIME_TABLES: readonly RealtimeTable[] = [
   'profiles',
   'organization_settings',
   'organization_qualification_settings',
+  'ai_organization_settings',
 ];
 
 // Published tables whose every row version carries its transaction's start
@@ -139,6 +144,7 @@ export const DEFAULT_IDENTITY_REALTIME_TABLES: readonly RealtimeTable[] = [
 // (lib/realtime/own-writes.ts). `bun run realtime:check` fails while a listed
 // table lacks the default or the trigger.
 export const TRANSACTION_STAMPED_TABLES: readonly RealtimeTable[] = [
+  'ai_organization_settings',
   'client_communication_preferences',
   'client_communication_settings',
   'client_contacts',
@@ -162,6 +168,8 @@ export const TRANSACTION_STAMPED_TABLES: readonly RealtimeTable[] = [
   'job_instruction_items',
   'job_material_lines',
   'jobs',
+  'offers',
+  'on_call_shifts',
   'organization_capabilities',
   'organization_exports',
   'organization_qualification_settings',

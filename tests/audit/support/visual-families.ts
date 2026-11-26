@@ -204,6 +204,15 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     heading: 'Qualifikationen',
   },
   {
+    id: 'kennzahlen',
+    role: 'admin',
+    // Its 12 week labels move with the run day; the clock stand-ins replace them whole
+    // (lib/testing/spec-support/visual-reference-text.test.ts), so no calendarWeek.
+    covers: ['/kennzahlen'],
+    route: fixed('/kennzahlen'),
+    heading: 'Wochenzahlen',
+  },
+  {
     id: 'meldungen',
     role: 'admin',
     covers: ['/meldungen'],
@@ -267,6 +276,15 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     covers: ['/service/wartung'],
     route: fixed('/service/wartung'),
     heading: SERVICE_AREA_HEADER.title,
+  },
+  {
+    id: 'service-bereitschaft',
+    role: 'admin',
+    covers: ['/service/bereitschaft'],
+    // A fixed Monday, so the week's range in the reference never moves with the clock.
+    route: fixed('/service/bereitschaft?woche=2026-03-02'),
+    heading: SERVICE_AREA_HEADER.title,
+    title: 'Bereitschaft',
   },
   {
     id: 'zeiterfassung',
@@ -405,6 +423,7 @@ export const STANDALONE_FAMILIES: readonly StandaloneFamily[] = [
   { id: 'onboarding-start', screen: '/onboarding/start', heading: 'Willkommen bei WerkFlow' },
   { id: 'onboarding-beitreten', screen: '/onboarding/join-organization', heading: 'Organisation beitreten' },
   { id: 'upgrade', screen: '/upgrade', heading: 'WerkFlow abonnieren' },
+  { id: 'zahlung-abgebrochen', screen: '/upgrade/abgebrochen', heading: 'Neue Organisation erstellen' },
   {
     id: 'onboarding-organisation',
     screen: '/onboarding/create-organization',

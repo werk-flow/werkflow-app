@@ -43,8 +43,9 @@ const failedAssertsSchema = z.array(
   z.object({ id: z.string(), flag: z.string(), location: z.string(), text: z.string() }),
 );
 
-// Read once per server instance, by a path from the app root: Turbopack's production build turns
-// `new URL(…, import.meta.url)` into an object readFile refuses (ERR_INVALID_ARG_TYPE).
+// Read once per server instance, by a path from the app root. In a Server Action, Turbopack's
+// production build turns `new URL(…, import.meta.url)` into an object readFile refuses
+// (ERR_INVALID_ARG_TYPE); the build traces the joined path (audit:wave-3:document-pdfs).
 let compiledRules: Promise<unknown> | null = null;
 
 async function loadRules(): Promise<unknown> {

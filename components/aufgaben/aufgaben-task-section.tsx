@@ -1,7 +1,8 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
+  AlarmClock,
   CalendarClock,
   CalendarX,
   ClipboardCheck,
@@ -20,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
+  attentionSectionAnchor,
   groupAttentionTasks,
   type AttentionTaskSection,
   type AttentionTaskSectionKey,
@@ -27,10 +29,10 @@ import {
 import type { AttentionTask } from '@/lib/attention/types';
 import { TaskRow } from './aufgaben-task-row';
 
-/** The handover backlog shows its oldest rows; „Alle anzeigen“ opens the rest. */
-const HANDOVER_PREVIEW_ROWS = 3;
+/** A backlog section shows its first rows; „Alle anzeigen“ opens the rest. */
+const BACKLOG_PREVIEW_ROWS = 3;
 
-const SECTION_PRESENTATION: Record<
+export const SECTION_PRESENTATION: Record<
   AttentionTaskSectionKey,
   { icon: React.ReactNode; title: string; testId: string; previewRows?: number }
 > = {
@@ -49,6 +51,12 @@ const SECTION_PRESENTATION: Record<
     icon: <CalendarX className="size-4" />,
     title: 'Einsätze umplanen',
     testId: 'attention-visit-replan-tasks',
+  },
+  overdueJob: {
+    icon: <AlarmClock className="size-4" />,
+    title: 'Überfällige Aufträge',
+    testId: 'attention-overdue-job-tasks',
+    previewRows: BACKLOG_PREVIEW_ROWS,
   },
   request: {
     icon: <Inbox className="size-4" />,
@@ -99,7 +107,7 @@ const SECTION_PRESENTATION: Record<
     icon: <ClipboardCheck className="size-4" />,
     title: 'Übergaben prüfen',
     testId: 'attention-work-handover-tasks',
-    previewRows: HANDOVER_PREVIEW_ROWS,
+    previewRows: BACKLOG_PREVIEW_ROWS,
   },
 };
 
@@ -127,14 +135,22 @@ function TaskGroup({ section }: { section: AttentionTaskSection }) {
   const { icon, title, testId, previewRows } = SECTION_PRESENTATION[section.key];
   const [showAll, setShowAll] = useState(false);
   const restId = useId();
+  const anchor = attentionSectionAnchor(section.key);
+  const groupRef = useRef<HTMLDivElement>(null);
+  // „Alle in Aufgaben“ opens this section: the tasks arrive after the page, so
+  // the browser found no target for the hash. The section scrolls itself into view.
+  useEffect(() => {
+    if (window.location.hash === `#${anchor}`) groupRef.current?.scrollIntoView({ block: 'start' });
+  }, [anchor]);
   const total = section.tasks.length;
   const shown = previewRows ?? total;
   const preview = section.tasks.slice(0, shown);
-  // The rest stays in the list behind `hidden`, so „Alle anzeigen“ opens it without a read.
+  // „Alle anzeigen“ renders the rest from the overview without a read; a long
+  // backlog stays out of the page until then.
   const rest = section.tasks.slice(shown);
 
   return (
-    <div className="space-y-2" data-testid={testId}>
+    <div id={anchor} ref={groupRef} className="scroll-mt-4 space-y-2" data-testid={testId}>
       <h3 className="flex items-center gap-1.5 px-1 text-sm font-medium text-muted-foreground">
         {icon}
         {title}
@@ -147,9 +163,7 @@ function TaskGroup({ section }: { section: AttentionTaskSection }) {
         {rest.length > 0 && (
           <>
             <div id={restId} hidden={!showAll} className="divide-y">
-              {rest.map((task) => (
-                <TaskRow key={taskKey(task)} task={task} />
-              ))}
+              {showAll && rest.map((task) => <TaskRow key={taskKey(task)} task={task} />)}
             </div>
             <div className="flex items-center justify-between gap-2 px-4 py-2">
               <p className="text-xs text-muted-foreground tabular-nums">

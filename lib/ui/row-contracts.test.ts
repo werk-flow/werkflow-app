@@ -63,6 +63,7 @@ const PAIRS = [
   ['components/zeiterfassung/time-period-results.tsx'],
   ['components/zeiterfassung/time-period-list.tsx'],
   ['components/zeiterfassung/time-account-overview-lists.tsx'],
+  ['components/kennzahlen/weekly-numbers-view.tsx', 'components/loading-states/kennzahlen-page-skeleton.tsx'],
 ] as const;
 
 // This tab renders the page's personnel payload synchronously. The route's

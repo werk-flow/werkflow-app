@@ -15,7 +15,12 @@ export function OrganizationSwitcher() {
   const { setIsOpen: setSidebarOpen } = useSidebar();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
-  const hasAdminMembership = memberships.some((membership) => membership.role === 'admin');
+  // A further organization is paid from one the caller administers, the active one first.
+  const adminOrganizationId = (
+    memberships.find((membership) => membership.orgId === activeOrgId && membership.role === 'admin') ??
+    memberships.find((membership) => membership.role === 'admin')
+  )?.orgId;
+  const hasAdminMembership = adminOrganizationId !== undefined;
 
   const handleChange = async (value: string) => {
     if (!value || value === activeOrgId) return;
@@ -68,7 +73,13 @@ export function OrganizationSwitcher() {
         </Button>
       )}
 
-      <CreateOrgDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
+      {adminOrganizationId && (
+        <CreateOrgDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+          adminOrganizationId={adminOrganizationId}
+        />
+      )}
       <JoinOrgDialog open={isJoinDialogOpen} onOpenChange={setIsJoinDialogOpen} />
     </div>
   );

@@ -12,6 +12,7 @@
 # Needs VERCEL_TOKEN, VERCEL_TEAM_ID, VERCEL_PROJECT_ID, APP_URL, HEALTH_URL and
 # HEALTH_CHECK_TOKEN.
 set -euo pipefail
+source "$(dirname "$0")/curl-headers.sh"
 
 expected="${1:-}"
 failures=0
@@ -20,7 +21,8 @@ fail() {
   failures=$((failures + 1))
 }
 
-served="$(curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $VERCEL_TOKEN" \
+served="$(curl --fail --silent --show-error --max-time 30 \
+  --config <(curl_headers <<< "Authorization: Bearer ${VERCEL_TOKEN}") \
   "https://api.vercel.com/v4/aliases/${APP_URL#https://}?teamId=${VERCEL_TEAM_ID}" | jq -r '.deploymentId // empty')" \
   || served=""
 test -n "$served" || { echo "::error title=Production smoke check::Vercel named no deployment for ${APP_URL}."; exit 1; }
@@ -68,7 +70,8 @@ query="$(jq -cn --arg team "$VERCEL_TEAM_ID" --arg project "$VERCEL_PROJECT_ID" 
     filter: "deploymentId:\($id)", groupBy: ["httpStatus"],
     metrics: {value: {metric: "vercel.request.count", aggregation: "count"}}, outputs: ["value"],
     seriesSelection: {limit: 100, mode: "exact", rankBy: [{metric: "value", direction: "desc"}]}}')"
-response="$(curl --fail --silent --show-error --max-time 60 -H "Authorization: Bearer $VERCEL_TOKEN" \
+response="$(curl --fail --silent --show-error --max-time 60 \
+  --config <(curl_headers <<< "Authorization: Bearer ${VERCEL_TOKEN}") \
   -H 'Content-Type: application/json' --data "$query" "https://api.vercel.com/metrics/v1?teamId=${VERCEL_TEAM_ID}")" \
   || response=""
 # Every row needs a status and a numeric count; anything else is unreadable, never zero.

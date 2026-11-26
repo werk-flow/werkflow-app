@@ -3,6 +3,7 @@ Aufträge
 P-2026-0007
 Sanierung Wohnanlage Uferweg
 Nicht begonnen
+Rechnung erstellen
 Auftrag hinzufügen
 Arbeitsstand
 Nächster Schritt:
@@ -23,5 +24,4 @@ Voraussetzungen
 Voraussetzung hinzufügen
 Keine zusätzlichen Voraussetzungen.
 Abschlussprüfungen und Verlauf
-Übergabe an das Büro
 Nicht eingestempelt

@@ -1,8 +1,8 @@
-// The real offer action and pages over the in-memory database: a field
+// The real offer actions and pages over the in-memory database: a field
 // worker is refused before any database access, another organization's
-// customer is refused by the one database function the action calls, the
-// office's write carries its own organization and actor, and the pages read
-// only the caller's organization.
+// customer, offer or recipient is refused by the one database function the
+// action calls, the office's writes carry their own organization and actor,
+// and the pages read only the caller's organization.
 // supabase/tests/offers.sql proves the function's refusals, grants and history.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
@@ -16,9 +16,14 @@ const ownOfferId = '95000000-0000-4000-8000-000000000001';
 const foreignOfferId = '95000000-0000-4000-8000-000000000009';
 
 const world = await installPageWorld({ offers: [], offer_events: [] });
-mock.module('next/cache', () => ({ updateTag: () => {}, revalidatePath: () => {}, revalidateTag: () => {} }));
+const revalidated: string[] = [];
+mock.module('next/cache', () => ({
+  updateTag: () => {},
+  revalidatePath: (path: string) => revalidated.push(path),
+  revalidateTag: () => {},
+}));
 
-const { createOffer } = await import('@/lib/offers/actions');
+const { createOffer, saveOfferContent, updateOffer } = await import('@/lib/offers/actions');
 const { default: OffersPage } = await import('@/app/(app)/angebote/page');
 const { default: OfferPage } = await import('@/app/(app)/angebote/[offerId]/page');
 
@@ -76,6 +81,171 @@ assert.deepEqual(
   [['create_offer', ORGANIZATION_A, CALLER_ID]],
 );
 
+// The header change: a field worker is refused before the database, another
+// organization's offer or recipient by the one function call, and Büro saves
+// its own offer as itself.
+const header = {
+  offerId: ownOfferId,
+  expectedVersion: 1,
+  attemptKey: '96000000-0000-4000-8000-000000000002',
+  title: 'Austausch Gastherme',
+  siteId: null,
+  contactId: null,
+  recipientClientId: null,
+  validUntil: '2026-12-31',
+  openingText: '',
+  closingText: '',
+  ownerUserId: CALLER_ID,
+};
+signInAs(world, 'employee');
+await assertRefused(
+  world,
+  [['updateOffer', () => updateOffer(header)]],
+  { success: false, error: 'not_authorized' },
+  'none',
+);
+signInAs(world, 'buero');
+refuseForeignIds(
+  world,
+  new Map([
+    [foreignOfferId, 'offer_not_found'],
+    [foreignClientId, 'recipient_not_found'],
+  ]),
+  { version: 2, updatedAt: '2026-11-23T08:00:00.123456+00:00' },
+);
+await assertRefused(
+  world,
+  [['updateOffer foreign offer', () => updateOffer({ ...header, offerId: foreignOfferId })]],
+  { success: false, error: 'offer_not_found' },
+  'one-call',
+);
+await assertRefused(
+  world,
+  [['updateOffer foreign recipient', () => updateOffer({ ...header, recipientClientId: foreignClientId })]],
+  { success: false, error: 'recipient_not_found' },
+  'one-call',
+);
+await assertRefused(
+  world,
+  [
+    ['updateOffer without title', () => updateOffer({ ...header, title: '  ' })],
+    ['updateOffer bad offer id', () => updateOffer({ ...header, offerId: 'not-a-uuid' })],
+  ],
+  { success: false, error: 'invalid_input' },
+  'none',
+);
+world.rpcCalls.length = 0;
+assert.deepEqual(await updateOffer(header), {
+  success: true,
+  offerId: ownOfferId,
+  version: 2,
+  updatedAt: '2026-11-23T08:00:00.123456+00:00',
+});
+assert.deepEqual(
+  world.rpcCalls.map((call) => [
+    call.name,
+    call.args.p_organization_id,
+    call.args.p_actor_id,
+    call.args.p_offer_id,
+  ]),
+  [['update_offer', ORGANIZATION_A, CALLER_ID, ownOfferId]],
+);
+
+// The content save: a field worker is refused before the database, another
+// organization's offer by the one function call, and Büro saves its own
+// offer as itself with the amounts the server computed.
+const servicePosition = {
+  kind: 'free' as const,
+  name: 'Wartung Gastherme',
+  description: '',
+  quantity: '1.5',
+  unit: 'hour',
+  unitPriceCents: 7250,
+  priceQuantity: 1 as const,
+  taxRateBasisPoints: 1900 as const,
+};
+const content = {
+  offerId: ownOfferId,
+  expectedContentVersion: 1,
+  attemptKey: '96000000-0000-4000-8000-000000000003',
+  sections: [
+    {
+      title: 'Wartung',
+      positions: [
+        servicePosition,
+        { kind: 'text' as const, name: 'Hinweis', description: 'Ersatzteile nach Aufwand.' },
+      ],
+    },
+  ],
+};
+signInAs(world, 'employee');
+await assertRefused(
+  world,
+  [['saveOfferContent', () => saveOfferContent(content)]],
+  { success: false, error: 'not_authorized' },
+  'none',
+);
+signInAs(world, 'buero');
+refuseForeignIds(world, new Map([[foreignOfferId, 'offer_not_found']]), {
+  contentVersion: 2,
+  updatedAt: '2026-11-26T08:00:00.123456+00:00',
+});
+await assertRefused(
+  world,
+  [['saveOfferContent foreign offer', () => saveOfferContent({ ...content, offerId: foreignOfferId })]],
+  { success: false, error: 'offer_not_found' },
+  'one-call',
+);
+await assertRefused(
+  world,
+  [
+    ['saveOfferContent bad offer id', () => saveOfferContent({ ...content, offerId: 'not-a-uuid' })],
+    [
+      'saveOfferContent four decimals',
+      () =>
+        saveOfferContent({
+          ...content,
+          sections: [{ title: 'Wartung', positions: [{ ...servicePosition, quantity: '1.2345' }] }],
+        }),
+    ],
+  ],
+  { success: false, error: 'invalid_input' },
+  'none',
+);
+world.rpcCalls.length = 0;
+assert.deepEqual(await saveOfferContent(content), {
+  success: true,
+  offerId: ownOfferId,
+  contentVersion: 2,
+  updatedAt: '2026-11-26T08:00:00.123456+00:00',
+});
+assert.deepEqual(
+  world.rpcCalls.map((call) => [
+    call.name,
+    call.args.p_organization_id,
+    call.args.p_actor_id,
+    call.args.p_offer_id,
+    call.args.p_totals,
+  ]),
+  [
+    [
+      'save_offer_content',
+      ORGANIZATION_A,
+      CALLER_ID,
+      ownOfferId,
+      // 1,5 h at 72,50 € is 108,75 €; 19 % VAT on it is 20,6625 €.
+      { netCents: 10875, taxCents: 2066, grossCents: 12941 },
+    ],
+  ],
+);
+
+// A refusal for another session's newer save renders the offer's page into its
+// answer, so the editor can offer that content at once.
+world.rpc = () => ({ data: null, error: { code: 'P0001', message: 'offer_changed' } });
+revalidated.length = 0;
+assert.deepEqual(await saveOfferContent(content), { success: false, error: 'offer_changed' });
+assert.deepEqual(revalidated, [`/angebote/${ownOfferId}`]);
+
 // The pages read only the caller's organization.
 world.rpc = ({ name }) =>
   name === 'list_offer_page'
@@ -103,15 +273,18 @@ world.rpc = ({ name }) =>
           offerNumber: 'ANG-2026-1',
           title: 'Heizungstausch',
           status: 'entwurf',
+          version: 1,
+          contentVersion: 1,
           validUntil: '2026-12-14',
           openingText: '',
           closingText: '',
           client: { id: ownClientId, name: 'Haustechnik Sonnenberg GmbH' },
           site: { id: ownClientId, name: 'Lindenhof 3', street: null, postalCode: '12345', city: null },
           contact: null,
-          recipient: { id: ownClientId, name: 'Haustechnik Sonnenberg GmbH', address: null },
+          recipient: { id: ownClientId, name: 'Haustechnik Sonnenberg GmbH', address: null, isDefault: true },
           owner: null,
           work: null,
+          sections: [],
         },
         error: null,
       }

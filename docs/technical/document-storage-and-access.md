@@ -32,7 +32,7 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 
 ## Generated documents
 
-`lib/document-rendering/` is the one renderer of generated business documents: offers and invoices. A caller maps its records, amounts computed, into the module's plain model; the module imports no domain or database type.
+`lib/document-rendering/` is the one renderer of generated business documents: offers, invoices and Serviceberichte. A caller maps its records, amounts computed, into the module's plain model; the module imports no domain or database type.
 
 - It runs in the app's Node functions with `pdf-lib` and bundled Geist font subsets; no browser or external service sees a document.
 - The same model gives the same bytes, dates included, so its preview equals the stored copy.
@@ -40,7 +40,7 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 - Every page says „Seite x von y“, the table header repeats on each page, a position keeps its first description line, and a subtotal keeps its section's last position.
 - A generated offer belongs to its offer and customer, never to a job or project, because an assigned employee reads a job's documents.
 - `lib/invoicing/` embeds or sends invoice XML only after the EN 16931 check passed. An invoice PDF is PDF/A-3b with the XML as `factur-x.xml`, read back from the saved bytes. Only CI checks PDF/A (Mustang, veraPDF), so invoices print stationery as plain letterhead.
-- An invoice's original is that PDF of its issue snapshot, registered and filed once (`register_invoice_original`: ten-year class, customer link only, never another); the same build renders identical bytes.
+- An invoice's original is the PDF of its issue snapshot, filed once (`register_invoice_original`: ten-year class, customer link only); the same build renders identical bytes.
 - The company document profile's logo and stationery lie under `{organizationId}/briefpapier/{fileId}/{uploaderId}/`, outside the library. They follow the [upload flow](#upload-flow); ticket and finalize bind the key to the session's person (`bindUploadPathToCreator`), so another manager finds nothing to finalize. The finalize also refuses a file the renderer cannot embed, and registers the copy with its stored size and its history entry in one call. It keeps the staging object (`copyStagedUpload`) until the registration settles, so a retry under the same file id copies it again. The [organization export](../features/employee-management.md#current-product-baseline) plans them by that size beside the documents' originals. A replacement or removal names the file the caller saw, and removing the first page's stationery also names the following pages' file it removes too; either is refused when another file took its place since. A replaced or removed file queues its old object for the [purge](#storage-cleanup); stored documents carry their own bytes.
 
 ## Links and ownership

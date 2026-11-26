@@ -33,6 +33,8 @@ const CONTEXT_RESOLVERS = new Set([
   'getCurrentOrgId',
   // lib/org/manager-context.ts: resolveActionContext's caller, refused unless Admin or Büro.
   'resolveManagerContext',
+  // lib/werkflow-billing/billing-page.ts: resolveActionContextFor, then the Admin role.
+  'resolveBillingAdmin',
 ]);
 
 /** The resolvers that verify their first argument as an organization the caller belongs to. */

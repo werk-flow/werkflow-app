@@ -9,11 +9,11 @@ import type { CalendarDispatchState } from '@/lib/calendar/board';
 
 // Attention items are derived live from the owning domains; this identity is
 // the only thing pattern-level storage (read markers, pattern events) keys on.
-// Keep in sync with the CHECK constraints in migrations
-// add_attention_pattern_state + extend_attention_taxonomy_sickness. Later
-// slices (qualifications P1-09, follow-ups P1-10, corrections P1-22,
-// procurement P1-29) extend this union plus the database CHECK — they never
-// add parallel storage.
+// Every kind that storage may key on stays in the CHECK constraints of
+// attention_read_states and attention_events (latest in migration
+// 20261201100004); a later slice extends this union plus the CHECK and never
+// adds parallel storage. The overdue job kind takes no marker or event, so
+// the CHECK leaves it out until one does.
 type AttentionSourceType =
   | 'time_session_approval'
   | 'time_change_request_approval'
@@ -37,7 +37,8 @@ type AttentionSourceType =
   | 'work_handover_review'
   | 'organization_join_request'
   | 'planning_visit_replan'
-  | 'site_access_proposal';
+  | 'site_access_proposal'
+  | 'job_past_last_visit';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -106,9 +107,11 @@ export type AttentionTask =
       /** When it becomes this viewer's overdue callback; null when it never does. */
       callbackDueAt: string | null;
     }
-  // An open request whose promised callback has passed: its owner's task, and
-  // every manager's while it has no owner who is still a manager. It replaces
-  // the request's client_request_open task for that viewer.
+  // An open request whose promised callback has passed: its owner's task,
+  // every manager's while it has no owner who is still a manager, and every
+  // Admin's once it is overdue past the owner start's threshold
+  // (owner-exceptions.ts). It replaces the request's client_request_open task
+  // for that viewer.
   | {
       sourceType: 'client_request_callback_overdue';
       sourceId: string;
@@ -119,6 +122,7 @@ export type AttentionTask =
       /** Null without an owner. */
       ownerName: string | null;
       ownerUnavailable: boolean;
+      assignedToMe: boolean;
     }
   | {
       sourceType: 'client_follow_up';
@@ -204,6 +208,8 @@ export type AttentionTask =
       packageState:
         | 'missing'
         | Exclude<Database['public']['Enums']['work_handover_package_state'], 'released'>;
+      /** Berlin date the execution completed; null while a finished child job of a project carries none. */
+      completedOn: string | null;
       stateVersion: string;
     }
   // Someone entered the organization code and waits for Admin or Büro.
@@ -241,6 +247,17 @@ export type AttentionTask =
       jobNumber: string | null;
       proposerName: string;
       proposedAt: string;
+    }
+  // An open job whose last scheduled visit lies before today: the visits are
+  // over and the work is neither complete nor planned again. Admin and Büro
+  // get it; the job is the identity.
+  | {
+      sourceType: 'job_past_last_visit';
+      sourceId: string;
+      jobLabel: string;
+      jobHref: string;
+      /** Berlin date of the last scheduled visit's last day. */
+      lastVisitDate: string;
     };
 
 // Informational notices, deduplicated per source record: a domain state

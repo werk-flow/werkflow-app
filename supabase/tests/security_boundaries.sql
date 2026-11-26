@@ -33,7 +33,9 @@ declare
     'organizations',              -- the tenant itself; its id is the organization key.
     'profiles',                   -- one row per Auth account; a person can belong to several organizations.
     'rate_limit_attempts',        -- keyed subject hashes; a limit can apply before an organization is known.
+    'resend_webhook_events',      -- Svix and provider message ids; the owning ledger holds the organization.
     'subscriptions',              -- billing per paying account (user_id); closes with the payment slice.
+    'werkflow_billing_reconciliations', -- WerkFlow's daily comparison runs with Stripe, across every customer.
     'werkflow_billing_signals'    -- Stripe event ids before any handler maps one to an organization.
   ];
   offender text; stale text;
@@ -356,6 +358,7 @@ language sql as $$
     ('get_invite_by_code(text)', 'An invite code names its own organization; the caller has none yet'),
     ('redeem_organization_invite_for_user(text,uuid)', 'An invite code names its own organization; the caller has none yet'),
     ('prune_realtime_deletions()', 'Maintenance across every organization by age, from no request'),
+    ('delete_expired_ai_thread_items()', 'Maintenance across every organization by age, from the daily cron, from no request'),
     ('sync_begun_inventory_item_prices()', 'Maintenance across every organization from the hourly cron, from no request; it syncs each organization''s prices with that organization''s own rows only'),
     ('assert_time_correction_sources_current(uuid,bigint)', 'Step of a public write that resolved the organization; reads the request it loaded there'),
     ('p1_22_revise_time_correction_request_impl(uuid,uuid,uuid,bigint,text,text,text,jsonb,jsonb,jsonb)', 'Step of a public write that resolved the organization; reads the request it loaded there'),
@@ -1260,6 +1263,67 @@ begin
   if exists (select 1 from public.work_billing_parties
     where work_id = '53270000-0000-4000-8000-000000000030')
   then raise exception 'a deleted job left its billing party versions'; end if;
+end;
+$$;
+
+-- The WerkFlow KI cost ledger (werk-flow/werkflow-planning#527) refuses UPDATE
+-- and DELETE: service_role holds no privilege, and the owner meets the history
+-- guard. Only the organization's deletion cascades through it.
+insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values
+('5e270000-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated',
+ 'authenticated', 'ai-ledger-admin@example.test', '', now(), '{}', '{"first_name":"Ledger","last_name":"KI"}',
+ now(), now());
+insert into public.organizations (id, name, admin_id, unique_code) values
+('5e270000-0000-4000-8000-000000000010', 'KI ledger SQL', '5e270000-0000-4000-8000-000000000001', 'AILEDG');
+insert into public.ai_runs (id, organization_id, idempotency_key, reserved_micro_usd) values
+('5e270000-0000-4000-8000-000000000020', '5e270000-0000-4000-8000-000000000010', 'ledger-run', 100);
+insert into public.ai_run_attempts (organization_id, run_id, idempotency_key, model_id, prompt_version,
+  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, outcome) values
+('5e270000-0000-4000-8000-000000000010', '5e270000-0000-4000-8000-000000000020', 'ledger-run:1', 'claude-haiku',
+ 'prompt-v1', 1, 1, 0, 0, 77, 'succeeded');
+set local role service_role;
+do $$
+begin
+  begin
+    update public.ai_run_attempts set cost_micro_usd = 0
+    where organization_id = '5e270000-0000-4000-8000-000000000010';
+    raise exception 'service-role AI cost ledger update was accepted';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.ai_run_attempts where organization_id = '5e270000-0000-4000-8000-000000000010';
+    raise exception 'service-role AI cost ledger delete was accepted';
+  exception when insufficient_privilege then null;
+  end;
+end;
+$$;
+reset role;
+do $$
+begin
+  begin
+    update public.ai_run_attempts set cost_micro_usd = 0
+    where organization_id = '5e270000-0000-4000-8000-000000000010';
+    raise exception 'privileged AI cost ledger update was accepted';
+  exception when raise_exception then
+    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+  end;
+  begin
+    delete from public.ai_run_attempts where organization_id = '5e270000-0000-4000-8000-000000000010';
+    raise exception 'privileged AI cost ledger delete was accepted';
+  exception when raise_exception then
+    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+  end;
+  if (select cost_micro_usd from public.ai_run_attempts
+      where organization_id = '5e270000-0000-4000-8000-000000000010') is distinct from 77::bigint
+  then raise exception 'the AI cost ledger row changed despite the denials'; end if;
+end;
+$$;
+delete from public.organizations where id = '5e270000-0000-4000-8000-000000000010';
+do $$
+begin
+  if exists (select 1 from public.ai_run_attempts where organization_id = '5e270000-0000-4000-8000-000000000010')
+  then raise exception 'the organization''s deletion left AI cost ledger rows'; end if;
 end;
 $$;
 

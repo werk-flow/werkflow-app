@@ -31,6 +31,10 @@ import {
   getFieldEquipmentHistory,
 } from '@/lib/installed-equipment/field-history-reads';
 import { getInstalledEquipmentPage } from '@/lib/installed-equipment/list-page-server';
+import {
+  equipmentOpenFindingsInputSchema,
+  getEquipmentOpenFindings,
+} from '@/lib/installed-equipment/open-findings-reads';
 import { getEquipmentSourceOptions } from '@/lib/installed-equipment/source-options-server';
 import { getOrgMembersAction, getProfilesByIds } from '@/lib/members/actions';
 import { getJobDetails, getNextJobNumber, getParkedJobs } from '@/lib/jobs/actions';
@@ -57,6 +61,8 @@ import { getServiceCasePage } from '@/lib/service-cases/list-page-server';
 import { getOwnSicknessReports, getSicknessReportsForRecord } from '@/lib/sickness/actions';
 import { getSchoolDaysForRecord } from '@/lib/personnel/school-day-actions';
 import { getMaintenanceEvidenceOptions, getMaintenanceWorkspace } from '@/lib/maintenance/actions';
+import { getOnCallOverview } from '@/lib/on-call/actions';
+import { getCompletedVisitPage } from '@/lib/service-reports/page-actions';
 import { maintenanceWorkspaceQuerySchema } from '@/lib/maintenance/workspace-page';
 import { getAssignmentTeamOptions } from '@/lib/qualifications/actions';
 import {
@@ -103,6 +109,8 @@ import {
 } from '@/lib/work-templates/actions';
 import { workTemplatePreviewInputSchema, workTemplateTargetTypeSchema } from '@/lib/work-templates/schemas';
 import { getSubstituteAbsences } from '@/lib/responsibilities/substitute-absence-read';
+import { globalSearchInputSchema } from '@/lib/search/global-search-input';
+import { searchEverywhere } from '@/lib/search/global-search-server';
 
 /**
  * The closed set of read-only readers a page may run in the background over
@@ -293,6 +301,12 @@ export const BACKGROUND_READS = {
     maintenanceWorkspaceQuerySchema.extend({ organizationId: uuidSchema }),
     (input) => getMaintenanceWorkspace(input),
   ),
+  // „Bereitschaft jetzt“ on the dashboard, for every member.
+  'on-call-overview': defineRead(organizationInput, (input) => getOnCallOverview(input.organizationId)),
+  'completed-maintenance-visits': defineRead(
+    z.object({ organizationId: uuidSchema, page: z.number().int().min(1).max(1_000_000) }),
+    (input) => getCompletedVisitPage({ page: input.page }),
+  ),
   'work-templates': defineRead(noInput, () => getWorkTemplates()),
   'work-template-detail': defineRead(z.object({ templateId: uuidSchema }), (input) =>
     getWorkTemplate(input.templateId),
@@ -348,6 +362,11 @@ export const BACKGROUND_READS = {
   'maintenance-evidence-options': defineRead(jobInput, (input) => getMaintenanceEvidenceOptions(input.jobId)),
   // The work pack's „Verlauf und Dokumente“ of one Anlage of the job.
   'equipment-field-history': defineRead(fieldHistoryInputSchema, (input) => getFieldEquipmentHistory(input)),
+  // The office's open Mängel of one Anlage; a switched organization refuses the stale read.
+  'equipment-open-findings': defineRead(
+    equipmentOpenFindingsInputSchema.extend({ organizationId: uuidSchema }),
+    (input) => getEquipmentOpenFindings({ equipmentId: input.equipmentId }),
+  ),
   'equipment-field-documents': defineRead(fieldDocumentsInputSchema, (input) =>
     getFieldEquipmentDocuments(input),
   ),
@@ -409,6 +428,8 @@ export const BACKGROUND_READS = {
     }),
     (input) => searchWorkPredecessors({ type: input.type, query: input.query }),
   ),
+  // The header search: one settled query through every domain list the caller's role reaches.
+  'global-search': defineRead(globalSearchInputSchema, (input) => searchEverywhere(input)),
 } as const;
 
 export type BackgroundReadKind = keyof typeof BACKGROUND_READS;

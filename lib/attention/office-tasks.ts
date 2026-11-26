@@ -23,6 +23,7 @@ import {
   showsOverdueCallback,
   type FollowUpAttentionCandidate,
 } from './resolution';
+import { escalatesCallbackToAdmin } from './owner-exceptions';
 import type { ManagerAttentionSetsRead } from './manager-sets';
 import type { AttentionTask } from './types';
 
@@ -161,16 +162,25 @@ export async function deriveOpenRequestTasks(
       )
         ? row.callback_due_at
         : null;
-    return row.callback_overdue && viewersCallback !== null
+    // Past the owner start's threshold, Admin gets another manager's overdue
+    // callback too. Its deadline has passed, so the open task names none.
+    const overdueCallback =
+      viewersCallback ??
+      (row.callback_due_at !== null &&
+      escalatesCallbackToAdmin(context.role, row.callback_due_at, businessToday)
+        ? row.callback_due_at
+        : null);
+    return row.callback_overdue && overdueCallback !== null
       ? {
           sourceType: 'client_request_callback_overdue',
           sourceId: row.id,
           requestNumber: row.request_number,
           summary: row.summary,
           urgency: row.urgency,
-          callbackDueAt: viewersCallback,
+          callbackDueAt: overdueCallback,
           ownerName: row.assigned_to ? (profileName(row.assigned_to) ?? 'Nicht verfügbar') : null,
           ownerUnavailable: row.assigned_to !== null && !row.owner_is_manager,
+          assignedToMe: row.assigned_to === context.userId,
         }
       : {
           sourceType: 'client_request_open',

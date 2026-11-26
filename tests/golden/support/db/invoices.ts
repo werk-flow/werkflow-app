@@ -176,3 +176,31 @@ export async function seedInvoiceChain(
     correctionId: invoiceFixtureField(cancelled, 'correctionId'),
   };
 }
+
+/**
+ * What a cancel stored: the original's status, and the Stornorechnung and
+ * correction draft that link to it (null where none does).
+ */
+export async function readStoredInvoiceChain(orgId: string, originalId: string) {
+  const admin = createAdminClient();
+  const { data: original } = await admin
+    .from('invoices')
+    .select('status')
+    .eq('organization_id', orgId)
+    .eq('id', originalId)
+    .single()
+    .throwOnError();
+  const linked = (column: 'cancels_invoice_id' | 'corrects_invoice_id') =>
+    admin
+      .from('invoices')
+      .select('id, status')
+      .eq('organization_id', orgId)
+      .eq(column, originalId)
+      .maybeSingle()
+      .throwOnError();
+  const [{ data: storno }, { data: correction }] = await Promise.all([
+    linked('cancels_invoice_id'),
+    linked('corrects_invoice_id'),
+  ]);
+  return { status: original.status, storno, correction };
+}

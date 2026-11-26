@@ -4,7 +4,8 @@ import ts from 'typescript';
 import { labStepsForFiles } from '../lab-steps';
 import { scenariosForFiles } from '../measured-scenarios';
 import { changeTrigger, type ChangeTrigger } from './change-triggers';
-import { MAINTENANCE_VISIT_SQL_FILES } from './maintenance-visit-sql-files';
+import { componentAreaGroups } from './component-areas';
+import { MAINTENANCE_VISIT_SQL_FILES, MAINTENANCE_VISIT_SQL_SCOPES } from './maintenance-visit-sql-files';
 
 export interface TestGroup {
   readonly id: string;
@@ -71,8 +72,7 @@ function declaredTiming(files: readonly string[]): GroupTimingRequirements {
   };
 }
 
-// Ownership, not proof of isolation: a changed file selects its scope's browser groups, an unowned one the
-// core set (group-selection.ts); "/" owns a directory, else one file; test-scope-prefixes.test.ts checks.
+// Ownership, not isolation: a changed file selects its scope's groups (group-selection.ts); "/" owns a folder.
 export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   customers: [
     'lib/clients/',
@@ -155,6 +155,7 @@ export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = 
     'hooks/use-weekly-time-data.ts',
     'components/clock-action-list.tsx',
     'components/clock-fab.tsx',
+    'components/clock-state-context.ts',
     'components/clock-state-provider.tsx',
     'components/manual-entry-dialog.tsx',
     'components/manual-entry-form-content.tsx',
@@ -266,6 +267,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['wave-2:p1-23', 'wave-2/p1-23.spec.ts', ['time', 'personnel', 'documents']],
   ['wave-2:p1-24', 'wave-2/p1-24.spec.ts', ['personnel', 'documents', 'time', 'work', 'attention']],
   ['wave-3:p1-24a', 'wave-3/p1-24a.spec.ts', ['planning', 'time', 'personnel', 'work', 'attention']],
+  ['wave-3:document-pdfs', 'wave-3/document-pdfs.spec.ts', ['commercial', 'documents', 'service']],
   ['wave-3:e2c-invoice-cancel', 'wave-3/e2c-invoice-cancel.spec.ts', ['commercial', 'documents']],
   // Every list page at 375 px; the detail pages, aliases and wide widths in layout:viewports (about four minutes each).
   ['layout', 'layout/mobile-viewport.spec.ts', ['*']],
@@ -387,8 +389,12 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['customer-relationships', ['customer_relationships.sql'], ['customers']],
   ['customer-atomic-writes', ['customer_atomic_writes.sql'], ['customers']],
   ['request-history-writes', ['request_history_writes.sql'], ['customers']],
-  ['request-caller-matches', ['request_caller_matches.sql'], ['customers']],
-  ['request-retry-results', ['request_retry_results.sql'], ['customers', 'work', 'service']],
+  ['request-caller-matches', ['request_caller_matches.sql', 'global_search_matches.sql'], ['customers']],
+  [
+    'request-retry-results',
+    ['request_retry_results.sql', 'request_offer_conversion_concurrency.sql'],
+    ['customers', 'work', 'service', 'commercial'],
+  ],
   ['request-attach-to-work', ['request_attach_to_work.sql'], ['customers', 'work', 'service', 'documents']],
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['client-archive-history', ['client_archive_history.sql'], ['customers']],
@@ -408,10 +414,10 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['planning_occurrences.sql', 'planning_dispatch.sql', 'planning_operation_assessments.sql'],
     ['planning', 'work'],
   ],
-  ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
+  ['service', ['service_boundaries.sql', 'assigned_equipment_search.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
   ['equipment-replacement', ['equipment_replacement_carry_over.sql'], ['service']],
-  ['maintenance-visit-next-actions', MAINTENANCE_VISIT_SQL_FILES, ['service', 'work', 'attention']],
+  ['maintenance-visit-next-actions', MAINTENANCE_VISIT_SQL_FILES, MAINTENANCE_VISIT_SQL_SCOPES],
   [
     'inventory-ledger',
     [
@@ -437,7 +443,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ],
   ['leistung-prices', ['leistung_prices.sql'], ['commercial']],
   ['offers', ['offers.sql', 'offers_concurrency.sql'], ['commercial', 'customers']],
-  ['invoice-drafts', ['invoice_drafts.sql'], ['commercial', 'customers']],
+  ['invoice-drafts', ['invoice_drafts.sql', 'invoice_line_sources.sql'], ['commercial', 'customers']],
   ['invoice-issue', ['invoice_issue.sql', 'invoice_issue_concurrency.sql'], ['commercial', 'documents']],
   ['invoice-cancel', ['invoice_cancel.sql'], ['commercial', 'documents']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
@@ -457,14 +463,16 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['job-plan-bridge', ['job_plan_bridge.sql'], ['work', 'planning']],
   ['responsibility-delegation-end', ['responsibility_delegation_end.sql'], ['personnel']],
   ['work-leads', ['work_leads.sql'], ['work', 'personnel']],
+  ['on-call-shifts', ['on_call_shifts.sql'], ['service', 'personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
-  ['rate-limits', ['rate_limits.sql'], ['*']],
+  ['rate-limits', ['rate_limits.sql', 'ai_threads.sql'], ['*']],
   ['werkflow-billing-signals', ['werkflow_billing_signals.sql'], ['*']],
-  ['werkflow-billing-mails', ['werkflow_billing_mails.sql'], ['*']],
-  ['werkflow-invoices', ['werkflow_invoices.sql'], ['*']],
+  ['werkflow-billing-mails', ['werkflow_billing_mails.sql', 'werkflow_billing_reconciliations.sql'], ['*']],
+  ['resend-webhook-events', ['resend_webhook_events.sql'], ['*']],
+  ['werkflow-invoices', ['werkflow_invoices.sql', 'werkflow_billing_page_signals.sql'], ['*']],
   ['werkflow-subscriptions', ['werkflow_subscriptions.sql'], ['*']],
   ['shared-stack-ledger', ['shared_stack_ledger_guard.sql'], ['*']],
-  ['organization-deletion', ['organization_deletion.sql'], ['*']],
+  ['organization-deletion', ['organization_deletion.sql', 'foreign_key_indexes.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
   [
     'company-document-profiles',
@@ -476,7 +484,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['problem_reports.sql', 'problem_report_support.sql', 'problem_report_handout.sql'],
     ['*'],
   ],
-  ['organization-export', ['organization_export.sql'], ['*']],
+  ['organization-export', ['organization_export.sql', 'weekly_outcome_numbers.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   ['hot-read-volume', ['hot_read_volume.sql'], ['planning', 'time', 'attention', 'work', 'documents']],
   [
@@ -552,15 +560,8 @@ export function getTestGroups(repositoryRoot: string): TestGroup[] {
     timing: declaredTiming([`tests/audit/${file}`]),
     changeTrigger: changeTrigger(repositoryRoot, `audit:${id}`, [`tests/audit/${file}`]),
   }));
+  groups.push(...componentAreaGroups(listTestFiles(repositoryRoot, 'tests/ui-contracts', /\.spec\.ts$/)));
   groups.push(
-    {
-      id: 'ui:contracts',
-      kind: 'ui',
-      files: listTestFiles(repositoryRoot, 'tests/ui-contracts', /\.spec\.ts$/),
-      scopes: ['*'],
-      isolation: 'process',
-      timing: untimed,
-    },
     {
       id: 'unit:all',
       kind: 'unit',

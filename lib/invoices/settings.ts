@@ -3,7 +3,7 @@ import { z } from '@/lib/zod';
 
 // The organization's invoice settings: the number series and the default
 // Zahlungsziel and Skonto of a new draft
-// (supabase/migrations/20261219120000_issue_invoices_with_gapless_numbers.sql).
+// (supabase/migrations/20270205090000_issue_invoices_with_gapless_numbers.sql).
 // The database formats the numbers; the form only edits the parts.
 
 const invoiceSettingsValuesSchema = z
@@ -13,7 +13,10 @@ const invoiceSettingsValuesSchema = z
     /** With the year, a number reads <prefix><year>-<n> and n restarts each year. */
     numberWithYear: z.boolean(),
     numberMinDigits: z.number().int().min(1).max(10),
-    nextNumber: z.number().int().min(1).max(999_999_998),
+    /** The database's bound: 999,999,999 is a used-up series, which issues nothing until a lower start. */
+    nextNumber: z.number().int().min(1).max(999_999_999),
+    /** The Berlin year the series was read in; save_invoice_settings refuses a year-based series read in another. */
+    numberYear: z.number().int(),
     paymentDueDays: z.number().int().min(0).max(365),
     discountDays: z.number().int().min(1).nullable(),
     discountBasisPoints: z.number().int().min(1).max(9999).nullable(),
@@ -41,7 +44,9 @@ export const invoiceSettingsSchema = z.object({
   numberWithYear: z.boolean(),
   numberMinDigits: z.number().int(),
   nextNumber: z.number().int(),
-  nextInvoiceNumber: z.string(),
+  /** Null once the series is used up: issue_invoice takes no further number. */
+  nextInvoiceNumber: z.string().nullable(),
+  numberYear: z.number().int(),
   /** From the first issue on the series is fixed. */
   numbersFixed: z.boolean(),
   paymentDueDays: z.number().int(),

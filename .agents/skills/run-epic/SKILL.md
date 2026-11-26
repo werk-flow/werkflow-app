@@ -68,7 +68,7 @@ For each hand-back:
 3. Merge a child with `gh pr merge <n> --squash --auto` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child, or one that changes `AGENTS.md`, waits for the owner's merge: call `unwatch_pull_request`, post it under "Owner queue", ask it through the question tool in the same turn, and go on with the children that do not depend on it. When nothing else can move, end your turn. T3 ends the watch on the merge without a wake; the notifier then sends you one message per merged PR your thread links ([the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate)), and you start the next stage. Keep no repeating `schedule_task` to babysit: the notifier wakes you when a PR or your epic stops moving.
 4. Bring the new `main` into an open sibling only when GitHub reports it conflicting (`DIRTY`), and keep both sides. The merge queue tests the others on the newest `main`.
 5. Classify every failed job by [Failures](../../../docs/technical/testing.md#failures) before any rerun. Only an `environment` failure gets its one retry; cite its issue.
-6. Once `gh pr view <n> --json state` reports `MERGED`, close the child issue with "Merged in <PR>."
+6. Once `gh pr view <n> --json state` reports `MERGED`, close the child issue with "Merged in <PR>." Then settle the child's threads, fix rounds included, and remove their worktrees ([remove a finished worktree](../../../docs/technical/machine-setup.md#remove-a-finished-worktree)).
 
 Start the next stage only after every child of this stage merged.
 

@@ -5,6 +5,7 @@
 
 import { z } from '@/lib/zod';
 
+import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { uuidSchema } from '@/lib/validation/uuid';
 import {
   DOCUMENT_CATEGORIES,
@@ -41,6 +42,8 @@ export const documentLibraryInputSchema = z.object({
   sort: z.enum(DOCUMENT_LIBRARY_SORTS).optional(),
   category: documentCategorySchema.or(z.literal('all')).nullable().optional(),
   linkFilter: z.enum(DOCUMENT_LIBRARY_LINK_FILTERS).nullable().optional(),
+  /** The library pages by `LIST_PAGE_SIZE`; the header search reads a shorter page. */
+  pageSize: z.number().int().min(1).max(LIST_PAGE_SIZE).optional(),
 });
 export type DocumentLibraryInput = z.input<typeof documentLibraryInputSchema>;
 

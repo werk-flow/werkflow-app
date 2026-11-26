@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -17,11 +18,9 @@ Service
 Arbeitsvorlagen
 Mitarbeiter
 Kunden
+Wochenzahlen
 Problem melden
 F2
-MK
-Martin Krämer
-martin.kraemer@haustechnik-kraemer.de
 Angebote
 Angebote
 Leistungen
@@ -29,6 +28,7 @@ Alle Angebote
 Austausch Gas-Brennwerttherme
 ANG-2026-001 · für Familie Hoffmann
 Entwurf
+Bearbeiten
 Angebotskopf
 Kunde
 Familie Hoffmann
@@ -48,4 +48,10 @@ Einleitung
 Vielen Dank für deine Anfrage. Gern bieten wir dir an:
 Schluss
 —
+Titel und Positionen
+Noch keine Positionen.
+Lege den ersten Titel an, zum Beispiel „Heizung“, und füge ihm Positionen hinzu.
+Titel hinzufügen
+Summe netto
+0,00 €
 Nicht eingestempelt

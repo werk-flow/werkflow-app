@@ -5,7 +5,7 @@ import { useState, type ReactNode } from 'react';
 
 import { ClockActionList } from '@/components/clock-action-list';
 import { loadedClockOutbox } from '@/components/clock-outbox-state';
-import { useClockState } from '@/components/clock-state-provider';
+import { useClockState } from '@/components/clock-state-context';
 import { useOrganization } from '@/components/organization/organization-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

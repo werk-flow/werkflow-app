@@ -15,7 +15,12 @@ import {
 } from './access';
 import { documentWriteFailure, revalidateDocuments } from './write-support';
 
-/** A target the link dialogs attach a document to. Requests receive documents only at upload. */
+/**
+ * A target the link dialogs attach a document to. Requests receive documents
+ * only at upload, offers only from the request they were converted from
+ * (convert_client_request_to_offer): an offer's document stays with the office
+ * and never reaches a job or project through a dialog of its own.
+ */
 export type DocumentLinkTarget =
   | { kind: 'job'; jobId: string }
   | { kind: 'project'; projectId: string }

@@ -1,6 +1,6 @@
 -- „Stornieren“ and „Korrigieren“ issue a Stornorechnung with the series' next
 -- number, leave the original untouched but Storniert, and link the chain
--- (migration 20261219130000_cancel_and_correct_issued_invoices.sql).
+-- (migration 20270310090000_cancel_and_correct_issued_invoices.sql).
 begin;
 
 insert into auth.users (
@@ -32,6 +32,10 @@ insert into public.clients (id, organization_id, name, client_type, address) val
 insert into public.jobs (id, organization_id, title, job_number, client_id, status, created_by) values
 ('38080000-0000-4000-8000-000000000050', '38080000-0000-4000-8000-000000000010', 'Heizung tauschen',
  'S-80', '38080000-0000-4000-8000-000000000020', 'nicht_bearbeitet', '38080000-0000-4000-8000-000000000002');
+-- The Leistung the first line of each invoice was added from.
+insert into public.leistungen (id, organization_id, leistung_number, name, kind, unit, tax_rate_basis_points) values
+('38080000-0000-4000-8000-000000000060', '38080000-0000-4000-8000-000000000010', 'L-1', 'Monteurstunde',
+ 'arbeit', 'hour', 1900);
 
 create function pg_temp.expect_refusal(p_label text, p_statement text, p_refusal text) returns void
 language plpgsql as $$
@@ -82,7 +86,8 @@ create function pg_temp.fill(p_name text) returns integer language sql as $$
       "discountBasisPoints":200,"orderReference":"BE-4711","buyerReference":"Objekt Hofweg",
       "openingText":"Vielen Dank.","closingText":"Gruß"}',
     '[{"name":"Monteurstunde","description":"Heizung","quantity":"1.5","unit":"hour","unitPriceCents":7200,
-       "priceQuantity":1,"taxCategory":"S","taxRateBasisPoints":1900,"netCents":10800},
+       "priceQuantity":1,"taxCategory":"S","taxRateBasisPoints":1900,"netCents":10800,
+       "source":{"kind":"leistung","id":"38080000-0000-4000-8000-000000000060"}},
       {"name":"Gutschrift Anfahrt","description":"","quantity":"-1","unit":"flat_rate","unitPriceCents":3500,
        "priceQuantity":1,"taxCategory":"S","taxRateBasisPoints":700,"netCents":-3500}]',
     '{"lineNetCents":7300,"taxCents":1807,"grossCents":9107}')
@@ -161,6 +166,18 @@ from (values
   ('another day', 'RE-' || to_char(now() at time zone 'Europe/Berlin', 'YYYY') || '-004',
    (now() at time zone 'Europe/Berlin')::date - 1)
 ) as cases(label, expected_number, expected_day);
+-- A used-up series has no number for the Stornorechnung: the server sends an empty one, and the cancel
+-- is refused as used up, not as a moved number the server would check again.
+select set_config('app.invoice_number_write', 'on', true);
+update public.invoice_settings set next_number = 999999999
+where organization_id = '38080000-0000-4000-8000-000000000010';
+select pg_temp.expect_refusal('a used-up series', format('select public.cancel_invoice(%L, %L, %L,
+  gen_random_uuid(), ''Falsch'', false, '''', %L)', '38080000-0000-4000-8000-000000000002',
+  '38080000-0000-4000-8000-000000000010', pg_temp.id('cancelled'), (now() at time zone 'Europe/Berlin')::date),
+  'invoice_numbers_exhausted');
+select set_config('app.invoice_number_write', 'on', true);
+update public.invoice_settings set next_number = 4
+where organization_id = '38080000-0000-4000-8000-000000000010';
 do $$
 begin
   if (select next_number from public.invoice_settings
@@ -208,13 +225,16 @@ begin
     raise exception 'the Stornorechnung is % (answer %)', to_jsonb(v_storno), v_answer;
   end if;
   if (select array_agg((line.position, line.name, line.description, line.quantity, line.unit, line.unit_price_cents,
-        line.price_quantity, line.tax_category, line.tax_rate_basis_points, line.net_cents)::text order by line.position)
+        line.price_quantity, line.tax_category, line.tax_rate_basis_points, line.net_cents, line.leistung_id,
+        line.item_id)::text order by line.position)
       from public.invoice_lines line where line.invoice_id = v_storno.id)
     is distinct from (select array_agg((line.position, line.name, line.description, -line.quantity, line.unit,
-        line.unit_price_cents, line.price_quantity, line.tax_category, line.tax_rate_basis_points, -line.net_cents)::text
-        order by line.position)
-      from issued_lines line where line.invoice_id = v_original.id) then
-    raise exception 'the Stornorechnung''s lines are not the original''s negated';
+        line.unit_price_cents, line.price_quantity, line.tax_category, line.tax_rate_basis_points, -line.net_cents,
+        line.leistung_id, line.item_id)::text order by line.position)
+      from issued_lines line where line.invoice_id = v_original.id)
+    or (select count(*) from public.invoice_lines line where line.invoice_id = v_storno.id
+        and line.leistung_id = '38080000-0000-4000-8000-000000000060') <> 1 then
+    raise exception 'the Stornorechnung''s lines are not the original''s negated with their sources';
   end if;
   -- The original is untouched: only its status moved; the cancel's actor and time are in its history.
   if to_jsonb(v_original) - 'status' is distinct from to_jsonb(v_before) - 'status'
@@ -340,10 +360,10 @@ begin
         v_original.service_start, v_original.service_end, v_original.payment_due_days, v_original.discount_days,
         v_original.discount_basis_points, v_original.order_reference, v_original.buyer_reference,
         v_original.opening_text, v_original.closing_text, v_original.gross_cents)
-    or (select array_agg((line.position, line.name, line.quantity, line.net_cents)::text order by line.position)
-        from public.invoice_lines line where line.invoice_id = v_correction.id)
-      is distinct from (select array_agg((line.position, line.name, line.quantity, line.net_cents)::text
-        order by line.position) from issued_lines line where line.invoice_id = v_original.id) then
+    or (select array_agg((line.position, line.name, line.quantity, line.net_cents, line.leistung_id, line.item_id)::text
+        order by line.position) from public.invoice_lines line where line.invoice_id = v_correction.id)
+      is distinct from (select array_agg((line.position, line.name, line.quantity, line.net_cents, line.leistung_id,
+        line.item_id)::text order by line.position) from issued_lines line where line.invoice_id = v_original.id) then
     raise exception 'the correction is % (answer %)', to_jsonb(v_correction), v_answer;
   end if;
   insert into ids values ('correction', v_correction.id);

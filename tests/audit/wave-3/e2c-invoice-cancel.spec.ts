@@ -1,6 +1,6 @@
 import { freezeLiveUpdates } from '../../golden/support/live';
 import { expect, test } from '../support/fixtures';
-import { seedInvoiceChain } from '../../golden/support/db/invoices';
+import { readStoredInvoiceChain, seedInvoiceChain } from '../../golden/support/db/invoices';
 import {
   cancelInvoiceViaDialog,
   CORRECTION_DRAFT_CHAIN_LABEL,
@@ -45,7 +45,7 @@ test.describe('E2c invoice cancel and correction audit @AUDIT-W3-E2C-INVOICE-CAN
       await expect(invoiceChain(adminPage)).toHaveCount(0);
     });
 
-    const stornoLabel =
+    const { stornoLabel, correctionId } =
       await test.step('„Korrigieren“ cancels it and opens the correction draft', async () => {
         await cancelInvoiceViaDialog(adminPage, {
           invoiceNumber: original.originalNumber,
@@ -60,7 +60,10 @@ test.describe('E2c invoice cancel and correction audit @AUDIT-W3-E2C-INVOICE-CAN
         await expect(invoiceChainLink(chain, originalTitle)).toBeVisible();
         const stornoLink = invoiceChainLink(chain, STORNO_CHAIN_LABEL);
         await expect(stornoLink).toBeVisible();
-        return (await stornoLink.textContent()) ?? '';
+        return {
+          stornoLabel: (await stornoLink.textContent()) ?? '',
+          correctionId: new URL(adminPage.url()).pathname.split('/').at(-1),
+        };
       });
 
     await test.step('Back shows the original Storniert, its chain linked and its actions gone', async () => {
@@ -74,6 +77,13 @@ test.describe('E2c invoice cancel and correction audit @AUDIT-W3-E2C-INVOICE-CAN
       await expect(invoiceChainCurrent(chain)).toHaveText(originalTitle);
       await expect(invoiceChainLink(chain, stornoLabel)).toBeVisible();
       await expect(invoiceChainLink(chain, CORRECTION_DRAFT_CHAIN_LABEL)).toBeVisible();
+    });
+
+    await test.step('The database holds the original Storniert, its Stornorechnung and the opened draft', async () => {
+      const stored = await readStoredInvoiceChain(world.orgId, original.originalId);
+      expect(stored.status).toBe('storniert');
+      expect(stored.storno?.status).toBe('ausgestellt');
+      expect(stored.correction).toEqual({ id: correctionId, status: 'entwurf' });
     });
   });
 });

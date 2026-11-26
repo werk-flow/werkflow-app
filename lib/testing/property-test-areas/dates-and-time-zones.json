@@ -1,0 +1,9 @@
+{
+  "area": "Dates and time zones",
+  "rule": "Europe/Berlin business dates, DST days, month and year turns",
+  "roots": ["lib/date-time"],
+  "covered": ["lib/date-time/berlin.ts"],
+  "exempt": {
+    "lib/date-time/tick-boundary.ts": "The delay of a UI clock tick; it names no date and no business day."
+  }
+}

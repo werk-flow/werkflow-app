@@ -18,7 +18,7 @@ test('an employee sees only their own settings sections', () => {
   });
 });
 
-test('Admin and Büro see every settings section, with the personal table view under „Persönlich“', () => {
+test('Admin and Büro see the organization settings, with the personal table view under „Persönlich“', () => {
   const organization = [
     'Dashboard',
     'Organisation',
@@ -29,8 +29,12 @@ test('Admin and Büro see every settings section, with the personal table view u
     'Mitarbeiter',
     'Kunden',
   ];
-  const account = ['Profil', 'Konto & Sicherheit', 'Aufträge & Projekte', 'Abonnement & Abrechnung'];
+  const account = ['Profil', 'Konto & Sicherheit', 'Aufträge & Projekte'];
   expect(tabs('buero')).toEqual({ account, organization });
-  // Only Admin exports the whole organization (werk-flow/werkflow-planning#287).
-  expect(tabs('admin')).toEqual({ account, organization: [...organization, 'Datenexport'] });
+  // Only Admin exports the whole organization (werk-flow/werkflow-planning#287) and
+  // sees WerkFlow's own subscription and invoices (werk-flow/werkflow-planning#252).
+  expect(tabs('admin')).toEqual({
+    account: [...account, 'Abonnement & Abrechnung'],
+    organization: [...organization, 'Datenexport'],
+  });
 });

@@ -2,7 +2,7 @@
 
 import { Save } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useBanner } from '@/components/ui/banner';
@@ -22,6 +22,7 @@ import {
 import type { IssueFinding } from '@/lib/invoices/issue-model';
 import type { InvoiceDetail, InvoiceWorkKind } from '@/lib/invoices/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { InvoiceCatalogLine } from './invoice-catalog-line';
 import { INVOICE_FAILURE_MESSAGES } from './invoice-failure-messages';
 import { InvoicePreviewLink, IssueFindings, IssueInvoiceButton } from './invoice-issue';
 import { InvoiceLinesFields } from './invoice-lines-fields';
@@ -54,9 +55,15 @@ function liveAmounts(form: DraftForm): DraftAmounts | null {
  * the server computes and stores the amounts again. Another session's save
  * shows here at once while nothing is typed; with own changes it asks for a
  * reload, and a save from the older version is refused. An issued invoice
- * shows the same fields, none of them editable.
+ * shows the same fields, none of them editable. A change of status mounts a
+ * new editor: an answer the draft's editor still waits for, such as a catalog
+ * line, lands on nothing.
  */
 export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
+  return <InvoiceEditorForm key={`${invoice.id}:${invoice.status}`} invoice={invoice} />;
+}
+
+function InvoiceEditorForm({ invoice }: { invoice: InvoiceDetail }) {
   const router = useRouter();
   const { showBanner } = useBanner();
   const draft = useDraftState(invoice);
@@ -65,7 +72,6 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
   const [error, setError] = useState<string | null>(null);
   // What the last „Ausstellen“ found at fault; the draft stays a draft.
   const [findings, setFindings] = useState<IssueFinding[]>([]);
-  const [nextKey, setNextKey] = useState(0);
   const { run, isPending } = usePendingTask();
   // An issued invoice shows its fields read only.
   const pending = isPending || invoice.status !== 'entwurf';
@@ -81,6 +87,7 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
       focusFirstInvalidField(parsed.errors);
       return;
     }
+    const submittedRevision = draft.revision();
     void run(async () => {
       setError(null);
       const result = await saveInvoiceDraft({
@@ -94,7 +101,7 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
         setError(result ? describeFailure(result.error, INVOICE_FAILURE_MESSAGES, SAVE_FAILED) : SAVE_FAILED);
         return;
       }
-      draft.markSaved(result.version);
+      draft.markSaved(result.version, submittedRevision);
       setAttempted(false);
       showBanner({ variant: 'success', message: 'Entwurf gespeichert.' });
       router.refresh();
@@ -112,14 +119,10 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
           }}
         />
       )}
-      <InvoiceLinesFields
-        lines={form.lines}
-        lineNetCents={form.lines.map((_line, index) => amounts?.lineNetCents[index] ?? null)}
-        onChange={(lines) => setForm({ ...form, lines })}
-        onAdd={() => {
-          setForm({ ...form, lines: [...form.lines, emptyLine(`new-${nextKey}`)] });
-          setNextKey(nextKey + 1);
-        }}
+      <EditorLines
+        form={form}
+        setForm={setForm}
+        amounts={amounts}
         errors={errors}
         disabled={pending}
         issued={invoice.status !== 'entwurf'}
@@ -140,6 +143,47 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
   );
 }
 
+/** The lines with their amounts. A draft adds an empty or a catalog line; an issued invoice adds none. */
+function EditorLines({
+  form,
+  setForm,
+  amounts,
+  errors,
+  disabled,
+  issued,
+}: {
+  form: DraftForm;
+  setForm: (next: DraftForm | ((current: DraftForm) => DraftForm)) => void;
+  amounts: DraftAmounts | null;
+  errors: Record<string, string | undefined>;
+  disabled: boolean;
+  issued: boolean;
+}) {
+  const [nextKey, setNextKey] = useState(0);
+  return (
+    <>
+      <InvoiceLinesFields
+        lines={form.lines}
+        lineNetCents={form.lines.map((_line, index) => amounts?.lineNetCents[index] ?? null)}
+        onChange={(lines) => setForm({ ...form, lines })}
+        onAdd={() => {
+          setForm({ ...form, lines: [...form.lines, emptyLine(`new-${nextKey}`)] });
+          setNextKey(nextKey + 1);
+        }}
+        errors={errors}
+        disabled={disabled}
+        issued={issued}
+      />
+      {!issued && (
+        <InvoiceCatalogLine
+          onAdd={(line) => setForm((current) => ({ ...current, lines: [...current.lines, line] }))}
+          disabled={disabled}
+        />
+      )}
+    </>
+  );
+}
+
 /**
  * The editor's text and the version it is based on. Another session's newer
  * version replaces the text while nothing is typed; with own changes it waits
@@ -155,10 +199,10 @@ function useDraftState(invoice: InvoiceDetail) {
   const [baseVersion, setBaseVersion] = useState(invoice.version);
   const [dirty, setDirty] = useState(false);
   const [attemptKey, setAttemptKey] = useState(() => crypto.randomUUID());
+  // Counts the changes, so a save marks saved only the text it sent: a catalog line that lands meanwhile stays unsaved.
+  const revision = useRef(0);
   const newer = invoice.version > baseVersion;
-  // An issue elsewhere replaces own changes too: an issued invoice shows only what it says.
-  const issuedElsewhere = newer && invoice.status !== 'entwurf';
-  if ((newer && !dirty) || issuedElsewhere) {
+  if (newer && !dirty) {
     setFormState(draftFormOf(invoice));
     setBaseVersion(invoice.version);
     setDirty(false);
@@ -169,13 +213,17 @@ function useDraftState(invoice: InvoiceDetail) {
     attemptKey,
     dirty,
     newerElsewhere: newer && dirty,
-    setForm: (next: DraftForm) => {
+    /** An update from an answer that arrives later takes the current text, so edits made meanwhile stay. */
+    setForm: (next: DraftForm | ((current: DraftForm) => DraftForm)) => {
+      revision.current += 1;
       setFormState(next);
       setDirty(true);
       setAttemptKey(crypto.randomUUID());
     },
-    markSaved: (version: number) => {
+    revision: () => revision.current,
+    markSaved: (version: number, savedRevision: number) => {
       setBaseVersion(version);
+      if (revision.current !== savedRevision) return;
       setDirty(false);
       setAttemptKey(crypto.randomUUID());
     },

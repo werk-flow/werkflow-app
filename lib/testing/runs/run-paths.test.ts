@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { browserRunPaths, manifestActiveStateDirectory } from './run-paths';
 import { artifactsDirectory, worldFilePath } from '../../../tests/golden/support/world';
+import { temporaryDirectory } from '../temporary-directory';
 
 describe('browser run ownership', () => {
   test('world paths resolve ownership after import and follow only the selected run', () => {
@@ -42,27 +42,23 @@ describe('browser run ownership', () => {
   });
 
   test('clearing one failed group cannot remove another group state or results', () => {
-    const root = mkdtempSync(resolve(tmpdir(), 'werkflow-run-paths-'));
-    try {
-      const failed = browserRunPaths(root, 'failed-group');
-      const unrelated = browserRunPaths(root, 'unrelated-group');
-      for (const paths of [failed, unrelated]) {
-        for (const directory of [paths.activeState, paths.archivedState, paths.results, paths.report]) {
-          mkdirSync(directory, { recursive: true });
-          writeFileSync(resolve(directory, 'ownership.json'), paths.directory);
-        }
+    const root = temporaryDirectory('werkflow-run-paths-');
+    const failed = browserRunPaths(root, 'failed-group');
+    const unrelated = browserRunPaths(root, 'unrelated-group');
+    for (const paths of [failed, unrelated]) {
+      for (const directory of [paths.activeState, paths.archivedState, paths.results, paths.report]) {
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(resolve(directory, 'ownership.json'), paths.directory);
       }
-      rmSync(failed.directory, { recursive: true });
-      for (const directory of [
-        unrelated.activeState,
-        unrelated.archivedState,
-        unrelated.results,
-        unrelated.report,
-      ]) {
-        expect(readFileSync(resolve(directory, 'ownership.json'), 'utf8')).toBe(unrelated.directory);
-      }
-    } finally {
-      rmSync(root, { recursive: true, force: true });
+    }
+    rmSync(failed.directory, { recursive: true });
+    for (const directory of [
+      unrelated.activeState,
+      unrelated.archivedState,
+      unrelated.results,
+      unrelated.report,
+    ]) {
+      expect(readFileSync(resolve(directory, 'ownership.json'), 'utf8')).toBe(unrelated.directory);
     }
   });
 });

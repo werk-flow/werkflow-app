@@ -18,7 +18,7 @@ const { calculatedInvoiceOf, renderInvoicePdf } = await import('./original');
 
 // The Stornorechnung cancel_invoice stores: every line negated by its
 // quantity. The database negates the stored amounts instead of computing them
-// (supabase/migrations/20261219130000_cancel_and_correct_issued_invoices.sql);
+// (supabase/migrations/20270310090000_cancel_and_correct_issued_invoices.sql);
 // this proves the invoice core, run on the negated lines, computes exactly
 // those amounts, and that the result passes the EN 16931 rules as a 384.
 
