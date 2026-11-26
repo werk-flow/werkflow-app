@@ -1,5 +1,6 @@
+import { INVENTORY_UNITS } from '@/lib/inventory/units';
 import { draftAmounts, type DraftAmounts } from '@/lib/invoices/amounts';
-import type { OfferSection } from './types';
+import type { OfferFreePosition, OfferPosition, OfferSection } from './types';
 
 // The amounts of an offer come from the one invoice core, as an invoice's do,
 // so an invoice of the same positions later agrees with the offer: each priced
@@ -28,5 +29,53 @@ export function offerAmounts(sections: readonly OfferSection[]): OfferAmounts {
       );
       return { netCents: positionCents.reduce<number>((sum, cents) => sum + (cents ?? 0), 0), positionCents };
     }),
+  };
+}
+
+type OfferContentArgument = {
+  sections: Array<{
+    title: string;
+    netCents: number;
+    positions: Array<OfferPosition | (OfferFreePosition & { unitLabel: string; amountCents: number })>;
+  }>;
+  totals: { netCents: number; taxCents: number; grossCents: number };
+};
+
+/**
+ * The content as `save_offer_content` stores it: each priced position with its
+ * unit's short label and its amount, each Titel with its subtotal, and the
+ * totals. Null for a position the line rule refuses.
+ */
+export function offerContentArgument(sections: readonly OfferSection[]): OfferContentArgument | null {
+  let amounts: OfferAmounts;
+  try {
+    amounts = offerAmounts(sections);
+  } catch (error) {
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
+  return {
+    sections: sections.map((section, sectionIndex) => {
+      const computed = amounts.sections[sectionIndex];
+      return {
+        title: section.title,
+        netCents: computed?.netCents ?? 0,
+        positions: section.positions.map((position, positionIndex) =>
+          position.kind === 'text'
+            ? position
+            : {
+                ...position,
+                unitLabel:
+                  INVENTORY_UNITS.find((unit) => unit.code === position.unit)?.shortLabel ?? position.unit,
+                amountCents: computed?.positionCents[positionIndex] ?? 0,
+              },
+        ),
+      };
+    }),
+    totals: {
+      netCents: amounts.totals.lineNetCents,
+      taxCents: amounts.totals.taxCents,
+      grossCents: amounts.totals.grossCents,
+    },
   };
 }

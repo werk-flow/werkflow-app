@@ -1,14 +1,12 @@
 import 'server-only';
 
 import type { ActionResult } from '@/lib/action-result';
-import { INVENTORY_UNITS } from '@/lib/inventory/units';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
 import { z } from '@/lib/zod';
 import { saveOfferContentSchema, type SaveOfferContentInput } from './action-schemas';
-import { offerAmounts, type OfferAmounts } from './amounts';
-import type { OfferSection } from './types';
+import { offerContentArgument } from './amounts';
 
 // The one write of an offer's Titel and Positionen, for the editor's action
 // and for server callers that act for the office (werk-flow/werkflow-planning#541).
@@ -25,40 +23,6 @@ const savedContentSchema = z.object({ contentVersion: z.number().int().positive(
 
 type OfficeActor = { orgId: string; userId: string };
 
-/** The amounts, or null for a position the line rule refuses: input the office fixes. */
-function amountsOrNull(sections: readonly OfferSection[]): OfferAmounts | null {
-  try {
-    return offerAmounts(sections);
-  } catch (error) {
-    if (error instanceof RangeError) return null;
-    throw error;
-  }
-}
-
-function unitLabel(code: string): string {
-  return INVENTORY_UNITS.find((unit) => unit.code === code)?.shortLabel ?? code;
-}
-
-/** The content as the database function takes it: each position with its unit label and amount. */
-function contentArgument(sections: readonly OfferSection[], amounts: OfferAmounts) {
-  return sections.map((section, sectionIndex) => {
-    const computed = amounts.sections[sectionIndex];
-    return {
-      title: section.title,
-      netCents: computed?.netCents ?? 0,
-      positions: section.positions.map((position, positionIndex) =>
-        position.kind === 'text'
-          ? position
-          : {
-              ...position,
-              unitLabel: unitLabel(position.unit),
-              amountCents: computed?.positionCents[positionIndex] ?? 0,
-            },
-      ),
-    };
-  });
-}
-
 /**
  * Replaces the Titel and Positionen of an offer in „Entwurf“ that is still at
  * the content version the input names, with the amounts the server computes.
@@ -72,8 +36,9 @@ export async function writeOfferContent(
   const parsed = saveOfferContentSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
-  const amounts = amountsOrNull(input.sections);
-  if (!amounts) return { success: false, error: 'invalid_input' };
+  const content = offerContentArgument(input.sections);
+  // A position the line rule refuses (an amount beyond the safe range) is the office's input to fix.
+  if (!content) return { success: false, error: 'invalid_input' };
   const { data, error } = await createSupabaseAdminClient().rpc(
     'save_offer_content',
     rpcArgs('save_offer_content', {
@@ -82,12 +47,8 @@ export async function writeOfferContent(
       p_offer_id: input.offerId,
       p_expected_content_version: input.expectedContentVersion,
       p_attempt_key: input.attemptKey,
-      p_sections: contentArgument(input.sections, amounts),
-      p_totals: {
-        netCents: amounts.totals.lineNetCents,
-        taxCents: amounts.totals.taxCents,
-        grossCents: amounts.totals.grossCents,
-      },
+      p_sections: content.sections,
+      p_totals: content.totals,
     }),
   );
   const saved = savedContentSchema.safeParse(data);
