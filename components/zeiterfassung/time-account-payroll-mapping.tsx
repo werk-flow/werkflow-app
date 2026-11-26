@@ -22,6 +22,7 @@ import {
   invalidPayrollCodeKeys,
   PAYROLL_CODE_MAX_LENGTH,
   PAYROLL_CODE_ROWS,
+  recordMappingSave,
   type PayrollCodeRow,
   type PayrollMappingDraft,
 } from '@/lib/time-accounts/payroll-mapping';
@@ -117,8 +118,8 @@ function PayrollMappingForm({ settings }: { settings: TimeAccountSettingsData })
         setError(getTimeAccountFailureMessage('createMapping', result.error));
         return;
       }
-      // The saved codes are no edits: the version this save made replaces the table.
-      setDraft((previous) => ({ ...previous, readCodes: submitted }));
+      // The saved codes are no edits; codes typed meanwhile stay, based on the version this save made.
+      setDraft((previous) => recordMappingSave(previous, { version: result.version, codes: submitted }));
       showBanner({ variant: 'success', message: 'Die Lohnarten-Zuordnung ist gespeichert.' });
     } catch {
       setError(getTimeAccountFailureMessage('createMapping', 'mapping_failed'));

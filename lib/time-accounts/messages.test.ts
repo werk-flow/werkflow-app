@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 
+import ts from 'typescript';
+
 import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
+import { parseProductSource } from '@/lib/conventions/product-sources';
 import { REALTIME_TABLES } from '@/lib/realtime/tables';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   TIME_ACCOUNT_SETTINGS_LIVE_TABLES,
   TIME_PERIOD_DETAIL_LIVE_TABLES,
@@ -188,10 +189,25 @@ describe('Regeln & Export live tables', () => {
   });
 
   test('the page subscribes to them', () => {
-    const page = readFileSync(
-      join(import.meta.dir, '../../app/(app)/zeiterfassung/einstellungen/page.tsx'),
-      'utf8',
-    );
-    expect(page).toContain('<LiveRouteRefresh tables={TIME_ACCOUNT_SETTINGS_LIVE_TABLES} />');
+    // The page's syntax tree, so formatting and attribute order do not matter.
+    const subscribed: string[] = [];
+    const visit = (node: ts.Node): void => {
+      const element = ts.isJsxSelfClosingElement(node)
+        ? node
+        : ts.isJsxElement(node)
+          ? node.openingElement
+          : null;
+      if (element?.tagName.getText() === 'LiveRouteRefresh') {
+        for (const attribute of element.attributes.properties) {
+          if (!ts.isJsxAttribute(attribute) || attribute.name.getText() !== 'tables') continue;
+          const value = attribute.initializer;
+          if (value && ts.isJsxExpression(value) && value.expression)
+            subscribed.push(value.expression.getText());
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(parseProductSource('app/(app)/zeiterfassung/einstellungen/page.tsx'));
+    expect(subscribed).toEqual(['TIME_ACCOUNT_SETTINGS_LIVE_TABLES']);
   });
 });

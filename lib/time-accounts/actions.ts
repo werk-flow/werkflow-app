@@ -559,15 +559,18 @@ export async function reopenTimePeriod(formInput: FormData): Promise<TimeAccount
  * every export keeps the version it was built from. A table read from a
  * version that is no longer current is refused as stale.
  */
-export async function savePayrollMapping(input: unknown): Promise<TimeAccountActionResult<'createMapping'>> {
+export async function savePayrollMapping(
+  input: unknown,
+): Promise<TimeAccountActionResult<'createMapping', { version: number }>> {
   const parsed = savePayrollMappingInputSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const context = await requireAuth();
   if (context.role !== 'admin') return { success: false, error: 'forbidden' };
   const codeMappings = toPayrollCodeMappings(parsed.data.codes);
   if (!codeMappings) return { success: false, error: 'invalid_code' };
+  let version: number;
   try {
-    await savePayrollMappingVersion(
+    version = await savePayrollMappingVersion(
       createSupabaseAdminClient(),
       context,
       codeMappings,
@@ -581,7 +584,7 @@ export async function savePayrollMapping(input: unknown): Promise<TimeAccountAct
   }
   revalidatePath('/zeiterfassung/einstellungen');
   revalidatePath('/einstellungen/zeiterfassung');
-  return { success: true };
+  return { success: true, version };
 }
 
 // Stores the package, records its document, and finalizes the export; any

@@ -7,6 +7,7 @@ import {
   PAYROLL_CODE_MAX_LENGTH,
   PAYROLL_CODE_ROWS,
   payrollCodesByKey,
+  recordMappingSave,
   toPayrollCodeMappings,
 } from './payroll-mapping';
 
@@ -103,5 +104,25 @@ describe('followMappingVersion: a live refresh never erases unsaved codes', () =
 
   test('the same version changes nothing', () => {
     expect(followMappingVersion(draft, { version: 1, codes: v1 })).toBe(draft);
+  });
+});
+
+describe('recordMappingSave: an edit typed during the own save stays based on that save', () => {
+  const v1 = payrollCodesByKey(null);
+  const submitted = { ...v1, overtime: 'UEB2' };
+  // The Admin saved `submitted` from version 1 and typed one more code while the save ran.
+  const typedDuringSave = { basedOnVersion: 1, readCodes: v1, codes: { ...submitted, vacation: 'URL9' } };
+
+  test('the next save names the version this save committed and keeps the typed code', () => {
+    const recorded = recordMappingSave(typedDuringSave, { version: 2, codes: submitted });
+    expect(recorded).toEqual({ basedOnVersion: 2, readCodes: submitted, codes: typedDuringSave.codes });
+    // The refresh that brings the own version 2 changes nothing.
+    expect(followMappingVersion(recorded, { version: 2, codes: submitted })).toBe(recorded);
+  });
+
+  test('a version another session committed after the own save still leaves the edit stale', () => {
+    const recorded = recordMappingSave(typedDuringSave, { version: 2, codes: submitted });
+    const other = { ...submitted, sickness: 'KRANK2' };
+    expect(followMappingVersion(recorded, { version: 3, codes: other }).basedOnVersion).toBe(2);
   });
 });

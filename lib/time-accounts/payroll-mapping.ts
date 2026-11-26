@@ -133,3 +133,15 @@ export function followMappingVersion(
   if (!sameCodes(draft.codes, draft.readCodes) && !sameCodes(draft.codes, current.codes)) return draft;
   return { basedOnVersion: current.version, readCodes: current.codes, codes: current.codes };
 }
+
+/**
+ * The draft after its own save of `saved.codes` was accepted as
+ * `saved.version`. Codes typed while the save ran stay as edits based on that
+ * version, so only a version another session commits later makes them stale.
+ */
+export function recordMappingSave(
+  draft: PayrollMappingDraft,
+  saved: { version: number; codes: Readonly<Record<string, string>> },
+): PayrollMappingDraft {
+  return { ...draft, basedOnVersion: saved.version, readCodes: saved.codes };
+}

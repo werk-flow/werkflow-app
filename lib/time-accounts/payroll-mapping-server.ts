@@ -13,15 +13,16 @@ import { requireRead } from './read-support';
  * Saves a new mapping version: the Admin's codes, and every person's current
  * Personalnummer. `basedOnVersion` is the version the Admin's table showed
  * (null before the first one); the database refuses the save with
- * `stale_version` when another version is current by now. Throws a stable
- * code (or a provider error) on every refusal; the action maps it.
+ * `stale_version` when another version is current by now. Returns the
+ * version number it committed, the base of the Admin's next save. Throws a
+ * stable code (or a provider error) on every refusal; the action maps it.
  */
 export async function savePayrollMappingVersion(
   admin: AdminClient,
   context: { orgId: string; userId: string },
   codeMappings: PayrollCodeMapping[],
   basedOnVersion: number | null,
-): Promise<void> {
+): Promise<number> {
   const { data: employees } = await readCompleteRows(
     (from, to) =>
       admin
@@ -38,19 +39,28 @@ export async function savePayrollMappingVersion(
     return { employee_record_id: employee.id, external_employee_reference: employee.employee_number };
   });
   const payload = { employeeMappings, codeMappings, basedOnVersion };
-  const { error } = await admin.rpc(
-    'confirm_payroll_mapping_version',
-    rpcArgs('confirm_payroll_mapping_version', {
-      p_actor_id: context.userId,
-      p_organization_id: context.orgId,
-      p_expected_version: basedOnVersion,
-      p_employee_mappings: employeeMappings,
-      p_code_mappings: codeMappings,
-      p_operation_id: randomUUID(),
-      p_request_hash: hashPayload(payload),
-    }),
-  );
-  if (error) throw error;
+  const versionId = await admin
+    .rpc(
+      'confirm_payroll_mapping_version',
+      rpcArgs('confirm_payroll_mapping_version', {
+        p_actor_id: context.userId,
+        p_organization_id: context.orgId,
+        p_expected_version: basedOnVersion,
+        p_employee_mappings: employeeMappings,
+        p_code_mappings: codeMappings,
+        p_operation_id: randomUUID(),
+        p_request_hash: hashPayload(payload),
+      }),
+    )
+    .then(requireRead);
+  const { version } = await admin
+    .from('payroll_mapping_versions')
+    .select('version')
+    .eq('organization_id', context.orgId)
+    .eq('id', versionId)
+    .single()
+    .then(requireRead);
+  return version;
 }
 
 /** The current mapping version with the code of each classification. */

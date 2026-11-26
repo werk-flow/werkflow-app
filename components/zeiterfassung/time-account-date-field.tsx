@@ -24,6 +24,7 @@ export function TimeAccountDateField({
   ariaLabel,
   form,
   id,
+  onPick,
 }: {
   name: string;
   /** The suggested date, `YYYY-MM-DD`. */
@@ -33,8 +34,14 @@ export function TimeAccountDateField({
   form?: string;
   /** The picker's id, for a form that focuses it when the date is missing. */
   id?: string;
+  /** Runs after every pick, an emptied date included. */
+  onPick?: (date: Date | undefined) => void;
 }) {
-  const [value, pick] = useSuggestedDate(initialValue);
+  const [value, setPicked] = useSuggestedDate(initialValue);
+  const pick = (date: Date | undefined): void => {
+    setPicked(date);
+    onPick?.(date);
+  };
   return (
     <>
       <input type="hidden" form={form} name={name} value={value ? toLocalDateString(value) : ''} />

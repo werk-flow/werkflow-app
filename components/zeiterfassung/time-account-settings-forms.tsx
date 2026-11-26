@@ -108,57 +108,18 @@ function AdjustmentKindButtons({
 
 const HOURS_HEAD = 'Stunden (Std:Min)';
 
-/** The table row takes the bare controls; a card labels each one. */
-function adjustmentCells(
-  layout: PersonLayout,
-  controls: {
-    ids: { hours: string; date: string; reason: string };
-    hours: ReactNode;
-    effectiveDate: ReactNode;
-    reason: ReactNode;
-    kinds: ReactNode;
-  },
-): Parameters<typeof PersonRow>[0]['cells'] {
-  const { ids, hours, effectiveDate, reason, kinds } = controls;
-  return layout === 'row'
-    ? [
-        { key: 'hours', content: hours },
-        { key: 'effectiveDate', content: effectiveDate },
-        { key: 'reason', content: reason },
-        { key: 'kind', content: kinds },
-      ]
-    : [
-        {
-          key: 'hours',
-          content: (
-            <Field label={HOURS_HEAD} htmlFor={ids.hours} required>
-              {hours}
-            </Field>
-          ),
-        },
-        {
-          key: 'effectiveDate',
-          content: (
-            <Field label="Wirksam am" htmlFor={ids.date} required>
-              {effectiveDate}
-            </Field>
-          ),
-        },
-        {
-          key: 'reason',
-          content: (
-            <Field label="Grund" htmlFor={ids.reason} required>
-              {reason}
-            </Field>
-          ),
-        },
-        { key: 'kind', content: kinds },
-      ];
-}
+type AdjustmentKey = 'hours' | 'date' | 'reason';
 
-type AdjustmentErrors = { hours: string | null; date: string | null; reason: string | null };
+type AdjustmentErrors = Record<AdjustmentKey, string | null>;
 
 const NO_ADJUSTMENT_ERRORS: AdjustmentErrors = { hours: null, date: null, reason: null };
+
+/** The column head of each field: a card shows it as the label, the table row hides it behind the header. */
+const ADJUSTMENT_LABELS: Record<AdjustmentKey, string> = {
+  hours: HOURS_HEAD,
+  date: 'Wirksam am',
+  reason: 'Grund',
+};
 
 /** What a submitted adjustment lacks, in the order of the row. */
 function checkAdjustment(data: FormData): AdjustmentErrors {
@@ -170,31 +131,39 @@ function checkAdjustment(data: FormData): AdjustmentErrors {
 }
 
 /**
- * The typed fields of one adjustment form. The hours take „±HH:MM“ like the
- * opening balance. On submit, wrong or zero hours, a missing date and a
- * missing reason mark their fields, focus the first and send nothing; typing
- * clears a mark. The form takes `noValidate`, so no browser bubble runs
- * before this check. Enter in a field must not submit through the first kind
- * button.
+ * The fields of one adjustment form, each in a `Field` that carries its
+ * error. The hours take „±HH:MM“ like the opening balance. On submit, wrong or
+ * zero hours, a missing date and a missing reason mark their fields, focus the
+ * first and send nothing; editing a field clears its mark. The form takes
+ * `noValidate`, so no browser bubble runs before this check. Enter in a field
+ * must not submit through the first kind button.
  */
 function useAdjustmentFields({
   formId,
+  layout,
   account,
+  today,
   handleKeyDown,
   handleSubmit,
 }: {
   formId: string;
+  layout: PersonLayout;
   account: Pick<TimeAccountSettingsData['accounts'][number], 'employeeName' | 'version'>;
+  today: string;
   handleKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   const ids = { hours: `${formId}-hours`, date: `${formId}-date`, reason: `${formId}-reason` };
   const [errors, setErrors] = useState<AdjustmentErrors>(NO_ADJUSTMENT_ERRORS);
-  // The account version a draft was typed against: a live refresh that changes
-  // the balance must not carry the draft over to it, so its save is refused as
-  // stale, again on every retry. Only an accepted save, which empties the
-  // fields, ends the draft.
+  // The account version a draft was started against, by its first edit of any
+  // field: a live refresh that changes the balance must not carry the draft
+  // over to it, so its save is refused as stale, again on every retry. Only an
+  // accepted save, which empties the fields, ends the draft.
   const [draftVersion, setDraftVersion] = useState<number | null>(null);
+  const edit = (key: AdjustmentKey): void => {
+    setErrors((previous) => ({ ...previous, [key]: null }));
+    setDraftVersion((previous) => previous ?? account.version);
+  };
   const submitChecked = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     const form = event.currentTarget;
     const next = checkAdjustment(new FormData(form));
@@ -208,30 +177,46 @@ function useAdjustmentFields({
     await handleSubmit(event);
     if (!new FormData(form).get('hours')) setDraftVersion(null);
   };
-  const field = (key: 'hours' | 'reason', label: string, extra: { placeholder?: string } = {}) => (
-    <Input
-      id={ids[key]}
-      form={formId}
-      name={key}
-      type="text"
-      autoComplete="off"
-      aria-label={`${label} für ${account.employeeName}`}
-      aria-invalid={errors[key] ? true : undefined}
-      onChange={() => {
-        setErrors((previous) => ({ ...previous, [key]: null }));
-        setDraftVersion((previous) => previous ?? account.version);
-      }}
-      onKeyDown={handleKeyDown}
+  // The table header labels a row's controls; the hidden label keeps the error wiring.
+  const field = (key: AdjustmentKey, control: ReactNode) => (
+    <Field
+      label={ADJUSTMENT_LABELS[key]}
+      htmlFor={ids[key]}
       required
-      {...extra}
-    />
+      hideLabel={layout === 'row'}
+      error={errors[key]}
+    >
+      {control}
+    </Field>
   );
+  const text = (key: 'hours' | 'reason', label: string, extra: { placeholder?: string } = {}) =>
+    field(
+      key,
+      <Input
+        form={formId}
+        name={key}
+        type="text"
+        autoComplete="off"
+        aria-label={`${label} für ${account.employeeName}`}
+        onChange={() => edit(key)}
+        onKeyDown={handleKeyDown}
+        {...extra}
+      />,
+    );
   return {
-    ids,
-    hours: field('hours', 'Stunden der Korrektur', { placeholder: '+0:00' }),
-    reason: field('reason', 'Korrekturgrund'),
-    message:
-      [errors.hours, errors.date, errors.reason].filter((message) => message !== null).join(' ') || null,
+    hours: text('hours', 'Stunden der Korrektur', { placeholder: '+0:00' }),
+    effectiveDate: field(
+      'date',
+      <TimeAccountDateField
+        form={formId}
+        name="effectiveDate"
+        id={ids.date}
+        initialValue={today}
+        ariaLabel={`Wirksamkeitsdatum für ${account.employeeName}`}
+        onPick={() => edit('date')}
+      />,
+    ),
+    reason: text('reason', 'Korrekturgrund'),
     expectedVersion: draftVersion ?? account.version,
     submitChecked,
   };
@@ -253,29 +238,14 @@ function AdjustmentRequestForm({
     successMessage: () => 'Der Antrag ist gespeichert. Er wird nach der Freigabe in den Saldo übernommen.',
   });
   const formId = `adjustment-${layout}-${account.id}`;
-  const kinds = (
-    <AdjustmentKindButtons
-      formId={formId}
-      employeeName={account.employeeName}
-      isPending={isPending}
-      pendingValue={pendingValue}
-    />
-  );
-  const { ids, hours, reason, message, expectedVersion, submitChecked } = useAdjustmentFields({
+  const { hours, effectiveDate, reason, expectedVersion, submitChecked } = useAdjustmentFields({
     formId,
+    layout,
     account,
+    today,
     handleKeyDown,
     handleSubmit,
   });
-  const effectiveDate = (
-    <TimeAccountDateField
-      form={formId}
-      name="effectiveDate"
-      id={ids.date}
-      initialValue={today}
-      ariaLabel={`Wirksamkeitsdatum für ${account.employeeName}`}
-    />
-  );
   return (
     <PersonRow
       layout={layout}
@@ -293,8 +263,23 @@ function AdjustmentRequestForm({
           <input type="hidden" name="expectedVersion" value={expectedVersion} />
         </form>
       }
-      cells={adjustmentCells(layout, { ids, hours, effectiveDate, reason, kinds })}
-      error={message ?? error}
+      cells={[
+        { key: 'hours', content: hours },
+        { key: 'effectiveDate', content: effectiveDate },
+        { key: 'reason', content: reason },
+        {
+          key: 'kind',
+          content: (
+            <AdjustmentKindButtons
+              formId={formId}
+              employeeName={account.employeeName}
+              isPending={isPending}
+              pendingValue={pendingValue}
+            />
+          ),
+        },
+      ]}
+      error={error}
     />
   );
 }

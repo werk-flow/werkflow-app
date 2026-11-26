@@ -131,3 +131,73 @@ test('an emptied date marks the row, focuses the date and sends nothing', async 
   await expect(page.getByRole('table')).toContainText('Wähle das Datum, ab dem die Korrektur gilt.');
   expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
 });
+
+const dateGroup = (page: Page): Locator =>
+  row(page).getByRole('group', { name: 'Wirksamkeitsdatum für Kevin Kontrakt' });
+
+/** Picks a day of the suggested month in the row's date picker, by the day's full name. */
+async function pickDay(page: Page, dayName: string): Promise<void> {
+  await dateGroup(page).getByRole('button', { name: 'Kalender öffnen' }).click();
+  await page.getByRole('button', { name: dayName, exact: true }).click();
+  await page.keyboard.press('Escape');
+}
+
+test('each field error describes its control in the table row and on the phone card', async ({ page }) => {
+  // The fixture shows both layouts at once: every hours field and every reason field.
+  const hoursFields = page.getByRole('textbox', {
+    name: 'Stunden der Korrektur für Kevin Kontrakt',
+    exact: true,
+  });
+  const reasonFields = page.getByRole('textbox', { name: 'Korrekturgrund für Kevin Kontrakt', exact: true });
+  await expect(hoursFields).toHaveCount(2);
+  for (const field of await hoursFields.all()) await field.fill('750');
+  for (const button of await page.getByRole('button', { name: 'Korrektur', exact: true }).all()) {
+    await button.click();
+  }
+  for (const field of await hoursFields.all()) {
+    await expect(field).toHaveAccessibleDescription(/Gib die Stunden als Std:Min an/);
+  }
+  for (const field of await reasonFields.all()) {
+    await expect(field).toHaveAccessibleDescription(/Gib einen Grund für die Korrektur an\./);
+  }
+  expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
+});
+
+test('an emptied date describes the picker, and a picked date clears the mark', async ({ page }) => {
+  await fillReason(page);
+  await hours(page).fill('+1:00');
+  await dateGroup(page).getByRole('button', { name: 'Kalender öffnen' }).click();
+  await page.getByRole('gridcell', { selected: true }).getByRole('button').click();
+  await page.keyboard.press('Escape');
+  await kind(page, 'Korrektur').click();
+  await expect(dateGroup(page)).toBeFocused();
+  await expect(dateGroup(page)).toHaveAttribute('data-invalid', 'true');
+  await expect(dateGroup(page)).toHaveAccessibleDescription(/Wähle das Datum, ab dem die Korrektur gilt\./);
+
+  await pickDay(page, 'Donnerstag, 5. November 2026');
+  await expect(dateGroup(page)).not.toHaveAttribute('data-invalid', 'true');
+  await expect(page.getByRole('table')).not.toContainText('Wähle das Datum, ab dem die Korrektur gilt.');
+});
+
+test('a draft that only changed its date keeps the account version it was picked against', async ({
+  page,
+}) => {
+  await pickDay(page, 'Donnerstag, 5. November 2026');
+  await page.evaluate(() => {
+    window.uiContractTimeAccounts = window.uiContractTimeAccounts.map((account) => ({
+      ...account,
+      currentBalanceMinutes: 120,
+      version: account.version + 1,
+    }));
+    window.dispatchEvent(new Event('ui-contract:route-refresh'));
+  });
+  await expect(row(page)).toContainText('Saldo +2:00 Std.');
+  await fillReason(page);
+  await hours(page).fill('-8:00');
+  await kind(page, 'Auszahlung').click();
+  await expectHeldWrite(page, 'submit-adjustment');
+  expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
+    expectedVersion: '1',
+    effectiveDate: '2026-11-05',
+  });
+});
