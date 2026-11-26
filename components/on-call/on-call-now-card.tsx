@@ -153,14 +153,14 @@ const OnCallNowContent = memo(function OnCallNowContent({
 function CurrentShift({ shift }: { shift: OnCallShift }): ReactElement {
   return (
     <li className="space-y-2 rounded-lg border p-3">
-      <p className="text-xs text-muted-foreground tabular-nums">
+      <p className="text-xs text-muted-foreground tabular-nums wrap-anywhere">
         {shift.label ? `${shift.label} · ` : ''}
         {shiftSpanLabel(shift)}
       </p>
       <ul className="space-y-2">
         {shift.members.map((member) => (
           <li key={member.employeeRecordId} className="flex flex-wrap items-center justify-between gap-2">
-            <span className="font-medium">{member.name}</span>
+            <span className="min-w-0 font-medium wrap-anywhere">{member.name}</span>
             {member.phone ? (
               <a
                 href={phoneHref(member.phone)}
@@ -175,7 +175,9 @@ function CurrentShift({ shift }: { shift: OnCallShift }): ReactElement {
           </li>
         ))}
       </ul>
-      {shift.handoverNote && <p className="whitespace-pre-line text-sm">{shift.handoverNote}</p>}
+      {shift.handoverNote && (
+        <p className="whitespace-pre-line text-sm wrap-anywhere">{shift.handoverNote}</p>
+      )}
     </li>
   );
 }
