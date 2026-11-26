@@ -27,10 +27,35 @@ export const AI_TURN_LIMITS = {
     maxMessageCharacters: 8_000,
     /** Bytes of the saved answer's JSON, under the item body cap of 64 KiB. */
     maxAnswerBytes: 48_000,
+    /**
+     * One attempt's cost write, both tries. Past it the turn ends, and the
+     * run's reservation stays as its provisional charge.
+     */
+    costWriteTimeoutMs: 5_000,
+    /** One save of the answer: a partial save, or the final save with its tries. */
+    answerSaveTimeoutMs: 8_000,
+    /** The run's settlement. Past it the reservation stays as the run's provisional charge. */
+    settleTimeoutMs: 5_000,
   },
 } as const;
 
 export type AiEntryPoint = keyof typeof AI_TURN_LIMITS;
+
+/**
+ * The longest a turn runs from its request to its settlement: its total
+ * timeout, then the last attempt's cost write, the partial save in flight,
+ * the final save and the settlement, each at its limit. The turn route's
+ * `maxDuration` holds it, so the invocation is never cut off before it settles.
+ */
+export function maxTurnRunMs(entryPoint: AiEntryPoint): number {
+  const limits = AI_TURN_LIMITS[entryPoint];
+  return (
+    limits.totalTimeoutMs +
+    limits.costWriteTimeoutMs +
+    2 * limits.answerSaveTimeoutMs +
+    limits.settleTimeoutMs
+  );
+}
 
 /**
  * The most a turn can cost: every step and every retry at its input cap,

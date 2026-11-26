@@ -1,7 +1,7 @@
-// The WerkFlow KI turn route over the in-memory database. The six harness
-// functions of werk-flow/werkflow-planning#527 answer here as their SQL
-// does (supabase/tests/ai_threads.sql proves the SQL itself); the route, the
-// harness, the AI SDK and the replay provider run for real. Each fixture
+// The WerkFlow KI turn route over the in-memory database. The harness's
+// database functions answer here as their SQL does (supabase/tests/ai_threads.sql
+// and ai_turn_charges.sql prove the SQL itself); the route, the harness, the
+// AI SDK and the replay provider run for real. Each fixture
 // process imports the route only after `installAiTurnWorld`.
 import { mock } from 'bun:test';
 import type { AiModel } from '@/lib/ai/model';
@@ -102,38 +102,8 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
       rows('rate_limits').push({ key });
       return ok(used < Number(args.p_max_attempts));
     }
-    case 'create_ai_thread': {
-      const thread = rows('ai_threads').find((row) => row.id === args.p_thread_id);
-      if (!thread) {
-        rows('ai_threads').push({
-          id: args.p_thread_id,
-          organization_id: organizationId,
-          user_id: args.p_user_id,
-          title: args.p_title,
-        });
-      } else if (thread.user_id !== args.p_user_id || thread.organization_id !== organizationId) {
-        return raise('ai_thread_not_found');
-      }
-      return ok(args.p_thread_id);
-    }
-    case 'reserve_ai_run':
-      return reserve(world, args);
-    case 'append_ai_thread_item': {
-      const items = rows('ai_thread_items').filter((row) => row.thread_id === args.p_thread_id);
-      const existing = items.find((row) => row.idempotency_key === args.p_idempotency_key);
-      const item = existing ?? {
-        id: `item-${rows('ai_thread_items').length + 1}`,
-        organization_id: organizationId,
-        thread_id: args.p_thread_id,
-        sequence: items.length + 1,
-        kind: args.p_kind,
-        status: args.p_status,
-        body: args.p_body,
-        idempotency_key: args.p_idempotency_key,
-      };
-      if (!existing) rows('ai_thread_items').push(item);
-      return ok([{ item_id: item.id, item_sequence: item.sequence }]);
-    }
+    case 'start_ai_turn':
+      return startTurn(world, args);
     case 'update_ai_thread_item': {
       const item = rows('ai_thread_items').find(
         (row) => row.id === args.p_item_id && row.organization_id === organizationId,
@@ -173,18 +143,120 @@ function attemptCost(world: AiTurnWorld, runId: string): number {
     .reduce((sum, row) => sum + Number(row.p_cost_micro_usd), 0);
 }
 
-function reserve(world: AiTurnWorld, args: Row): Outcome {
+const OPEN_RUN_MS = 15 * 60_000;
+const isOpen = (run: Row): boolean =>
+  run.status === 'reserved' && Date.parse(String(run.created_at)) > Date.now() - OPEN_RUN_MS;
+
+/** `start_ai_turn`: the thread, the message, the open-run check, the reservation and the empty answer. */
+function startTurn(world: AiTurnWorld, args: Row): Outcome {
+  const rows = (table: string): Row[] => tableRows(world, table);
+  const thread = rows('ai_threads').find((row) => row.id === args.p_thread_id);
+  if (!thread) {
+    rows('ai_threads').push({
+      id: args.p_thread_id,
+      organization_id: args.p_organization_id,
+      user_id: args.p_user_id,
+      title: args.p_title,
+    });
+  } else if (thread.user_id !== args.p_user_id || thread.organization_id !== args.p_organization_id) {
+    return raise('ai_thread_not_found');
+  }
+  const command = String(args.p_command_id);
+  const verdict = (name: string): Outcome => ok([{ verdict: name }]);
+  const userItem = appendItem(
+    world,
+    args,
+    'user_message',
+    'complete',
+    { text: args.p_text },
+    `${command}:user`,
+  );
+  if (JSON.stringify(userItem.body) !== JSON.stringify({ text: args.p_text }))
+    return verdict('command_conflict');
+  const answer = rows('ai_thread_items').find(
+    (row) => row.thread_id === args.p_thread_id && row.idempotency_key === `${command}:assistant`,
+  );
+  if (answer) {
+    const commandRuns = rows('ai_runs').filter(
+      (run) =>
+        run.organization_id === args.p_organization_id && String(run.idempotency_key).startsWith(command),
+    );
+    if (commandRuns.some(isOpen)) return verdict('run_active');
+    if (answer.status === 'streaming') {
+      const { text } = z.object({ text: z.string() }).parse(answer.body);
+      Object.assign(answer, { status: 'failed', body: { text, failure: 'interrupted' } });
+    }
+    return verdict('answered');
+  }
+  if (rows('ai_runs').some((run) => run.user_id === args.p_user_id && isOpen(run)))
+    return verdict('run_active');
+  const reservation = reserve(world, { ...args, p_idempotency_key: command });
+  if (reservation.status !== 'reserved')
+    return reservation.status === 'raised' ? reservation.outcome : verdict(reservation.status);
+  const answerItem = appendItem(
+    world,
+    args,
+    'assistant_message',
+    'streaming',
+    { text: '' },
+    `${command}:assistant`,
+  );
+  return ok([
+    {
+      verdict: 'started',
+      run_id: reservation.runId,
+      user_item_id: userItem.id,
+      user_item_sequence: userItem.sequence,
+      answer_item_id: answerItem.id,
+      answer_item_sequence: answerItem.sequence,
+    },
+  ]);
+}
+
+function appendItem(
+  world: AiTurnWorld,
+  args: Row,
+  kind: string,
+  status: string,
+  body: Row,
+  idempotencyKey: string,
+): Row & { id: string; sequence: number } {
+  const all = tableRows(world, 'ai_thread_items');
+  const items = all.filter((row) => row.thread_id === args.p_thread_id);
+  const existing = items.find((row) => row.idempotency_key === idempotencyKey);
+  if (existing) return { ...existing, id: String(existing.id), sequence: Number(existing.sequence) };
+  const item = {
+    id: `item-${all.length + 1}`,
+    organization_id: args.p_organization_id,
+    thread_id: args.p_thread_id,
+    sequence: items.length + 1,
+    kind,
+    status,
+    body,
+    idempotency_key: idempotencyKey,
+  };
+  all.push(item);
+  return item;
+}
+
+type Reservation =
+  | { status: 'reserved'; runId: string }
+  | { status: 'disabled' | 'budget_exhausted' | 'replayed' }
+  | { status: 'raised'; outcome: Outcome };
+
+/** `reserve_ai_run`: every open run holds its reservation until it settles, whatever its age. */
+function reserve(world: AiTurnWorld, args: Row): Reservation {
   const settings = tableRows(world, 'ai_organization_settings').find(
     (row) => row.organization_id === args.p_organization_id,
   );
-  if (!settings?.enabled) return ok([{ run_id: null, verdict: 'disabled' }]);
+  if (!settings?.enabled) return { status: 'disabled' };
   const runs = tableRows(world, 'ai_runs').filter((row) => row.organization_id === args.p_organization_id);
   const existing = runs.find((row) => row.idempotency_key === args.p_idempotency_key);
   if (existing) {
     if (existing.user_id !== args.p_user_id || existing.thread_id !== args.p_thread_id)
-      return raise('ai_reservation_key_conflict');
-    if (existing.status !== 'reserved') return raise('ai_run_closed');
-    return ok([{ run_id: existing.id, verdict: 'replayed' }]);
+      return { status: 'raised', outcome: raise('ai_reservation_key_conflict') };
+    if (!isOpen(existing)) return { status: 'raised', outcome: raise('ai_run_closed') };
+    return { status: 'replayed' };
   }
   const spent = tableRows(world, 'ai_run_attempts')
     .filter((row) => row.organization_id === args.p_organization_id)
@@ -196,7 +268,7 @@ function reserve(world: AiTurnWorld, args: Row): Outcome {
       0,
     );
   if (spent + held + Number(args.p_reserve_micro_usd) > Number(settings.monthly_budget_micro_eur)) {
-    return ok([{ run_id: null, verdict: 'budget_exhausted' }]);
+    return { status: 'budget_exhausted' };
   }
   const run = {
     id: `run-${tableRows(world, 'ai_runs').length + 1}`,
@@ -209,7 +281,7 @@ function reserve(world: AiTurnWorld, args: Row): Outcome {
     created_at: new Date().toISOString(),
   };
   tableRows(world, 'ai_runs').push(run);
-  return ok([{ run_id: run.id, verdict: 'reserved' }]);
+  return { status: 'reserved', runId: run.id };
 }
 
 const turnEventSchema = z.object({

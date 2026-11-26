@@ -27,9 +27,6 @@ import { z } from '@/lib/zod';
 const HISTORY_MESSAGES = 20;
 /** Saves of a streaming answer: at most one per interval (brief non-negotiable 4). */
 const PARTIAL_SAVE_INTERVAL_MS = 750;
-const OPEN_RUN_MINUTES = 15;
-/** Runs one command may reserve: its first and the retries after refusals before its answer existed. */
-const COMMAND_RUN_CAP = 20;
 
 export type AiTurnCommand = {
   entryPoint: AiEntryPoint;
@@ -90,21 +87,38 @@ export type AiTurnStart =
 
 type Admin = ReturnType<typeof createSupabaseAdminClient>;
 type Refused = Extract<AiTurnStart, { status: 'refused' }>;
-type Reservation =
-  | Exclude<AiTurnStart, { status: 'started' }>
-  | { status: 'reserved'; runId: string; runKey: string }
-  | { status: 'closed' };
 
 const refused = (refusal: AiTurnRefusal): Refused => ({ status: 'refused', refusal });
 
 const messageBodySchema = z.object({ text: z.string() });
-const AI_TURN_FAILURE_BODY: { text: string; failure: AiTurnFailure } = { text: '', failure: 'interrupted' };
+// What `start_ai_turn` answers: ids only when the turn started.
+const turnStartSchema = z.discriminatedUnion('verdict', [
+  z.object({
+    verdict: z.literal('started'),
+    run_id: z.string(),
+    user_item_id: z.string(),
+    user_item_sequence: z.number(),
+    answer_item_id: z.string(),
+    answer_item_sequence: z.number(),
+  }),
+  z.object({
+    verdict: z.enum([
+      'answered',
+      'run_active',
+      'replayed',
+      'command_conflict',
+      'disabled',
+      'budget_exhausted',
+    ]),
+  }),
+]);
 
 /**
- * Starts one turn: the per-person limits allow it, the thread is the
- * caller's, the organization's budget holds the turn's most expensive outcome,
- * and no other run of the person is open. Then the user's message and an
- * empty answer are saved. `run` writes the answer and goes on after the client
+ * Starts one turn: the per-person limits allow it, then one database call
+ * saves the person's message in the caller's thread and, when no other run of
+ * the person is open and the organization's budget holds the turn's most
+ * expensive outcome, reserves the run and saves an empty answer. A refusal
+ * keeps the message. `run` writes the answer and goes on after the client
  * leaves, so the caller keeps the invocation alive until it saved the answer
  * and settled.
  */
@@ -123,171 +137,53 @@ export async function startAiTurn(command: AiTurnCommand): Promise<AiTurnStart> 
   if (limit === 'limited') return refused('too_many_turns');
   if (limit === 'unavailable') return refused('unavailable');
 
-  const thread = await admin.rpc('create_ai_thread', {
-    p_organization_id: organizationId,
-    p_user_id: userId,
-    p_thread_id: command.threadId,
-    p_title: threadTitle(command.text),
-  });
-  if (thread.error) {
-    if (thread.error.message === 'ai_thread_not_found') return refused('thread_not_found');
-    logError('startAiTurn: thread write failed', thread.error);
+  // The reservation's key is the command id, never a value of its message (decision 19).
+  const { data, error } = await admin
+    .rpc('start_ai_turn', {
+      p_organization_id: organizationId,
+      p_user_id: userId,
+      p_thread_id: command.threadId,
+      p_title: threadTitle(command.text),
+      p_command_id: commandId,
+      p_text: command.text,
+      p_reserve_micro_usd: maxTurnCostMicroUsd(command.entryPoint),
+    })
+    .single();
+  if (error) {
+    if (error.message === 'ai_thread_not_found') return refused('thread_not_found');
+    // An earlier build closed this command's run before its answer existed; the client sends a new command.
+    if (error.message === 'ai_run_closed') return refused('command_conflict');
+    logError('startAiTurn: turn start failed', error);
     return refused('unavailable');
   }
-  // The person's message stands on its own: a refused or failed turn keeps it, and a retry finds it.
-  const userItem = await appendItem(
-    admin,
-    command,
-    'user_message',
-    'complete',
-    { text: command.text },
-    `${commandId}:user`,
-  );
-  if (!userItem) return refused('unavailable');
-  // A command id names one message: sent again with other text, it is refused,
-  // so the model never answers a message the thread does not hold (sol-loop S17).
-  const saved = await readItem(admin, command, `${commandId}:user`);
-  if (!saved || saved === 'load_failed') return refused('unavailable');
-  if (saved.text !== command.text) return refused('command_conflict');
-
-  let reserved = await reserveRun(admin, command, commandId);
-  if (reserved.status === 'closed') {
-    const resumed = await resumeClosedCommand(admin, command);
-    if (resumed.status !== 'retry') return resumed;
-    reserved = await reserveRun(admin, command, resumed.runKey);
-    // Closed already: another retry of this command took the key first.
-    if (reserved.status === 'closed') return refused('run_active');
+  const start = turnStartSchema.safeParse(data);
+  if (!start.success) {
+    logError('startAiTurn: unexpected turn start', 'invalid_result');
+    return refused('unavailable');
   }
-  if (reserved.status !== 'reserved') return reserved;
-  const { runId, runKey } = reserved;
-  // Refused before its answer exists, the command stays open: a retry under
-  // the same id reserves again (resumeClosedCommand).
-  const refuse = async (refusal: AiTurnRefusal): Promise<AiTurnStart> => {
-    await settleRun(admin, organizationId, runId, 'cancelled');
-    return refused(refusal);
-  };
-  // One active run per person, in any organization: a run that sees another
-  // open run of its person yields. Both reservations are committed before
-  // either looks, so two runs never both pass; under a tie both yield, and
-  // the client sends again.
-  const other = await hasOtherOpenRun(admin, command, runId);
-  if (other !== false) return refuse(other === true ? 'run_active' : 'unavailable');
-
-  const history = await readHistory(admin, command, userItem.sequence);
-  if (history === 'load_failed') return refuse('unavailable');
-  const assistantItem = await appendItem(
-    admin,
-    command,
-    'assistant_message',
-    'streaming',
-    { text: '' },
-    `${commandId}:assistant`,
-  );
-  if (!assistantItem) return refuse('unavailable');
-
-  const modelContext = await buildAiContext({
-    role: command.role,
-    thread: [...history, { role: 'user', text: command.text }],
-    inputTokenCap: AI_TURN_LIMITS[command.entryPoint].maxInputTokens,
-  });
+  const started = start.data;
+  if (started.verdict === 'answered') return { status: 'already_done' };
+  // The same command runs in another request.
+  if (started.verdict === 'replayed') return refused('run_active');
+  if (started.verdict !== 'started') return refused(started.verdict);
+  const userItem = { id: started.user_item_id, sequence: started.user_item_sequence };
+  const assistantItem = { id: started.answer_item_id, sequence: started.answer_item_sequence };
   return {
     status: 'started',
     userItem,
     assistantItem,
-    run: (sink) => runTurn({ admin, command, model, runId, runKey, assistantItem, modelContext, sink }),
+    run: (sink) =>
+      runTurn({
+        admin,
+        command,
+        model,
+        runId: started.run_id,
+        runKey: commandId,
+        userItem,
+        assistantItem,
+        sink,
+      }),
   };
-}
-
-/**
- * Holds the turn's most expensive outcome in the organization's budget under
- * the run's key: the command id, never a value of its message. Its caller has
- * counted the turn against the person's limits.
- */
-async function reserveRun(admin: Admin, command: AiTurnCommand, runKey: string): Promise<Reservation> {
-  const reservation = await admin
-    .rpc('reserve_ai_run', {
-      p_organization_id: command.organizationId,
-      p_user_id: command.userId,
-      p_thread_id: command.threadId,
-      p_idempotency_key: runKey,
-      p_reserve_micro_usd: maxTurnCostMicroUsd(command.entryPoint),
-    })
-    .single();
-  if (reservation.error) {
-    if (reservation.error.message === 'ai_run_closed') return { status: 'closed' };
-    logError('startAiTurn: reservation failed', reservation.error);
-    return refused('unavailable');
-  }
-  const reserved = reservation.data;
-  if (reserved.verdict === 'disabled') return refused('disabled');
-  if (reserved.verdict === 'budget_exhausted') return refused('budget_exhausted');
-  // The same command is running in another request.
-  if (reserved.verdict === 'replayed') return refused('run_active');
-  if (reserved.verdict !== 'reserved') {
-    logError('startAiTurn: unexpected reservation verdict', 'invalid_result');
-    return refused('unavailable');
-  }
-  return { status: 'reserved', runId: reserved.run_id, runKey };
-}
-
-/**
- * A command whose run closed. With an answer it is done; an answer left
- * streaming is finished as failed and keeps what was written. Refused before
- * its answer existed, it is still open and reserves again, keyed by the
- * command id and the count of its earlier runs.
- */
-async function resumeClosedCommand(
-  admin: Admin,
-  command: AiTurnCommand,
-): Promise<Refused | { status: 'already_done' } | { status: 'retry'; runKey: string }> {
-  // The answer first: a run that wrote one was reserved before it, so the run read below sees it.
-  const answer = await readItem(admin, command, `${command.commandId}:assistant`);
-  if (answer === 'load_failed') return refused('unavailable');
-  const runs = await admin
-    .from('ai_runs')
-    .select('status, created_at')
-    .eq('organization_id', command.organizationId)
-    .like('idempotency_key', `${command.commandId}%`)
-    .limit(COMMAND_RUN_CAP);
-  if (runs.error) {
-    logError('startAiTurn: command runs read failed', runs.error);
-    return refused('unavailable');
-  }
-  // A command refused this often is not retried again; the client sends a new one.
-  if (runs.data.length >= COMMAND_RUN_CAP) return refused('too_many_turns');
-  const openSince = Date.now() - OPEN_RUN_MINUTES * 60_000;
-  if (runs.data.some((run) => run.status === 'reserved' && Date.parse(run.created_at) > openSince)) {
-    return refused('run_active');
-  }
-  if (!answer) return { status: 'retry', runKey: `${command.commandId}:retry-${runs.data.length}` };
-  if (answer.status !== 'streaming') return { status: 'already_done' };
-  const finished = await saveAnswer(admin, command, answer.id, 'failed', {
-    ...AI_TURN_FAILURE_BODY,
-    text: answer.text,
-  });
-  return finished ? { status: 'already_done' } : refused('unavailable');
-}
-
-/** A saved item of the command, by its key. */
-async function readItem(
-  admin: Admin,
-  command: AiTurnCommand,
-  idempotencyKey: string,
-): Promise<{ id: string; status: string; text: string } | null | 'load_failed'> {
-  const { data, error } = await admin
-    .from('ai_thread_items')
-    .select('id, status, body')
-    .eq('organization_id', command.organizationId)
-    .eq('thread_id', command.threadId)
-    .eq('idempotency_key', idempotencyKey)
-    .maybeSingle();
-  if (error) {
-    logError('startAiTurn: item read failed', error);
-    return 'load_failed';
-  }
-  if (!data) return null;
-  const body = messageBodySchema.safeParse(data.body);
-  return { id: data.id, status: data.status, text: body.success ? body.data.text : '' };
 }
 
 /** The first line of the first message, up to 80 characters; counted by code point, so none is split. */
@@ -296,49 +192,12 @@ function threadTitle(text: string): string {
   return Array.from(firstLine).slice(0, 80).join('') || AI_PRODUCT_NAME;
 }
 
-async function settleRun(
-  admin: Admin,
-  organizationId: string,
-  runId: string,
-  status: 'succeeded' | 'failed' | 'cancelled',
-): Promise<void> {
-  const { error } = await admin.rpc('settle_ai_run', {
-    p_organization_id: organizationId,
-    p_run_id: runId,
-    p_status: status,
-  });
-  // The hold lapses after OPEN_RUN_MINUTES; the recorded attempts stay counted.
-  if (error) logError('aiTurn: settlement failed', error);
-}
-
-/** Whether the person has another open run, in any of their organizations (B13). */
-async function hasOtherOpenRun(
-  admin: Admin,
-  command: AiTurnCommand,
-  runId: string,
-): Promise<boolean | 'load_failed'> {
-  const since = new Date(Date.now() - OPEN_RUN_MINUTES * 60_000).toISOString();
-  // tenant-scope: cross-organization-by-design — B13 allows one open run per person in all their organizations; the read returns only ids of the signed-in user's own runs.
-  const { data, error } = await admin
-    .from('ai_runs')
-    .select('id')
-    .eq('user_id', command.userId)
-    .eq('status', 'reserved')
-    .gt('created_at', since)
-    .neq('id', runId)
-    .limit(1);
-  if (error) {
-    logError('startAiTurn: open-run read failed', error);
-    return 'load_failed';
-  }
-  return data.length > 0;
-}
-
 /** The thread's latest finished messages, oldest first: the model's memory of the conversation. */
 async function readHistory(
   admin: Admin,
   command: AiTurnCommand,
   beforeSequence: number,
+  signal: AbortSignal,
 ): Promise<AiThreadMessage[] | 'load_failed'> {
   const { data, error } = await admin
     .from('ai_thread_items')
@@ -349,9 +208,10 @@ async function readHistory(
     .in('kind', ['user_message', 'assistant_message'])
     .lt('sequence', beforeSequence)
     .order('sequence', { ascending: false })
-    .limit(HISTORY_MESSAGES);
+    .limit(HISTORY_MESSAGES)
+    .abortSignal(signal);
   if (error) {
-    logError('startAiTurn: history read failed', error);
+    logError('aiTurn: history read failed', error);
     return 'load_failed';
   }
   return data
@@ -363,44 +223,72 @@ async function readHistory(
     });
 }
 
-async function appendItem(
-  admin: Admin,
-  command: AiTurnCommand,
-  kind: 'user_message' | 'assistant_message',
-  status: 'complete' | 'streaming' | 'failed',
-  body: { text: string; failure?: AiTurnFailure },
-  idempotencyKey: string,
-): Promise<ItemRef | null> {
-  const { data, error } = await admin
-    .rpc('append_ai_thread_item', {
-      p_organization_id: command.organizationId,
-      p_user_id: command.userId,
-      p_thread_id: command.threadId,
-      p_kind: kind,
-      p_status: status,
-      p_body: body,
-      p_idempotency_key: idempotencyKey,
-    })
-    .single();
-  const item = data;
-  if (error || !item) {
-    logError('startAiTurn: item write failed', error ?? 'no_result');
-    return null;
+type DatabaseWrite = PromiseLike<{ error: { message: string } | null }>;
+
+/**
+ * Runs an idempotent database write under its time limit, at most `tries`
+ * times while time is left. A write past its limit counts as failed, though
+ * it may still land: the caller then keeps the run's provisional charge,
+ * which only ever overstates. `landed` names a refusal that means an earlier
+ * try already wrote.
+ */
+async function boundedWrite(
+  label: string,
+  limitMs: number,
+  tries: number,
+  write: (signal: AbortSignal) => DatabaseWrite,
+  landed: (message: string) => boolean = () => false,
+): Promise<boolean> {
+  const signal = AbortSignal.timeout(limitMs);
+  let failure: unknown = 'timeout';
+  for (let attempt = 0; attempt < tries && !signal.aborted; attempt += 1) {
+    const { error } = await write(signal);
+    if (!error || landed(error.message)) return true;
+    failure = error;
   }
-  return { id: item.item_id, sequence: item.item_sequence };
+  logError(label, failure);
+  return false;
 }
 
-type RunContext = {
+/**
+ * Ends the run's reservation at the cost the ledger recorded. When it cannot,
+ * the reservation stays as the run's provisional charge, and the database job
+ * settles it at its reserved amount.
+ */
+async function settleRun(context: TurnContext, status: 'succeeded' | 'failed' | 'cancelled'): Promise<void> {
+  await boundedWrite(
+    'aiTurn: settlement failed',
+    AI_TURN_LIMITS[context.command.entryPoint].settleTimeoutMs,
+    2,
+    (signal) =>
+      context.admin
+        .rpc('settle_ai_run', {
+          p_organization_id: context.command.organizationId,
+          p_run_id: context.runId,
+          p_status: status,
+        })
+        .abortSignal(signal),
+  );
+}
+
+/** What a started turn knows before it reads the thread. */
+type TurnContext = {
   admin: Admin;
   command: AiTurnCommand;
   model: AiModel;
   runId: string;
   /** The run's ledger key; each attempt's key extends it. */
   runKey: string;
+  userItem: ItemRef;
   assistantItem: ItemRef;
+  sink: AiTurnSink;
+};
+
+type RunContext = TurnContext & {
   /** What the model reads: the system prompt, the role's tools and the thread (lib/ai/context.ts). */
   modelContext: AiContext;
-  sink: AiTurnSink;
+  /** Aborts when the turn's total time is up, counted from the request's arrival. */
+  turnSignal: AbortSignal;
 };
 
 /** The run's answer so far, with what is left of its one retry allowance. */
@@ -418,19 +306,34 @@ type StepOutcome =
   | { kind: 'finished'; finishReason: string; responseMessages: ModelMessage[] }
   | { kind: 'failed'; failure: AiTurnFailure };
 
-async function runTurn(context: RunContext): Promise<AiTurnEnd> {
-  const { admin, command, runId, assistantItem } = context;
+async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
+  const { command } = context;
+  const limits = AI_TURN_LIMITS[command.entryPoint];
   const answer: Answer = {
     text: '',
     savedText: '',
     savedAt: Date.now(),
     saving: null,
     ledgerFailed: false,
-    retriesLeft: AI_TURN_LIMITS[command.entryPoint].maxRetries,
+    retriesLeft: limits.maxRetries,
   };
+  // The turn's time counts from the request's arrival, so setup cannot eat the time to settle.
+  const turnSignal = AbortSignal.timeout(
+    Math.max(0, limits.totalTimeoutMs - (Date.now() - command.receivedAt)),
+  );
   let end: AiTurnEnd;
   try {
-    end = await runSteps(context, answer);
+    const history = await readHistory(context.admin, command, context.userItem.sequence, turnSignal);
+    if (history === 'load_failed') {
+      end = failedEnd('failed', 'interrupted');
+    } else {
+      const modelContext = await buildAiContext({
+        role: command.role,
+        thread: [...history, { role: 'user', text: command.text }],
+        inputTokenCap: limits.maxInputTokens,
+      });
+      end = await runSteps({ ...context, modelContext, turnSignal }, answer);
+    }
   } catch (error) {
     logError('aiTurn: run failed', error instanceof Error ? error.name : 'unknown');
     end = failedEnd('failed', 'interrupted');
@@ -438,43 +341,39 @@ async function runTurn(context: RunContext): Promise<AiTurnEnd> {
   const body =
     end.status === 'complete' ? { text: answer.text } : { text: answer.text, failure: end.failure };
   await answer.saving;
-  if (!(await saveAnswer(admin, command, assistantItem.id, end.status, body))) {
-    end = failedEnd('failed', 'interrupted');
-  }
-  // An attempt the ledger could not take keeps its hold until it lapses, so the budget still covers it.
-  if (!answer.ledgerFailed) {
-    await settleRun(
-      admin,
-      command.organizationId,
-      runId,
-      end.status === 'complete' ? 'succeeded' : end.status,
-    );
-  }
+  if (!(await saveAnswer(context, end.status, body))) end = failedEnd('failed', 'interrupted');
+  // An attempt the ledger could not take leaves the run open: its reservation stays as the provisional charge.
+  if (!answer.ledgerFailed) await settleRun(context, end.status === 'complete' ? 'succeeded' : end.status);
   return end;
 }
 
-/** Writes an answer's end; a second try covers a passing database failure. */
+/**
+ * Writes an answer's end, trying again within its time limit. An answer
+ * already finished counts as saved: while the run is open, only the run
+ * finishes its answer, so an earlier try landed. Left streaming, the answer
+ * keeps its last partial save, and the database job finishes it.
+ */
 async function saveAnswer(
-  admin: Admin,
-  command: AiTurnCommand,
-  itemId: string,
+  context: TurnContext,
   status: 'complete' | 'failed' | 'cancelled',
   body: { text: string; failure?: AiTurnFailure },
 ): Promise<boolean> {
-  let failure: unknown = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const { error } = await admin.rpc('update_ai_thread_item', {
-      p_organization_id: command.organizationId,
-      p_user_id: command.userId,
-      p_item_id: itemId,
-      p_status: status,
-      p_body: body,
-    });
-    if (!error) return true;
-    failure = error;
-  }
-  logError('aiTurn: answer save failed', failure);
-  return false;
+  return boundedWrite(
+    'aiTurn: answer save failed',
+    AI_TURN_LIMITS[context.command.entryPoint].answerSaveTimeoutMs,
+    3,
+    (signal) =>
+      context.admin
+        .rpc('update_ai_thread_item', {
+          p_organization_id: context.command.organizationId,
+          p_user_id: context.command.userId,
+          p_item_id: context.assistantItem.id,
+          p_status: status,
+          p_body: body,
+        })
+        .abortSignal(signal),
+    (message) => message === 'ai_thread_item_finished',
+  );
 }
 
 function failedEnd(status: 'failed' | 'cancelled', failure: AiTurnFailure): AiTurnEnd {
@@ -495,9 +394,6 @@ async function readStepGate(organizationId: string): Promise<'open' | 'disabled'
 
 async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd> {
   const limits = AI_TURN_LIMITS[context.command.entryPoint];
-  // The turn's time counts from the request's arrival, so setup cannot eat the time to settle.
-  const elapsedMs = Date.now() - context.command.receivedAt;
-  const turnSignal = AbortSignal.timeout(Math.max(0, limits.totalTimeoutMs - elapsedMs));
   let messages = context.modelContext.messages;
   for (let step = 1; ; step += 1) {
     if (step > limits.maxSteps) return failedEnd('cancelled', 'step_limit');
@@ -508,7 +404,12 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
     const prompt = serializedInput(context.modelContext, messages);
     if (inputTokenCeiling(prompt) > limits.maxInputTokens) return failedEnd('failed', 'input_too_large');
 
-    const outcome = await runStep(context, answer, { step, messages, prompt, turnSignal });
+    const outcome = await runStep(context, answer, {
+      step,
+      messages,
+      prompt,
+      turnSignal: context.turnSignal,
+    });
     if (outcome.kind === 'failed') {
       const stopped = outcome.failure === 'timeout' || outcome.failure === 'answer_too_long';
       return failedEnd(stopped ? 'cancelled' : 'failed', outcome.failure);
@@ -652,13 +553,15 @@ function savePartial(context: RunContext, answer: Answer): void {
   answer.savedText = answer.text;
   // The model's stream never waits for the database; the final save waits for this one.
   answer.saving = (async () => {
-    const { error } = await context.admin.rpc('update_ai_thread_item', {
-      p_organization_id: context.command.organizationId,
-      p_user_id: context.command.userId,
-      p_item_id: context.assistantItem.id,
-      p_status: 'streaming',
-      p_body: { text: answer.savedText },
-    });
+    const { error } = await context.admin
+      .rpc('update_ai_thread_item', {
+        p_organization_id: context.command.organizationId,
+        p_user_id: context.command.userId,
+        p_item_id: context.assistantItem.id,
+        p_status: 'streaming',
+        p_body: { text: answer.savedText },
+      })
+      .abortSignal(AbortSignal.timeout(AI_TURN_LIMITS[context.command.entryPoint].answerSaveTimeoutMs));
     // A missed partial save costs only freshness; the final save follows.
     if (error) logError('aiTurn: partial save failed', error);
     answer.saving = null;
@@ -700,39 +603,32 @@ function estimatedUsage(prompt: string, billed: boolean, limits: { maxOutputToke
   };
 }
 
+/** Ledgers one attempt under its time limit; its key makes a repeat charge once. */
 async function recordAttempt(
   context: RunContext,
   key: string,
   usage: AiTokenUsage,
   outcome: string,
 ): Promise<boolean> {
-  // The key makes a repeat charge once; a second try covers a passing database failure.
-  for (const last of [false, true]) {
-    if (await recordAttemptOnce(context, key, usage, outcome, last)) return true;
-  }
-  return false;
-}
-
-async function recordAttemptOnce(
-  context: RunContext,
-  key: string,
-  usage: AiTokenUsage,
-  outcome: string,
-  last: boolean,
-): Promise<boolean> {
-  const { error } = await context.admin.rpc('record_ai_run_attempt', {
-    p_organization_id: context.command.organizationId,
-    p_run_id: context.runId,
-    p_idempotency_key: key,
-    p_model_id: context.model.modelId,
-    p_prompt_version: AI_PROMPT_VERSION,
-    p_input_tokens: usage.inputTokens,
-    p_output_tokens: usage.outputTokens,
-    p_cache_read_tokens: usage.cacheReadTokens,
-    p_cache_write_tokens: usage.cacheWriteTokens,
-    p_cost_micro_usd: costMicroUsd(usage, AI_MODEL_PRICE),
-    p_outcome: outcome,
-  });
-  if (error && last) logError('aiTurn: attempt record failed', error);
-  return !error;
+  return boundedWrite(
+    'aiTurn: attempt record failed',
+    AI_TURN_LIMITS[context.command.entryPoint].costWriteTimeoutMs,
+    2,
+    (signal) =>
+      context.admin
+        .rpc('record_ai_run_attempt', {
+          p_organization_id: context.command.organizationId,
+          p_run_id: context.runId,
+          p_idempotency_key: key,
+          p_model_id: context.model.modelId,
+          p_prompt_version: AI_PROMPT_VERSION,
+          p_input_tokens: usage.inputTokens,
+          p_output_tokens: usage.outputTokens,
+          p_cache_read_tokens: usage.cacheReadTokens,
+          p_cache_write_tokens: usage.cacheWriteTokens,
+          p_cost_micro_usd: costMicroUsd(usage, AI_MODEL_PRICE),
+          p_outcome: outcome,
+        })
+        .abortSignal(signal),
+  );
 }

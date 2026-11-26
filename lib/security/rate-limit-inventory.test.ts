@@ -27,7 +27,7 @@ const REDEMPTION_RPCS = new Set(['redeem_organization_invite_for_user']);
 // Storing an organization's Stripe customer and claiming its Checkout (lib/subscription/checkout.ts).
 const BILLING_RPCS = new Set(['begin_werkflow_checkout']);
 // Reserving a WerkFlow KI run: every turn costs money (lib/ai/turn.ts).
-const MODEL_RUN_RPCS = new Set(['reserve_ai_run']);
+const MODEL_RUN_RPCS = new Set(['reserve_ai_run', 'start_ai_turn']);
 const BILLING_TABLES = new Set(['subscriptions']);
 const WRITE_METHODS = new Set(['insert', 'upsert', 'update']);
 
