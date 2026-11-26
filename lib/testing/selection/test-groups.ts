@@ -483,7 +483,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['problem_reports.sql', 'problem_report_support.sql', 'problem_report_handout.sql'],
     ['*'],
   ],
-  ['organization-export', ['organization_export.sql'], ['*']],
+  ['organization-export', ['organization_export.sql', 'weekly_outcome_numbers.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   ['hot-read-volume', ['hot_read_volume.sql'], ['planning', 'time', 'attention', 'work', 'documents']],
   [
