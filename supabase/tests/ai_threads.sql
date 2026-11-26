@@ -1,8 +1,8 @@
 -- WerkFlow KI storage (migration 20270110100000, werk-flow/werkflow-planning#527):
 -- client roles reach no function and write no table; items take the thread's
 -- next sequence once per idempotency key; a reservation refuses when the
--- organization is off, over its budget or undecidable; the daily job deletes only items older than 12 months and
--- the threads they leave empty, and the ledger keeps its cost. Author-only
+-- organization is off, over its budget or undecidable; the daily job deletes
+-- only items older than 12 months and the threads they leave empty, and the ledger keeps its cost. Author-only
 -- reads are in client_read_boundaries.sql. Runs in one transaction and rolls back.
 begin;
 
@@ -280,9 +280,10 @@ reset role;
 
 -- The ledger's denials are proved in security_boundaries.sql.
 
--- Boundaries of the budget: a hold lapses 15 minutes after its run began
--- while its recorded cost still counts, and an attempt of the previous
--- Berlin month counts no more.
+-- Boundaries of the budget, each at its exact edge: a hold lapses when its
+-- run is 15 minutes old while its recorded cost still counts, an attempt at
+-- the first instant of the Berlin month counts, and one a microsecond
+-- earlier counts no more.
 set local role service_role;
 select public.set_ai_organization_enabled('ae000000-0000-4000-8000-000000000011',
   'ae000000-0000-4000-8000-000000000003', true);
@@ -292,7 +293,7 @@ reset role;
 insert into public.ai_runs (id, organization_id, thread_id, user_id, idempotency_key, reserved_micro_usd, created_at)
 values ('ae000000-0000-4000-8000-000000000041', 'ae000000-0000-4000-8000-000000000011',
   'ae000000-0000-4000-8000-000000000021', 'ae000000-0000-4000-8000-000000000003', 'lapsed-run', 50000000,
-  now() - interval '16 minutes');
+  now() - interval '15 minutes');
 insert into public.ai_runs (id, organization_id, thread_id, user_id, idempotency_key, status, reserved_micro_usd,
   created_at, settled_at)
 values ('ae000000-0000-4000-8000-000000000042', 'ae000000-0000-4000-8000-000000000011',
@@ -304,19 +305,23 @@ insert into public.ai_run_attempts (organization_id, run_id, idempotency_key, mo
  'prompt-v1', 10, 10, 0, 0, 10000000, 'succeeded', now()),
 ('ae000000-0000-4000-8000-000000000011', 'ae000000-0000-4000-8000-000000000042', 'last-month:1', 'claude-haiku',
  'prompt-v1', 10, 10, 0, 0, 50000000, 'succeeded',
- (date_trunc('month', now() at time zone 'Europe/Berlin') at time zone 'Europe/Berlin') - interval '1 second');
+ (date_trunc('month', now() at time zone 'Europe/Berlin') at time zone 'Europe/Berlin') - interval '1 microsecond'),
+('ae000000-0000-4000-8000-000000000011', 'ae000000-0000-4000-8000-000000000042', 'month-start:1', 'claude-haiku',
+ 'prompt-v1', 1, 1, 0, 0, 1000000, 'succeeded',
+ date_trunc('month', now() at time zone 'Europe/Berlin') at time zone 'Europe/Berlin');
 do $$
 begin
-  -- EUR 10 spent this month, the lapsed hold free, last month's EUR 50 gone: EUR 40 fits, one cent more does not.
+  -- EUR 11 spent this month (the lapsed run's 10 and the month-start 1), the
+  -- lapsed hold free, last month's EUR 50 gone: EUR 39 fits, a micro-euro more does not.
   if (select verdict from public.reserve_ai_run('ae000000-0000-4000-8000-000000000011',
-      'ae000000-0000-4000-8000-000000000003', 'ae000000-0000-4000-8000-000000000021', 'over', 40000001))
+      'ae000000-0000-4000-8000-000000000003', 'ae000000-0000-4000-8000-000000000021', 'over', 39000001))
       is distinct from 'budget_exhausted' then
-    raise exception 'The recorded cost of a lapsed run did not count';
+    raise exception 'The recorded cost of a lapsed run or the attempt at the month start did not count';
   end if;
   if (select verdict from public.reserve_ai_run('ae000000-0000-4000-8000-000000000011',
-      'ae000000-0000-4000-8000-000000000003', 'ae000000-0000-4000-8000-000000000021', 'fits', 40000000))
+      'ae000000-0000-4000-8000-000000000003', 'ae000000-0000-4000-8000-000000000021', 'fits', 39000000))
       is distinct from 'reserved' then
-    raise exception 'A lapsed hold or last month''s spend still blocked the budget';
+    raise exception 'A hold 15 minutes old or last month''s spend still blocked the budget';
   end if;
 end;
 $$;
