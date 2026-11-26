@@ -52,12 +52,14 @@ alter table public.invoices add constraint invoices_cancels_fk foreign key (canc
 -- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice table yet
 alter table public.invoices add constraint invoices_corrects_fk foreign key (corrects_invoice_id, organization_id)
   references public.invoices (id, organization_id) not valid;
--- An invoice is cancelled at most once and corrected by at most one draft.
+-- An invoice is cancelled at most once and corrected by at most one draft. Each index holds its
+-- key's columns, so a deleted invoice finds its links without a scan (foreign_key_indexes.sql); the
+-- key fixes the organization of a linked id, so the pair is unique exactly when the id is.
 -- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice table yet
-create unique index invoices_cancels_unique on public.invoices (cancels_invoice_id)
+create unique index invoices_cancels_unique on public.invoices (cancels_invoice_id, organization_id)
   where cancels_invoice_id is not null;
 -- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice table yet
-create unique index invoices_corrects_unique on public.invoices (corrects_invoice_id)
+create unique index invoices_corrects_unique on public.invoices (corrects_invoice_id, organization_id)
   where corrects_invoice_id is not null;
 
 -- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice history yet; the widened rule keeps every type it allowed

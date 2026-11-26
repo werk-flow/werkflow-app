@@ -3,7 +3,7 @@ import { describe, expect, mock, test } from 'bun:test';
 import { EMPTY_COMPANY_PROFILE_DETAILS } from '@/lib/company-profile/profile';
 import { calculateInvoice } from '@/lib/invoicing/calculate';
 import { toEn16931 } from '@/lib/invoicing/to-en16931';
-import { cancelInvoiceSchema, cancellationReasonProblem, negatedQuantity, stornoOf } from './cancel-model';
+import { cancelInvoiceSchema, cancellationReasonProblem, stornoOf } from './cancel-model';
 import { invoiceDraftOf, type IssueSnapshot } from './issue-model';
 import { INVOICE_REFERENCE_MAX_LENGTH, type InvoiceLineValues } from './types';
 
@@ -95,7 +95,7 @@ function issued(lines: InvoiceLineValues[], buyerReference = '', orderReference 
   };
 }
 
-describe('negatedQuantity', () => {
+describe("a Stornorechnung line's quantity", () => {
   test.each([
     ['1.500', '-1.500'],
     ['-1', '1'],
@@ -103,7 +103,8 @@ describe('negatedQuantity', () => {
     ['0', '0'],
     ['0.000', '0.000'],
   ])('%p negates to %p', (quantity, negated) => {
-    expect(negatedQuantity(quantity)).toBe(negated);
+    const storno = stornoOf(issued([line(quantity, 'hour', 7200, 1900)]), 'Falsche Menge');
+    expect(storno.lines.map((entry) => entry.quantity)).toEqual([negated]);
   });
 });
 

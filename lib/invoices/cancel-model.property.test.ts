@@ -7,7 +7,7 @@ import {
   invoiceLineSourceArbitrary,
   invoiceTermsArbitrary,
 } from '@/lib/testing/invoice-arbitraries';
-import { negatedQuantity, stornoOf } from './cancel-model';
+import { stornoOf } from './cancel-model';
 import { invoiceDraftOf } from './issue-model';
 
 // Property tests (docs/technical/testing.md, "Property tests"). The rule comes from
@@ -102,13 +102,17 @@ describe('A Stornorechnung', () => {
     fc.assert(
       fc.property(issuedArbitrary, ({ invoice }) => {
         const storno = stornoOf(invoice, 'Falscher Rechnungsempfänger');
-        // Negated back, each Storno line is its original's line again, amount aside.
-        const restored = storno.lines.map((line, index) => ({
-          ...line,
-          quantity: negatedQuantity(line.quantity),
-          netCents: invoice.lines[index]?.netCents,
-        }));
-        expect(restored).toEqual(invoice.lines);
+        // Each Storno line is its original's line, quantity and amount aside.
+        const kept = <Line extends { quantity: string; netCents: number }>(lines: readonly Line[]) =>
+          lines.map((line) => ({ ...line, quantity: '', netCents: 0 }));
+        expect(kept(storno.lines)).toEqual(kept(invoice.lines));
+        // The quantity keeps its digits and flips its value: no rounding, no reformatting.
+        expect(storno.lines.map((line) => line.quantity.replace(/^-/, ''))).toEqual(
+          invoice.lines.map((line) => line.quantity.replace(/^-/, '')),
+        );
+        expect(
+          storno.lines.map((line, index) => Number(line.quantity) + Number(invoice.lines[index]?.quantity)),
+        ).toEqual(invoice.lines.map(() => 0));
       }),
     );
   });
