@@ -70,7 +70,7 @@ export function OfferArticlePicker({
   };
 
   return (
-    <div className="min-w-0 space-y-1 sm:w-72">
+    <div className="min-w-0 space-y-1 sm:w-80">
       <div className="flex items-center gap-2">
         <SearchableSelect
           id={id}
