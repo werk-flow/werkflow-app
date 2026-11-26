@@ -70,8 +70,9 @@ This table is the one home of every deployment and workflow credential. No check
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
 | `RESEND_API_KEY`, `FROM_EMAIL` | Supabase secrets, one key per project; Vercel | Mail functions; `lib/delivery/send-email.ts` | Never | Resend, API keys: a sending key per project, `supabase secrets set RESEND_API_KEY` on DEV, PROD's dashboard, or Vercel, delete the old one. |
 | `WERKFLOW_ALARM_EMAIL`, `WERKFLOW_BILLING_REPLY_TO`, `RESEND_WEBHOOK_SECRET` | Vercel | Alarm, reply-to, webhook | Never | Set, redeploy. |
+| `WERKFLOW_KI_ANTHROPIC_KEY` | Vercel, Sensitive: Production holds the key of the production Anthropic workspace, Preview the key of the dev workspace | WerkFlow KI's model calls (`lib/ai/model.ts`). Without it a Vercel deployment refuses every turn; every other machine replays recorded answers and never calls a model | As set in the Anthropic Console | Anthropic Console, the workspace's API keys: create a key, set it, redeploy, revoke the old key. Revoking the key is the fastest global stop of WerkFlow KI. |
 
-The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the workstation tokens, and `WERKFLOW_DATANORM_TOKEN`, whose failure fails the next Vercel build by name.
+The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the workstation tokens, `WERKFLOW_DATANORM_TOKEN`, whose failure fails the next Vercel build by name, and `WERKFLOW_KI_ANTHROPIC_KEY`, whose failure fails the next turn with a German message.
 
 ## The local test stack
 

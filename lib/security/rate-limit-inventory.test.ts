@@ -5,7 +5,7 @@ import { listProductSources, parseProductSource } from '../conventions/product-s
 
 // Tier 2 for the abuse limits (docs/technical/security.md#trust-boundaries,
 // "Abuse limits"). Every product call that sends mail through an edge
-// function, redeems an invite or activates billing must follow a checked
+// function, redeems an invite, activates billing or reserves a model run must follow a checked
 // `consumeRateLimit` call (lib/security/rate-limit.ts) in the function that
 // makes it. Checked means the limiter runs unconditionally in that function's
 // statement list (a `try` block continues it) before the call, and its
@@ -17,7 +17,7 @@ import { listProductSources, parseProductSource } from '../conventions/product-s
 // limit in its caller. Anything else fails here, or carries a reviewed reason
 // in REVIEWED_UNLIMITED.
 
-type LimitedKind = 'edge-function mail' | 'invite redemption' | 'billing activation';
+type LimitedKind = 'edge-function mail' | 'invite redemption' | 'billing activation' | 'model run';
 
 /** `file#kind` -> why the call needs no limit. Shrink-only: an entry that matches nothing fails. */
 const REVIEWED_UNLIMITED: Readonly<Record<string, string>> = {};
@@ -26,6 +26,8 @@ const LIMITER = 'consumeRateLimit';
 const REDEMPTION_RPCS = new Set(['redeem_organization_invite_for_user']);
 // Storing an organization's Stripe customer and claiming its Checkout (lib/subscription/checkout.ts).
 const BILLING_RPCS = new Set(['begin_werkflow_checkout']);
+// Reserving a WerkFlow KI run: every turn costs money (lib/ai/turn.ts).
+const MODEL_RUN_RPCS = new Set(['reserve_ai_run']);
 const BILLING_TABLES = new Set(['subscriptions']);
 const WRITE_METHODS = new Set(['insert', 'upsert', 'update']);
 
@@ -65,6 +67,7 @@ function limitedKind(call: ts.CallExpression): LimitedKind | null {
   if (method === 'rpc') {
     const name = firstStringArgument(call);
     if (name !== null && BILLING_RPCS.has(name)) return 'billing activation';
+    if (name !== null && MODEL_RUN_RPCS.has(name)) return 'model run';
     return name !== null && REDEMPTION_RPCS.has(name) ? 'invite redemption' : null;
   }
   if (WRITE_METHODS.has(method) && writesBillingTable(callee)) return 'billing activation';
@@ -329,7 +332,7 @@ function limitedKindsIn(source: ts.SourceFile): Set<LimitedKind> {
   return kinds;
 }
 
-test('every mail send, invite redemption and billing activation follows consumeRateLimit', () => {
+test('every mail send, invite redemption, billing activation and model run follows consumeRateLimit', () => {
   const files = listProductSources();
   const findings: string[] = [];
   const matched = new Set<string>();
@@ -346,14 +349,14 @@ test('every mail send, invite redemption and billing activation follows consumeR
   expect(findings).toEqual([]);
   expect(Object.keys(REVIEWED_UNLIMITED).filter((key) => !matched.has(key))).toEqual([]);
   // The scan still recognizes every kind: a renamed call shape must not pass silently.
-  expect([...seenKinds].sort()).toEqual(['billing activation', 'edge-function mail', 'invite redemption']);
+  expect([...seenKinds].sort()).toEqual(['billing activation', 'edge-function mail', 'invite redemption', 'model run']);
 });
 
 describe('planted violations', () => {
   const findingsIn = (text: string): string[] =>
     unlimitedCalls(parseProductSource('lib/x/actions.ts', text)).map(({ kind, line }) => `${line} ${kind}`);
 
-  test('a send, a redemption and an activation without a limit fail; a limit after the call is too late', () => {
+  test('a send, a redemption, an activation and a model run without a limit fail; a limit after the call is too late', () => {
     expect(
       findingsIn(
         [
@@ -371,9 +374,12 @@ describe('planted violations', () => {
           "  await admin.from('subscriptions').select('*');",
           "  await admin.rpc('get_invite_by_code', {});",
           '}',
+          'export async function turn() {',
+          "  await admin.rpc('reserve_ai_run', {});",
+          '}',
         ].join('\n'),
       ),
-    ).toEqual(['2 edge-function mail', '5 invite redemption', '9 billing activation']);
+    ).toEqual(['2 edge-function mail', '5 invite redemption', '9 billing activation', '16 model run']);
   });
 
   test('a local limiter helper counts, and a helper is limited only when every caller limits first', () => {

@@ -66,7 +66,7 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 - **Organization cookie.** A hint: the server accepts it only for a current member and sets it for no one else.
 - **Joining.** Join codes are cryptographically random. A code creates a join request, never a membership; only an Admin or Büro approval in that organization creates it, in one database function. A signed-in user gets limited join attempts per hour.
 - **Cross-organization writes.** A write that names another record checks that it belongs to the caller's organization and, where it applies, to the same person.
-- **Abuse limits.** Invite mail, invite redemption, join codes, email-change codes, the simulated payment and health checks pass a limit per subject. A limiter that cannot decide refuses the operation; the health check proceeds. A subject reaches the database only as a keyed hash.
+- **Abuse limits.** Invite mail, invite redemption, join codes, email-change codes, the simulated payment, WerkFlow KI turns and health checks pass a limit per subject. A limiter that cannot decide refuses the operation; the health check proceeds. A subject reaches the database only as a keyed hash.
 
 ### Database
 

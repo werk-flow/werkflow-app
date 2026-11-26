@@ -66,18 +66,6 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
 
 /** Function -> why it stays although the current build does not call it. */
 const KEPT_FOR_DEPLOYED_BUILD: Readonly<Record<string, string>> = {
-  append_ai_thread_item:
-    'WerkFlow KI harness storage (werk-flow/werkflow-planning#527); the model path of werk-flow/werkflow-planning#528, stacked on it, is its caller and removes this entry',
-  create_ai_thread:
-    'WerkFlow KI harness storage (werk-flow/werkflow-planning#527); the model path of werk-flow/werkflow-planning#528, stacked on it, is its caller and removes this entry',
-  record_ai_run_attempt:
-    'WerkFlow KI harness storage (werk-flow/werkflow-planning#527); the model path of werk-flow/werkflow-planning#528, stacked on it, is its caller and removes this entry',
-  reserve_ai_run:
-    'WerkFlow KI harness storage (werk-flow/werkflow-planning#527); the model path of werk-flow/werkflow-planning#528, stacked on it, is its caller and removes this entry',
-  settle_ai_run:
-    'WerkFlow KI harness storage (werk-flow/werkflow-planning#527); the model path of werk-flow/werkflow-planning#528, stacked on it, is its caller and removes this entry',
-  update_ai_thread_item:
-    'WerkFlow KI harness storage (werk-flow/werkflow-planning#527); the model path of werk-flow/werkflow-planning#528, stacked on it, is its caller and removes this entry',
   complete_maintenance_due_work:
     'the deployed production build completes maintenance through it; complete_maintenance_visit replaced it, so drop it in the first migration after the next production release',
   create_organization_with_defaults:

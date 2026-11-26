@@ -63,6 +63,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'delegates to getAttentionCounts, which authenticates the cookie session, resolves the active organization, and checks membership',
     mustCall: ['getAttentionCounts'],
   },
+  'app/api/ki/threads/[threadId]/turns/route.ts': {
+    authorization:
+      'same-origin JSON guard; verified cookie identity and current membership of the organization the body names; the release gate, the per-person turn limits, the thread author check and the budget reservation in the database functions before any model step; private no-store responses',
+    mustCall: ['verifySameOriginJsonRequest', 'resolveActionContextFor', 'startAiTurn'],
+  },
   'app/api/redeem-invite/route.ts': {
     authorization:
       'same-origin JSON guard before any cookie is written; getUser() on the caller session, where a check that cannot complete answers 503; the redemption limit; the RPC binds the invite to that user',
