@@ -58,6 +58,16 @@ export function OfferDetailSkeleton() {
           </div>
         ))}
       </div>
+      {/* Titel und Positionen: one Titel with two positions, then the totals. */}
+      <div className="space-y-4">
+        <Skeleton className="h-4 w-40" />
+        <div className="space-y-3 rounded-lg border p-4">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+        </div>
+        <Skeleton className="ml-auto h-16 w-full max-w-sm" />
+      </div>
     </div>
   );
 }
