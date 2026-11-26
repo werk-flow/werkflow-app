@@ -1,5 +1,6 @@
-// Rule test: no agent shell call starts a sign-in, hands out an account token or runs the Vercel
-// CLI, directly, through a package runner or wrapper, or hidden where the guard cannot read it.
+// Rule test: no agent shell call starts a sign-in, hands out an account token, runs the Vercel
+// CLI or touches a hosted project's function secrets, directly, through a package runner or
+// wrapper, or hidden where the guard cannot read it.
 import { expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -10,7 +11,7 @@ import { accountSignInRefusal } from './account-sign-in';
 import { temporaryDirectory } from '../testing/temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
-const REFUSED = 'A sign-in is an owner step';
+const REFUSED = 'is an owner step: put it under "Owner queue"';
 
 test('every Vercel CLI call is refused, through every runner and wrapper', () => {
   for (const command of [
@@ -115,6 +116,20 @@ test('every listed sign-in and token command is refused, through every runner an
     expect(accountSignInRefusal(command), command).toContain(REFUSED);
 });
 
+// From a checkout, `secrets set` also uploads config.toml's [edge_runtime.secrets], whose local
+// mail capture stops a hosted project's mail (werk-flow/werkflow-planning#585).
+test("every call on a hosted project's function secrets is refused", () => {
+  for (const command of [
+    'supabase secrets set RESEND_API_KEY=x --project-ref abc',
+    'bunx supabase secrets set --env-file ./env --project-ref abc',
+    'npx --yes supabase@2 secrets unset FROM_EMAIL',
+    'supabase --project-ref abc secrets list',
+    'supabase --workdir /x secrets list',
+    "bash -c 'supabase secrets list'",
+  ])
+    expect(accountSignInRefusal(command), command).toContain("touches a hosted project's function secrets");
+});
+
 test('a heredoc a shell runs is read as commands', () => {
   for (const command of [
     "bash <<'EOF'\nvercel list\nEOF",
@@ -197,6 +212,9 @@ test('everyday commands, other subcommands and mentions as data pass', () => {
     'bunx supabase db push --linked',
     'bunx supabase functions deploy login',
     'bunx supabase projects list',
+    'bunx supabase functions deploy health --project-ref abc --use-api --no-verify-jwt',
+    'grep -rn "supabase secrets set" docs',
+    'git commit -m "Refuse supabase secrets set"',
     'supabase status',
     'codex exec "fix it"',
     'coderabbit auth status && coderabbit review --plain',

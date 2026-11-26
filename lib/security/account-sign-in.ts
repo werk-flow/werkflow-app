@@ -12,9 +12,10 @@ import {
 
 // Agents never start a sign-in or use an account-wide CLI (docs/technical/security.md, "Never"):
 // a device sign-in an agent starts asks the owner to approve it, and the owner cannot tell who
-// asked. Approved, it leaves an account token on the machine that reaches production. The
-// PreToolUse hook .claude/hooks/refuse-account-sign-in.ts refuses such a shell call, for Claude
-// Code and Codex alike.
+// asked. Approved, it leaves an account token on the machine that reaches production. Nor do they
+// touch a hosted project's function secrets: from a checkout, `supabase secrets set` also uploads
+// config.toml's local-only [edge_runtime.secrets]. The PreToolUse hook
+// .claude/hooks/refuse-account-sign-in.ts refuses such a shell call, for Claude Code and Codex alike.
 //
 // Threat model: the guard stops accidental and habitual calls. Agents run as the owner's OS user,
 // so deliberate evasion is a rule violation it does not claim to catch.
@@ -32,6 +33,8 @@ const CLIS: readonly AccountCli[] = [
   { names: ['vercel', 'vc'], verbs: [] },
   { names: ['gh'], verbs: [['auth'], ['login', 'refresh', 'switch', 'token', 'setup-git']] },
   { names: ['supabase'], verbs: [['login']] },
+  // Hosted function secrets are set in the project's dashboard (docs/technical/environments.md#credentials).
+  { names: ['supabase'], verbs: [['secrets']] },
   { names: ['stripe'], verbs: [['login']] },
   { names: ['wrangler'], verbs: [['login']] },
   { names: ['railway', '@railway/cli'], verbs: [['login']] },
@@ -53,7 +56,7 @@ const CLIS: readonly AccountCli[] = [
 ];
 
 const INSTEAD = [
-  'A sign-in is an owner step: put it under "Owner queue" on your epic or issue with exact steps,',
+  'A sign-in or a hosted secret is an owner step: put it under "Owner queue" on your epic or issue with exact steps,',
   'ask the owner through the question tool, and keep working (docs/technical/security.md, "Never").',
   'For Vercel metadata and counts use the Vercel MCP connector.',
 ].join(' ');
@@ -85,11 +88,11 @@ function mentions(text: string): number {
   return MENTIONS.reduce((sum, pattern) => sum + (text.match(pattern)?.length ?? 0), 0);
 }
 
-/** A word as a program name: without a package runner's `@version`; the path's last part counts too. */
-function cliOf(text: string): AccountCli | undefined {
+/** The entries a word names as a program: without a package runner's `@version`; the path's last part counts too. */
+function clisOf(text: string): AccountCli[] {
   const name = text.replace(/(?<=.)@[^/@]*$/, '');
   const base = name.slice(name.lastIndexOf('/') + 1);
-  return CLIS.find((cli) => cli.names.includes(name) || cli.names.includes(base));
+  return CLIS.filter((cli) => cli.names.includes(name) || cli.names.includes(base));
 }
 
 /**
@@ -221,8 +224,7 @@ function scan(command: string, depth = 0): Scan | undefined {
     accounted += wordMentions(messages);
     const runnable = withoutRedirections(words).filter((word) => !messages.includes(word));
     for (const [index, word] of runnable.entries()) {
-      const cli = cliOf(word.text);
-      if (cli && opensWithSignIn(runnable.slice(index + 1), cli.verbs)) {
+      if (clisOf(word.text).some((cli) => opensWithSignIn(runnable.slice(index + 1), cli.verbs))) {
         refused.push(
           runnable
             .slice(index)
@@ -237,8 +239,8 @@ function scan(command: string, depth = 0): Scan | undefined {
 }
 
 /**
- * Why a shell command may not run because it starts a sign-in, hands out an account token or uses
- * the Vercel CLI, or undefined. Every such call refuses, and every mention of one in the raw
+ * Why a shell command may not run because it starts a sign-in, hands out an account token, uses
+ * the Vercel CLI or touches a hosted project's function secrets, or undefined. Every such call refuses, and every mention of one in the raw
  * command must be data the scan accounts for: a mention it cannot place (a comment, an
  * interpreter's script, a heredoc an unknown program reads) refuses too.
  */
@@ -255,7 +257,7 @@ export function accountSignInRefusal(command: string): string | undefined {
   const [first] = result.refused;
   if (first) {
     const call = first.length > 80 ? `${first.slice(0, 77)}...` : first;
-    return `Refused: \`${call}\` starts a sign-in, hands out an account token, or runs the Vercel CLI. ${INSTEAD}`;
+    return `Refused: \`${call}\` starts a sign-in, hands out an account token, runs the Vercel CLI, or touches a hosted project's function secrets. ${INSTEAD}`;
   }
   if (named <= result.accounted) return undefined;
   const lines = command
