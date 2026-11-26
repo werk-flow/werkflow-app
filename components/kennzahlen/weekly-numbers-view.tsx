@@ -106,15 +106,12 @@ function WeeklyNumbersTable({ weeks }: { weeks: readonly WeeklyNumbers[] }): Rea
               <TableRow key={row.id}>
                 <TableHead
                   scope="row"
-                  className={cn(
-                    'h-auto py-2 align-top font-normal text-foreground',
-                    row.total && 'font-semibold',
-                  )}
+                  className={cn('h-auto py-2 font-normal text-foreground', row.total && 'font-semibold')}
                 >
                   {row.label}
                 </TableHead>
                 {newestFirst.map((week) => (
-                  <TableCell key={week.weekStart} className="text-right align-top">
+                  <TableCell key={week.weekStart} className="text-right">
                     <CellValue cell={row.cell(week)} strong={row.total} />
                   </TableCell>
                 ))}
