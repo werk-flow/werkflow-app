@@ -328,6 +328,20 @@ export function documentViewerImage(viewer: Locator, fileName: string): Locator 
   return viewer.getByRole('img', { name: fileName });
 }
 
+/** The viewer shows the file's image decoded: a broken image is visible too, but has no width. */
+export async function expectDocumentImageShown(viewer: Locator, fileName: string): Promise<void> {
+  const image = documentViewerImage(viewer, fileName);
+  await expect(image).toBeVisible();
+  await expect
+    .poll(
+      () => image.evaluate((element) => element instanceof HTMLImageElement && element.naturalWidth > 0),
+      {
+        message: `The viewer decoded the image of ${fileName}`,
+      },
+    )
+    .toBe(true);
+}
+
 /** The embedded PDF frame; its title is the file name. */
 export function documentViewerPdfFrame(viewer: Locator, fileName: string): Locator {
   return viewer.getByTitle(fileName);

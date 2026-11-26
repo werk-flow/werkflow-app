@@ -11,12 +11,13 @@ import {
   aufgabenSidebarBadge,
   callbackTaskLink,
   expectBadgeCount,
+  expectStartPageRead,
   openAufgaben,
   startPageRegion,
 } from './support/steps/attention';
 import { openPage } from './support/streamed-content';
 import { customerDocumentsRegion, customerSiteSourceNumber } from './support/steps/customers';
-import { documentOpenButton, documentViewer, documentViewerImage } from './support/steps/documents';
+import { documentOpenButton, documentViewer, expectDocumentImageShown } from './support/steps/documents';
 import { dismissDialog, hydratedAndSettled } from './support/steps/interaction';
 import { closeRequestOnDetail } from './support/steps/requests';
 import { globalSearchDialog, searchEverywhere, searchFoundNothing, searchHit } from './support/steps/search';
@@ -90,7 +91,7 @@ test.describe('E8 Finden und vom Start aus handeln @E8', () => {
     await test.step('Büro öffnet das verknüpfte Original aus dem Altsystem', async () => {
       await documentOpenButton(customerDocumentsRegion(bueroPage), original).click();
       const viewer = documentViewer(bueroPage, original);
-      await expect(documentViewerImage(viewer, original)).toBeVisible();
+      await expectDocumentImageShown(viewer, original);
       await dismissDialog(viewer);
     });
 
@@ -104,6 +105,7 @@ test.describe('E8 Finden und vom Start aus handeln @E8', () => {
 
     await test.step('Der Rückruf verlässt den Start und Aufgaben', async () => {
       await openDashboardInApp(bueroPage);
+      await expectStartPageRead(bueroPage);
       await expectGone(callbackTaskLink(startPageRegion(bueroPage, 'office'), requestNumber));
       await openAufgaben(bueroPage);
       await expectGone(callbackTaskLink(bueroPage, requestNumber));
@@ -165,6 +167,8 @@ test.describe('E8 Finden und vom Start aus handeln @E8', () => {
       await expectGone(callbackTaskLink(session.aufgaben, requestNumber));
       await expectBadgeCount(aufgabenSidebarBadge(session.aufgaben), remaining);
       await openDashboardInApp(adminPage);
+      await expectStartPageRead(adminPage);
+      await expect(startPageRegion(adminPage, 'owner')).toBeVisible();
       await expectGone(callbackTaskLink(startPageRegion(adminPage, 'owner'), requestNumber));
       await expectGone(callbackTaskLink(startPageRegion(adminPage, 'office'), requestNumber));
       await expectBadgeCount(aufgabenSidebarBadge(adminPage), remaining);
@@ -193,7 +197,7 @@ test.describe('E8 Finden und vom Start aus handeln @E8', () => {
       jobNumber: `AUF-${world.runId}-E8-FREMD`,
       equipment: testData`Wärmepumpe Ahornweg ${world.runId}`,
     };
-    const ownWork = await seedAssignedEquipmentJob(
+    const ownEquipmentId = await seedAssignedEquipmentJob(
       world,
       own,
       `${oldNumberPrefix}-1`,
@@ -203,7 +207,7 @@ test.describe('E8 Finden und vom Start aus handeln @E8', () => {
       orgId: world.orgId,
       actorId: world.users.admin.id,
       displayName: own.manual,
-      equipmentId: ownWork.equipmentId,
+      equipmentId: ownEquipmentId,
     });
     // A colleague's job for another customer, its Anlage under the same old-number prefix.
     await seedAssignedEquipmentJob(world, foreign, `${oldNumberPrefix}-2`, world.users.admin.id);
@@ -221,10 +225,10 @@ test.describe('E8 Finden und vom Start aus handeln @E8', () => {
 
     await test.step('Der Monteur öffnet die Anlage aus dem Treffer und ihre Bedienungsanleitung', async () => {
       await searchHit(globalSearchDialog(employeePage), 'anlagen', own.equipment).click();
-      await employeePage.waitForURL(`**/auftraege/${own.jobNumber}#anlage-${ownWork.equipmentId}`);
+      await employeePage.waitForURL(`**/auftraege/${own.jobNumber}#anlage-${ownEquipmentId}`);
       const record = await openFieldEquipmentRecord(employeePage, own.equipment);
       await documentOpenButton(record, own.manual).click();
-      await expect(documentViewerImage(documentViewer(employeePage, own.manual), own.manual)).toBeVisible();
+      await expectDocumentImageShown(documentViewer(employeePage, own.manual), own.manual);
     });
   });
 });
@@ -235,7 +239,7 @@ async function seedAssignedEquipmentJob(
   records: { customer: string; site: string; jobNumber: string; equipment: string },
   sourceNumber: string,
   assigneeId: string,
-): Promise<{ jobId: string; equipmentId: string }> {
+): Promise<string> {
   const actor = { orgId: world.orgId, actorId: world.users.admin.id };
   const { clientId, siteIds } = await seedCustomer({
     ...actor,
@@ -261,5 +265,5 @@ async function seedAssignedEquipmentJob(
   });
   await seedEquipmentJobLink({ ...actor, equipment, jobId });
   await seedJobAssignment({ ...actor, jobId, userId: assigneeId });
-  return { jobId, equipmentId: equipment.id };
+  return equipment.id;
 }

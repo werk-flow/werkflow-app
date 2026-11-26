@@ -39,6 +39,19 @@ export function startPageRegion(page: Page, start: keyof typeof START_PAGE_HEADI
   return page.getByRole('region', { name: START_PAGE_HEADINGS[start], exact: true });
 }
 
+/**
+ * Waits until the shown start page holds a read of Aufgaben: the office start
+ * marks its tasks usable only after a successful read, never while it loads or
+ * failed. Admin's owner start renders from the same read.
+ */
+export async function expectStartPageRead(page: Page): Promise<void> {
+  await expect(
+    startPageRegion(page, 'office').locator(
+      '[data-usable-content-name="office-start"][data-usable-content="ready"]',
+    ),
+  ).toBeAttached({ timeout: TASK_OVERVIEW_READ_TIMEOUT_MS });
+}
+
 // Task links carry stable German aria-labels that name their source. Counting
 // via the accessible name doubles as the per-viewer deduplication assertion.
 function attentionTaskLink(scope: Page | Locator, ariaLabel: string): Locator {
