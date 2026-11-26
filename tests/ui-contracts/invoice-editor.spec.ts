@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { textInDom, visibleText } from '../golden/support/steps/shared';
 import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fixture';
 
 // The invoice page (docs/features/commercial-and-finance.md, "Invoice drafts" and "Issuing"): an
@@ -26,8 +27,8 @@ test('a catalog line that answers after the invoice was issued adds no line to t
   await answerHeldWrite(page, null);
 
   await expect(names).toHaveCount(1);
-  await expect(names.first()).toHaveValue('Heizkörper tauschen');
-  await expect(page.getByText('Monteurstunde')).toHaveCount(0);
+  await expect(names).toHaveValue('Heizkörper tauschen');
+  await expect(textInDom(page, 'Monteurstunde')).toHaveCount(0);
 });
 
 // Einstellungen → Rechnungen ("Invoice settings"): a year-based series restarts at 1 each Berlin
@@ -40,10 +41,10 @@ test('a settings read in a new Berlin year replaces the text read in the old one
   await nextNumber.fill('58');
 
   await page.evaluate(() => window.uiContractInvoiceSettingsNewYear?.());
-  await expect(page.getByText('RE-2038-001')).toBeVisible();
+  await expect(visibleText(page, 'RE-2038-001')).toBeVisible();
   await expect(nextNumber).toHaveValue('1');
 
   await page.getByRole('button', { name: 'Speichern', exact: true }).click();
-  await expect(page.getByText('Es gibt keine Änderungen zu speichern.')).toBeVisible();
+  await expect(visibleText(page, 'Es gibt keine Änderungen zu speichern.')).toBeVisible();
   expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
 });

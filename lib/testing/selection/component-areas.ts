@@ -40,7 +40,15 @@ const COMPONENT_AREAS: readonly (readonly [string, readonly string[], readonly s
   ],
   [
     'inventory',
-    ['article-terms', 'inventory-', 'leistungen', 'offers', 'supplier-catalog', 'wholesaler-import'],
+    [
+      'article-terms',
+      'inventory-',
+      'invoice-editor',
+      'leistungen',
+      'offers',
+      'supplier-catalog',
+      'wholesaler-import',
+    ],
     ['inventory', 'commercial'],
   ],
   ['customers', ['billing-parties', 'client-relations', 'customer', 'customer-', 'request-'], ['customers']],
