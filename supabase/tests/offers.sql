@@ -798,6 +798,20 @@ end;
 $$;
 reset role;
 
+-- A stored cost holds both its amount and its price quantity, and any amount an article price may have.
+select pg_temp.expect_refusal('a cost without its price quantity',
+  'update public.offer_positions set purchase_price_quantity = null where purchase_cost_cents = 812', '23514');
+select pg_temp.expect_refusal('a price quantity without its cost',
+  'update public.offer_positions set purchase_cost_cents = null where purchase_cost_cents = 812', '23514');
+do $$
+begin
+  update public.offer_positions set purchase_cost_cents = 250000000 where purchase_cost_cents = 812;
+  if not found then
+    raise exception 'a cost above one million euros was not stored';
+  end if;
+end;
+$$;
+
 -- An article a Position names is archived, never deleted.
 select pg_temp.expect_refusal('deleting a named article',
   'delete from public.inventory_items where id = ''38040000-0000-4000-8000-000000000070''', '23503');

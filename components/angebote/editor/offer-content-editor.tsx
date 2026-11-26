@@ -86,7 +86,17 @@ function useContentDraft(offer: OfferDetail, saving: boolean) {
         edited: true,
         attemptKey: crypto.randomUUID(),
       })),
-    saved: () => setDraft({ ...draft, edited: false, attemptKey: crypto.randomUUID() }),
+    /**
+     * The save under `attemptKey` was stored as `contentVersion`. Text changed
+     * since, such as an article whose price arrived meanwhile, stays edited
+     * on the saved version, so it is neither lost nor taken for another session's.
+     */
+    saved: (attemptKey: string, contentVersion: number) =>
+      setDraft((current) =>
+        current.attemptKey === attemptKey
+          ? { ...current, edited: false, attemptKey: crypto.randomUUID() }
+          : { ...current, baseVersion: contentVersion },
+      ),
     reload: () => setDraft(contentDraftOf(offer)),
   };
 }
@@ -151,7 +161,7 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
         setError(failureSentence(result?.error ?? null, draft.edited));
         return;
       }
-      saved();
+      saved(draft.attemptKey, result.contentVersion);
       setAttempted(false);
       // A retry after a lost answer can name a version the page already shows or has passed.
       const confirmed = result.contentVersion <= offer.contentVersion || (await settle.confirmChange(since));

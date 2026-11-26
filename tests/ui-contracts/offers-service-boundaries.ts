@@ -8,10 +8,15 @@ import { holdWrite, unexpectedWrite } from './held-write-boundary';
 declare global {
   interface Window {
     uiContractOfferCreates: number;
+    /** While true, the article picker's price read waits until the spec calls `uiContractArticleRead`. */
+    uiContractHoldArticleRead: boolean;
+    uiContractArticleRead: (() => void) | null;
   }
 }
 
 window.uiContractOfferCreates = 0;
+window.uiContractHoldArticleRead = false;
+window.uiContractArticleRead = null;
 
 export async function createOffer(): Promise<{ success: false; error: string }> {
   window.uiContractOfferCreates += 1;
@@ -73,6 +78,11 @@ export async function saveOfferContent(
  * unit is outside the list, so a contract can show the unit question.
  */
 export async function readOfferArticleLine(): Promise<{ success: true; line: OfferArticleLine }> {
+  if (window.uiContractHoldArticleRead) {
+    await new Promise<void>((resolve) => {
+      window.uiContractArticleRead = resolve;
+    });
+  }
   return {
     success: true,
     line: {

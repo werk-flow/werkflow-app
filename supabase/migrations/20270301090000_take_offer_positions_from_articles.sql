@@ -39,10 +39,12 @@ alter table public.offer_positions add constraint offer_positions_item_fk foreig
 alter table public.offer_positions add constraint offer_positions_item_check
   check (item_id is null or kind = 'free') not valid;
 -- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no offer content table yet; the rule binds only the new columns, which older code never writes
+-- Every operand of the second branch is non-null there, so a row with one cost field null fails
+-- instead of passing as unknown. The amount takes any article price (inventory_item_prices).
 alter table public.offer_positions add constraint offer_positions_purchase_cost_check check (
   (purchase_cost_cents is null and purchase_price_quantity is null)
-  or (item_id is not null and purchase_cost_cents between 0 and 100000000
-    and purchase_price_quantity in (1, 10, 100, 1000))
+  or (item_id is not null and purchase_cost_cents is not null and purchase_price_quantity is not null
+    and purchase_cost_cents >= 0 and purchase_price_quantity in (1, 10, 100, 1000))
 ) not valid;
 
 create index offer_positions_item_idx on public.offer_positions (item_id, organization_id);
