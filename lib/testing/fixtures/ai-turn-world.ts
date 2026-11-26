@@ -51,6 +51,7 @@ export function resetAiTables(world: AiTurnWorld, settings: Row = {}): void {
       enabled: true,
       monthly_budget_micro_eur: 50_000_000,
       updated_at: null,
+      revision: 0,
       ...settings,
     },
   ];
