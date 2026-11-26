@@ -1,14 +1,45 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { repositoryRoot } from '../conventions/product-sources';
+import { temporaryDirectory } from '../testing/temporary-directory';
 
 // Tier 2 beside the ESLint ban (B2): the AI SDK is reached only from lib/ai/,
 // in every source file of the repository and every import form: a static or
 // type import, a re-export, an import type, a dynamic import and a require,
 // each also spread over several lines.
 const SDK_SPECIFIER = /^(ai|ai\/.*|@ai-sdk\/.*)$/;
+/** The `git grep -E` pattern of files that name an SDK specifier in quotes; the parser then decides. */
+const SDK_FILE_PATTERN = '[\'"`](ai|ai/[^\'"`]*|@ai-sdk/[^\'"`]*)[\'"`]';
+
+/** The files of `folder` that `git grep` finds with SDK_FILE_PATTERN. */
+function filesNamingTheSdk(folder: string, extraArguments: string[] = []): string[] {
+  const search = Bun.spawnSync(
+    [
+      'git',
+      'grep',
+      ...extraArguments,
+      '-l',
+      '-E',
+      SDK_FILE_PATTERN,
+      '--',
+      '*.ts',
+      '*.tsx',
+      '*.js',
+      '*.jsx',
+      '*.mjs',
+      '*.cjs',
+      '*.mts',
+      '*.cts',
+      ':!lib/ai/**',
+      ':!node_modules/**',
+    ],
+    { cwd: folder },
+  );
+  expect(search.exitCode === 0 || search.exitCode === 1, search.stderr.toString()).toBe(true);
+  return search.stdout.toString().split('\n').filter(Boolean);
+}
 
 function specifierOf(node: ts.Node): ts.Expression | ts.TypeNode | undefined {
   if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return node.moduleSpecifier;
@@ -43,38 +74,26 @@ function sdkImportLines(fileName: string, text: string): number[] {
 }
 
 test('no source file outside lib/ai/ loads the AI SDK, in any form', () => {
-  // Every file that names an SDK specifier in quotes at all; the parser then decides.
-  const search = Bun.spawnSync(
-    [
-      'git',
-      'grep',
-      '--untracked',
-      '-l',
-      '-E',
-      '[\'"`](ai|ai/[^\'"`]*|@ai-sdk/[^\'"`]*)[\'"`]',
-      '--',
-      '*.ts',
-      '*.tsx',
-      '*.js',
-      '*.jsx',
-      '*.mjs',
-      '*.cjs',
-      '*.mts',
-      '*.cts',
-      ':!lib/ai/**',
-      ':!node_modules/**',
-    ],
-    { cwd: repositoryRoot },
+  const found = filesNamingTheSdk(repositoryRoot, ['--untracked']).flatMap((file) =>
+    sdkImportLines(file, readFileSync(join(repositoryRoot, file), 'utf8')).map((line) => `${file}:${line}`),
   );
-  expect(search.exitCode === 0 || search.exitCode === 1, search.stderr.toString()).toBe(true);
-  const found = search.stdout
-    .toString()
-    .split('\n')
-    .filter(Boolean)
-    .flatMap((file) =>
-      sdkImportLines(file, readFileSync(join(repositoryRoot, file), 'utf8')).map((line) => `${file}:${line}`),
-    );
   expect(found).toEqual([]);
+});
+
+test('the file search finds a specifier in single quotes, double quotes and backticks (sol-loop S8)', () => {
+  const folder = temporaryDirectory('sdk-boundary-');
+  const probes = {
+    'single.ts': "await import('ai');",
+    'double.ts': 'await import("@ai-sdk/anthropic");',
+    'backtick.ts': 'await import(`ai/test`);',
+    'lookalike.ts': "const label = 'aiX'; await import(`./ai-helper`);",
+  };
+  for (const [name, text] of Object.entries(probes)) writeFileSync(join(folder, name), text);
+  expect(filesNamingTheSdk(folder, ['--no-index']).toSorted()).toEqual([
+    'backtick.ts',
+    'double.ts',
+    'single.ts',
+  ]);
 });
 
 test('every import form of the SDK is caught, over several lines too, and lookalikes are not', () => {

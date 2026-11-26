@@ -4,6 +4,7 @@
 // harness, the AI SDK and the replay provider run for real. Each fixture
 // process imports the route only after `installAiTurnWorld`.
 import { mock } from 'bun:test';
+import type { AiModel } from '@/lib/ai/model';
 import { z } from '@/lib/zod';
 import {
   ORGANIZATION_A,
@@ -28,16 +29,33 @@ export type AiTurnWorld = ActionWorld & {
   afterAttempt: ((world: AiTurnWorld) => void) | null;
   /** The runs `after()` keeps alive; `settle` awaits them. */
   pending: Promise<unknown>[];
+  /** The abort signal of each provider request, in order: whether the harness stopped it. */
+  streamSignals: (AbortSignal | undefined)[];
 };
 
-export function installAiTurnWorld(): AiTurnWorld {
+export async function installAiTurnWorld(): Promise<AiTurnWorld> {
   process.env.EMAIL_OTP_HASH_SECRET = 'fixture-only-ai-turn-secret';
   // The fixtures replay; a key in the shell that runs them must never reach a provider.
   delete process.env.WERKFLOW_KI_ANTHROPIC_KEY;
   process.env.AI_ORGANIZATION_IDS = `${ORGANIZATION_A},${ORGANIZATION_B}`;
   const base = installActionWorld({});
-  const world: AiTurnWorld = Object.assign(base, { afterAttempt: null, pending: [] });
+  const world: AiTurnWorld = Object.assign(base, { afterAttempt: null, pending: [], streamSignals: [] });
   mock.module('next/server', () => ({ after: (task: Promise<unknown>) => world.pending.push(task) }));
+  // The real replay model, watched: each request's abort signal is kept for the fixture to read.
+  const { AI_REPLAY_PROVIDER, createReplayModel } = await import('@/lib/ai/replay');
+  mock.module('@/lib/ai/replay', () => ({
+    AI_REPLAY_PROVIDER,
+    createReplayModel: (modelId: string): AiModel => {
+      const model = createReplayModel(modelId);
+      return {
+        ...model,
+        doStream: (options) => {
+          world.streamSignals.push(options.abortSignal);
+          return model.doStream(options);
+        },
+      };
+    },
+  }));
   resetAiTables(world);
   world.rpc = (call) => answer(world, call.name, call.args);
   return world;
@@ -60,6 +78,7 @@ export function resetAiTables(world: AiTurnWorld, settings: Row = {}): void {
   }
   world.afterAttempt = null;
   world.pending = [];
+  world.streamSignals = [];
   world.failingTables.clear();
   signInAs(world, 'employee');
 }

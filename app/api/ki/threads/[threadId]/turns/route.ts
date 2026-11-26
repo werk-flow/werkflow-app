@@ -25,6 +25,7 @@ const REFUSAL_STATUS: Readonly<Record<AiTurnRefusal, number>> = {
   disabled: 403,
   thread_not_found: 404,
   run_active: 409,
+  command_conflict: 409,
   too_many_turns: 429,
   budget_exhausted: 429,
   unavailable: 503,

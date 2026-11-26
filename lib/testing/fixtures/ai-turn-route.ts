@@ -2,7 +2,6 @@
 // harness (check 4 and B13-B15, B21 of werk-flow/werkflow-planning#20). Each
 // block states one invariant; a failing assert names it.
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { AI_TURN_LIMITS } from '@/lib/ai/limits';
 import { ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
 import {
@@ -14,11 +13,14 @@ import {
   resetAiTables,
 } from './ai-turn-world';
 
-const world = installAiTurnWorld();
+const world = await installAiTurnWorld();
 const rows = (table: string) => tableRows(world, table);
 const attempts = () => rows('ai_run_attempts');
 const answerItem = () => rows('ai_thread_items').find((row) => row.kind === 'assistant_message');
 const runStatus = () => rows('ai_runs').map((row) => row.status);
+const TURN_STREAM = 'application/x-ndjson; charset=utf-8';
+const streamedText = (events: Awaited<ReturnType<typeof readTurn>>) =>
+  events.flatMap((event) => (event.type === 'text' ? [event.delta] : [])).join('');
 
 // A plain turn saves the message, streams the answer, saves it and settles one charged attempt.
 {
@@ -27,7 +29,7 @@ const runStatus = () => rows('ai_runs').map((row) => row.status);
   const events = await readTurn(world, response);
   assert.equal(events[0]?.type, 'started');
   assert.deepEqual(events.at(-1), { type: 'end', status: 'complete' });
-  const streamed = events.flatMap((event) => (event.type === 'text' ? [event.delta] : [])).join('');
+  const streamed = streamedText(events);
   assert.match(streamed, /aus einer Aufzeichnung/);
   assert.deepEqual(answerItem()?.body, { text: streamed });
   assert.equal(answerItem()?.status, 'complete');
@@ -91,14 +93,14 @@ const runStatus = () => rows('ai_runs').map((row) => row.status);
     organization_id: world.memberships[0]?.orgId,
     thread_id: THREAD_ID,
     user_id: world.callerId,
-    // The harness keys a command by its id and its message.
-    idempotency_key: `${commandId}:${createHash('sha256').update('Wie lege ich einen Auftrag an?').digest('hex').slice(0, 16)}`,
+    idempotency_key: commandId,
     reserved_micro_usd: 1,
     status: 'reserved',
     created_at: new Date().toISOString(),
   });
   const whileRunning = await postTurn('Wie lege ich einen Auftrag an?', { commandId });
   assert.equal(whileRunning.status, 409, 'the same command running elsewhere must not run twice');
+  assert.equal(rows('ai_runs').length, 1, 'a command running elsewhere must not reserve again');
   assert.equal(attempts().length, 0);
 
   resetAiTables(world);
@@ -108,6 +110,12 @@ const runStatus = () => rows('ai_runs').map((row) => row.status);
   assert.deepEqual(await retry.json(), { status: 'already_done' });
   assert.equal(attempts().length, 1, 'a retried command must be charged once');
   assert.equal(rows('ai_thread_items').length, 2);
+  // The ledger keeps its rows past the thread's deletion: its keys hold the command id and no value of the message.
+  assert.deepEqual(
+    [...rows('ai_runs'), ...attempts()].map((row) => row.idempotency_key),
+    [retriedId, `${retriedId}:1:0`],
+    'a ledger key must name the bare command id',
+  );
 }
 
 // An overloaded provider is retried, and both attempts are ledgered (B15).
@@ -159,17 +167,35 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
   const events = await readTurn(world, await postTurn('[replay:verbindung-weg] Hallo'));
   assert.deepEqual(events.at(-1), { type: 'end', status: 'complete' });
   assert.equal(attempts().length, 2);
+  // The provider accepted the request, so it bills it: the failed attempt is charged at its caps.
+  assert.equal(
+    attempts()[0]?.p_output_tokens,
+    AI_TURN_LIMITS.chat.maxOutputTokens,
+    'an attempt the provider accepted must be charged at its output cap',
+  );
+  assert.ok(Number(attempts()[0]?.p_input_tokens) > 0, 'an accepted attempt must be charged for its prompt');
 }
 
-// A command id sent again with another message is another command: the model answers the saved message (sol-loop S17).
+// A command id sent again with other text is refused, and the saved message stays as it was (sol-loop S17).
 {
   resetAiTables(world, { monthly_budget_micro_eur: 1 });
   const commandId = crypto.randomUUID();
-  assert.equal((await postTurn('Erste Frage', { commandId })).status, 429);
-  resetAiTables(world);
-  const events = await readTurn(world, await postTurn('[replay:echo] Zweite Frage', { commandId }));
-  const streamed = events.flatMap((event) => (event.type === 'text' ? [event.delta] : [])).join('');
-  assert.equal(streamed, 'Du hast geschrieben: Zweite Frage');
+  assert.equal((await postTurn('[replay:echo] Erste Frage', { commandId })).status, 429);
+  // Only the budget changes between the two posts; the thread keeps the saved message.
+  const settings = rows('ai_organization_settings')[0];
+  if (settings) settings.monthly_budget_micro_eur = 50_000_000;
+  const reused = await postTurn('[replay:echo] Zweite Frage', { commandId });
+  assert.equal(reused.status, 409, 'a reused command id with other text must be refused');
+  assert.deepEqual(await reused.json(), { error: 'command_conflict' });
+  assert.deepEqual(
+    rows('ai_thread_items').map((row) => row.body),
+    [{ text: '[replay:echo] Erste Frage' }],
+    'the saved message must stay as it was',
+  );
+  assert.equal(rows('ai_runs').length, 0, 'a refused reuse must reserve nothing');
+  // The same text under the same id is the retry it was: the saved message gets its answer.
+  const events = await readTurn(world, await postTurn('[replay:echo] Erste Frage', { commandId }));
+  assert.equal(streamedText(events), 'Du hast geschrieben: Erste Frage');
 }
 
 // A stream the provider closed before its first event is retried, and the accepted attempt is charged (B15).
@@ -209,7 +235,12 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
   resetAiTables(world);
   const events = await readTurn(world, await postTurn('[replay:zu-lang] Schreib viel.'));
   assert.equal(events.at(-1)?.failure, 'answer_too_long');
-  const streamed = events.flatMap((event) => (event.type === 'text' ? [event.delta] : [])).join('');
+  assert.equal(
+    world.streamSignals.at(-1)?.aborted,
+    true,
+    'an early stop must abort the provider request (sol-loop S18)',
+  );
+  const streamed = streamedText(events);
   assert.deepEqual(answerItem()?.body, { text: streamed, failure: 'answer_too_long' });
   assert.ok(
     Buffer.byteLength(JSON.stringify(answerItem()?.body)) <= AI_TURN_LIMITS.chat.maxAnswerBytes,
@@ -251,7 +282,7 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
   assert.deepEqual(runStatus(), ['reserved'], 'an unledgered charge must keep its hold');
 }
 
-// A retried command whose start broke before its answer existed gets a failed answer (sol-loop S1).
+// A command refused before its answer existed stays open: a retry under the same id answers it.
 {
   resetAiTables(world);
   const commandId = crypto.randomUUID();
@@ -261,21 +292,30 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
       ? { data: null, error: { message: 'connection failure' } }
       : answerOf(call);
   assert.equal((await postTurn('Hallo', { commandId })).status, 503);
-  // While the failed answer cannot be written either, the retry is no success.
-  assert.equal(
-    (await postTurn('Hallo', { commandId })).status,
-    503,
-    'an unrecovered command must not be done',
-  );
+  assert.equal((await postTurn('Hallo', { commandId })).status, 503);
   world.rpc = answerOf;
-  assert.deepEqual(await (await postTurn('Hallo', { commandId })).json(), { status: 'already_done' });
-  assert.deepEqual(answerItem()?.body, { text: '', failure: 'interrupted' });
-  assert.equal(answerItem()?.status, 'failed');
+  const retry = await postTurn('Hallo', { commandId });
+  assert.equal(
+    retry.headers.get('content-type'),
+    TURN_STREAM,
+    'a command refused before its answer must run on retry',
+  );
+  const events = await readTurn(world, retry);
+  assert.deepEqual(events.at(-1), { type: 'end', status: 'complete' });
+  assert.equal(answerItem()?.status, 'complete');
   assert.deepEqual(
     rows('ai_thread_items').map((row) => row.kind),
     ['user_message', 'assistant_message'],
-    'the failed answer belongs to the saved message',
+    'the answer belongs to the saved message',
   );
+  assert.deepEqual(runStatus(), ['cancelled', 'cancelled', 'succeeded']);
+  assert.deepEqual(
+    rows('ai_runs').map((row) => row.idempotency_key),
+    [commandId, `${commandId}:retry-1`, `${commandId}:retry-2`],
+  );
+  assert.equal(attempts().length, 1, 'only the run that answered is charged');
+  // Once answered, the command is done.
+  assert.deepEqual(await (await postTurn('Hallo', { commandId })).json(), { status: 'already_done' });
 }
 
 // An identity check that cannot complete is a private failure, never a turn (sol-loop S7).
@@ -308,9 +348,18 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
     status: 'reserved',
     created_at: new Date(Date.now() - 60_000).toISOString(),
   });
-  const response = await postTurn('Wie lege ich einen Auftrag an?');
+  const commandId = crypto.randomUUID();
+  const response = await postTurn('Wie lege ich einen Auftrag an?', { commandId });
   assert.equal(response.status, 409, 'a second open run of a person must yield');
   assert.deepEqual(runStatus(), ['reserved', 'cancelled']);
+  // Once the older run is done, the yielded command runs under its own id.
+  const older = rows('ai_runs')[0];
+  if (older) older.status = 'succeeded';
+  const retry = await postTurn('Wie lege ich einen Auftrag an?', { commandId });
+  assert.equal(retry.headers.get('content-type'), TURN_STREAM, 'a yielded command must run on retry');
+  const events = await readTurn(world, retry);
+  assert.deepEqual(events.at(-1), { type: 'end', status: 'complete' });
+  assert.match(streamedText(events), /aus einer Aufzeichnung/);
   // A younger open run blocks too: a run that committed late never passes beside it.
   resetAiTables(world);
   rows('ai_runs').push({

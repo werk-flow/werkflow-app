@@ -6,7 +6,7 @@ import { logError } from '@/lib/logging';
 import { installAiTurnWorld, postTurn, readTurn, resetAiTables } from './ai-turn-world';
 
 const SENTINEL = 'WF-KI-SENTINEL-4c1e9a';
-const world = installAiTurnWorld();
+const world = await installAiTurnWorld();
 
 async function captureLogs(work: () => Promise<void>): Promise<string> {
   const captured: string[] = [];
