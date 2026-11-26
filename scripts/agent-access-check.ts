@@ -5,19 +5,22 @@ import { dirname, join, resolve } from 'node:path';
 import {
   STAGING_AGENT_KEY_FILE,
   STAGING_AGENT_KEY_NAMES,
-  assignedValues,
+  type Outcome,
   type StagingAgentKeyName,
   type StagingAgentKeys,
   type Verdict,
   devOnlyVerdict,
+  envFileValues,
   installStagingAgentKeys,
   isStagingAgentKeyName,
   keyShapeVerdict,
   privateModeVerdict,
   protectionVerdict,
+  queryErrorSqlState,
+  readOnlyModeOffOutcome,
   readStagingAgentKeys,
   sandboxVerdict,
-  writeRefusedVerdict,
+  writeRefusedOutcome,
 } from '../lib/security/staging-agent-keys';
 import { supabaseProjectRefs } from '../lib/security/production-access';
 
@@ -25,7 +28,7 @@ import { supabaseProjectRefs } from '../lib/security/production-access';
  * `bun run agent-access:check` proves that this machine's agent keys reach DEV, staging and the
  * Stripe sandbox, and nothing more (docs/technical/machine-setup.md, "Agent keys"). It prints each
  * check's name and `ok`, `failed` or `missing`, never a value or a response body, and exits 1 on
- * anything but `ok`. A request that fails or times out fails its check. It sends a key only when the
+ * anything but `ok`. A failed write probe adds a line that names the condition that failed. A request that fails or times out fails its check. It sends a key only when the
  * key has its shape, so a live Stripe key never leaves the machine.
  */
 const MANAGEMENT_API = 'https://api.supabase.com/v1';
@@ -72,21 +75,49 @@ async function devOnly(token: string): Promise<Verdict> {
   });
 }
 
+/** DEV's read-only mode as the token reads it; only a 200's two flags are read from the body. */
+async function readOnlyModeOff(token: string, ref: string): Promise<Outcome> {
+  try {
+    const response = await request(`${MANAGEMENT_API}/projects/${ref}/readonly`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.status !== 200) {
+      await response.body?.cancel();
+      return readOnlyModeOffOutcome(response.status, undefined);
+    }
+    return readOnlyModeOffOutcome(200, await response.json());
+  } catch {
+    return { verdict: 'failed', reason: "DEV's read-only state could not be read" };
+  }
+}
+
 /**
- * A temporary table through the read-write query endpoint: it needs write access and vanishes with
- * its session if it ran. A read-only token's query fails in a read-only transaction. The body is
- * an error message about this query; only its SQLSTATE is read, and nothing is printed.
+ * A temporary table through the query endpoint: it needs write access, vanishes with its session if
+ * it ran, and Supabase refuses it to a token without Database write (writeRefusedOutcome). DEV's
+ * read-only mode is read before and after the write, never beside it. Only a 400's SQLSTATE is read;
+ * every other body is discarded unread.
  */
-async function writeRefused(token: string): Promise<Verdict> {
-  if (!refs) return 'failed';
-  return probe(async () => {
-    const response = await request(`${MANAGEMENT_API}/projects/${refs.dev}/database/query`, {
+async function writeRefused(token: string): Promise<Outcome> {
+  if (!refs) return { verdict: 'failed', reason: 'the environments doc names no DEV project' };
+  const dev = refs.dev;
+  const write = async (): Promise<[number, string | undefined]> => {
+    const response = await request(`${MANAGEMENT_API}/projects/${dev}/database/query`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: 'create temporary table agent_access_write_probe (id int)' }),
     });
-    return writeRefusedVerdict(response.status, await response.text());
-  });
+    if (response.status === 400) return [400, queryErrorSqlState(await response.json())];
+    await response.body?.cancel();
+    return [response.status, undefined];
+  };
+  try {
+    const before = await readOnlyModeOff(token, dev);
+    const [status, sqlState] = await write();
+    const after = await readOnlyModeOff(token, dev);
+    return writeRefusedOutcome(status, sqlState, { before, after });
+  } catch {
+    return { verdict: 'failed', reason: 'the write request failed, timed out or answered no JSON' };
+  }
 }
 
 /** One row of DEV's Auth users; the body holds personal data, so only the status counts. */
@@ -145,7 +176,7 @@ function readKeys(): StagingAgentKeys | undefined {
 
 /** Runs every check, prints each verdict, and answers whether all passed. */
 async function check(): Promise<boolean> {
-  const lines: [string, Verdict | Promise<Verdict>][] = [];
+  const lines: [string, Verdict | Outcome | Promise<Verdict | Outcome>][] = [];
 
   // The key file: present, private, in a private folder, with every key in its shape.
   const keyPath = join(home, STAGING_AGENT_KEY_FILE);
@@ -163,8 +194,8 @@ async function check(): Promise<boolean> {
   /** A check that needs a key runs only when the key has its shape; otherwise it repeats the shape verdict. */
   function withKey(
     name: StagingAgentKeyName,
-    check: (value: string) => Promise<Verdict>,
-  ): Verdict | Promise<Verdict> {
+    check: (value: string) => Promise<Verdict | Outcome>,
+  ): Verdict | Promise<Verdict | Outcome> {
     const value = keys?.file === 'present' ? keys.values.get(name) : undefined;
     return value === undefined ? verdictOf(name) : check(value);
   }
@@ -199,9 +230,12 @@ async function check(): Promise<boolean> {
     .filter((name) => name.startsWith('.env'))
     .sort();
   for (const name of envFiles) {
-    const path = join(checkout, name);
-    if (!statSync(path, { throwIfNoEntry: false })?.isFile()) continue;
-    const tokens = assignedValues(readFileSync(path, 'utf8'), 'SUPABASE_ACCESS_TOKEN');
+    const tokens = envFileValues(join(checkout, name), 'SUPABASE_ACCESS_TOKEN');
+    // A file the check cannot read may hold a token it cannot vouch for; the others are still checked.
+    if (tokens === 'failed') {
+      lines.push([`${name} readable`, 'failed']);
+      continue;
+    }
     tokens.forEach((token, index) => {
       const which = tokens.length > 1 ? ` #${index + 1}` : '';
       lines.push([`${name} SUPABASE_ACCESS_TOKEN${which} reaches DEV and not PROD`, tokenVerdict(token)]);
@@ -219,9 +253,12 @@ async function check(): Promise<boolean> {
 
   let passed = true;
   for (const [name, pending] of lines) {
-    const verdict = await pending;
+    const result = await pending;
+    const verdict = typeof result === 'string' ? result : result.verdict;
     passed &&= verdict === 'ok';
     console.log(`[agent-access] ${name}: ${verdict}`);
+    if (typeof result !== 'string' && result.verdict === 'failed')
+      console.log(`[agent-access]   reason: ${result.reason}`);
   }
   return passed;
 }

@@ -259,6 +259,8 @@ export const OUTSIDE_INVENTORY: Readonly<Record<string, string>> = {
   'prod-inspect.yml#inspect': "Reads PROD's structure with a read-only token, which only main may hold.",
   'prod-inspect.yml#auth': "Reads PROD's auth settings and copies mailer fields to DEV, when dispatched.",
   'prod-inspect.yml#report': "Reports the inspection's failure.",
+  'prod-watch.yml#watch':
+    "Watches production's deployments and error counts with its token, which only main may hold.",
 };
 
 /** One item of the inventory: a job, a kind of run, or a schedule. */

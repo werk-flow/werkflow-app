@@ -2,22 +2,24 @@
 // machine, and `bun run agent-access:check` fails on a key that reaches anything else. Every value
 // here is made up.
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import {
   STAGING_AGENT_KEY_FILE,
-  assignedValues,
   devAccessToken,
   devOnlyVerdict,
+  envFileValues,
   installStagingAgentKeys,
   keyShapeVerdict,
   privateModeVerdict,
   protectionVerdict,
+  queryErrorSqlState,
+  readOnlyModeOffOutcome,
   readStagingAgentKeys,
   sandboxVerdict,
-  writeRefusedVerdict,
+  writeRefusedOutcome,
 } from './staging-agent-keys';
 
 const MADE_UP = {
@@ -146,17 +148,40 @@ test('an install writes a private file in a private folder, and a key out of sha
   }
 });
 
-test('every assignment of a name counts, an exported one too', () => {
-  const text = [
-    `SUPABASE_ACCESS_TOKEN=${MADE_UP.SUPABASE_DEV_ACCESS_TOKEN}`,
-    '# SUPABASE_ACCESS_TOKEN=commented',
-    `export SUPABASE_ACCESS_TOKEN="sbp_${'1f'.repeat(20)}"`,
-    'OTHER=1',
-  ].join('\n');
-  expect(assignedValues(text, 'SUPABASE_ACCESS_TOKEN')).toEqual([
-    MADE_UP.SUPABASE_DEV_ACCESS_TOKEN,
-    `sbp_${'1f'.repeat(20)}`,
-  ]);
+test('every assignment of a name in an env file counts, an exported one too', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'env-file-'));
+  try {
+    const path = join(folder, '.env.local');
+    writeFileSync(
+      path,
+      [
+        `SUPABASE_ACCESS_TOKEN=${MADE_UP.SUPABASE_DEV_ACCESS_TOKEN}`,
+        '# SUPABASE_ACCESS_TOKEN=commented',
+        `export SUPABASE_ACCESS_TOKEN="sbp_${'1f'.repeat(20)}"`,
+        'OTHER=1',
+      ].join('\n'),
+    );
+    expect(envFileValues(path, 'SUPABASE_ACCESS_TOKEN')).toEqual([
+      MADE_UP.SUPABASE_DEV_ACCESS_TOKEN,
+      `sbp_${'1f'.repeat(20)}`,
+    ]);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test('an env file that cannot be read fails, and a path that is no file holds nothing', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'env-file-'));
+  try {
+    // A symlink loop fails its stat, as an unreadable file fails its read, even for root.
+    symlinkSync(join(folder, '.env.loop'), join(folder, '.env.loop'));
+    expect(envFileValues(join(folder, '.env.loop'), 'SUPABASE_ACCESS_TOKEN')).toBe('failed');
+    mkdirSync(join(folder, '.env.folder'));
+    expect(envFileValues(join(folder, '.env.folder'), 'SUPABASE_ACCESS_TOKEN')).toEqual([]);
+    expect(envFileValues(join(folder, '.env.missing'), 'SUPABASE_ACCESS_TOKEN')).toEqual([]);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });
 
 test('the reader refuses a key path that is no regular file', () => {
@@ -193,18 +218,87 @@ test('a Supabase token passes only when it reaches DEV and is refused PROD', () 
   for (const status of [429, 500, 503]) expect(devOnlyVerdict(200, status), String(status)).toBe('failed');
 });
 
-test('a write passes only when Supabase refuses it', () => {
-  // A read-only token's query runs in a read-only transaction; a token without Database access gets 403.
-  const readOnly =
-    '{"message":"Failed to run sql query: ERROR:  25006: cannot execute CREATE TABLE in a read-only transaction\\n"}';
-  expect(writeRefusedVerdict(400, readOnly)).toBe('ok');
-  expect(writeRefusedVerdict(403, '')).toBe('ok');
-  // A write that ran, a refused sign-in, another 400, or an answer that proves nothing, fails.
-  expect(writeRefusedVerdict(400, '{"message":"Failed to run sql query: ERROR:  42601: syntax error"}')).toBe(
-    'failed',
+const OK = { verdict: 'ok' } as const;
+const OFF = { enabled: false, override_enabled: false, override_active_until: '2026-01-01T00:00:00Z' };
+
+test("DEV's read-only mode is off only on 200 with both flags false", () => {
+  expect(readOnlyModeOffOutcome(200, OFF)).toEqual(OK);
+  const reason = (status: number, body: unknown) => {
+    const outcome = readOnlyModeOffOutcome(status, body);
+    return outcome.verdict === 'failed' ? outcome.reason : 'ok';
+  };
+  expect(reason(200, { ...OFF, enabled: true })).toBe("DEV's read-only state has enabled true");
+  expect(reason(200, { ...OFF, override_enabled: true })).toBe(
+    "DEV's read-only state has override_enabled true",
   );
+  expect(reason(200, { override_enabled: false })).toBe(
+    "DEV's read-only state has enabled missing or not a boolean",
+  );
+  expect(reason(200, { enabled: false, override_enabled: 'false' })).toBe(
+    "DEV's read-only state has override_enabled missing or not a boolean",
+  );
+  expect(reason(200, [OFF])).toBe("DEV's read-only state is no JSON object");
+  expect(reason(200, null)).toBe("DEV's read-only state is no JSON object");
+  // A token that may not read the mode, or an answer that proves nothing, fails without its body.
+  for (const status of [401, 403, 404, 429, 500])
+    expect(reason(status, OFF), String(status)).toBe(`DEV's read-only state answered ${status}, not 200`);
+});
+
+test('a write passes only when Supabase refuses it, and 25006 only while DEV is not read-only', () => {
+  const readOnly = readOnlyModeOffOutcome(200, { ...OFF, enabled: true });
+  const off = { before: OK, after: OK };
+  expect(writeRefusedOutcome(403, undefined, { before: readOnly, after: readOnly })).toEqual(OK);
+  // A read-only token's query runs in a read-only transaction, which refuses the write. DEV's own
+  // read-only mode answers the same to a write-capable token, so the mode must read as off.
+  expect(writeRefusedOutcome(400, '25006', off)).toEqual(OK);
+  expect(writeRefusedOutcome(400, '25006', { before: readOnly, after: readOnly })).toEqual({
+    verdict: 'failed',
+    reason: "a read-only transaction refused the write, but before it DEV's read-only state has enabled true",
+  });
+  const unreadable = readOnlyModeOffOutcome(404, undefined);
+  expect(writeRefusedOutcome(400, '25006', { before: unreadable, after: OK })).toEqual({
+    verdict: 'failed',
+    reason:
+      "a read-only transaction refused the write, but before it DEV's read-only state answered 404, not 200",
+  });
+  // Another query error, a 400 without a code, a write that ran, a refused sign-in, or an answer
+  // that proves nothing, fails.
+  expect(writeRefusedOutcome(400, '42601', off)).toEqual({
+    verdict: 'failed',
+    reason: 'the write answered 400 with SQLSTATE 42601, not 403 or 400 with SQLSTATE 25006',
+  });
+  expect(writeRefusedOutcome(400, undefined, off).verdict).toBe('failed');
   for (const status of [200, 201, 401, 404, 429, 500])
-    expect(writeRefusedVerdict(status, readOnly), String(status)).toBe('failed');
+    expect(writeRefusedOutcome(status, '25006', off).verdict, String(status)).toBe('failed');
+});
+
+test("a 25006 fails when DEV's read-only mode changes between the reads around the write", () => {
+  const readOnly = readOnlyModeOffOutcome(200, { ...OFF, enabled: true });
+  const overridden = readOnlyModeOffOutcome(200, { ...OFF, override_enabled: true });
+  // DEV was read-only for the write and left the mode before the second read, so the 25006 may be
+  // the mode's refusal of a write-capable token.
+  expect(writeRefusedOutcome(400, '25006', { before: readOnly, after: OK })).toEqual({
+    verdict: 'failed',
+    reason: "a read-only transaction refused the write, but before it DEV's read-only state has enabled true",
+  });
+  // DEV entered the mode after the first read, so the write may have met it.
+  expect(writeRefusedOutcome(400, '25006', { before: OK, after: overridden })).toEqual({
+    verdict: 'failed',
+    reason:
+      "a read-only transaction refused the write, but after it DEV's read-only state has override_enabled true",
+  });
+});
+
+test("a query error's SQLSTATE is the only part of its body read", () => {
+  const message = (text: string) => ({ message: `Failed to run sql query: ${text}\n` });
+  expect(
+    queryErrorSqlState(message('ERROR:  25006: cannot execute CREATE TABLE in a read-only transaction')),
+  ).toBe('25006');
+  expect(queryErrorSqlState(message('ERROR:  42601: syntax error at or near "creat"'))).toBe('42601');
+  // A code elsewhere in the text, or a body of another shape, names none.
+  expect(queryErrorSqlState(message('read-only transaction 25006'))).toBeUndefined();
+  expect(queryErrorSqlState({ error: 'ERROR:  25006: made up' })).toBeUndefined();
+  expect(queryErrorSqlState('ERROR:  25006: made up')).toBeUndefined();
 });
 
 test('a DEV script takes the environment token first, else the agent token from the key file', () => {
