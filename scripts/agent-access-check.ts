@@ -23,6 +23,7 @@ import {
   writeRefusedOutcome,
 } from '../lib/security/staging-agent-keys';
 import { supabaseProjectRefs } from '../lib/security/production-access';
+import { STAGING_ORIGIN } from '../lib/testing/staging/boundary';
 
 /**
  * `bun run agent-access:check` proves that this machine's agent keys reach DEV, staging and the
@@ -32,7 +33,6 @@ import { supabaseProjectRefs } from '../lib/security/production-access';
  * key has its shape, so a live Stripe key never leaves the machine.
  */
 const MANAGEMENT_API = 'https://api.supabase.com/v1';
-const STAGING_ORIGIN = 'https://werkflow-app-git-main-werkflows-projects.vercel.app';
 const TIMEOUT_MS = 20_000;
 const checkout = resolve(import.meta.dir, '..');
 const home = homedir();
