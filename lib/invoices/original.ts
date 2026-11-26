@@ -178,7 +178,12 @@ export async function issueUnderCheckedNumber<Result extends ActionResult>(
     const original = await checkedIssueOriginal(organizationId, invoice, snapshot, next);
     if (!original) return { success: false, error: 'invoice_incomplete' };
     if (Array.isArray(original)) return { success: false, error: 'invoice_check_failed', findings: original };
-    const result = await issue(next, await storeCheckedOriginal(organizationId, next.number, original));
+    const stored = await storeCheckedOriginal(
+      organizationId,
+      { invoiceNumber: next.number, cancels: invoice.cancels },
+      original,
+    );
+    const result = await issue(next, stored);
     if (attempt >= ISSUE_ATTEMPTS || !isMovedNumber(result)) return result;
   }
 }
@@ -203,9 +208,12 @@ const registeredSchema = z.object({
   contentHash: z.string().nullable(),
 });
 
-/** The file name of an invoice's original. */
-function originalFileName(invoiceNumber: string): string {
-  return `Rechnung ${invoiceNumber}.pdf`;
+/** The invoice an original is stored for: its number, and whether it is a Stornorechnung. */
+type OriginalOf = Pick<IssuedInvoice, 'invoiceNumber' | 'cancels'>;
+
+/** The file name of an invoice's original: a Stornorechnung says so. */
+function originalFileName(invoice: OriginalOf): string {
+  return `${invoice.cancels ? 'Stornorechnung' : 'Rechnung'} ${invoice.invoiceNumber}.pdf`;
 }
 
 /** An original stored under its own document id, not yet registered. */
@@ -217,14 +225,14 @@ export type StoredOriginal = {
   contentHash: string;
 };
 
-/** Stores the bytes of the original of invoice `invoiceNumber` under a new document id. */
+/** Stores the bytes of the original of `invoice` under a new document id. */
 async function storeInvoiceOriginal(
   organizationId: string,
-  invoiceNumber: string,
+  invoice: OriginalOf,
   bytes: Uint8Array,
 ): Promise<StoredOriginal> {
   const documentId = randomUUID();
-  const fileName = originalFileName(invoiceNumber);
+  const fileName = originalFileName(invoice);
   const path = buildDocumentStoragePath({ organizationId, documentId, fileName });
   await putStorageObject({ organizationId, path, body: bytes, contentType: 'application/pdf' });
   const contentHash = createHash('sha256').update(bytes).digest('hex');
@@ -234,11 +242,11 @@ async function storeInvoiceOriginal(
 /** Stores the checked original; a storage failure leaves the original pending and is logged. */
 async function storeCheckedOriginal(
   organizationId: string,
-  invoiceNumber: string,
+  invoice: OriginalOf,
   bytes: Uint8Array,
 ): Promise<StoredOriginal | null> {
   try {
-    return await storeInvoiceOriginal(organizationId, invoiceNumber, bytes);
+    return await storeInvoiceOriginal(organizationId, invoice, bytes);
   } catch (error) {
     logError('issueInvoice: original not stored', error);
     return null;
@@ -272,7 +280,7 @@ async function registerOriginal(
   invoice: IssuedInvoice,
 ): Promise<string | null> {
   const bytes = await renderOriginal(context.orgId, invoice);
-  const stored = await storeInvoiceOriginal(context.orgId, invoice.invoiceNumber, bytes);
+  const stored = await storeInvoiceOriginal(context.orgId, invoice, bytes);
   const { data, error } = await admin.rpc('register_invoice_original', {
     p_actor_id: context.userId,
     p_organization_id: context.orgId,

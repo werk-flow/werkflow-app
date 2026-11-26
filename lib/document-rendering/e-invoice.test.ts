@@ -146,7 +146,7 @@ describe('the ZUGFeRD invoice PDF', () => {
 
     const storno = await textOf((await rendered(STORNO_INVOICE)).bytes);
     expect(storno).toContain('Stornorechnung RE-2026-0003');
-    expect(storno).toContain('Storno zu Rechnung RE-2026-0002\nvom 14.11.2026');
+    expect(storno).toContain('Storno zu Rechnung RE-2026-0002 vom 14.11.2026');
     expect(storno).not.toContain('Zahlbar');
     expect(storno).not.toContain('Bankverbindung');
   });
