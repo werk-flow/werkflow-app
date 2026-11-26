@@ -715,6 +715,8 @@ declare
   conflicting_id constant uuid := '24000000-0000-0000-0000-000000000066';
   returning_id constant uuid := '24000000-0000-0000-0000-000000000067';
   buero_record_id uuid;
+  co_holder_record_id uuid;
+  transition_source text;
   configuration_id uuid;
   today constant date := (clock_timestamp() at time zone 'Europe/Berlin')::date;
   lifecycle_id uuid;
@@ -759,6 +761,10 @@ begin
     where id = rehire_id
       and (entry_date is distinct from '2020-01-01'::date or exit_date is distinct from '2025-06-30'::date)
   ) then raise exception 'withdrawn planned start kept its dates'; end if;
+  -- The state follows the restored dates: an exit date of the past is an exit.
+  if (select state from public.personnel_employment_lifecycles where employee_record_id = rehire_id)
+     is distinct from 'exited'
+    then raise exception 'withdrawn planned return kept the person planned after a past exit date'; end if;
 
   -- A date the office changed on the record after the plan stays when the plan is withdrawn.
   perform public.set_personnel_employment_transition(
@@ -853,25 +859,54 @@ begin
     organization_id, responsibility, mode, created_by, effective_from
   ) values (test_organization_id, 'time_approval', 'selected', actor_id, clock_timestamp())
   returning id into configuration_id;
+  -- The employee's access is not configured here, so they cannot approve and count as no holder.
+  select id into co_holder_record_id from public.employee_records
+  where organization_id = test_organization_id and user_id = '24000000-0000-0000-0000-000000000003';
+  if app_private.p1_24_has_effective_access(test_organization_id, '24000000-0000-0000-0000-000000000003')
+    then raise exception 'the co-holder of the last-holder case has effective access'; end if;
   insert into public.organization_responsibility_assignments (organization_id, configuration_id, employee_record_id, source)
-  values (test_organization_id, configuration_id, buero_record_id, 'direct');
+  values (test_organization_id, configuration_id, buero_record_id, 'direct'),
+         (test_organization_id, configuration_id, co_holder_record_id, 'direct');
   begin
     perform public.set_personnel_employment_transition(
       actor_id, test_organization_id, buero_record_id, 1, 'cancel_scheduled', today,
       'Rückkehr zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-00000000007e', repeat('a', 64)
     );
-    raise exception 'withdrawing a planned return left a selected group without a holder';
+    raise exception 'withdrawing a planned return left a selected group without an effective holder';
   exception when others then
     if sqlerrm not like '%last_responsibility_holder%' then raise; end if;
   end;
   if (select exit_date from public.employee_records where id = buero_record_id) is not null
     then raise exception 'a refused withdrawal restored the exit date'; end if;
+  -- With a holder who has effective access beside them, the withdrawal goes through.
+  insert into public.organization_responsibility_assignments (organization_id, configuration_id, employee_record_id, source)
+  select test_organization_id, configuration_id, id, 'direct' from public.employee_records
+  where organization_id = test_organization_id and user_id = actor_id;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, buero_record_id, 1, 'cancel_scheduled', today,
+    'Rückkehr zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-000000000083', repeat('a', 64)
+  );
+  if not exists (
+    select 1 from public.employee_records record
+    join public.personnel_employment_lifecycles lifecycle on lifecycle.employee_record_id = record.id
+    where record.id = buero_record_id and record.exit_date = '2025-06-30'::date
+      and lifecycle.state = 'exited' and lifecycle.scheduled_state is null
+  ) then raise exception 'withdrawing a planned return beside an effective holder did not restore the exit'; end if;
 
-  -- A step that acts at once refuses a future date and changes nothing.
+  -- The per-person lock comes before the current date is read, so a wait
+  -- across Berlin midnight cannot leave a due plan open to withdrawal.
+  transition_source := pg_get_functiondef(
+    'public.set_personnel_employment_transition(uuid,uuid,uuid,bigint,public.personnel_employment_transition_kind,date,text,jsonb,uuid,text)'::regprocedure);
+  if strpos(transition_source, 'today := ') = 0
+     or strpos(transition_source, 'today := ') < strpos(transition_source, ':p1-24-employment:')
+  then raise exception 'an employment transition reads the current date before the per-person lock'; end if;
+
+  -- A step that acts at once refuses a future date and changes nothing. The
+  -- date lies days ahead, so a run across Berlin midnight still sees it as future.
   foreach kind in array array['start', 'mark_inactive', 'exit', 'reactivate']::public.personnel_employment_transition_kind[] loop
     begin
       perform public.set_personnel_employment_transition(
-        actor_id, test_organization_id, immediate_id, 0, kind, today + 1,
+        actor_id, test_organization_id, immediate_id, 0, kind, today + 7,
         'Sofortiger Schritt in der Zukunft', '[]'::jsonb, gen_random_uuid(), repeat('1', 64)
       );
       raise exception 'immediate step % accepted a future date', kind;
