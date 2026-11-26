@@ -34,6 +34,7 @@ type AttentionWorkTask = Extract<
       | 'work_handover_review';
   }
 >;
+type AttentionMaintenanceDueTask = Extract<AttentionTask, { sourceType: 'maintenance_due' }>;
 type AttentionClientTask = Extract<
   AttentionTask,
   { sourceType: 'client_follow_up' | 'client_request_open' | 'client_request_callback_overdue' }
@@ -119,22 +120,25 @@ export function TaskRow({ task }: { task: AttentionTask }) {
         </TaskLink>
       );
     // The Wartung workspace, searched for the item's plan, creates the visit or records an exception.
-    case 'maintenance_due': {
-      const due = `${task.overdue ? 'fällig seit' : 'fällig am'} ${formatGermanDate(task.dueDate)}`;
-      return (
-        <TaskLink
-          href={task.href}
-          ariaLabel={`Wartung ${task.equipmentLabel} öffnen, ${due}`}
-          sourceId={task.sourceId}
-        >
-          <p className="truncate text-sm font-medium">{task.equipmentLabel}</p>
-          <p className="text-xs text-muted-foreground tabular-nums">
-            {task.siteName ? `${task.siteName} · ${due}` : due}
-          </p>
-        </TaskLink>
-      );
-    }
+    case 'maintenance_due':
+      return <MaintenanceDueTaskRow task={task} />;
   }
+}
+
+function MaintenanceDueTaskRow({ task }: { task: AttentionMaintenanceDueTask }) {
+  const due = `${task.overdue ? 'fällig seit' : 'fällig am'} ${formatGermanDate(task.dueDate)}`;
+  return (
+    <TaskLink
+      href={task.href}
+      ariaLabel={`Wartung ${task.equipmentLabel} öffnen, ${due}`}
+      sourceId={task.sourceId}
+    >
+      <p className="truncate text-sm font-medium">{task.equipmentLabel}</p>
+      <p className="text-xs text-muted-foreground tabular-nums">
+        {task.siteName ? `${task.siteName} · ${due}` : due}
+      </p>
+    </TaskLink>
+  );
 }
 
 function AttentionApprovalTaskRow({ task }: { task: AttentionApprovalTask }) {

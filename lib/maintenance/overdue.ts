@@ -15,7 +15,7 @@ export function isMaintenanceDueOverdue(
 }
 
 /** How many Berlin days ahead of its due date an open due item reaches Aufgaben. */
-export const MAINTENANCE_DUE_LEAD_DAYS = 14;
+const MAINTENANCE_DUE_LEAD_DAYS = 14;
 
 /**
  * An open due item, one without a visit job, belongs in Aufgaben while it is

@@ -31,7 +31,7 @@ export const dueMaintenanceSetSchema = z.object({
 export type DueMaintenanceRow = z.infer<typeof dueMaintenanceRowSchema>;
 
 /** The due items that belong in Aufgaben on the Berlin day `today`, in the set's order: earliest due first. */
-export function toMaintenanceDueTasks(rows: readonly DueMaintenanceRow[], today: string): AttentionTask[] {
+function toMaintenanceDueTasks(rows: readonly DueMaintenanceRow[], today: string): AttentionTask[] {
   return rows
     .filter((row) => isMaintenanceDueForAufgaben({ dueDate: row.due_date, status: 'open' }, today))
     .map(
