@@ -129,4 +129,40 @@ test('a content save marks a Titel without a name, then sends the whole content 
   await expect(editor.getByText(/Jemand hat die Positionen gerade geändert/)).toBeVisible();
   await expect(title).toHaveValue('Wartung');
   await expect(save).toBeEnabled();
+  // The newer content may not have reached the tab: the page reads again, so „Neu laden“ can appear.
+  expect(await page.evaluate(() => window.uiContractOfferRefreshes)).toBe(1);
+});
+
+// A save confirms only once the page renders the saved content, whether that
+// render lands before or after the answer; the editor then shows the content
+// as stored and names its version on the next save.
+test('a content save confirms with the rendered content, before or after its answer', async ({ page }) => {
+  await openContractFixture(page, 'offers');
+  const editor = page.getByRole('form', { name: 'Titel und Positionen' });
+  const save = editor.getByRole('button', { name: 'Speichern', exact: true });
+  await editor.getByRole('button', { name: 'Titel hinzufügen', exact: true }).click();
+  const title = editor.getByRole('textbox', { name: 'Titel 1' });
+
+  await title.fill('Wartung');
+  await save.click();
+  await expectHeldWrite(page, 'save-offer-content');
+  await page.evaluate(() => window.uiContractOfferContentRender?.(2, [{ title: 'Wartung', positions: [] }]));
+  await answerHeldWrite(page, null);
+  await expect(visibleText(page, 'Positionen gespeichert.', true)).toBeVisible();
+  await expect(editor.getByText(/inzwischen geändert/)).toHaveCount(0);
+
+  await title.fill('Wartung Heizung');
+  await save.click();
+  await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
+  expect(await page.evaluate(() => window.uiContractWrites.calls[1]?.input)).toMatchObject({
+    expectedContentVersion: 2,
+  });
+  await answerHeldWrite(page, null);
+  await expect(save).toHaveAttribute('aria-busy', 'true');
+  await page.evaluate(() =>
+    window.uiContractOfferContentRender?.(3, [{ title: 'Wartung Heizung', positions: [] }]),
+  );
+  await expect(save).not.toHaveAttribute('aria-busy', 'true');
+  await expect(title).toHaveValue('Wartung Heizung');
+  await expect(editor.getByText(/inzwischen geändert/)).toHaveCount(0);
 });

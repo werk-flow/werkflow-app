@@ -5,16 +5,18 @@ import { OfferContentEditor } from '@/components/angebote/editor/offer-content-e
 import { EditOfferHeaderButton } from '@/components/angebote/offer-header-dialog';
 import { BannerProvider } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
-import type { OfferDetail } from '@/lib/offers/types';
+import type { OfferDetail, OfferSection } from '@/lib/offers/types';
 
 // „Angebot anlegen“: a press without title or customer marks both fields,
 // focuses the first and sends nothing. „Angebotskopf bearbeiten“ of a draft
 // offer saves against the version it opened with; the spec renders a newer
 // version of the page as a refresh would. The content editor of the same
-// draft starts without Titel.
+// draft starts without Titel; the spec renders its saved content as the
+// save's revalidated page would.
 declare global {
   interface Window {
     uiContractOfferServerRender: ((version: number) => void) | null;
+    uiContractOfferContentRender: ((contentVersion: number, sections: OfferSection[]) => void) | null;
   }
 }
 
@@ -45,8 +47,11 @@ const OFFER: OfferDetail = {
 export function OffersContractFixture(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [version, setVersion] = useState(1);
+  const [content, setContent] = useState({ contentVersion: 1, sections: OFFER.sections });
   useEffect(() => {
     window.uiContractOfferServerRender = setVersion;
+    window.uiContractOfferContentRender = (contentVersion, sections) =>
+      setContent({ contentVersion, sections });
   }, []);
   return (
     <BannerProvider>
@@ -58,7 +63,7 @@ export function OffersContractFixture(): React.JSX.Element {
           offer={{ ...OFFER, version }}
           owners={[{ userId: '93000000-0000-4000-8000-000000000001', name: 'Erika Musterfrau' }]}
         />
-        <OfferContentEditor offer={{ ...OFFER, version }} />
+        <OfferContentEditor offer={{ ...OFFER, version, ...content }} />
       </main>
     </BannerProvider>
   );

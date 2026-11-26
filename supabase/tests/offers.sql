@@ -496,8 +496,9 @@ begin
     end if;
   end loop;
   if has_table_privilege('service_role', 'public.offer_positions', 'UPDATE')
+    or has_table_privilege('service_role', 'public.offer_positions', 'DELETE')
     or has_table_privilege('service_role', 'public.offer_sections', 'UPDATE') then
-    raise exception 'service_role can update offer content outside the save';
+    raise exception 'service_role can change offer positions outside the save';
   end if;
   if not (select relrowsecurity from pg_class where oid = 'public.offer_sections'::regclass)
     or not (select relrowsecurity from pg_class where oid = 'public.offer_positions'::regclass) then

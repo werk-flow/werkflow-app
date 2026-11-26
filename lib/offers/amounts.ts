@@ -44,38 +44,38 @@ type OfferContentArgument = {
 /**
  * The content as `save_offer_content` stores it: each priced position with its
  * unit's short label and its amount, each Titel with its subtotal, and the
- * totals. Null for a position the line rule refuses.
+ * totals. Null for a position the line rule refuses, and for an amount the
+ * computation did not answer: nothing stores a guessed zero.
  */
 export function offerContentArgument(sections: readonly OfferSection[]): OfferContentArgument | null {
-  let amounts: OfferAmounts;
   try {
-    amounts = offerAmounts(sections);
+    const amounts = offerAmounts(sections);
+    return {
+      sections: sections.map((section, sectionIndex) => {
+        const computed = amounts.sections[sectionIndex];
+        if (!computed) throw new RangeError('A Titel has no computed subtotal.');
+        return {
+          title: section.title,
+          netCents: computed.netCents,
+          positions: section.positions.map((position, positionIndex) => {
+            if (position.kind === 'text') return position;
+            const amountCents = computed.positionCents[positionIndex];
+            if (amountCents === null || amountCents === undefined) {
+              throw new RangeError('A priced position has no computed amount.');
+            }
+            const unit = INVENTORY_UNITS.find((candidate) => candidate.code === position.unit);
+            return { ...position, unitLabel: unit?.shortLabel ?? position.unit, amountCents };
+          }),
+        };
+      }),
+      totals: {
+        netCents: amounts.totals.lineNetCents,
+        taxCents: amounts.totals.taxCents,
+        grossCents: amounts.totals.grossCents,
+      },
+    };
   } catch (error) {
     if (error instanceof RangeError) return null;
     throw error;
   }
-  return {
-    sections: sections.map((section, sectionIndex) => {
-      const computed = amounts.sections[sectionIndex];
-      return {
-        title: section.title,
-        netCents: computed?.netCents ?? 0,
-        positions: section.positions.map((position, positionIndex) =>
-          position.kind === 'text'
-            ? position
-            : {
-                ...position,
-                unitLabel:
-                  INVENTORY_UNITS.find((unit) => unit.code === position.unit)?.shortLabel ?? position.unit,
-                amountCents: computed?.positionCents[positionIndex] ?? 0,
-              },
-        ),
-      };
-    }),
-    totals: {
-      netCents: amounts.totals.lineNetCents,
-      taxCents: amounts.totals.taxCents,
-      grossCents: amounts.totals.grossCents,
-    },
-  };
 }

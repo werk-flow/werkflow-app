@@ -97,7 +97,8 @@ create index offer_positions_organization_id_fk_idx on public.offer_positions (o
 
 alter table public.offer_positions enable row level security;
 revoke all on table public.offer_positions from public, anon, authenticated, service_role;
-grant select, insert, delete on table public.offer_positions to service_role;
+-- No delete: a position goes only with its Titel, whose delete cascades in the save.
+grant select, insert on table public.offer_positions to service_role;
 
 -- 2. The totals and the content version. Office sessions select offers to
 -- hear of a change; the totals are sale amounts, which Admin and Büro see.
