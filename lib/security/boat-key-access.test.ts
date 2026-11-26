@@ -2,7 +2,7 @@
 // CLI's config; only the process that calls Boat reads the key.
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -352,6 +352,23 @@ test('a read of .env.live-backup in any checkout is refused and names the produc
   expect(tool('Grep', { pattern: 'KEY', path: '.env.live-backup' })).toContain('PROD keys');
 });
 
+test('an option value or an -e pattern never counts as the folder a recursive grep searches', () => {
+  // Each reads the checkout it runs in: a value word or a pattern is no folder operand.
+  for (const command of [
+    'grep -r -A 3 KEY',
+    'grep -rn -m 5 KEY',
+    'grep -r --exclude-dir node_modules KEY',
+    'grep -d recurse KEY',
+    'grep -r -e A -e B',
+    'grep -r -f patterns.txt',
+    'grep -r --regexp=KEY',
+  ])
+    expect(refusedInCheckout(command), command).toContain('PROD keys');
+  // A path beside the pattern, after `-e` or after `--`, stays the only folder read.
+  for (const command of ['grep -rn KEY lib/', 'grep -r -e KEY lib/', 'grep -r -- -KEY lib/'])
+    expect(refusedInCheckout(command), command).toBeUndefined();
+});
+
 test('ordinary work in a checkout that holds .env.live-backup passes', () => {
   for (const command of [
     'grep -rn boatKeyCommandRefusal lib/',
@@ -396,6 +413,9 @@ test('the disk reader finds .env.live-backup anywhere in the tree it reads', () 
     expect(liveBackupsOnDisk(join(root, 'missing'), Infinity)).toEqual([]);
     expect(liveBackupsOnDisk(join(outer, '.git'), Infinity)).toEqual([]);
     expect(liveBackupsOnDisk(join(outer, '.git', 'below'), Infinity)).toEqual([]);
+    // A folder that fails to list for another reason, here a symlink loop, cannot be told.
+    symlinkSync(join(root, 'loop'), join(root, 'loop'));
+    expect(liveBackupsOnDisk(join(root, 'loop'), Infinity)).toBeUndefined();
     // A tree larger than the walk's bound cannot be told.
     for (let index = 0; index <= 4000; index++)
       mkdirSync(join(root, 'wide', String(index)), { recursive: true });

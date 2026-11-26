@@ -19,7 +19,7 @@ import {
   sandboxVerdict,
   writeRefusedVerdict,
 } from '../lib/security/staging-agent-keys';
-import { DEV_PROJECT_REF } from '../lib/testing/local-stack/dev-migration-history';
+import { supabaseProjectRefs } from '../lib/security/production-access';
 
 /**
  * `bun run agent-access:check` proves that this machine's agent keys reach DEV, staging and the
@@ -33,6 +33,8 @@ const STAGING_ORIGIN = 'https://werkflow-app-git-main-werkflows-projects.vercel.
 const TIMEOUT_MS = 20_000;
 const checkout = resolve(import.meta.dir, '..');
 const home = homedir();
+/** Both refs come from the environments doc, so PROD's never enters code. */
+const refs = supabaseProjectRefs(checkout);
 
 async function request(url: string, init: RequestInit = {}): Promise<Response> {
   return fetch(url, { redirect: 'manual', ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
@@ -53,13 +55,19 @@ async function probe(check: () => Promise<Verdict>): Promise<Verdict> {
   }
 }
 
+/** Whether the token reaches DEV's project and is refused PROD's; neither body is read. */
 async function devOnly(token: string): Promise<Verdict> {
+  if (!refs) return 'failed';
   return probe(async () => {
-    const response = await request(`${MANAGEMENT_API}/projects`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!response.ok) return statusVerdict(response, () => 'failed');
-    return devOnlyVerdict(await response.json());
+    const status = async (ref: string) => {
+      const response = await request(`${MANAGEMENT_API}/projects/${ref}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await response.body?.cancel();
+      return response.status;
+    };
+    const [dev, production] = await Promise.all([status(refs.dev), status(refs.production)]);
+    return devOnlyVerdict(dev, production);
   });
 }
 
@@ -68,9 +76,10 @@ async function devOnly(token: string): Promise<Verdict> {
  * it ran, and Supabase denies it (403) to a token without Database write.
  */
 async function writeRefused(token: string): Promise<Verdict> {
+  if (!refs) return 'failed';
   return probe(async () =>
     statusVerdict(
-      await request(`${MANAGEMENT_API}/projects/${DEV_PROJECT_REF}/database/query`, {
+      await request(`${MANAGEMENT_API}/projects/${refs.dev}/database/query`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: 'create temporary table agent_access_write_probe (id int)' }),
@@ -82,9 +91,10 @@ async function writeRefused(token: string): Promise<Verdict> {
 
 /** One row of DEV's Auth users; the body holds personal data, so only the status counts. */
 async function readsDevAuth(secretKey: string): Promise<Verdict> {
+  if (!refs) return 'failed';
   return probe(async () =>
     statusVerdict(
-      await request(`https://${DEV_PROJECT_REF}.supabase.co/auth/v1/admin/users?page=1&per_page=1`, {
+      await request(`https://${refs.dev}.supabase.co/auth/v1/admin/users?page=1&per_page=1`, {
         headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}` },
       }),
       (status) => (status === 200 ? 'ok' : 'failed'),
@@ -158,7 +168,10 @@ async function check(): Promise<boolean> {
     const value = keys?.file === 'present' ? keys.values.get(name) : undefined;
     return value === undefined ? verdictOf(name) : check(value);
   }
-  lines.push(['SUPABASE_DEV_ACCESS_TOKEN sees DEV only', withKey('SUPABASE_DEV_ACCESS_TOKEN', devOnly)]);
+  lines.push([
+    'SUPABASE_DEV_ACCESS_TOKEN reaches DEV and not PROD',
+    withKey('SUPABASE_DEV_ACCESS_TOKEN', devOnly),
+  ]);
   lines.push([
     'SUPABASE_DEV_ACCESS_TOKEN is refused a write',
     withKey('SUPABASE_DEV_ACCESS_TOKEN', writeRefused),
@@ -171,7 +184,7 @@ async function check(): Promise<boolean> {
     withKey('VERCEL_STAGING_BYPASS_SECRET', (bypass) => staging(bypass)),
   ]);
 
-  // Every Supabase token this checkout's env files hold sees DEV only. A value without a token's
+  // Every Supabase token this checkout's env files hold reaches DEV and not PROD. A value without a token's
   // shape fails unsent, so another provider's key never reaches Supabase.
   const tokenVerdicts = new Map<string, Promise<Verdict>>();
   const tokenVerdict = (token: string): Verdict | Promise<Verdict> => {
@@ -191,7 +204,7 @@ async function check(): Promise<boolean> {
     const tokens = assignedValues(readFileSync(path, 'utf8'), 'SUPABASE_ACCESS_TOKEN');
     tokens.forEach((token, index) => {
       const which = tokens.length > 1 ? ` #${index + 1}` : '';
-      lines.push([`${name} SUPABASE_ACCESS_TOKEN${which} sees DEV only`, tokenVerdict(token)]);
+      lines.push([`${name} SUPABASE_ACCESS_TOKEN${which} reaches DEV and not PROD`, tokenVerdict(token)]);
     });
   }
 

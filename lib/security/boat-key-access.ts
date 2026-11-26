@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { type Dirent, readdirSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { type ShellWord, SCRIPT_FLAG, SHELLS, program, readShell } from './shell-words';
@@ -253,7 +253,7 @@ type Context = {
   home: string;
   /**
    * The `.env.live-backup` files in a folder and the folders below it, at most `depth` levels down;
-   * undefined when the tree is too large to tell. The disk for the hook, a list in tests.
+   * undefined when the guard cannot tell. The disk for the hook, a list in tests.
    */
   liveBackupsUnder: (folder: string, depth: number) => readonly string[] | undefined;
 };
@@ -266,26 +266,24 @@ const MAX_WALKED = 4000;
 /** A missing path, a path through a file, or one the user cannot reach: nothing a reader would read. */
 const UNREACHABLE = new Set(['ENOENT', 'ENOTDIR', 'EACCES']);
 
-/** Runs a filesystem step, answering `fallback` when its path is unreachable. */
-function reachable<T>(step: () => T, fallback: T): T {
-  try {
-    return step();
-  } catch (error) {
-    if (UNREACHABLE.has(String(errorCode(error)))) return fallback;
-    throw error;
-  }
-}
-
 /**
  * The `.env.live-backup` files in `folder` and the folders below it, at most `depth` levels down,
- * nested checkouts included, or undefined past MAX_WALKED folders. A file operand holds none.
+ * nested checkouts included. A file operand or an unreachable path holds none. Undefined past
+ * MAX_WALKED folders, or when a folder fails to list for another reason, such as a symlink loop or
+ * an I/O error: the guard then cannot tell, and refuses.
  */
 export function liveBackupsOnDisk(folder: string, depth: number): string[] | undefined {
   const found: string[] = [];
   const queue = [{ dir: folder, level: 0 }];
   for (const { dir, level } of queue) {
     if (queue.length > MAX_WALKED) return undefined;
-    const entries = reachable(() => readdirSync(dir, { withFileTypes: true }), []);
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+      if (UNREACHABLE.has(String(errorCode(error)))) continue;
+      return undefined;
+    }
     if (entries.some((entry) => entry.name === LIVE_BACKUP)) found.push(join(dir, LIVE_BACKUP));
     if (level >= depth) continue;
     for (const entry of entries)
@@ -335,12 +333,35 @@ function globReaches(pattern: string, target: string): boolean {
 }
 
 /**
- * Whether a recursive reader reads a folder it is given no operand for: a search tool given at
- * most its pattern, or a `find` whose first word is an expression. Copy tools read only operands.
+ * Whether a search tool surely names a path to search beside its pattern. An option that may take
+ * a value (`-A 3`, `--exclude-dir x`, `-d recurse`) hides which word is a path, so it names none.
+ */
+function searchNamesPath(name: string, args: readonly ShellWord[]): boolean {
+  let pattern = false;
+  let operands = 0;
+  for (let index = 0; index < args.length; index++) {
+    const text = args[index]?.text ?? '';
+    if (text === '--') {
+      operands += args.length - index - 1;
+      break;
+    }
+    if (['-e', '--regexp', '-f', '--file'].includes(text)) {
+      pattern = true;
+      index++;
+    } else if (/^--(?:regexp|file)=/.test(text)) pattern = true;
+    else if (!text.startsWith('-')) operands++;
+    else if (!valueless(name, text)) return false;
+  }
+  return operands > (pattern ? 0 : 1);
+}
+
+/**
+ * Whether a recursive reader reads a folder it is given no operand for: a search tool that names
+ * no path beside its pattern, or a `find` whose first word is an expression. Copy tools read only
+ * operands.
  */
 function readsWorkingFolder(name: string, args: readonly ShellWord[]): boolean {
-  const operands = args.filter((arg) => !arg.text.startsWith('-'));
-  if (SEARCHERS.has(name)) return operands.length <= 1;
+  if (SEARCHERS.has(name)) return !searchNamesPath(name, args);
   const first = args[0]?.text;
   return name === 'find' && (first === undefined || /^[-(!]/.test(first));
 }
@@ -544,12 +565,12 @@ function lineRefusal(
   return merged([...refusals, ...untold]);
 }
 
-/** The live backups `folder` holds as guarded files; a tree too large to tell adds a refusal to `untold`. */
+/** The live backups `folder` holds as guarded files; a tree the guard cannot tell adds a refusal to `untold`. */
 function liveBackupFiles(context: Context, folder: string, depth: number, untold: Refusal[]): SecretFile[] {
   const found = context.liveBackupsUnder(folder, depth);
   if (!found)
     untold.push({
-      why: `the guard cannot tell whether ${folder} holds .env.live-backup: the tree is too large.`,
+      why: `the guard cannot tell whether ${folder} holds .env.live-backup: the tree is too large or fails to list.`,
       secrets: [LIVE_BACKUP_SECRET],
     });
   return (found ?? []).map((path) => ({ path, secret: LIVE_BACKUP_SECRET }));

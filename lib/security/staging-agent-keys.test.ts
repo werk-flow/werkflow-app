@@ -16,11 +16,8 @@ import {
   protectionVerdict,
   readStagingAgentKeys,
   sandboxVerdict,
-  stagingAgentKeysFrom,
-  withStagingAgentKeys,
   writeRefusedVerdict,
 } from './staging-agent-keys';
-import { DEV_PROJECT_REF } from '../testing/local-stack/dev-migration-history';
 
 const MADE_UP = {
   SUPABASE_DEV_ACCESS_TOKEN: `sbp_${'0a'.repeat(20)}`,
@@ -55,23 +52,37 @@ test('each key has its shape, and a live or account-wide key does not', () => {
   expect(keyShapeVerdict('STRIPE_SANDBOX_KEY', undefined)).toBe('missing');
 });
 
+/** Runs `check` with a made-up home whose key file holds `text`, then removes the home. */
+function withKeyFile(text: string, check: (home: string, path: string) => void): void {
+  const home = mkdtempSync(join(tmpdir(), 'agent-keys-'));
+  try {
+    const path = join(home, STAGING_AGENT_KEY_FILE);
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    writeFileSync(path, text, { mode: 0o600 });
+    check(home, path);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
 test('the reader returns only keys in shape, so a malformed or live key is never sent', () => {
-  const keys = stagingAgentKeysFrom(
-    `${fileText({ ...MADE_UP, STRIPE_SANDBOX_KEY: `rk_live_${'Ab1'.repeat(10)}` })}\nOTHER=1\n# VERCEL_STAGING_BYPASS_SECRET=commented`,
-  );
-  if (keys.file !== 'present') throw new Error('The file text was not read.');
-  expect(keys.verdicts).toEqual({
-    SUPABASE_DEV_ACCESS_TOKEN: 'ok',
-    SUPABASE_DEV_SECRET_KEY: 'ok',
-    STRIPE_SANDBOX_KEY: 'failed',
-    VERCEL_STAGING_BYPASS_SECRET: 'ok',
+  const text = `${fileText({ ...MADE_UP, STRIPE_SANDBOX_KEY: `rk_live_${'Ab1'.repeat(10)}` })}\nOTHER=1\n# VERCEL_STAGING_BYPASS_SECRET=commented`;
+  withKeyFile(text, (home) => {
+    const keys = readStagingAgentKeys(home);
+    if (keys.file !== 'present') throw new Error('The key file was not read.');
+    expect(keys.verdicts).toEqual({
+      SUPABASE_DEV_ACCESS_TOKEN: 'ok',
+      SUPABASE_DEV_SECRET_KEY: 'ok',
+      STRIPE_SANDBOX_KEY: 'failed',
+      VERCEL_STAGING_BYPASS_SECRET: 'ok',
+    });
+    expect([...keys.values.keys()].sort()).toEqual([
+      'SUPABASE_DEV_ACCESS_TOKEN',
+      'SUPABASE_DEV_SECRET_KEY',
+      'VERCEL_STAGING_BYPASS_SECRET',
+    ]);
+    expect(keys.values.get('SUPABASE_DEV_ACCESS_TOKEN')).toBe(MADE_UP.SUPABASE_DEV_ACCESS_TOKEN);
   });
-  expect([...keys.values.keys()].sort()).toEqual([
-    'SUPABASE_DEV_ACCESS_TOKEN',
-    'SUPABASE_DEV_SECRET_KEY',
-    'VERCEL_STAGING_BYPASS_SECRET',
-  ]);
-  expect(keys.values.get('SUPABASE_DEV_ACCESS_TOKEN')).toBe(MADE_UP.SUPABASE_DEV_ACCESS_TOKEN);
 });
 
 test('the reader reports a machine without the key file as missing and reads one with it', () => {
@@ -94,12 +105,12 @@ test('the reader reports a machine without the key file as missing and reads one
 
 test('an install sets each key on one line and keeps the rest of the file', () => {
   const text = `# agent keys\nSUPABASE_DEV_SECRET_KEY=sb_secret_OldMadeUpValue_0123456789\nOTHER=1\n\n`;
-  expect(
-    withStagingAgentKeys(text, new Map([['SUPABASE_DEV_SECRET_KEY', MADE_UP.SUPABASE_DEV_SECRET_KEY]])),
-  ).toBe(`# agent keys\nOTHER=1\nSUPABASE_DEV_SECRET_KEY=${MADE_UP.SUPABASE_DEV_SECRET_KEY}\n`);
-  expect(withStagingAgentKeys('', new Map([['STRIPE_SANDBOX_KEY', MADE_UP.STRIPE_SANDBOX_KEY]]))).toBe(
-    `STRIPE_SANDBOX_KEY=${MADE_UP.STRIPE_SANDBOX_KEY}\n`,
-  );
+  withKeyFile(text, (home, path) => {
+    installStagingAgentKeys(new Map([['SUPABASE_DEV_SECRET_KEY', MADE_UP.SUPABASE_DEV_SECRET_KEY]]), home);
+    expect(readFileSync(path, 'utf8')).toBe(
+      `# agent keys\nOTHER=1\nSUPABASE_DEV_SECRET_KEY=${MADE_UP.SUPABASE_DEV_SECRET_KEY}\n`,
+    );
+  });
 });
 
 test('an install writes a private file in a private folder, and a key out of shape writes nothing', () => {
@@ -172,14 +183,13 @@ test('a key file is a regular file with mode 600, its folder a folder with mode 
   expect(privateModeVerdict(file(0o700), 'folder')).toBe('failed');
 });
 
-test('a Supabase token passes only when it sees DEV and no other project', () => {
-  expect(devOnlyVerdict([{ ref: DEV_PROJECT_REF, name: 'WerkFlow App Dev' }])).toBe('ok');
-  expect(devOnlyVerdict([{ id: DEV_PROJECT_REF }])).toBe('ok');
-  // An account-wide token sees PROD beside DEV; a token for another project sees no DEV.
-  expect(devOnlyVerdict([{ ref: DEV_PROJECT_REF }, { ref: 'madeupotherprojectref' }])).toBe('failed');
-  expect(devOnlyVerdict([{ ref: 'madeupotherprojectref' }])).toBe('failed');
-  expect(devOnlyVerdict([])).toBe('failed');
-  expect(devOnlyVerdict({ message: 'Unauthorized' })).toBe('failed');
+test('a Supabase token passes only when it reaches DEV and is refused PROD', () => {
+  for (const refused of [401, 403, 404]) expect(devOnlyVerdict(200, refused), String(refused)).toBe('ok');
+  // An account-wide token sees PROD; a token for another project does not reach DEV.
+  expect(devOnlyVerdict(200, 200)).toBe('failed');
+  for (const status of [401, 403, 404]) expect(devOnlyVerdict(status, 404), String(status)).toBe('failed');
+  // An answer that proves nothing about PROD fails.
+  for (const status of [429, 500, 503]) expect(devOnlyVerdict(200, status), String(status)).toBe('failed');
 });
 
 test('a write passes only when Supabase refuses it', () => {

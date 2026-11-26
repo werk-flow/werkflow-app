@@ -35,10 +35,15 @@ const context = {
   home: homedir(),
   liveBackupsUnder: liveBackupsOnDisk,
 };
-const command = shellCommand(toolCall);
-const reason = command
-  ? boatKeyCommandRefusal(command, { ...context, cwd: shellFolder(toolInput, context) })
-  : boatKeyToolRefusal(toolCall, context);
+let reason: string | undefined;
+try {
+  const command = shellCommand(toolCall);
+  reason = command
+    ? boatKeyCommandRefusal(command, { ...context, cwd: shellFolder(toolInput, context) })
+    : boatKeyToolRefusal(toolCall, context);
+} catch {
+  reason = 'Refused: the Boat key guard failed while it read the call, so it cannot rule out a read of the key.';
+}
 if (reason) {
   console.error(reason);
   process.exit(2);

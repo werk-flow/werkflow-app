@@ -5,7 +5,6 @@ import { z } from 'zod';
 
 import { parseEnvironmentFile } from '../testing/evidence/proof-environment';
 import { errorCode } from '../testing/runner/error-code';
-import { DEV_PROJECT_REF } from '../testing/local-stack/dev-migration-history';
 
 // The one owner of the keys agents hold for DEV, staging and the Stripe sandbox
 // (docs/technical/machine-setup.md, "Agent keys"). Each machine keeps its own
@@ -63,7 +62,7 @@ export type StagingAgentKeys =
     };
 
 /** Parses the key file's text; a value out of shape is left out, so no caller sends it anywhere. */
-export function stagingAgentKeysFrom(text: string): StagingAgentKeys {
+function stagingAgentKeysFrom(text: string): StagingAgentKeys {
   const assignments = parseEnvironmentFile(text);
   const values = new Map<StagingAgentKeyName, string>();
   const verdict = (name: StagingAgentKeyName): Verdict => {
@@ -109,7 +108,7 @@ export function isStagingAgentKeyName(name: string): name is StagingAgentKeyName
 }
 
 /** The key file's text with each of `keys` on one line of its own; every other line stays. */
-export function withStagingAgentKeys(text: string, keys: ReadonlyMap<StagingAgentKeyName, string>): string {
+function withStagingAgentKeys(text: string, keys: ReadonlyMap<StagingAgentKeyName, string>): string {
   const kept = text.split(/\r?\n/).filter((line) => {
     const name = /^\s*([A-Za-z_]\w*)\s*=/.exec(line)?.[1];
     return !(name !== undefined && isStagingAgentKeyName(name) && keys.has(name));
@@ -148,14 +147,14 @@ export function privateModeVerdict(stat: PathStat, kind: 'file' | 'folder'): Ver
   return typed && (stat.mode & 0o777) === (kind === 'file' ? 0o600 : 0o700) ? 'ok' : 'failed';
 }
 
-const projectListSchema = z.array(z.object({ ref: z.string().optional(), id: z.string().optional() }));
-
-/** Whether a Management API project list (`GET /v1/projects`) holds DEV and nothing else. */
-export function devOnlyVerdict(body: unknown): Verdict {
-  const parsed = projectListSchema.safeParse(body);
-  if (!parsed.success) return 'failed';
-  const refs = parsed.data.map((project) => project.ref ?? project.id);
-  return refs.length === 1 && refs[0] === DEV_PROJECT_REF ? 'ok' : 'failed';
+/**
+ * Whether a Supabase token reaches DEV and not PROD, from `GET /v1/projects/{ref}` for each: a
+ * project-scoped token can make both calls, unlike the account-wide project list. DEV must answer
+ * 200, PROD a refusal (401, 403 or 404). An account-wide token sees PROD and fails; an answer that
+ * proves nothing (a rate limit, a server error) fails too.
+ */
+export function devOnlyVerdict(devStatus: number, productionStatus: number): Verdict {
+  return devStatus === 200 && [401, 403, 404].includes(productionStatus) ? 'ok' : 'failed';
 }
 
 /**

@@ -46,11 +46,11 @@ Start the key with the owning organization id and go through `lib/storage/r2.ts`
 
 ### Log a failure
 
-Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`; it keeps only the error's name, code and status. Keep the label free of recipients, codes, links, row values and provider bodies. Wrong turn: `console.error(error)`: a provider message can quote row values.
+Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`, which keeps only its name, code and status. Keep the label free of recipients, codes, links, row values and provider bodies. Wrong turn: `console.error(error)`: a provider message can quote row values.
 
 ### Profile a customer export
 
-A customer's export stays on the owner's machine, in no repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds personal data. The owner reads `profile.md` before sharing. Only the profile reaches an agent; fixtures derive from it. Wrong turn: opening an export row to "check one field".
+A customer's export stays on the owner's machine, in no repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only profile and refuses when its self-check finds personal data. The owner reads it before sharing. Only the profile reaches an agent; fixtures derive from it. Wrong turn: opening an export row to "check one field".
 
 ## Trust boundaries
 
@@ -105,7 +105,7 @@ A reader cached across requests throws `CachedReadError` on a failed read, so th
 
 ### Supply chain
 
-Every plan carries an advisory check under 24 hours old. An unknown finding fails, as does an exception that is expired, outgrown or on a changed dependency tree, matching or not. An exception in `lib/security/dependency-exceptions.json` names its path, reason, digest and expiry. A workflow pins each outside action to a commit SHA and its release.
+Every plan carries an advisory check under 24 hours old. An unknown finding fails, as does an exception that is expired, outgrown or on a changed dependency tree, matching or not. A workflow pins each outside action to a commit SHA and its release.
 
 On an unchanged tree, an exception matching no finding passes with a note: remove it.
 
@@ -124,8 +124,8 @@ On an unchanged tree, an exception matching no finding passes with a note: remov
 - Write to PROD outside the `release` workflow.
 - Pass a secret as a program argument in a script: other local users read it in `/proc` (`curl-headers.sh`).
 - Read PROD data in an agent session: results reach the model provider ([which tool reaches what](environments.md#which-tool-reaches-what)).
-- Keep an account-wide token or a PROD key where agents read: they hold only [agent keys](machine-setup.md#agent-keys).
-- Start a sign-in or run the Vercel CLI as an agent: the owner cannot tell who asked, and the token reaches PROD (`refuse-account-sign-in.ts`). Sign-ins are owner steps: numbered steps (machine, window, command, what the owner sees) under "Owner queue" on your epic or issue, then the question tool; keep working.
+- Keep an account-wide token or a PROD key where agents read, except `.env.live-backup` in the owner's [production session](environments.md#work-on-production): agents hold only [agent keys](machine-setup.md#agent-keys).
+- Start a sign-in or run the Vercel CLI as an agent: the owner cannot tell who asked, and the token reaches PROD (`refuse-account-sign-in.ts`). Sign-ins are numbered owner steps (machine, window, command, what the owner sees) under "Owner queue", then the question tool.
 
 ## Verify your work
 
@@ -146,9 +146,10 @@ List each owner-accepted residual exposure until it closes.
 - The `health` edge function has no rate limit; a constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time; `P1-33` owns offboarding and asset return.
 - Organization deletion removes stored files after the rows; a file whose delete fails or cannot be rechecked stays under its prefix, logged, unreachable through the app.
-- Dev tools' minimatch (GHSA-g3hv-75wg-m249) and picomatch (GHSA-fc5q-39xc-vjpf) are reviewed exceptions (`lib/security/dependency-exceptions.json`).
+- The dev-tool advisories `lib/security/dependency-exceptions.json` lists as reviewed exceptions.
 - A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
 - Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
+- In the owner's production session, only the read hook guards `.env.live-backup`'s PROD keys in a checkout. An agent's [bypass secret](machine-setup.md#agent-keys) also opens PROD's protected deployment links, past some of Vercel's firewall and bot protection (werk-flow/werkflow-planning#564).
 - A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).
 - Unsent work outlives sign-out, readable to whoever unlocks the phone's browser profile; the app shows it only to its person (werk-flow/werkflow-planning#22, OQ-4). [Report drafts](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts) keep text and photos 7 days past lost access, then until the phone's next use; unsent [drafts and time events](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-the-time-outbox) stay until their person sends or deletes them, an [unreadable draft](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-stored-records-stay-readable) until its person deletes it.
 
@@ -178,9 +179,8 @@ Before client data is imported, the owner retains the providers' data-processing
 
 A GET handler may share the identity and membership reads of one request through `lib/data/read-request-cache.ts`.
 
-- Each GET gets a fresh scope; no result crosses requests.
 - Never wrap a Server Action or a mutation. Never pass caller-supplied authorization context into a `'use server'` export.
-- A handler that takes an organization from the request requires it to equal the resolved active organization.
+- An organization a handler takes from the request must equal the resolved active one.
 - The privileged profile lookup reads through the caller's own RLS on every call.
 - A new consumer extends `lib/data/read-request-cache.test.ts`. Job-access facts share one read per render or GET scope (`lib/jobs/job-access-reads.ts`) and read fresh in a Server Action.
 
