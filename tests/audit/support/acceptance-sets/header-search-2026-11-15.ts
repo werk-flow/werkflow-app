@@ -93,7 +93,7 @@ function headerSearchCaptures(): OpenSet {
         view: officeSearch,
         widths: [1280],
         schemes: ['light'],
-        inLayer: searchKastanienhof,
+        act: searchKastanienhof,
       },
       {
         id: 'admin-search-hits-phone',
@@ -102,7 +102,7 @@ function headerSearchCaptures(): OpenSet {
         view: officeSearch,
         widths: [375],
         schemes: ['dark'],
-        inLayer: searchKastanienhof,
+        act: searchKastanienhof,
       },
     ],
     standalone: [],

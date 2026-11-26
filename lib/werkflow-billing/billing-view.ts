@@ -33,7 +33,8 @@ type InvoiceRow = Pick<
 export type SubscriptionState =
   | { kind: 'active'; renewsAt: string | null }
   | { kind: 'ending'; endsAt: string | null }
-  | { kind: 'payment_open' }
+  /** `ended`: Stripe ended the subscription after its first debit failed; the Admin subscribes again. */
+  | { kind: 'payment_open'; ended: boolean }
   | { kind: 'ended'; endedAt: string | null }
   | { kind: 'unknown' };
 
@@ -41,6 +42,8 @@ export type SubscriptionView = {
   state: SubscriptionState;
   canCancel: boolean;
   canResume: boolean;
+  /** Stripe bills nothing any more, so a new Checkout starts the subscription again. */
+  canSubscribe: boolean;
 };
 
 export type WerkflowInvoiceView = {
@@ -69,8 +72,9 @@ function stateOf(row: SubscriptionRow): SubscriptionState {
   }
   if (RUNNING.has(status)) return { kind: 'active', renewsAt: row.current_period_end };
   // Stripe ends a subscription whose first debit failed; access stays (no lockout in stage A).
-  if (PAYMENT_OPEN.has(status) || (status === 'canceled' && row.cancellation_reason === 'payment_failed')) {
-    return { kind: 'payment_open' };
+  if (PAYMENT_OPEN.has(status)) return { kind: 'payment_open', ended: false };
+  if (status === 'canceled' && row.cancellation_reason === 'payment_failed') {
+    return { kind: 'payment_open', ended: true };
   }
   if (ENDED.has(status)) return { kind: 'ended', endedAt: row.current_period_end };
   return { kind: 'unknown' };
@@ -85,6 +89,7 @@ export function subscriptionViewOf(row: SubscriptionRow | null, now: Date): Subs
     state: stateOf(row),
     canCancel: changeable && !row.cancel_at_period_end,
     canResume: changeable && row.cancel_at_period_end && periodRuns,
+    canSubscribe: ENDED.has(row.status ?? ''),
   };
 }
 

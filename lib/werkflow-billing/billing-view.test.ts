@@ -24,14 +24,21 @@ describe('the subscription state in plain terms', () => {
 
   test('a failed payment is open, never ended, and can still be cancelled while Stripe retries', () => {
     expect(subscriptionViewOf(row({ status: 'past_due' }), NOW)).toEqual({
-      state: { kind: 'payment_open' },
+      state: { kind: 'payment_open', ended: false },
       canCancel: true,
       canResume: false,
+      canSubscribe: false,
     });
-    // Stripe ends a subscription whose first debit failed; access stays and nothing is left to cancel.
+    // Stripe ends a subscription whose first debit failed: access stays, nothing is left to cancel,
+    // and the Admin subscribes again (werk-flow/werkflow-planning#495).
     expect(
       subscriptionViewOf(row({ status: 'canceled', cancellation_reason: 'payment_failed' }), NOW),
-    ).toEqual({ state: { kind: 'payment_open' }, canCancel: false, canResume: false });
+    ).toEqual({
+      state: { kind: 'payment_open', ended: true },
+      canCancel: false,
+      canResume: false,
+      canSubscribe: true,
+    });
   });
 
   test('a cancellation runs to the end of the paid period and can be taken back only until then', () => {
@@ -39,6 +46,7 @@ describe('the subscription state in plain terms', () => {
       state: { kind: 'ending', endsAt: '2026-12-15T10:00:00Z' },
       canCancel: false,
       canResume: true,
+      canSubscribe: false,
     });
     const afterTheEnd = new Date('2026-12-15T10:00:01Z');
     expect(subscriptionViewOf(row({ cancel_at_period_end: true }), afterTheEnd)?.canResume).toBe(false);
@@ -49,6 +57,7 @@ describe('the subscription state in plain terms', () => {
       state: { kind: 'unknown' },
       canCancel: false,
       canResume: false,
+      canSubscribe: false,
     });
   });
 });
