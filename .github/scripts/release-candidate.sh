@@ -6,11 +6,16 @@
 # that stops, skip and skip_reason to $GITHUB_OUTPUT. A manual release always goes on. A scheduled one goes on only when
 # main moved since production and its newest full run is green, or it has none yet and
 # the release runs its own. A dry run decides like a scheduled run and changes nothing.
-# Needs GH_TOKEN, GITHUB_REF, GITHUB_REPOSITORY, and origin/production fetched.
+# Needs GITHUB_REF and origin/production fetched. It reads GitHub without a token through
+# full-run-verdict.sh, so a machine that holds none, such as a CI runner's release user
+# (werk-flow/werkflow-planning#517), decides too.
 set -euo pipefail
 
 mode="$1"
 case "$mode" in manual | scheduled | dry-run) ;; *) echo "::error::Unknown mode ${mode}."; exit 1 ;; esac
+# The reader of the newest full run (shared with the nightly) sources check-app.sh and curl-headers.sh.
+source "$(dirname "${BASH_SOURCE[0]}")/full-run-verdict.sh"
+check_app_id || exit 1
 
 test "$GITHUB_REF" = refs/heads/main \
   || { echo "::error::A release starts on main, not ${GITHUB_REF}."; exit 1; }
@@ -39,22 +44,9 @@ fi
 git merge-base --is-ancestor origin/production "$sha" \
   || { echo "::error::production is not an ancestor of main; it only ever moves forward."; exit 1; }
 
-# A full run is ci.yml called with `full` from a job named `Full run`, so its aggregate
-# job is `Full run / Check` (.github/workflows/nightly.yml). Only a nightly, release or
-# main-full-run run on main counts: their workflow files come from the commit itself, so no
-# other branch can stand in for one, and no pull request starts them. The newest completed full
-# run decides; a later failure replaces a pass.
-runs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${sha}&branch=main&per_page=100" \
-  --jq '.workflow_runs[] | select(.head_branch == "main"
-    and (.path == ".github/workflows/nightly.yml" or .path == ".github/workflows/release.yml"
-      or .path == ".github/workflows/main-full-run.yml")
-    and (.event == "schedule" or .event == "workflow_dispatch")) | .id')"
-# A failed request stops the gate: a missing run could be the newest, failed one.
-latest="$(for run in $runs; do
-  gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/jobs?per_page=100" \
-    --jq '.jobs[] | select(.name == "Full run / Check" and .status == "completed") | "\(.completed_at) \(.conclusion) \(.html_url)"' \
-    || exit 1
-done | sort | tail -n 1)"
+# The newest full run on the commit decides (full-run-verdict.sh); a failed read or a malformed row
+# stops the gate.
+latest="$(newest_full_run "$sha")" || exit 1
 echo "Newest full run on ${sha}: ${latest:-none}"
 conclusion="$(echo "$latest" | cut -d ' ' -f 2)"
 

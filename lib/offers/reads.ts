@@ -7,6 +7,7 @@ import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
+import { offerSectionSchema } from './action-schemas';
 import type { OfferListQuery, OfferPage } from './list-page';
 import { OFFER_STATUSES, offerWorkKindSchema, type OfferDetail, type OfferWorkKind } from './types';
 
@@ -66,6 +67,8 @@ const offerSchema = z.object({
   offerNumber: z.string(),
   title: z.string(),
   status: z.string(),
+  version: z.number().int().positive(),
+  contentVersion: z.number().int().positive(),
   validUntil: z.iso.date(),
   openingText: z.string(),
   closingText: z.string(),
@@ -74,7 +77,7 @@ const offerSchema = z.object({
     .extend({ street: z.string().nullable(), postalCode: z.string().nullable(), city: z.string().nullable() })
     .nullable(),
   contact: party.nullable(),
-  recipient: party.extend({ address: z.string().nullable() }),
+  recipient: party.extend({ address: z.string().nullable(), isDefault: z.boolean() }),
   owner: z
     .object({
       userId: uuidSchema,
@@ -86,6 +89,7 @@ const offerSchema = z.object({
   work: z
     .object({ kind: offerWorkKindSchema, id: uuidSchema, number: z.string().nullable(), title: z.string() })
     .nullable(),
+  sections: z.array(offerSectionSchema),
 });
 
 const WORK_LABELS: Record<OfferWorkKind, string> = { job: 'Auftrag', project: 'Projekt', request: 'Anfrage' };

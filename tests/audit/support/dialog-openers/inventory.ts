@@ -330,6 +330,11 @@ export const COMMERCIAL_OPENERS = {
       page.getByRole('main').getByRole('button', { name: 'Angebot anlegen', exact: true }),
     layer: (page) => page.getByRole('dialog', { name: 'Angebot anlegen', exact: true }),
   },
+  'commercial.offer-header': {
+    trigger: async ({ page }) =>
+      page.getByRole('main').getByRole('button', { name: 'Bearbeiten', exact: true }),
+    layer: (page) => page.getByRole('dialog', { name: 'Angebotskopf bearbeiten', exact: true }),
+  },
   'commercial.invoice': {
     trigger: async ({ page }) =>
       page.getByRole('main').getByRole('button', { name: 'Rechnung erstellen', exact: true }),

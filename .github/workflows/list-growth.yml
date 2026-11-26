@@ -5,8 +5,8 @@ name: List growth
 # no run on a label event, and its Fast job reads the label at run time. Every other label skips
 # this job, so it never touches CI.
 on:
+  # Any base, as ci.yml: a stacked PR's run reads the label too.
   pull_request:
-    branches: [main]
     types: [labeled, unlabeled]
 
 permissions: {}
@@ -35,7 +35,11 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          run="$(gh run list --workflow ci.yml --event pull_request --commit "$SHA" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          # This PR's newest run counts for Check on the commit; another PR on the same head has runs
+          # of its own. A standalone assignment, so a failed API call fails the step instead of
+          # reading as no run.
+          run="$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?event=pull_request&head_sha=$SHA&per_page=100" \
+            --jq '[.workflow_runs[] | select(.head_sha == env.SHA and any(.pull_requests[]; .number == (env.PR | tonumber)))][0].id // empty')"
           if test -z "$run"; then
             echo "No CI run on $SHA yet. Its Fast job reads the labels when it starts."
             exit 0

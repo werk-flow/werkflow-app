@@ -26,10 +26,37 @@ export type StartCheckoutResult = ActionResult<
 export async function startOrganizationCheckout(): Promise<StartCheckoutResult> {
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
-
-  let reservation;
   try {
     if (await userHasOrganizations(user.id)) return { success: false, error: 'organization_exists' };
+  } catch {
+    return { success: false, error: 'checkout_failed' };
+  }
+  return reservationCheckout(user);
+}
+
+/**
+ * A Checkout for a further organization (werk-flow/werkflow-planning#495),
+ * which only an Admin of an organization the caller belongs to starts; it
+ * reserves the new organization's id as for the first one.
+ */
+export async function startFurtherOrganizationCheckout(organizationId: string): Promise<StartCheckoutResult> {
+  const parsedOrganizationId = uuidSchema.safeParse(organizationId);
+  if (!parsedOrganizationId.success) return { success: false, error: 'not_a_member' };
+  const caller = await resolveActionContextFor(parsedOrganizationId.data);
+  if (!caller.success) return caller;
+  if (caller.context.role !== 'admin') return { success: false, error: 'not_authorized' };
+  const user = await getAuthenticatedUser();
+  if (!user) return { success: false, error: 'not_authenticated' };
+  return reservationCheckout(user);
+}
+
+/** The Checkout of the caller's open reservation, or of a new one; a paid one goes on to naming it. */
+async function reservationCheckout(user: {
+  id: string;
+  email?: string | null;
+}): Promise<StartCheckoutResult> {
+  let reservation;
+  try {
     reservation = await readOpenReservation(user.id);
   } catch {
     return { success: false, error: 'checkout_failed' };

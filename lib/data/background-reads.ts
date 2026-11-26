@@ -61,6 +61,7 @@ import { getServiceCasePage } from '@/lib/service-cases/list-page-server';
 import { getOwnSicknessReports, getSicknessReportsForRecord } from '@/lib/sickness/actions';
 import { getSchoolDaysForRecord } from '@/lib/personnel/school-day-actions';
 import { getMaintenanceEvidenceOptions, getMaintenanceWorkspace } from '@/lib/maintenance/actions';
+import { getOnCallOverview } from '@/lib/on-call/actions';
 import { getCompletedVisitPage } from '@/lib/service-reports/page-actions';
 import { maintenanceWorkspaceQuerySchema } from '@/lib/maintenance/workspace-page';
 import { getAssignmentTeamOptions } from '@/lib/qualifications/actions';
@@ -108,6 +109,8 @@ import {
 } from '@/lib/work-templates/actions';
 import { workTemplatePreviewInputSchema, workTemplateTargetTypeSchema } from '@/lib/work-templates/schemas';
 import { getSubstituteAbsences } from '@/lib/responsibilities/substitute-absence-read';
+import { globalSearchInputSchema } from '@/lib/search/global-search-input';
+import { searchEverywhere } from '@/lib/search/global-search-server';
 
 /**
  * The closed set of read-only readers a page may run in the background over
@@ -298,6 +301,8 @@ export const BACKGROUND_READS = {
     maintenanceWorkspaceQuerySchema.extend({ organizationId: uuidSchema }),
     (input) => getMaintenanceWorkspace(input),
   ),
+  // „Bereitschaft jetzt“ on the dashboard, for every member.
+  'on-call-overview': defineRead(organizationInput, (input) => getOnCallOverview(input.organizationId)),
   'completed-maintenance-visits': defineRead(
     z.object({ organizationId: uuidSchema, page: z.number().int().min(1).max(1_000_000) }),
     (input) => getCompletedVisitPage({ page: input.page }),
@@ -423,6 +428,8 @@ export const BACKGROUND_READS = {
     }),
     (input) => searchWorkPredecessors({ type: input.type, query: input.query }),
   ),
+  // The header search: one settled query through every domain list the caller's role reaches.
+  'global-search': defineRead(globalSearchInputSchema, (input) => searchEverywhere(input)),
 } as const;
 
 export type BackgroundReadKind = keyof typeof BACKGROUND_READS;

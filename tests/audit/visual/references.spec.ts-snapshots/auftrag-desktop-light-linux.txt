@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -17,16 +18,15 @@ Service
 Arbeitsvorlagen
 Mitarbeiter
 Kunden
+Wochenzahlen
 Problem melden
 F2
-MK
-Martin Krämer
-martin.kraemer@haustechnik-kraemer.de
 Aufträge
 A-2026-0101
 Gastherme warten und Abgasmessung
 Nicht begonnen
 Mittel
+Rechnung erstellen
 Arbeitsstand
 Nächster Schritt:
 Mitarbeiter zuweisen und einplanen

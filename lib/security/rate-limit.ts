@@ -26,7 +26,9 @@ type RateLimit = { maxAttempts: number; windowSeconds: number };
  * - the health check runs once a week per deployment, plus manual runs; one
  *   budget per backend, because only holders of its token reach the limiter;
  * - document mail: a busy office sends tens of invoices an hour, a property
- *   manager receives a few a day from one company.
+ *   manager receives a few a day from one company;
+ * - a WerkFlow KI turn costs money: 60 an hour and 400 a day per person, the
+ *   owner's beta limits (O3 on werk-flow/werkflow-planning#20).
  */
 const RATE_LIMITS = {
   invite_send_per_organization: { maxAttempts: 100, windowSeconds: HOUR_SECONDS },
@@ -40,6 +42,8 @@ const RATE_LIMITS = {
   health_check_per_backend: { maxAttempts: 30, windowSeconds: HOUR_SECONDS },
   document_send_per_organization: { maxAttempts: 200, windowSeconds: HOUR_SECONDS },
   document_send_per_recipient: { maxAttempts: 30, windowSeconds: HOUR_SECONDS },
+  ai_turn_per_user_hour: { maxAttempts: 60, windowSeconds: HOUR_SECONDS },
+  ai_turn_per_user_day: { maxAttempts: 400, windowSeconds: DAY_SECONDS },
 } as const satisfies Record<string, RateLimit>;
 
 type RateLimitAction = keyof typeof RATE_LIMITS;
@@ -50,7 +54,7 @@ type RateLimitCheck = { action: RateLimitAction; subject: string };
 /**
  * `unavailable` means the limiter could not decide. Every caller refuses the
  * operation with its retryable failure: the guarded operations send mail,
- * redeem a capability or activate a subscription, and an outage of the limit
+ * redeem a capability, activate a subscription or start a paid model run, and an outage of the limit
  * store must not turn into unbounded sends. The cost is that these operations
  * stop while the database is unreachable, which they need anyway.
  */

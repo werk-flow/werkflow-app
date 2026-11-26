@@ -169,8 +169,8 @@ const saved = world.rpcCalls[1]?.args;
 // 1,5 × 72,00 € at 19 % and a credit of 45,00 € at 0 %: 63,00 € net, 20,52 € VAT.
 assert.deepEqual(saved?.p_totals, { lineNetCents: 6300, taxCents: 2052, grossCents: 8352 });
 assert.deepEqual(Array.isArray(saved?.p_lines) ? saved.p_lines.map((line: unknown) => line) : null, [
-  { ...lines[0], taxCategory: 'S', netCents: 10800 },
-  { ...lines[1], taxCategory: 'Z', netCents: -4500 },
+  { ...lines[0], source: null, taxCategory: 'S', netCents: 10800 },
+  { ...lines[1], source: null, taxCategory: 'Z', netCents: -4500 },
 ]);
 
 // The pages read only the caller's organization.
@@ -185,6 +185,6 @@ assert.deepEqual(
   world.rpcCalls.map((call) => [call.name, call.args.p_organization_id]),
   [
     ['list_invoice_page', ORGANIZATION_A],
-    ['get_invoice', ORGANIZATION_A],
+    ['get_invoice_with_line_sources', ORGANIZATION_A],
   ],
 );

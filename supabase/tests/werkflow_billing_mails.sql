@@ -3,8 +3,9 @@
 -- or runs its functions, including the organization's own Admin; the service
 -- role writes only through them; a customer mail names its organization and
 -- an alarm none; one row per kind and Stripe object; a failed send keeps its
--- code and is claimed again; a sent row is never claimed or changed again; an
--- organization's deletion removes its mail rows.
+-- code and is claimed again; a sent row is never claimed or changed again; the
+-- ledger takes every kind, the refund mail's included; an organization's
+-- deletion removes its mail rows.
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
 
@@ -145,6 +146,28 @@ begin
     perform public.settle_werkflow_billing_mail(v_alarm, null, 'sent', null);
     raise exception 'a sent outcome without a message id was accepted';
   exception when sqlstate '22023' then null;
+  end;
+  -- Every kind of 20270111100005 is taken: the subscription end's two alarms,
+  -- the refund mail of 20270111100004, the invoice mails and alarms of
+  -- 20261223100004, the bounce alarm of 20261221100009 and every kind before
+  -- them; a customer mail with its organization and an alarm without one.
+  declare
+    v_kind text;
+  begin
+    foreach v_kind in array array[
+      'payment_failed', 'card_problem', 'mandate_inactive', 'debit_notice', 'invoice', 'receipt', 'refund',
+      'alarm.debit_failed', 'alarm.debit_reversed', 'alarm.mandate_inactive',
+      'alarm.mail_failed', 'alarm.invoice_check_failed', 'alarm.invoice_undelivered',
+      'alarm.debit_notice_late', 'alarm.mail_undelivered', 'alarm.signals_quiet',
+      'alarm.reconciliation_missed', 'alarm.mail_bounced',
+      'alarm.duplicate_subscription_cancelled', 'alarm.refund_failed'
+    ] loop
+      if public.claim_werkflow_billing_mail(v_kind,
+          case when v_kind like 'alarm.%' then null else v_org end,
+          'rechnung@sonnenberg.example', 'cn_test_kinds') is null then
+        raise exception 'the mail ledger refused the kind %', v_kind;
+      end if;
+    end loop;
   end;
   begin
     perform public.claim_werkflow_billing_mail('newsletter', v_org, 'rechnung@sonnenberg.example', 'in_test_0001');

@@ -328,6 +328,20 @@ export function documentViewerImage(viewer: Locator, fileName: string): Locator 
   return viewer.getByRole('img', { name: fileName });
 }
 
+/** The viewer shows the file's image decoded: a broken image is visible too, but has no width. */
+export async function expectDocumentImageShown(viewer: Locator, fileName: string): Promise<void> {
+  const image = confirmed(documentViewerImage(viewer, fileName));
+  await expect(image).toBeVisible();
+  await expect
+    .poll(
+      () => image.evaluate((element) => element instanceof HTMLImageElement && element.naturalWidth > 0),
+      {
+        message: `The viewer decoded the image of ${fileName}`,
+      },
+    )
+    .toBe(true);
+}
+
 /** The embedded PDF frame; its title is the file name. */
 export function documentViewerPdfFrame(viewer: Locator, fileName: string): Locator {
   return viewer.getByTitle(fileName);
@@ -377,8 +391,8 @@ export function documentTableRows(page: Page, fileName: string): Locator {
 }
 
 /** The button that opens a file in the contextual frame; its name starts with the file name. */
-export function documentOpenButton(page: Page, fileName: string): Locator {
-  return page.getByRole('button', { name: new RegExp(escapeRegExp(fileName)) });
+export function documentOpenButton(scope: Page | Locator, fileName: string): Locator {
+  return scope.getByRole('button', { name: new RegExp(escapeRegExp(fileName)) });
 }
 
 /** Waits for the file name within the live envelope, then once after a reload. */

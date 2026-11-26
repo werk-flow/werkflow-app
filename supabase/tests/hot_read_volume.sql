@@ -144,6 +144,8 @@ do $$ declare
       and status='pending' order by created_at desc, id limit 1000$q$),
     -- Aufgaben: the handover candidates (lib/attention/handover-tasks.ts).
     'aufgaben-handover-candidates', jsonb_build_array('{jobs,projects}', 'select * from public.list_handover_candidate_projects(%1$L)'),
+    -- Aufgaben: the office's pending sets with the jobs to plan (lib/attention/manager-sets.ts).
+    'aufgaben-office-sets', jsonb_build_array('{jobs,planning_occurrences}', 'select public.read_manager_attention_sets(%1$L, 10000)'),
     -- Aufträge: the first page of active work for a manager and an employee (lib/jobs/list-server.ts).
     'auftraege-manager', jsonb_build_array('{jobs,projects}',
       format('select public.list_job_entries_page(%%1$L,%%2$L,true,jsonb_build_object(''active'',%L::jsonb))', job_query)),

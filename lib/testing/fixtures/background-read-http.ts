@@ -238,6 +238,9 @@ mock.module('@/lib/work-lifecycle/actions', () => ({
 mock.module('@/lib/installed-equipment/list-page-server', () => ({
   getInstalledEquipmentPage: seam('equipment-page'),
 }));
+mock.module('@/lib/search/global-search-server', () => ({
+  searchEverywhere: seam('global-search'),
+}));
 mock.module('@/lib/service-cases/list-page-server', () => ({
   getServiceCasePage: seam('service-case-page'),
 }));
@@ -266,6 +269,7 @@ mock.module('@/lib/maintenance/actions', () => ({
   getMaintenanceWorkspace: seam('maintenance-workspace'),
   getMaintenanceEvidenceOptions: seam('maintenance-evidence-options'),
 }));
+mock.module('@/lib/on-call/actions', () => ({ getOnCallOverview: seam('on-call-overview') }));
 mock.module('@/lib/service-reports/page-actions', () => ({
   getCompletedVisitPage: seam('completed-maintenance-visits'),
 }));
@@ -483,6 +487,7 @@ const inputs: Record<string, unknown> = {
     planPage: 2,
     coveragePage: 3,
   },
+  'on-call-overview': { organizationId },
   'completed-maintenance-visits': { organizationId, page: 2 },
   'published-work-templates': { targetType: 'project' },
   'work-template-preview': { versionId: jobId, targetType: 'job', jobId },
@@ -520,6 +525,7 @@ const inputs: Record<string, unknown> = {
   'work-artifact-detail': { artifactId: jobId },
   'instruction-items': { targetType: 'project', targetId: jobId },
   'work-predecessor-search': { organizationId, type: 'job', query: '  Heiz ' },
+  'global-search': { organizationId, query: ' 0711 / 123 45 ' },
 };
 // What each reader receives: some take the bare identifier, the rest the validated object.
 const readerArguments: Record<string, unknown> = {
@@ -528,6 +534,7 @@ const readerArguments: Record<string, unknown> = {
   'profiles-by-ids': [jobId],
   'pending-sessions': organizationId,
   'pending-change-requests': organizationId,
+  'on-call-overview': organizationId,
   'time-correction-requests': [organizationId, 'approvals'],
   'time-correction-history': [organizationId, 2],
   'time-correction-form-options': organizationId,
@@ -584,6 +591,8 @@ const readerArguments: Record<string, unknown> = {
   'work-artifact-detail': jobId,
   'instruction-items': jobId,
   'work-predecessor-search': { type: 'job', query: 'Heiz' },
+  // The search checks the organization against the session itself.
+  'global-search': { organizationId, query: '0711 / 123 45' },
 };
 for (const kind of Object.keys(BACKGROUND_READS)) {
   reads = [];
@@ -627,6 +636,7 @@ for (const kind of [
   'vacation-days-preview',
   'work-predecessor-search',
   'time-correction-planned-visits',
+  'global-search',
 ]) {
   assert.ok(organizationNamingKinds.includes(kind), `${kind} names its organization`);
 }

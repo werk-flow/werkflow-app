@@ -72,7 +72,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ invoic
                 </Suspense>
               )}
               <InvoiceFacts invoice={invoice} />
-              <InvoiceEditor key={invoice.id} invoice={invoice} />
+              <InvoiceEditor invoice={invoice} />
             </div>
           </PageBody>
         </>

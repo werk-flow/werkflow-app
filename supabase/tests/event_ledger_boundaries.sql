@@ -5,7 +5,7 @@ do $$
 declare ledger text;
 begin
   foreach ledger in array array[
-    'attention_events', 'client_communication_preference_events', 'client_follow_up_events',
+    'ai_run_attempts', 'attention_events', 'client_communication_preference_events', 'client_follow_up_events',
     'client_request_events', 'document_audit_events', 'employee_record_events',
     'organization_export_events', 'organization_responsibility_events', 'qualification_events',
     'sickness_report_events', 'team_events', 'time_entry_audit_events', 'vacation_request_events',
@@ -100,6 +100,30 @@ begin
 end;
 $$;
 alter table public.documents disable trigger "AA_test_nested_history_edit";
+
+-- A forged organization-deletion marker allows no nested delete while the
+-- organization still exists (the guard's teardown fast path, 20270111100001).
+create temporary table ledger_probe (id integer);
+create function pg_temp.attempt_nested_history_delete() returns trigger language plpgsql as $$
+begin
+  delete from public.employee_record_events where id = '73000000-0000-4000-8000-000000000031';
+  return new;
+end;
+$$;
+create trigger attempt_nested_history_delete after insert on ledger_probe
+  for each row execute function pg_temp.attempt_nested_history_delete();
+do $$
+begin
+  perform set_config('app.deleting_organization_ids', '73000000-0000-4000-8000-000000000010', true);
+  begin
+    insert into ledger_probe values (1);
+    raise exception 'a forged organization-deletion marker allowed a nested history delete';
+  exception when raise_exception then
+    if sqlerrm <> 'event_ledger_history_immutable' then raise; end if;
+  end;
+  perform set_config('app.deleting_organization_ids', '', true);
+end;
+$$;
 
 -- Real parent deletion keeps the history payload and nulls only the declared FK.
 delete from auth.users where id = '73000000-0000-4000-8000-000000000002';

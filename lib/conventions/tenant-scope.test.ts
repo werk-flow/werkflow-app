@@ -87,6 +87,9 @@ const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
     'Records a Stripe event id that Stripe signed; the ledger holds no organization data, and a handler finds the organization from the Stripe customer.',
   settle_werkflow_billing_signal:
     'Settles, by its Stripe event id, only the signal the same request just claimed.',
+  mark_werkflow_billing_mail_undelivered:
+    'Marks, by the provider message id of a signal Resend signed, only the mails WerkFlow sent under it; each answered row names its own organization, and the handler passes no other.',
+  record_resend_webhook_event: 'Records a Svix id that Resend signed; the record holds no organization data.',
 };
 
 const ORGANIZATION_ARGUMENT_NAMES = ['p_organization_id', 'p_org_id', 'organization_id', 'org_id'];

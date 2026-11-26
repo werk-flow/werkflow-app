@@ -9,7 +9,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
 import { saveInvoiceSettingsSchema, type SaveInvoiceSettingsInput } from './settings';
 
-const refusal = writeRefusalFor(new Set(['not_authorized', 'stale_version']));
+const refusal = writeRefusalFor(new Set(['not_authorized', 'stale_version', 'invoice_year_changed']));
 
 /**
  * Saves the organization's invoice settings, Admin only. Once an invoice is

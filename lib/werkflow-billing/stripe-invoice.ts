@@ -1,4 +1,4 @@
-import { WerkflowInvoiceFailure } from '@/lib/werkflow-billing/failure';
+import { billingFailure } from '@/lib/werkflow-billing/failure';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
@@ -94,10 +94,12 @@ function vatIdOf(taxIds: z.infer<typeof invoiceSchema>['customer_tax_ids']): str
 function stripePaymentOf(method: unknown, mandateReference: unknown): StripeInvoicePayment | null {
   if (method === null) return null;
   const parsed = paymentMethodSchema.safeParse(method);
-  if (!parsed.success) throw new WerkflowInvoiceFailure('werkflow_invoice_unreadable');
+  if (!parsed.success) throw billingFailure('werkflow_invoice_unreadable');
   if (parsed.data.type === 'card') return { kind: 'card', lastFour: parsed.data.card.last4 };
+  // No mandate yet: the first debit's charge is still being created, and Stripe delivers again.
+  if (mandateReference === null) throw billingFailure('werkflow_invoice_payment_pending');
   const reference = mandateReferenceSchema.safeParse(mandateReference);
-  if (!reference.success) throw new WerkflowInvoiceFailure('werkflow_invoice_unreadable');
+  if (!reference.success) throw billingFailure('werkflow_invoice_unreadable');
   return { kind: 'direct-debit', mandateReference: reference.data };
 }
 
@@ -118,17 +120,16 @@ export function stripeInvoiceForIssue(source: {
 }): StripeInvoiceForIssue {
   const parsed = invoiceSchema.safeParse(source.invoice);
   const lines = z.array(lineSchema).safeParse(source.lines);
-  if (!parsed.success || !lines.success) throw new WerkflowInvoiceFailure('werkflow_invoice_unreadable');
+  if (!parsed.success || !lines.success) throw billingFailure('werkflow_invoice_unreadable');
   const invoice = parsed.data;
   const finalizedAt = invoice.status_transitions.finalized_at;
   if (invoice.status === 'draft' || !invoice.number || !finalizedAt || invoice.currency !== 'eur') {
-    throw new WerkflowInvoiceFailure('werkflow_invoice_not_finalized');
+    throw billingFailure('werkflow_invoice_not_finalized');
   }
   const organizationId = uuidSchema.safeParse(invoice.customer.metadata?.werkflow_organization_id);
-  if (!organizationId.success) throw new WerkflowInvoiceFailure('werkflow_invoice_organization_unknown');
+  if (!organizationId.success) throw billingFailure('werkflow_invoice_organization_unknown');
   const payment = stripePaymentOf(source.paymentMethod, source.mandateReference);
-  if (!payment && invoice.amount_remaining > 0)
-    throw new WerkflowInvoiceFailure('werkflow_invoice_payment_pending');
+  if (!payment && invoice.amount_remaining > 0) throw billingFailure('werkflow_invoice_payment_pending');
 
   const address = invoice.customer_address;
   return {

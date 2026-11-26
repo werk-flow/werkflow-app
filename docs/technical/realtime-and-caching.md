@@ -20,7 +20,7 @@ Wrong turn: a button that waits for the server, or pending state from a router t
 ### Add Realtime data
 
 1. Confirm that the UI needs live updates and that a route refresh does not serve better.
-2. In the migration: add the table to the `supabase_realtime` publication, publish INSERT and UPDATE only, create the unique `(id, organization_id)` index `<table>_replident_idx` (unless a unique constraint provides one), set `REPLICA IDENTITY USING INDEX` on it, and add the `emit_realtime_deletion` trigger as `20260907010200_private_realtime_deletions.sql` does. A table whose rows each belong to one person, read through a select-own policy, gets no trigger: a notice reaches every member. List it in `OWN_USER_REALTIME_TABLES`.
+2. In the migration: add the table to the `supabase_realtime` publication, publish INSERT and UPDATE only, create the unique `(id, organization_id)` index `<table>_replident_idx` (unless a unique constraint provides one), set `REPLICA IDENTITY USING INDEX` on it, and add the `emit_realtime_deletion` trigger with the `app.deleting_organization_ids` WHEN clause of `20270111100001_index_every_foreign_key_and_skip_teardown_triggers.sql`, so an organization's deletion skips it (`supabase/tests/realtime_deletions.sql`). A table whose rows each belong to one person, read through a select-own policy, gets no trigger: a notice reaches every member. List it in `OWN_USER_REALTIME_TABLES`.
 3. Add the table to `REALTIME_TABLES` in `lib/realtime/tables.ts`. Run `bun run realtime:check`; it fails until the migration and the list agree.
 
 Wrong turn: publishing a ledger or a link table. Publish the mutable owning root, so one row signals one authoritative read.

@@ -4,6 +4,7 @@ import { PresentationFixture } from './presentation-fixture';
 import { CreateClientContractFixture, CustomerContractFixture } from './customer-boundaries';
 import { RequestCaptureContractFixture } from './request-capture-boundaries';
 import { RequestAttachContractFixture } from './request-attach-boundaries';
+import { GlobalSearchContractFixture } from './global-search-boundaries';
 import { BillingPartiesContractFixture } from './billing-parties-boundaries';
 import { VacationApprovals } from '@/components/zeiterfassung/vacation-approvals';
 import {
@@ -49,6 +50,7 @@ import { OfflineClockContractFixture, UnsentTimeLandingContractFixture } from '.
 import { OfflineTodayContractFixture } from './offline-today-boundaries';
 import { ReturnOnSignal } from '@/app/offline/return-on-signal';
 import { RetryButton } from '@/app/offline/retry-button';
+import { WorkerStartContractFixture } from './worker-start-boundaries';
 import { WorkHandoverContractFixture } from './work-handover-boundaries';
 import { EditJobContractFixture } from './edit-job-boundaries';
 import { SiteAccessProposalContractFixture, SiteAccessReviewContractFixture } from './site-access-boundaries';
@@ -78,6 +80,7 @@ import {
 } from './inventory-movements-boundaries';
 import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
 import { OffersContractFixture } from './offers-boundaries';
+import { InvoiceEditorContractFixture, InvoiceSettingsContractFixture } from './invoice-editor-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -124,7 +127,9 @@ import { PersonnelLifecycleSection } from '@/components/mitarbeiter/personnel-li
 import { PersonnelOwnActionsSection } from '@/components/mitarbeiter/personnel-own-actions-section';
 import { JoinRequestsSection } from '@/components/mitarbeiter/join-requests-section';
 import { initializePersonnelBoundary } from './personnel-boundaries';
-import { TaskSectionsContractFixture } from './task-section-boundaries';
+import { TaskSectionsAnchorContractFixture, TaskSectionsContractFixture } from './task-section-boundaries';
+import { OfficeStartContractFixture } from './office-start-boundaries';
+import { OwnerStartContractFixture } from './owner-start-boundaries';
 
 initializeServiceBoundaries();
 initializeLifecycleBoundary();
@@ -646,10 +651,16 @@ createRoot(root).render(
     <RequestCaptureContractFixture />
   ) : window.uiContractFixture === 'request-attach' ? (
     <RequestAttachContractFixture />
+  ) : window.uiContractFixture === 'global-search' ? (
+    <GlobalSearchContractFixture />
   ) : window.uiContractFixture === 'billing-parties' ? (
     <BillingPartiesContractFixture />
   ) : window.uiContractFixture === 'offers' ? (
     <OffersContractFixture />
+  ) : window.uiContractFixture === 'invoice-editor' ? (
+    <InvoiceEditorContractFixture />
+  ) : window.uiContractFixture === 'invoice-settings' ? (
+    <InvoiceSettingsContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>
@@ -705,6 +716,8 @@ createRoot(root).render(
       <ReturnOnSignal />
       <RetryButton />
     </main>
+  ) : window.uiContractFixture === 'worker-start' ? (
+    <WorkerStartContractFixture />
   ) : window.uiContractFixture === 'offline-clock' ? (
     <OfflineClockContractFixture />
   ) : window.uiContractFixture === 'unsent-time-landing' ? (
@@ -757,6 +770,21 @@ createRoot(root).render(
     <main>
       <h1>Komponentenverträge</h1>
       <TaskSectionsContractFixture />
+    </main>
+  ) : window.uiContractFixture === 'task-sections-anchor' ? (
+    <main>
+      <h1>Komponentenverträge</h1>
+      <TaskSectionsAnchorContractFixture />
+    </main>
+  ) : window.uiContractFixture === 'office-start' ? (
+    <main>
+      <h1>Komponentenverträge</h1>
+      <OfficeStartContractFixture />
+    </main>
+  ) : window.uiContractFixture === 'owner-start' ? (
+    <main>
+      <h1>Komponentenverträge</h1>
+      <OwnerStartContractFixture />
     </main>
   ) : window.uiContractFixture === 'own-personnel' ? (
     <BannerProvider>

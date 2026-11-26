@@ -1,6 +1,7 @@
 import { isInventoryUnitCode } from '@/lib/inventory/units';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
+import { invoiceLineSourceRefSchema } from './line-sources';
 import { INVOICE_REFERENCE_MAX_LENGTH, INVOICE_TAX_RATES, invoiceWorkKindSchema } from './types';
 
 // The inputs of the invoice actions. The editor checks the same limits before
@@ -25,6 +26,8 @@ const lineSchema = z.object({
   unitPriceCents: z.number().int().min(0).max(100_000_000),
   priceQuantity: z.literal([1, 10, 100, 1000]),
   taxRateBasisPoints: z.literal(INVOICE_TAX_RATES),
+  /** The Leistung or article the line came from; the database refuses one of another organization. */
+  source: invoiceLineSourceRefSchema.nullable().default(null),
 });
 
 const termsSchema = z

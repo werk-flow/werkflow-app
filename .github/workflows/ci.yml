@@ -5,9 +5,10 @@ name: CI
 # scripts/ci/job.ts, the same on any runner, and runs its groups through scripts/verify.ts, the
 # engine of a local run. This file adds only what GitHub owns: triggers, runners, caches, tokens
 # and artifacts. The required check is `Check` at the end of this file.
-# - A pull request's run, draft or ready, is the fast tier: Fast, SQL and Component contracts, each
-#   running only the groups the plan selects for the diff (lib/testing/selection/fast-tier.ts). A job
-#   whose selection is empty is skipped with the plan's reason.
+# - A pull request's run, draft or ready, is the fast tier: Fast, SQL, Component contracts and
+#   E-invoices, each running only the groups the plan selects for the diff
+#   (lib/testing/selection/fast-tier.ts, e-invoice-selection.ts). A job whose selection is empty is
+#   skipped with the plan's reason.
 # - The merge queue's run (`integration`) adds the plan's browser shards: browser groups run once
 #   per PR, on the PR on top of main and of every PR ahead of it (owner decision D1,
 #   werk-flow/werkflow-planning#503).
@@ -23,9 +24,13 @@ on:
   # left the required `Check` failed or "Expected". The Fast job reads the PR's labels at run
   # time, and list-growth.yml reruns it when the owner's `approved: list growth` label changes.
   # Marking a draft ready starts no run: the draft's run already is the PR's whole run.
+  # Only a new head starts a run: GitHub counts only the newest run of this workflow on a commit, so
+  # a title or body edit's run displaced the head's green Check and left it "Expected" (2026-11-23,
+  # #592). A stacked PR runs on its own base; after GitHub retargets it, retarget-notice.yml asks its
+  # thread for a new head on the new base. A reopened PR whose Check is missing or red takes a new
+  # head too (docs/technical/coderabbit.md, "Babysit a pull request").
   pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize]
   merge_group:
     types: [checks_requested]
   push:
@@ -67,6 +72,9 @@ env:
   CI_PRODUCER: github-actions
   CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
   MIDNIGHT_PROOF_MINUTES: ${{ inputs.midnight_proof_minutes }}
+  # Measurement only (lib/testing/ci/measurement.ts): the PR a run serves, or the queue ref that names it.
+  CI_PRS: ${{ github.event.pull_request.number || github.event.merge_group.head_ref || '' }}
+  CI_RUN_ATTEMPT: ${{ github.run_attempt }}
 
 jobs:
   plan:
@@ -117,43 +125,31 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/setup
       # docs:check reads the sibling clones beside the app (docs/README.md, "Sibling repositories").
+      # The token stays in this step: it runs before any code of the checkout (its install scripts,
+      # its Bun configuration), outside it, and hands the token to git through its environment, so
+      # it is in no argument and no clone's .git/config. prepare.ts siblings keeps the clones in place.
       - name: Clone the sibling repositories
+        working-directory: ${{ runner.temp }}
         env:
-          SIBLING_TOKEN: ${{ secrets.SIBLING_REPOSITORIES_TOKEN }}
+          SIBLING_REPOSITORIES_TOKEN: ${{ secrets.SIBLING_REPOSITORIES_TOKEN }}
         run: |
-          git clone --quiet --depth 1 https://github.com/werk-flow/werkflow-website ../werkflow-website
-          if test -n "$SIBLING_TOKEN"; then
-            git clone --quiet --depth 1 "https://x-access-token:${SIBLING_TOKEN}@github.com/werk-flow/werkflow-business" ../werkflow-business
-          else
-            echo "::warning::SIBLING_REPOSITORIES_TOKEN is not set, so docs:check cannot read the private werkflow-business clone."
-            echo "WERKFLOW_UNREADABLE_SIBLINGS=werkflow-business" >> "$GITHUB_ENV"
+          parent="$(dirname "$GITHUB_WORKSPACE")"
+          git clone --quiet --depth 1 https://github.com/werk-flow/werkflow-website "$parent/werkflow-website"
+          if [ -n "$SIBLING_REPOSITORIES_TOKEN" ]; then
+            header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$SIBLING_REPOSITORIES_TOKEN" | base64 -w0)"
+            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader GIT_CONFIG_VALUE_0="$header" \
+              git clone --quiet --depth 1 https://github.com/werk-flow/werkflow-business "$parent/werkflow-business"
           fi
-      # The owner's approval for a shrink-only list to grow (docs/technical/testing.md, "Grow a
-      # shrink-only list"). Read now, not from the event, so a rerun after a label change sees it.
-      # A queue run holds its own PR (named in its branch) and each PR ahead of it, one squash commit
-      # "<title> (#<n>)" each above the queue's base; it diffs all of them against main. Each PR's own
-      # Check already held its growth to its label, so one approval covers the group.
+      - uses: ./.github/actions/setup
+      # Without the token the business clone is missing: docs:check then says it cannot read it.
+      - name: Mark a missing sibling clone
+        run: bun scripts/ci/prepare.ts siblings
+      # The owner's approval for a shrink-only list to grow, read at run time from the labels of the
+      # run's PRs (scripts/ci/prepare.ts approval).
       - name: Read the list growth approval
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        env:
-          PR: ${{ github.event.pull_request.number }}
-          QUEUE_BRANCH: ${{ github.event.merge_group.head_ref }}
-          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
-        run: |
-          prs="$PR"
-          if test -n "$QUEUE_BRANCH"; then
-            prs="$(sed -nE 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$QUEUE_BRANCH"
-              git log --format=%s "$QUEUE_BASE..HEAD" | sed -nE 's/.*\(#([0-9]+)\)$/\1/p')"
-          fi
-          approved=false
-          for pr in $(sort -u <<< "$prs"); do
-            labels="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$pr/labels" --jq '.[].name')"
-            if grep -qxF 'approved: list growth' <<< "$labels"; then approved=true; fi
-          done
-          echo "SHRINK_ONLY_GROWTH_APPROVED=$approved" >> "$GITHUB_ENV"
-          echo "approved: list growth = $approved"
+        run: bun scripts/ci/prepare.ts approval
       # The stack's URL and keys are the CLI's fixed defaults, so the build needs no stack. The job
       # writes .env.local only after the static gates and Unit, which run without it as before.
       - uses: ./.github/actions/local-stack
@@ -194,6 +190,56 @@ jobs:
         with:
           job: components
           shard: ${{ matrix.shard }}
+
+  # The reference invoices rendered as ZUGFeRD PDFs, then Mustang and veraPDF on them, when the
+  # plan selects them (lib/testing/selection/e-invoice-selection.ts).
+  invoices:
+    name: E-invoices
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'invoices')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: ./.github/actions/setup
+      # Maven Central answered 429 to Mustang's download (#516, #539), so the jar comes from this
+      # cache, keyed on its version and SHA-256. mustang-jar.ts verifies the jar either way and
+      # downloads it, with retries, only on a miss; every caller of this workflow shares the cache.
+      # A queue run reads main's cache, which mustang-cache.yml seeds on every push to main.
+      - name: Read Mustang's cache key
+        id: mustang
+        run: bun lib/document-rendering/fixtures/mustang-jar.ts >> "$GITHUB_OUTPUT"
+      - name: Restore Mustang's jar
+        id: mustang-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.mustang.outputs.path }}
+          key: ${{ steps.mustang.outputs.key }}
+      - uses: ./.github/actions/ci-job
+        with:
+          job: invoices
+      # Only the pinned jar, verified again here, enters the cache, even when a check failed.
+      - name: Verify Mustang's jar before caching it
+        id: mustang-verified
+        if: always() && steps.mustang-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: bun lib/document-rendering/fixtures/mustang-jar.ts verify
+      - name: Cache Mustang's jar
+        if: always() && steps.mustang-verified.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.mustang.outputs.path }}
+          key: ${{ steps.mustang.outputs.key }}
+      - name: Keep the checked PDFs and Mustang's reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e-invoices
+          path: .agent-logs/e-invoices
+          retention-days: 14
+          if-no-files-found: ignore
+          # A rerun of the job keeps its own attempt's folder beside the earlier ones.
+          overwrite: true
 
   sql:
     name: SQL
@@ -288,7 +334,7 @@ jobs:
   check:
     name: Check
     if: always()
-    needs: [plan, fast, sql, components, midnight, browser]
+    needs: [plan, fast, sql, components, invoices, midnight, browser]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

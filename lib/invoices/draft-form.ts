@@ -1,5 +1,6 @@
 import { centsToEuroInput, parseEuroCents } from '@/lib/price-catalog/money';
 import { parseWholeNumberInput } from '@/lib/ui/decimal';
+import type { InvoiceDraftLine, InvoiceLineSource } from './line-sources';
 import type { InvoiceDetail, InvoiceLineValues, InvoiceTaxRate, InvoiceTerms } from './types';
 
 // The draft editor's text state and its parse into the values the save sends.
@@ -17,6 +18,8 @@ export type DraftLineForm = {
   price: string;
   priceQuantity: InvoiceLineValues['priceQuantity'];
   taxRateBasisPoints: InvoiceTaxRate;
+  /** The Leistung or article the line was copied from; null for a free line. */
+  source: InvoiceLineSource | null;
 };
 
 export type DraftForm = {
@@ -33,7 +36,7 @@ export type DraftForm = {
 };
 
 export type ParsedDraft =
-  | { ok: true; terms: InvoiceTerms; lines: InvoiceLineValues[] }
+  | { ok: true; terms: InvoiceTerms; lines: InvoiceDraftLine[] }
   | { ok: false; errors: Record<string, string> };
 
 /** The control id of a line's field. */
@@ -79,7 +82,7 @@ export function percentInput(basisPoints: number | null): string {
 }
 
 /** „1,5“ from the stored „1.500“. */
-function quantityInput(quantity: string): string {
+export function quantityInput(quantity: string): string {
   const trimmed = quantity.includes('.') ? quantity.replace(/0+$/, '').replace(/\.$/, '') : quantity;
   return trimmed.replace('.', ',');
 }
@@ -106,6 +109,7 @@ export function draftFormOf(invoice: InvoiceDetail): DraftForm {
       price: centsToEuroInput(line.unitPriceCents),
       priceQuantity: line.priceQuantity,
       taxRateBasisPoints: line.taxRateBasisPoints,
+      source: line.source,
     })),
   };
 }
@@ -121,6 +125,7 @@ export function emptyLine(key: string): DraftLineForm {
     price: '',
     priceQuantity: 1,
     taxRateBasisPoints: 1900,
+    source: null,
   };
 }
 
@@ -156,19 +161,24 @@ function parseTerms(form: DraftForm, errors: Record<string, string>): InvoiceTer
   };
 }
 
-function parseLine(
+/**
+ * A priced line typed by hand, as invoice and offer editors read it: name,
+ * quantity and net price are required. `fieldId` names each field's control,
+ * so the editor marks it; null while a field cannot be read.
+ */
+export function parsePricedLine(
   line: DraftLineForm,
-  index: number,
+  fieldId: (field: 'name' | 'quantity' | 'price') => string,
   errors: Record<string, string>,
 ): InvoiceLineValues | null {
   const quantity = parseQuantity(line.quantity);
   const unitPriceCents = parseEuroCents(line.price);
-  if (!line.name.trim()) errors[lineFieldId(index, 'name')] = 'Gib der Position eine Bezeichnung.';
+  if (!line.name.trim()) errors[fieldId('name')] = 'Gib der Position eine Bezeichnung.';
   if (quantity === null) {
-    errors[lineFieldId(index, 'quantity')] = 'Gib die Menge an, höchstens drei Nachkommastellen.';
+    errors[fieldId('quantity')] = 'Gib die Menge an, höchstens drei Nachkommastellen.';
   }
   if (unitPriceCents === null || unitPriceCents === undefined) {
-    errors[lineFieldId(index, 'price')] = 'Gib den Netto-Einzelpreis an, zum Beispiel 72,50.';
+    errors[fieldId('price')] = 'Gib den Netto-Einzelpreis an, zum Beispiel 72,50.';
   }
   if (!line.name.trim() || quantity === null || unitPriceCents === null || unitPriceCents === undefined)
     return null;
@@ -183,10 +193,20 @@ function parseLine(
   };
 }
 
+function parseLine(
+  line: DraftLineForm,
+  index: number,
+  errors: Record<string, string>,
+): InvoiceDraftLine | null {
+  const values = parsePricedLine(line, (field) => lineFieldId(index, field), errors);
+  if (!values) return null;
+  return { ...values, source: line.source ? { kind: line.source.kind, id: line.source.id } : null };
+}
+
 /** Every line of the editor's text, or null while one cannot be read: the totals wait for all. */
-export function parseDraftLines(lines: readonly DraftLineForm[]): InvoiceLineValues[] | null {
+export function parseDraftLines(lines: readonly DraftLineForm[]): InvoiceDraftLine[] | null {
   const parsed = lines.map((line, index) => parseLine(line, index, {}));
-  return parsed.every((line): line is InvoiceLineValues => line !== null) ? parsed : null;
+  return parsed.every((line): line is InvoiceDraftLine => line !== null) ? parsed : null;
 }
 
 /** The terms and lines of the editor's text, or a sentence per field at fault. */
@@ -194,7 +214,7 @@ export function parseDraftForm(form: DraftForm): ParsedDraft {
   const errors: Record<string, string> = {};
   const terms = parseTerms(form, errors);
   const lines = form.lines.map((line, index) => parseLine(line, index, errors));
-  const parsed = lines.filter((line): line is InvoiceLineValues => line !== null);
+  const parsed = lines.filter((line): line is InvoiceDraftLine => line !== null);
   if (!terms || parsed.length !== lines.length || Object.keys(errors).length > 0)
     return { ok: false, errors };
   return { ok: true, terms, lines: parsed };

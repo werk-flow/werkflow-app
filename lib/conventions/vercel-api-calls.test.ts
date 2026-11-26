@@ -4,6 +4,7 @@ import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { repositoryRoot } from './product-sources';
+import { workflowsFolder } from '../testing/ci-workflow';
 
 // Tier 2 after the staging deploy of 2026-11-13: `curl --fail --silent ... | jq -r .id` turned
 // Vercel's HTTP 429 into an empty id, then polled it for 20 minutes without saying why. The
@@ -24,7 +25,7 @@ function files(folder: string): string[] {
     .map((name) => join(folder, name));
 }
 
-const sources = ['.github/workflows', '.github/scripts', '.github/actions'].flatMap(files).map((path) => ({
+const sources = [workflowsFolder(), '.github/scripts', '.github/actions'].flatMap(files).map((path) => ({
   path,
   text: readFileSync(join(repositoryRoot, path), 'utf8'),
 }));

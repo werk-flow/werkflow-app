@@ -32,6 +32,7 @@ export const CONTEXT_WRAPPERS: Record<string, string> = {
   requireManagerAndClient: 'lib/clients/manager-access.ts',
   requireManagedInvite: 'lib/invites/managed-invite.ts',
   verifyCurrentMembership: 'lib/time-tracking/action-access.ts',
+  resolveBillingAdmin: 'lib/werkflow-billing/billing-page.ts',
 };
 
 const SESSION_IDENTITY = 'getAuthenticatedUser';

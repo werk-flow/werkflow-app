@@ -51,6 +51,14 @@ type CheckoutOutcome = { ok: true; url: string } | { ok: false; code: CheckoutFa
 
 const PRICE_ID = /^price_[A-Za-z0-9_]{1,250}$/;
 
+// A cancelled Checkout returns where it started (werk-flow/werkflow-planning#500):
+// an organization's own from the billing page, through /upgrade; a
+// reservation's to /upgrade/abgebrochen, which sends a first organization's
+// payer back to /upgrade and offers an Admin's further organization again.
+// The session is reused while it stays open, so the return depends only on
+// the Checkout's kind, and the return page decides from its own records.
+const BILLING_PAGE = '/einstellungen/abonnement-abrechnung';
+
 // begin_werkflow_checkout's answer, parsed once at the Supabase boundary.
 const beginSchema = z.discriminatedUnion('result', [
   z.object({ result: z.enum(['subscribed', 'busy']) }),
@@ -98,7 +106,8 @@ export async function openCheckout(request: CheckoutRequest): Promise<CheckoutOu
 
   try {
     const stored = await readOrganizationSubscription(request.organizationId);
-    if (stored?.holdsSubscription) return { ok: false, code: 'already_subscribed' };
+    // A subscription Stripe ended after a failed first debit still holds, but a new Checkout restarts it.
+    if (stored?.runsSubscription) return { ok: false, code: 'already_subscribed' };
 
     const customerId =
       stored?.stripeCustomerId ??
@@ -123,13 +132,13 @@ export async function openCheckout(request: CheckoutRequest): Promise<CheckoutOu
             subscriptions,
             priceId,
             successUrl: new URL(request.linked ? '/dashboard' : '/upgrade/bestaetigt', siteUrl).toString(),
-            cancelUrl: new URL('/upgrade', siteUrl).toString(),
+            cancelUrl: new URL(request.linked ? BILLING_PAGE : '/upgrade/abgebrochen', siteUrl).toString(),
           });
         case 'open': {
           // Read outside the row lock: one Stripe call per start that finds a stored session.
           const stored = await subscriptions.readCheckout(begun.session_id);
           if (stored.open) return { ok: true, url: begun.session_url };
-          if (await recordsHolding(request.organizationId, stored.subscriptionId, subscriptions)) {
+          if (await recordsRunning(request.organizationId, stored.subscriptionId, subscriptions)) {
             return { ok: false, code: 'already_subscribed' };
           }
           closedSessionId = begun.session_id;
@@ -171,16 +180,16 @@ async function beginCheckout(
 
 /**
  * Records the subscription a paid Checkout started, before its signal
- * arrives; answers whether the organization now holds a subscription.
+ * arrives; answers whether the organization now has one that Stripe bills.
  */
-async function recordsHolding(
+async function recordsRunning(
   organizationId: string,
   subscriptionId: string | null,
   subscriptions: StripeSubscriptionGateway,
 ): Promise<boolean> {
   if (!subscriptionId) return false;
   await recordSubscription(await subscriptions.readSubscription(subscriptionId), subscriptions);
-  return (await readOrganizationSubscription(organizationId))?.holdsSubscription === true;
+  return (await readOrganizationSubscription(organizationId))?.runsSubscription === true;
 }
 
 type ClaimedCheckoutConfiguration = {
@@ -227,7 +236,7 @@ async function claimedCheckout(
   let session: StripeCheckoutSession | null = null;
   try {
     const paid = claim.session_id ? await subscriptions.closeCheckout(claim.session_id) : null;
-    if (await recordsHolding(request.organizationId, paid, subscriptions)) {
+    if (await recordsRunning(request.organizationId, paid, subscriptions)) {
       await finishCheckout(request.organizationId, claim.attempt, null);
       return { ok: false, code: 'already_subscribed' };
     }

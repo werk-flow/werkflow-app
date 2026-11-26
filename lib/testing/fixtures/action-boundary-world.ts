@@ -83,6 +83,16 @@ function createAdminStandIn(world: ActionWorld, database: () => { from: (table: 
           const result = await outcome;
           return Array.isArray(result.data) ? { ...result, data: result.data.slice(from, to + 1) } : result;
         },
+        // A function that returns one row, read as that row (PostgREST answers PGRST116 for any other count).
+        single: async (): Promise<RpcOutcome> => {
+          const result = await outcome;
+          if (result.error || !Array.isArray(result.data)) return result;
+          const rows: unknown[] = result.data;
+          const [row, ...rest] = rows;
+          return row !== undefined && rest.length === 0
+            ? { ...result, data: row }
+            : { data: null, error: { code: 'PGRST116', message: 'not exactly one row' } };
+        },
       });
     },
     functions: {

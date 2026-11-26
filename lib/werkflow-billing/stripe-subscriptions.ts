@@ -43,6 +43,32 @@ export type StripeCheckoutSession = { id: string; url: string; expiresAt: string
 
 type StripeCheckoutState = { open: boolean; subscriptionId: string | null };
 
+/** A refund as Stripe holds it now, with the duplicate it ends when the backstop issued it. */
+type StripeRefundSnapshot = {
+  id: string;
+  /** Stripe's status, such as `pending`, `succeeded` or `failed`. */
+  status: string;
+  amountCents: number;
+  paymentIntentId: string | null;
+  customerId: string | null;
+  /** The `werkflow_duplicate_subscription_id` metadata the duplicate cleanup set; null on any other refund. */
+  duplicateSubscriptionId: string | null;
+};
+
+/** How a subscription is paid, with no more than the last four digits. */
+export type StripePaymentMethodSummary =
+  | { kind: 'sepa_debit'; lastFour: string | null }
+  | { kind: 'card'; brand: string; lastFour: string | null }
+  | { kind: 'other' };
+
+/** What the billing page asks Stripe (werk-flow/werkflow-planning#252). */
+export type StripeBillingOutlook = {
+  /** The next renewal's amount and date; null when the subscription ends at its period end or has ended. */
+  upcoming: { amountCents: number; dueAt: string } | null;
+  /** The method Stripe charges next; null when none is set. */
+  paymentMethod: StripePaymentMethodSummary | null;
+};
+
 export type StripeSubscriptionGateway = {
   /** Creates the customer of an organization, with its id in the metadata; answers the customer id. */
   createCustomer(input: {
@@ -70,9 +96,26 @@ export type StripeSubscriptionGateway = {
    * Ends a second subscription of an organization at once: refunds every
    * payment of its latest invoice that has no refund yet (a SEPA debit still
    * in flight is refunded when it settles), then cancels it without proration.
-   * A rerun after a partial failure finishes the job.
+   * A rerun after a partial failure finishes the job. A refund Stripe
+   * reported failed is never issued again: its alarm asks a person to refund.
    */
   cancelDuplicateSubscription(subscriptionId: string): Promise<void>;
+  /**
+   * Ends what a customer has running when its organization or account is
+   * deleted: the open Checkout expires, and every subscription Stripe still
+   * bills is cancelled at once, without proration or refund (owner,
+   * 2026-11-15). Answers the subscriptions it cancelled; a rerun cancels none twice.
+   */
+  endCustomerSubscriptions(customerId: string, checkoutSessionId: string | null): Promise<string[]>;
+  readRefund(refundId: string): Promise<StripeRefundSnapshot>;
+  /** The next renewal and the payment method of a subscription. */
+  readBillingOutlook(subscriptionId: string): Promise<StripeBillingOutlook>;
+  /**
+   * Ends the subscription at the end of its paid period, or takes that back
+   * while the period runs. The caller re-reads the subscription to record it:
+   * a read stamps when it began, so a late answer never outranks a newer change.
+   */
+  setCancelAtPeriodEnd(subscriptionId: string, cancelAtPeriodEnd: boolean): Promise<void>;
 };
 
 function callFailed(): Error {
@@ -105,7 +148,6 @@ function subscriptionSnapshotOf(
     typeof customer === 'object' && !customer.deleted
       ? (customer.metadata[ORGANIZATION_METADATA_KEY] ?? null)
       : null;
-  const periodEnds = subscription.items.data.map((item) => item.current_period_end);
   return {
     id: subscription.id,
     customerId: expandableId(customer) ?? '',
@@ -113,10 +155,88 @@ function subscriptionSnapshotOf(
     status: subscription.status,
     cancellationReason: subscription.cancellation_details?.reason ?? null,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
-    currentPeriodEnd: periodEnds.length > 0 ? new Date(Math.min(...periodEnds) * 1000).toISOString() : null,
+    currentPeriodEnd: nullableIsoOf(periodEndOf(subscription)),
     readAt,
   };
 }
+
+/** The earliest end of a subscription's items: when its paid period ends. */
+function periodEndOf(subscription: Stripe.Subscription): number | null {
+  const periodEnds = subscription.items.data.map((item) => item.current_period_end);
+  return periodEnds.length > 0 ? Math.min(...periodEnds) : null;
+}
+
+function paymentMethodSummaryOf(method: Stripe.PaymentMethod | null): StripePaymentMethodSummary | null {
+  if (!method) return null;
+  if (method.type === 'sepa_debit') return { kind: 'sepa_debit', lastFour: method.sepa_debit?.last4 ?? null };
+  if (method.type === 'card') {
+    return { kind: 'card', brand: method.card?.brand ?? 'unknown', lastFour: method.card?.last4 ?? null };
+  }
+  return { kind: 'other' };
+}
+
+/**
+ * Whether Stripe invoices a renewal at the end of the current period: not
+ * when the subscription ended, ends at its period end, or is set to cancel
+ * by then. A cancellation set for a later date leaves the renewals before it.
+ */
+function renewsAt(subscription: Stripe.Subscription, periodEnd: number): boolean {
+  return (
+    !subscription.cancel_at_period_end &&
+    (subscription.cancel_at === null || subscription.cancel_at > periodEnd) &&
+    !['canceled', 'incomplete_expired'].includes(subscription.status)
+  );
+}
+
+/** The renewal preview and the payment method, in Stripe's own order of defaults. */
+async function billingOutlook(client: Stripe, subscriptionId: string): Promise<StripeBillingOutlook> {
+  const subscription = await client.subscriptions.retrieve(subscriptionId, {
+    expand: ['default_payment_method', 'customer.invoice_settings.default_payment_method'],
+  });
+  const customer = subscription.customer;
+  const method =
+    expanded(subscription.default_payment_method) ??
+    (typeof customer === 'object' && !customer.deleted
+      ? expanded(customer.invoice_settings.default_payment_method)
+      : null);
+  const periodEnd = periodEndOf(subscription);
+  const preview =
+    periodEnd !== null && renewsAt(subscription, periodEnd)
+      ? await client.invoices.createPreview({ subscription: subscriptionId })
+      : null;
+  // The preview's own payment date, so amount and date describe one invoice even
+  // when the subscription renewed between the two reads.
+  const dueAt = nullableIsoOf(preview?.next_payment_attempt ?? periodEnd);
+  return {
+    upcoming: preview && dueAt ? { amountCents: preview.amount_due, dueAt } : null,
+    paymentMethod: paymentMethodSummaryOf(method),
+  };
+}
+
+/** Stripe's seconds since the epoch as ISO time. */
+function nullableIsoOf(seconds: number | null): string | null {
+  return seconds === null ? null : new Date(seconds * 1000).toISOString();
+}
+
+/** The object of a field Stripe expanded; null for an id or nothing. */
+export function expanded<T extends object>(value: string | T | null | undefined): T | null {
+  return typeof value === 'object' ? value : null;
+}
+
+/** Only the end of the paid period changes: no immediate cancel, no proration, no refund. */
+async function setCancellation(
+  client: Stripe,
+  subscriptionId: string,
+  cancelAtPeriodEnd: boolean,
+): Promise<void> {
+  await client.subscriptions.update(subscriptionId, { cancel_at_period_end: cancelAtPeriodEnd });
+}
+
+/** Stripe's statuses of a subscription it no longer bills. */
+const ENDED_STATUSES = new Set(['canceled', 'incomplete_expired']);
+
+/** The metadata key on each refund the duplicate cleanup issues. */
+const DUPLICATE_METADATA_KEY = 'werkflow_duplicate_subscription_id';
 
 /** cancelDuplicateSubscription's steps: each refund and the cancellation run at most once over reruns. */
 async function cancelDuplicate(client: Stripe, subscriptionId: string): Promise<void> {
@@ -129,14 +249,91 @@ async function cancelDuplicate(client: Stripe, subscriptionId: string): Promise<
     const intentId = expandableId(payment.payment.payment_intent ?? null);
     if (!intentId || payment.status === 'canceled') continue;
     let refunded = false;
+    let cancelled = 0;
     for await (const refund of client.refunds.list({ payment_intent: intentId, limit: 100 })) {
-      if (refund.status !== 'failed' && refund.status !== 'canceled') refunded = true;
+      if (refund.status === 'canceled') cancelled += 1;
+      else refunded = true;
     }
-    if (!refunded) await client.refunds.create({ payment_intent: intentId });
+    if (!refunded) {
+      // Each cancelled refund starts a new attempt: Stripe would replay the cancelled one for its key.
+      await client.refunds.create(
+        { payment_intent: intentId, metadata: { [DUPLICATE_METADATA_KEY]: subscriptionId } },
+        { idempotencyKey: `werkflow-duplicate-refund-${intentId}-${cancelled}` },
+      );
+    }
   }
-  if (subscription.status !== 'canceled') {
+  if (!ENDED_STATUSES.has(subscription.status)) {
     await client.subscriptions.cancel(subscriptionId, { prorate: false, invoice_now: false });
   }
+}
+
+/** endCustomerSubscriptions' steps: the Checkout first, so no payer starts a new subscription meanwhile. */
+async function endCustomer(
+  client: Stripe,
+  customerId: string,
+  checkoutSessionId: string | null,
+): Promise<string[]> {
+  if (checkoutSessionId) {
+    const session = await client.checkout.sessions.retrieve(checkoutSessionId);
+    if (session.status === 'open') await client.checkout.sessions.expire(checkoutSessionId);
+  }
+  const cancelled: string[] = [];
+  for await (const subscription of client.subscriptions.list({
+    customer: customerId,
+    status: 'all',
+    limit: 100,
+  })) {
+    if (ENDED_STATUSES.has(subscription.status)) continue;
+    await client.subscriptions.cancel(subscription.id, { prorate: false, invoice_now: false });
+    cancelled.push(subscription.id);
+  }
+  return cancelled;
+}
+
+async function refundSnapshot(client: Stripe, refundId: string): Promise<StripeRefundSnapshot> {
+  const refund = await client.refunds.retrieve(refundId, { expand: ['payment_intent'] });
+  const intent = expanded(refund.payment_intent);
+  return {
+    id: refund.id,
+    status: refund.status ?? 'unknown',
+    amountCents: refund.amount,
+    paymentIntentId: expandableId(refund.payment_intent),
+    customerId: intent ? expandableId(intent.customer) : null,
+    duplicateSubscriptionId: refund.metadata?.[DUPLICATE_METADATA_KEY] ?? null,
+  };
+}
+
+/** A Checkout for the monthly subscription, keyed by organization and attempt. */
+async function createCheckout(
+  client: Stripe,
+  request: StripeCheckoutRequest,
+): Promise<StripeCheckoutSession> {
+  const metadata = { [ORGANIZATION_METADATA_KEY]: request.organizationId };
+  const session = await client.checkout.sessions.create(
+    {
+      mode: 'subscription',
+      customer: request.customerId,
+      client_reference_id: request.organizationId,
+      line_items: [{ price: request.priceId, quantity: 1 }],
+      // offer.md: direct debit first, card as the alternative, nothing else.
+      allowed_payment_method_types: ['sepa_debit', 'card'],
+      // The invoice names the buyer's address (EN 16931); Checkout saves it on the customer.
+      billing_address_collection: 'required',
+      customer_update: { address: 'auto', name: 'auto' },
+      locale: 'de',
+      metadata,
+      subscription_data: { metadata },
+      success_url: request.successUrl,
+      cancel_url: request.cancelUrl,
+    },
+    { idempotencyKey: `werkflow-checkout-${request.organizationId}-${request.attempt}` },
+  );
+  if (!session.url) throw callFailed();
+  return {
+    id: session.id,
+    url: session.url,
+    expiresAt: new Date(session.expires_at * 1000).toISOString(),
+  };
 }
 
 export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
@@ -153,35 +350,7 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
         });
         return customer.id;
       }),
-    createCheckoutSession: (request) =>
-      call(async () => {
-        const metadata = { [ORGANIZATION_METADATA_KEY]: request.organizationId };
-        const session = await client.checkout.sessions.create(
-          {
-            mode: 'subscription',
-            customer: request.customerId,
-            client_reference_id: request.organizationId,
-            line_items: [{ price: request.priceId, quantity: 1 }],
-            // offer.md: direct debit first, card as the alternative, nothing else.
-            allowed_payment_method_types: ['sepa_debit', 'card'],
-            // The invoice names the buyer's address (EN 16931); Checkout saves it on the customer.
-            billing_address_collection: 'required',
-            customer_update: { address: 'auto', name: 'auto' },
-            locale: 'de',
-            metadata,
-            subscription_data: { metadata },
-            success_url: request.successUrl,
-            cancel_url: request.cancelUrl,
-          },
-          { idempotencyKey: `werkflow-checkout-${request.organizationId}-${request.attempt}` },
-        );
-        if (!session.url) throw callFailed();
-        return {
-          id: session.id,
-          url: session.url,
-          expiresAt: new Date(session.expires_at * 1000).toISOString(),
-        };
-      }),
+    createCheckoutSession: (request) => call(() => createCheckout(client, request)),
     closeCheckout: (sessionId) =>
       call(async () => {
         const session = await client.checkout.sessions.retrieve(sessionId);
@@ -217,5 +386,11 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
         return newest ? subscriptionSnapshotOf(newest, readAt) : null;
       }),
     cancelDuplicateSubscription: (subscriptionId) => call(() => cancelDuplicate(client, subscriptionId)),
+    endCustomerSubscriptions: (customerId, checkoutSessionId) =>
+      call(() => endCustomer(client, customerId, checkoutSessionId)),
+    readRefund: (refundId) => call(() => refundSnapshot(client, refundId)),
+    readBillingOutlook: (subscriptionId) => call(() => billingOutlook(client, subscriptionId)),
+    setCancelAtPeriodEnd: (subscriptionId, cancelAtPeriodEnd) =>
+      call(() => setCancellation(client, subscriptionId, cancelAtPeriodEnd)),
   };
 }

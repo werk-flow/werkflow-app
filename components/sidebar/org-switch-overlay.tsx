@@ -109,6 +109,11 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<
       ),
   ],
   [
+    '/service/bereitschaft',
+    service(),
+    () => import('@/components/loading-states/on-call-skeletons').then((m) => service(m.OnCallWeekSkeleton)),
+  ],
+  [
     '/service/wartung',
     service(),
     () =>
@@ -175,6 +180,14 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<
     titled('Inventar'),
     () =>
       import('@/components/loading-states/inventar-page-skeleton').then((m) => page(m.InventarPageSkeleton)),
+  ],
+  [
+    '/kennzahlen',
+    titled('Wochenzahlen'),
+    () =>
+      import('@/components/loading-states/kennzahlen-page-skeleton').then((m) =>
+        page(m.KennzahlenPageSkeleton),
+      ),
   ],
   [
     '/angebote/leistungen',

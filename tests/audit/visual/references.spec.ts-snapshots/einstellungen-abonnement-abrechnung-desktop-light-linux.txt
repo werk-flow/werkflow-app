@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -17,11 +18,9 @@ Service
 Arbeitsvorlagen
 Mitarbeiter
 Kunden
+Wochenzahlen
 Problem melden
 F2
-MK
-Martin Krämer
-martin.kraemer@haustechnik-kraemer.de
 Einstellungen
 Persönlich
 Profil
@@ -51,8 +50,9 @@ Kunden
 Kundenverwaltung und Defaults
 Datenexport
 Abonnement & Abrechnung
-Vertrags-, Rechnungs- und Abonnementinformationen für die Organisation.
+Dein WerkFlow-Abo, die nächste Zahlung und alle Rechnungen von WerkFlow an deine Organisation.
 Gilt für Haustechnik Krämer GmbH
-Noch keine Einstellungen
-Für diesen Bereich gibt es noch nichts einzustellen. Sobald es Einstellungen gibt, findest du sie hier.
+Noch kein Abo
+Deine Organisation nutzt WerkFlow ohne Abo. Wenn du ein Abo abschließt, findest du hier deine Rechnungen, die nächste Zahlung und die Kündigung.
+Abo abschließen
 Nicht eingestempelt

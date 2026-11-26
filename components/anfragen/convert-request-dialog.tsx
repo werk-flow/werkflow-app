@@ -41,6 +41,12 @@ interface ConvertRequestDialogProps {
   onSaved?: () => void;
 }
 
+const SUBMIT_LABELS = {
+  job: 'In Auftrag umwandeln',
+  project: 'In Projekt umwandeln',
+  offer: 'In Angebot umwandeln',
+} as const;
+
 /** The target kind, its template, and the title and number fields that change label with it. */
 function ConvertRequestTargetFields({ form }: { form: ConvertRequestForm }) {
   const {
@@ -74,33 +80,45 @@ function ConvertRequestTargetFields({ form }: { form: ConvertRequestForm }) {
           <TabsTrigger value="project" className="flex-1">
             Projekt
           </TabsTrigger>
+          <TabsTrigger value="offer" className="flex-1">
+            Angebot
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
-      <WorkTemplatePicker
-        targetType={target}
-        value={templateVersionId}
-        onChange={setTemplateVersionId}
-        disabled={isLoading}
-      />
+      {target !== 'offer' && (
+        <WorkTemplatePicker
+          targetType={target}
+          value={templateVersionId}
+          onChange={setTemplateVersionId}
+          disabled={isLoading}
+        />
+      )}
 
       <Field
-        label={target === 'job' ? 'Titel' : 'Projektname'}
+        label={target === 'project' ? 'Projektname' : 'Titel'}
         htmlFor="convert-title"
         required
         error={titleError}
+        description={
+          target === 'offer'
+            ? 'Die Angebotsnummer wird automatisch vergeben, Gültigkeit und Texte kommen aus den Firmendaten.'
+            : undefined
+        }
       >
         <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={isLoading} />
       </Field>
 
-      <Field
-        label={target === 'job' ? 'Auftragsnummer' : 'Projektnummer'}
-        htmlFor="convert-number"
-        required={target === 'job'}
-        error={numberError}
-      >
-        <Input value={number} onChange={(e) => setNumber(e.target.value)} disabled={isLoading} />
-      </Field>
+      {target !== 'offer' && (
+        <Field
+          label={target === 'job' ? 'Auftragsnummer' : 'Projektnummer'}
+          htmlFor="convert-number"
+          required={target === 'job'}
+          error={numberError}
+        >
+          <Input value={number} onChange={(e) => setNumber(e.target.value)} disabled={isLoading} />
+        </Field>
+      )}
     </>
   );
 }
@@ -147,13 +165,15 @@ export function ConvertRequestDialog({
 
               {target === 'job' && <ConvertRequestJobFields form={form} />}
 
-              <Field label="Beschreibung" htmlFor="convert-description">
-                <Textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  disabled={isLoading}
-                />
-              </Field>
+              {target !== 'offer' && (
+                <Field label="Beschreibung" htmlFor="convert-description">
+                  <Textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    disabled={isLoading}
+                  />
+                </Field>
+              )}
 
               <ErrorText>{formError}</ErrorText>
             </DialogBody>
@@ -168,7 +188,7 @@ export function ConvertRequestDialog({
               </Button>
               <Button type="submit" pending={isLoading}>
                 <ArrowRightLeft className="size-4" />
-                {target === 'job' ? 'In Auftrag umwandeln' : 'In Projekt umwandeln'}
+                {SUBMIT_LABELS[target]}
               </Button>
             </DialogFooter>
           </form>

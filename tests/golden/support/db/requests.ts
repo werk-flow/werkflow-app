@@ -24,6 +24,8 @@ export async function seedRequest(input: {
   details?: string;
   urgency?: RequestEnums['request_urgency'];
   assignedTo?: string;
+  /** The promised callback, an ISO instant; a past one makes the open request an overdue callback. */
+  callbackDueAt?: string;
   outcome?:
     | { status: 'offen' | 'in_klaerung' }
     | { status: 'geschlossen'; reason: RequestEnums['request_close_reason'] }
@@ -53,6 +55,7 @@ export async function seedRequest(input: {
       details: input.details ?? null,
       urgency: input.urgency ?? 'normal',
       assigned_to: input.assignedTo ?? null,
+      callback_due_at: input.callbackDueAt ?? null,
       status: outcome.status,
       ...(outcome.status === 'geschlossen'
         ? { closed_reason: outcome.reason, closed_at: now, closed_by: input.actorId }

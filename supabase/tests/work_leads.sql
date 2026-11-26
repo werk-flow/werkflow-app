@@ -417,6 +417,15 @@ begin
   if (select ctid from public.work_leads where id = v_holding) is distinct from v_before then
     raise exception 'a job of another project touched the holding';
   end if;
+  -- The delete side has its own trigger, which skips only an organization's deletion.
+  insert into public.jobs (id, organization_id, project_id, title, job_number, created_by) values
+    ('4f200000-0000-4000-8000-000000000026', '4f200000-0000-4000-8000-0000000000a0',
+     '4f200000-0000-4000-8000-000000000011', 'Probebohrung', 'LEAD-7', '4f200000-0000-4000-8000-000000000001');
+  v_before := (select ctid from public.work_leads where id = v_holding);
+  delete from public.jobs where id = '4f200000-0000-4000-8000-000000000026';
+  if (select ctid from public.work_leads where id = v_holding) is not distinct from v_before then
+    raise exception 'a deleted job of a led project did not touch its holding';
+  end if;
 end;
 $$;
 

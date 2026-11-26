@@ -79,3 +79,23 @@ function probe(host: string, port: number): Promise<void> {
 export async function assertAppPortFree(port: number): Promise<void> {
   for (const host of [...LISTEN_ADDRESSES, ...hostAddresses()]) await probe(host, port);
 }
+
+/** How long a stopped server's descendants get to release the app port after its group is gone. */
+const PORT_RELEASE_MS = 10_000;
+
+/**
+ * Resolves once the app port is free, or throws the last refusal after PORT_RELEASE_MS: a server
+ * that stopped can leave a descendant in a group of its own that still closes its socket.
+ */
+export async function awaitAppPortFree(port: number): Promise<void> {
+  const deadline = Date.now() + PORT_RELEASE_MS;
+  for (;;) {
+    try {
+      await assertAppPortFree(port);
+      return;
+    } catch (error) {
+      if (Date.now() > deadline) throw error;
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  }
+}

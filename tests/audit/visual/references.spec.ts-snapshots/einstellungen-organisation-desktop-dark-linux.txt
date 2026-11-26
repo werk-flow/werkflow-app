@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -17,11 +18,9 @@ Service
 Arbeitsvorlagen
 Mitarbeiter
 Kunden
+Wochenzahlen
 Problem melden
 F2
-MK
-Martin Krämer
-martin.kraemer@haustechnik-kraemer.de
 Einstellungen
 Persönlich
 Profil
@@ -59,6 +58,8 @@ Deine Rolle
 Admin
 Erstellt am
 1. Januar 2026
+Mitglieder
+4
 Allgemeine Angaben
 Admins können den Organisationsnamen und den Code für den Beitritt pflegen.
 Name der Organisation
@@ -71,8 +72,6 @@ Pflichtfeld
 Dieser Code muss organisationsweit eindeutig sein, damit neue Nutzer gezielt beitreten können.
 Änderungen wirken sich direkt auf alle Mitglieder dieser Organisation aus.
 Organisation speichern
-Gefahrenzone
-Löscht die Organisation dauerhaft inklusive Mitgliedschaften und Einladungen.
-Diese Aktion sollte nur genutzt werden, wenn die Organisation wirklich nicht mehr benötigt wird.
-Organisation löschen
+WerkFlow KI
+Der KI-Assistent arbeitet nur mit den Rechten der Person, die ihn nutzt. Chats sind privat: Niemand sonst kann sie lesen, auch kein Admin. Nach 12 Monaten werden sie gelöscht.
 Nicht eingestempelt

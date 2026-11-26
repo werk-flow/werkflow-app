@@ -120,7 +120,7 @@ export type NextIssue = { number: string; issueDate: string };
  * both, leaves room for the lines. Its bytes when it passes, else what keeps
  * the invoice from its number; null without a Leistungsdatum.
  */
-async function checkedOriginal(
+async function checkedIssueOriginal(
   organizationId: string,
   invoice: Parameters<typeof calculatedInvoiceOf>[0] & { recipient: { id: string } },
   snapshot: IssueSnapshot,
@@ -159,15 +159,23 @@ function isMovedNumber(result: ActionResult): boolean {
  */
 export async function issueUnderCheckedNumber<Result extends ActionResult>(
   organizationId: string,
-  invoice: Parameters<typeof checkedOriginal>[1],
+  invoice: Parameters<typeof checkedIssueOriginal>[1],
   snapshot: IssueSnapshot,
   issue: (next: NextIssue, original: StoredOriginal | null) => Promise<Result>,
 ): Promise<Result | InvoiceCheckFailure | ActionFailure<'invoice_incomplete'>> {
   for (let attempt = 1; ; attempt += 1) {
     const issueDate = getBusinessTodayIso();
     const { nextInvoiceNumber } = await readInvoiceSettings(organizationId);
+    if (nextInvoiceNumber === null) {
+      // A used-up series has no number to check under, so nothing is checked or stored. The function still
+      // answers a retry whose first press took the last number with that issue, before it reads the
+      // series, and refuses anything else as invoice_numbers_exhausted.
+      const result = await issue({ number: '', issueDate }, null);
+      if (attempt >= ISSUE_ATTEMPTS || !isMovedNumber(result)) return result;
+      continue;
+    }
     const next = { number: nextInvoiceNumber, issueDate };
-    const original = await checkedOriginal(organizationId, invoice, snapshot, next);
+    const original = await checkedIssueOriginal(organizationId, invoice, snapshot, next);
     if (!original) return { success: false, error: 'invoice_incomplete' };
     if (Array.isArray(original)) return { success: false, error: 'invoice_check_failed', findings: original };
     const result = await issue(next, await storeCheckedOriginal(organizationId, next.number, original));

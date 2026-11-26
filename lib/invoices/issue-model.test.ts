@@ -1,12 +1,13 @@
 import { describe, expect, mock, test } from 'bun:test';
 
 import { offerLetterhead } from '@/lib/company-profile/letterhead';
-import { EMPTY_COMPANY_PROFILE_DETAILS } from '@/lib/company-profile/profile';
 import { invoiceDocument } from '@/lib/document-rendering/invoice-layout';
 import { calculateInvoice } from '@/lib/invoicing/calculate';
 import { toEn16931 } from '@/lib/invoicing/to-en16931';
 import { INVENTORY_UNITS } from '@/lib/inventory/units';
-import { invoiceDraftOf, issueFindingsOf, postalAddressOf, type IssueSnapshot } from './issue-model';
+import { ISSUE_SNAPSHOT } from '@/lib/testing/invoice-arbitraries';
+import { invoiceDraftOf, issueFindingsOf, postalAddressOf } from './issue-model';
+import type { InvoiceLineSource } from './line-sources';
 import { INVOICE_REFERENCE_MAX_LENGTH, type InvoiceDetail } from './types';
 
 mock.module('server-only', () => ({}));
@@ -22,25 +23,7 @@ const { renderBusinessDocument } = await import('@/lib/document-rendering/render
 // core: address, units, Leistungsdatum, Skonto, texts, tax; the findings in
 // the office's words; and the longest references still leave room on the page.
 
-const SNAPSHOT: IssueSnapshot = {
-  organizationName: 'Haustechnik Sonnenberg',
-  profile: {
-    ...EMPTY_COMPANY_PROFILE_DETAILS,
-    companyName: 'Haustechnik Sonnenberg GmbH',
-    street: 'Sonnenweg 1',
-    postalCode: '01234',
-    city: 'Sonnenstadt',
-    vatId: 'DE123456789',
-    iban: 'DE00 1111 1111 1111 1111 11',
-  },
-  files: { logo: null, stationery_first: null, stationery_following: null },
-  buyer: {
-    name: 'Hausverwaltung Lindenhof GmbH',
-    address: { lines: ['Hofweg 1'], postalCode: '10117', city: 'Berlin', countryCode: 'DE' },
-  },
-};
-
-const line = (unit: string, taxRateBasisPoints: 1900 | 700 | 0) => ({
+const line = (unit: string, taxRateBasisPoints: 1900 | 700 | 0, source: InvoiceLineSource | null = null) => ({
   name: 'Position',
   description: '',
   quantity: '1.000',
@@ -49,7 +32,16 @@ const line = (unit: string, taxRateBasisPoints: 1900 | 700 | 0) => ({
   priceQuantity: 1 as const,
   taxRateBasisPoints,
   netCents: 1000,
+  source,
 });
+
+const MONTEURSTUNDE: InvoiceLineSource = {
+  kind: 'leistung',
+  id: '00000000-0000-4000-8000-000000000071',
+  number: 'L-7',
+  name: 'Monteurstunde',
+  archived: false,
+};
 
 const INVOICE: Parameters<typeof invoiceDraftOf>[0] = {
   serviceStart: '2037-11-02',
@@ -61,7 +53,7 @@ const INVOICE: Parameters<typeof invoiceDraftOf>[0] = {
   buyerReference: '',
   openingText: 'Vielen Dank für deinen Auftrag.',
   closingText: '',
-  lines: [line('hour', 1900), line('coil', 0)],
+  lines: [line('hour', 1900, MONTEURSTUNDE), line('coil', 0)],
 };
 
 describe('postalAddressOf', () => {
@@ -86,7 +78,7 @@ describe('postalAddressOf', () => {
 
 describe('invoiceDraftOf', () => {
   test('maps the stored invoice and the snapshot into the core, and the result passes the EN 16931 rules', async () => {
-    const draft = invoiceDraftOf(INVOICE, SNAPSHOT, { number: 'RE-2037-001', issueDate: '2037-11-20' });
+    const draft = invoiceDraftOf(INVOICE, ISSUE_SNAPSHOT, { number: 'RE-2037-001', issueDate: '2037-11-20' });
     expect(draft).not.toBeNull();
     if (!draft) return;
     expect(draft.delivery).toEqual({ kind: 'period', start: '2037-11-02', end: '2037-11-06' });
@@ -108,7 +100,7 @@ describe('invoiceDraftOf', () => {
   test('every unit of the list has a code the EN 16931 rules accept', async () => {
     const draft = invoiceDraftOf(
       { ...INVOICE, lines: INVENTORY_UNITS.map((unit) => line(unit.code, 1900)) },
-      SNAPSHOT,
+      ISSUE_SNAPSHOT,
       { number: 'RE-2037-001', issueDate: '2037-11-20' },
     );
     if (!draft) throw new Error('no draft');
@@ -117,13 +109,13 @@ describe('invoiceDraftOf', () => {
   });
 
   test('one day is a Leistungsdatum; without one there is no invoice to issue', () => {
-    const oneDay = invoiceDraftOf({ ...INVOICE, serviceEnd: '2037-11-02' }, SNAPSHOT, {
+    const oneDay = invoiceDraftOf({ ...INVOICE, serviceEnd: '2037-11-02' }, ISSUE_SNAPSHOT, {
       number: 'X',
       issueDate: '2037-11-20',
     });
     expect(oneDay?.delivery).toEqual({ kind: 'date', date: '2037-11-02' });
     expect(
-      invoiceDraftOf({ ...INVOICE, serviceStart: null, serviceEnd: null }, SNAPSHOT, {
+      invoiceDraftOf({ ...INVOICE, serviceStart: null, serviceEnd: null }, ISSUE_SNAPSHOT, {
         number: 'X',
         issueDate: '2037-11-20',
       }),
@@ -134,11 +126,11 @@ describe('invoiceDraftOf', () => {
     const reference = 'A'.repeat(INVOICE_REFERENCE_MAX_LENGTH);
     const draft = invoiceDraftOf(
       { ...INVOICE, orderReference: reference, buyerReference: reference },
-      SNAPSHOT,
+      ISSUE_SNAPSHOT,
       { number: 'RE-2037-000001', issueDate: '2037-11-20' },
     );
     if (!draft) throw new Error('no draft');
-    const letterhead = offerLetterhead(SNAPSHOT.profile, {}, SNAPSHOT.organizationName);
+    const letterhead = offerLetterhead(ISSUE_SNAPSHOT.profile, {}, ISSUE_SNAPSHOT.organizationName);
     const bytes = await renderBusinessDocument(invoiceDocument(calculateInvoice(draft), letterhead));
     expect(bytes.byteLength).toBeGreaterThan(0);
   });

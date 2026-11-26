@@ -5,6 +5,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { workflowsFolder } from '../ci-workflow';
 
 const root = resolve(import.meta.dir, '../../..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
@@ -12,12 +13,12 @@ const SETUP_CLI = 'uses: supabase/setup-cli@';
 const CACHED_CLI = 'uses: ./.github/actions/supabase-cli';
 
 test('CI and staging install the Supabase CLI through the cached action', () => {
-  for (const path of ['.github/actions/local-stack/action.yml', '.github/workflows/staging.yml']) {
+  for (const path of ['.github/actions/local-stack/action.yml', `${workflowsFolder()}/staging.yml`]) {
     expect(read(path), path).toContain(CACHED_CLI);
     expect(read(path), path).not.toContain(SETUP_CLI);
   }
-  expect(read('.github/workflows/release.yml')).toContain(SETUP_CLI);
-  expect(read('.github/workflows/release.yml')).not.toContain(CACHED_CLI);
+  expect(read(`${workflowsFolder()}/release.yml`)).toContain(SETUP_CLI);
+  expect(read(`${workflowsFolder()}/release.yml`)).not.toContain(CACHED_CLI);
 });
 
 test('the cached action restores first and downloads only on a miss', () => {

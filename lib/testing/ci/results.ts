@@ -2,6 +2,7 @@
 // `Check` reads the results of its run; a later run reads the ledger to reuse a passed result.
 import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
+import { INCIDENT_CLASSES } from '../runner/run-policy';
 import { CI_EVENTS, CI_JOBS, type CiJob } from './dag';
 
 const shardSchema = z.object({ shard: z.number().int().positive(), groups: z.string().min(1) });
@@ -17,8 +18,59 @@ const runPlanSchema = z.object({
   shards: z.array(shardSchema),
   /** The planner's outputs, `$GITHUB_OUTPUT` keys of scripts/ci-plan.ts with the run's changes. */
   outputs: z.record(z.string(), z.string()),
+  /** Each job or shard that another run's passed result stands for, with that run. Absent on older plans. */
+  reused: z
+    .array(
+      z.object({
+        job: z.enum(CI_JOBS),
+        shard: z.number().int().positive().nullable(),
+        runUrl: z.string().min(1),
+      }),
+    )
+    .optional(),
+  /**
+   * The work the run's event requires of the selection before reuse, as `job:group`, sorted
+   * (`plannedWork` in lib/testing/ci/run-plan.ts). A push reuses a passed run of its tree only when
+   * that run required the same work. Absent on older plans, which no push reuses.
+   */
+  work: z.array(z.string().min(1)).optional(),
 });
 export type RunPlan = z.infer<typeof runPlanSchema>;
+
+/** A PR number or an attempt: a positive safe integer, so a measurement input that passes it parses as a receipt. */
+export const positiveIntegerSchema = z.number().int().positive();
+
+/**
+ * The Plan a job ran under (`planIdentityOf` in lib/testing/ci/check.ts): its run, attempt, start,
+ * base and a digest of its decision. A replanned attempt has another identity, a rerun of failed
+ * jobs under the same Plan the same one.
+ */
+const planIdentitySchema = z.object({
+  runUrl: z.string().min(1).nullable(),
+  attempt: positiveIntegerSchema.nullable(),
+  startedAt: z.string().datetime(),
+  base: z.string().nullable(),
+  /** SHA-256 of the Plan's decision (`plan`), keys sorted. */
+  digest: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type PlanIdentity = z.infer<typeof planIdentitySchema>;
+
+/** The failure classes of docs/technical/testing.md, "Failures". `transient` is retired. */
+export const failureClassSchema = z.enum(INCIDENT_CLASSES).exclude(['transient']);
+export type FailureClass = z.infer<typeof failureClassSchema>;
+
+/** What a job cost (lib/testing/ci/measurement.ts). The runner sets the inputs; the job never fails on them. */
+const jobCostSchema = z.object({
+  /** One per job process on a CI runner; none on a workstation. */
+  machineStart: z.boolean(),
+  /** When the runner began the job, before its checkout and setup (CI_JOB_STARTED_AT), or null. */
+  runnerStartedAt: z.string().datetime().nullable(),
+  /** The runner's setup before the job body, and a browser shard's build and server start. */
+  setupMs: z.number().nonnegative(),
+  /** From the runner's start of the job, or the body's when unknown, to its result; null while it runs. */
+  wallMs: z.number().nonnegative().nullable(),
+});
+export type JobCost = z.infer<typeof jobCostSchema>;
 
 const ciResultSchema = z.object({
   version: z.literal(1),
@@ -51,12 +103,44 @@ const ciResultSchema = z.object({
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime().nullable(),
   plan: runPlanSchema.optional(),
+  /**
+   * Check's own: when the Plan it verified the run by started. A push reuses the run only by that
+   * Plan's receipt in the ledger (lib/testing/ci/reuse.ts). Absent on older Checks, which no push reuses.
+   */
+  planStartedAt: z.string().datetime().optional(),
+  /**
+   * Every job's but Plan's and Check's: the Plan it ran under. Check passes a planned job only by a
+   * result that names the run's current Plan, so an attempt that planned again never stands on an
+   * earlier Plan's result. Absent on older results, which never pass Check.
+   */
+  planIdentity: planIdentitySchema.optional(),
+  // Measurement (lib/testing/ci/measurement.ts, summed by scripts/ci-cost.ts). Optional: receipts written before it hold none, and no gate
+  // or reuse decision reads them.
+  /** The pull requests the run serves: a PR run's one, an integration batch's, a push's landed ones; none for a full run. */
+  prs: z.array(positiveIntegerSchema).optional(),
+  /** The run's attempt, 1 for the first; a rerun of its failed jobs counts up (CI_RUN_ATTEMPT). Null: unreadable. */
+  attempt: positiveIntegerSchema.nullable().optional(),
+  cost: jobCostSchema.optional(),
+  /** On a rerun: the class the failed first attempt of this job was given (CI_FIRST_ATTEMPT_CLASS). */
+  firstAttemptClass: failureClassSchema.nullable().optional(),
+  /** A full run's failed groups that no diff plan of its trees selected: selection misses. A full run's Check records them from its runner's ledger (scripts/ci/job.ts). */
+  unselectedFailures: z.array(z.string().min(1)).optional(),
 });
 export type CiResult = z.infer<typeof ciResultSchema>;
 
 /** The file a job writes in the results directory: `<job>.json`, a shard's `<job>-<n>.json`. */
 export function resultFileName(job: CiJob, shard: number | null): string {
   return shard === null ? `${job}.json` : `${job}-${shard}.json`;
+}
+
+/** The result a text holds, or undefined; no detail of a malformed text is kept. */
+export function parseResult(text: string): CiResult | undefined {
+  try {
+    const parsed = ciResultSchema.safeParse(JSON.parse(text));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The result in `path`, or why it cannot count. */

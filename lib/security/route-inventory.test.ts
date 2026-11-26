@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import ts from 'typescript';
+import { temporaryDirectory } from '../testing/temporary-directory';
 
 // Tier 2 inventory for route handlers (SI-001, SI-007, SI-013). A route handler
 // gets no framework authentication or CSRF check, so every one that exists
@@ -68,6 +68,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'delegates to getAttentionCounts, which authenticates the cookie session, resolves the active organization, and checks membership',
     mustCall: ['getAttentionCounts'],
   },
+  'app/api/ki/threads/[threadId]/turns/route.ts': {
+    authorization:
+      'same-origin JSON guard; verified cookie identity and current membership of the organization the body names; the release gate, the per-person turn limits, the thread author check and the budget reservation in the database functions before any model step; private no-store responses',
+    mustCall: ['verifySameOriginJsonRequest', 'resolveActionContextFor', 'startAiTurn'],
+  },
   'app/api/redeem-invite/route.ts': {
     authorization:
       'same-origin JSON guard before any cookie is written; getUser() on the caller session, where a check that cannot complete answers 503; the redemption limit; the RPC binds the invite to that user',
@@ -129,6 +134,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'no session: Stripe proves itself with the Stripe-Signature header over the raw body and STRIPE_WEBHOOK_SECRET, verified before anything is parsed or stored; a missing, forged or stale signature answers 400 and records nothing; without a key accepted for this environment nothing runs and it answers 503; one database call records and claims the event id, so a replay changes nothing; the body is empty, no-store',
     mustCall: ['resolveStripeGateway', 'verifySignal', 'receiveSignal'],
   },
+  'app/api/resend/webhook/route.ts': {
+    authorization:
+      'no session: Resend proves itself with the Svix signature over svix-id, svix-timestamp and the raw body with RESEND_WEBHOOK_SECRET, verified before anything is parsed or stored; a missing, forged, stale or altered signature answers 401 and touches nothing; without a usable secret nothing runs and it answers 503; a recorded svix-id is a replay and dispatches nothing; the owning ledger, found by the provider message id, changes its own rows before the signal is recorded; the record keeps ids, type, time and ledger only; the body is empty, no-store',
+    mustCall: ['resendWebhookSecret', 'verifyResendSignature', 'receiveResendSignal'],
+  },
   'app/upgrade/bestaetigt/route.ts': {
     authorization:
       "verified cookie identity; reads only the caller's own open reservation and re-reads its customer's newest subscription from Stripe, recorded as its signal would; takes nothing from the query string; redirects only to fixed paths, private no-store",
@@ -158,6 +168,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
     authorization:
       'Vercel Cron sends the shared CRON_SECRET as a bearer token, compared in constant time; without a configured secret the handler runs nothing and answers 503, a wrong one 404; the purge deletes only due paths no row references, each inside its organization prefix; the body holds counts only, no-store',
     mustCall: ['cronRequestAccess', 'purgeDueStorageObjects'],
+  },
+  'app/api/werkflow-billing-reconciliation/route.ts': {
+    authorization:
+      'Vercel Cron sends the shared CRON_SECRET as a bearer token, compared in constant time; without a configured secret or a Stripe key accepted for this environment the handler runs nothing and answers 503, a wrong secret 404; the run reads Stripe through the gateway, resends failed billing mails and raises alarms to the configured alarm address only; the body holds counts only, no-store',
+    mustCall: ['cronRequestAccess', 'resolveStripeGateway', 'reconcileWerkflowBilling'],
   },
   'app/auth/callback/route.ts': {
     authorization:
@@ -411,19 +426,15 @@ describe('planted violations', () => {
   });
 
   test('a route.js handler joins the inventory', () => {
-    const root = mkdtempSync(join(tmpdir(), 'route-inventory-'));
-    try {
-      for (const [folder, name] of [
-        ['app/api/a', 'route.js'],
-        ['app/api/b', 'route.ts'],
-        ['app/c', 'page.tsx'],
-      ] as const) {
-        mkdirSync(join(root, folder), { recursive: true });
-        writeFileSync(join(root, folder, name), '');
-      }
-      expect(listRouteHandlers(root)).toEqual(['app/api/a/route.js', 'app/api/b/route.ts']);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
+    const root = temporaryDirectory('route-inventory-');
+    for (const [folder, name] of [
+      ['app/api/a', 'route.js'],
+      ['app/api/b', 'route.ts'],
+      ['app/c', 'page.tsx'],
+    ] as const) {
+      mkdirSync(join(root, folder), { recursive: true });
+      writeFileSync(join(root, folder, name), '');
     }
+    expect(listRouteHandlers(root)).toEqual(['app/api/a/route.js', 'app/api/b/route.ts']);
   });
 });

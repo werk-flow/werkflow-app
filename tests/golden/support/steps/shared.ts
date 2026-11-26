@@ -337,6 +337,26 @@ export function metadataDiscardConfirmation(page: Page): Locator {
   return page.getByRole('alertdialog', { name: METADATA_COPY.discardTitle, exact: true });
 }
 
+/**
+ * Opens the dashboard through the sidebar's main navigation, inside the app:
+ * the document stays, and a kept route shows again with what it holds now.
+ */
+export async function openDashboardInApp(page: Page): Promise<void> {
+  await page
+    .getByRole('navigation', { name: 'Hauptnavigation', exact: true })
+    .getByRole('link', { name: 'Dashboard', exact: true })
+    .click();
+  await page.waitForURL('**/dashboard');
+}
+
+/**
+ * When the shown document started. It stays the same until a load or a reload
+ * replaces the document, so equal values prove a journey stayed in one session.
+ */
+export function documentTimeOrigin(page: Page): Promise<number> {
+  return page.evaluate(() => performance.timeOrigin);
+}
+
 /** The pagination navigation of one list; each list names its pager. */
 export function listPager(page: Page, pagerName: string): Locator {
   return page.getByRole('navigation', { name: pagerName, exact: true });

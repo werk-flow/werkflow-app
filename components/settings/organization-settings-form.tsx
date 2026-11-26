@@ -3,7 +3,7 @@
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionFailure } from '@/lib/action-result';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 
@@ -51,9 +51,13 @@ type OrganizationSettingsFormProps = {
     uniqueCode: string;
     createdAtLabel: string;
     role: 'admin' | 'buero' | 'employee';
+    /** Null when the read failed. */
+    memberCount: number | null;
   };
   /** What a deletion removes, read for Admins only; null for other roles. */
   deletionScope: OrganizationDeletionScope | 'load_failed' | null;
+  /** The WerkFlow KI card, for Admins only; null for other roles. */
+  aiSettings: ReactNode;
 };
 
 type OrganizationSaveError = Extract<UpdateOrganizationSettingsResult, ActionFailure>['error'];
@@ -98,9 +102,11 @@ function showSaveFailure(
 function OrganizationDetailsCard({
   roleLabel,
   createdAtLabel,
+  memberCount,
 }: {
   roleLabel: string;
   createdAtLabel: string;
+  memberCount: number | null;
 }) {
   return (
     <Card>
@@ -118,6 +124,14 @@ function OrganizationDetailsCard({
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">Erstellt am</p>
           <p className="text-sm text-muted-foreground">{createdAtLabel}</p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">Mitglieder</p>
+          {memberCount === null ? (
+            <RegionLoadError>Die Mitgliederzahl konnte nicht geladen werden.</RegionLoadError>
+          ) : (
+            <p className="text-sm text-muted-foreground tabular-nums">{memberCount}</p>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -200,6 +214,7 @@ function OrganizationSaveFooter({ canEdit, isSaving }: { canEdit: boolean; isSav
 export function OrganizationSettingsForm({
   initialOrganization,
   deletionScope,
+  aiSettings,
 }: OrganizationSettingsFormProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
@@ -253,6 +268,7 @@ export function OrganizationSettingsForm({
       <OrganizationDetailsCard
         roleLabel={getRoleLabel(initialOrganization.role)}
         createdAtLabel={initialOrganization.createdAtLabel}
+        memberCount={initialOrganization.memberCount}
       />
 
       <Card>
@@ -274,6 +290,8 @@ export function OrganizationSettingsForm({
           </form>
         </Form>
       </Card>
+
+      {aiSettings}
 
       <DangerZoneCard orgName={initialOrganization.name} canEdit={canEdit} deletionScope={deletionScope} />
     </div>

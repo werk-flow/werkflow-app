@@ -177,6 +177,58 @@ export async function loadInventoryItemOptions(
   };
 }
 
+const leistungRow = z.object({ id: uuidSchema, number: z.string(), name: z.string(), unit: z.string() });
+
+function leistungOption(row: z.output<typeof leistungRow>): JobEntityOption {
+  return {
+    value: row.id,
+    label: `${row.number} · ${row.name}`,
+    number: row.number,
+    name: row.name,
+    unit: row.unit,
+  };
+}
+
+/** Active Leistungen, searched literally over number, name and description. */
+export async function loadLeistungOptions(
+  admin: Admin,
+  context: AuthContext,
+  input: Request,
+): Promise<JobOptionResult> {
+  const [page, selected] = await Promise.all([
+    admin.rpc('search_leistung_options', {
+      p_organization_id: context.orgId,
+      p_search: input.query,
+      p_offset: input.offset,
+    }),
+    readInBatches(input.selectedIds, (ids) =>
+      admin
+        .from('leistungen')
+        .select('id,leistung_number,name,unit')
+        .eq('organization_id', context.orgId)
+        .in('id', [...ids]),
+    ),
+  ]);
+  const parsed = pageSchema(leistungRow).safeParse(page.data);
+  if (page.error || selected.error || !parsed.success) {
+    logReadErrors(
+      'loadLeistungOptions: read failed',
+      page.error,
+      selected.error,
+      parsed.success ? null : { code: 'malformed_result' },
+    );
+    return FAILED;
+  }
+  return {
+    success: true,
+    options: parsed.data.options.map(leistungOption),
+    selected: selected.data.map((row) =>
+      leistungOption({ id: row.id, number: row.leistung_number, name: row.name, unit: row.unit }),
+    ),
+    hasMore: parsed.data.hasMore,
+  };
+}
+
 function serviceCaseOption(row: z.output<typeof serviceCaseRow>): JobEntityOption {
   return {
     value: row.id,

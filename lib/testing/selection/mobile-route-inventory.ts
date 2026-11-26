@@ -23,6 +23,7 @@ export const MANAGER_PHONE_ROUTES = [
   '/service/faelle',
   '/service/anlagen',
   '/service/wartung',
+  '/service/bereitschaft',
   '/einstellungen/profil',
   '/einstellungen/zeiterfassung',
   '/einstellungen/kunden',
@@ -36,6 +37,7 @@ export const MANAGER_PHONE_ROUTES = [
   '/einstellungen/abonnement-abrechnung',
   '/einstellungen/mitarbeiter',
   '/einstellungen/auftraege-projekte',
+  '/kennzahlen',
 ] as const;
 
 export const DYNAMIC_PHONE_ROUTES = [
