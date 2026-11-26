@@ -1,13 +1,21 @@
 'use client';
 
+import dynamic from 'next/dynamic';
+
 import { useLiveAttentionOverview } from '@/components/aufgaben/use-aufgaben-overview';
 import { useOrganization } from '@/components/organization/organization-context';
+import { OfficeStartSkeleton } from '@/components/loading-states/office-start-skeleton';
 import { OnCallNowCard } from '@/components/on-call/on-call-now-card';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { OfficeStartView } from './office-start-sections';
-import { OwnerStartView } from './owner-start';
+
+// Only Admin renders it: in its own chunk, the page's client references,
+// which every clock action's render sends, stay as they are for everyone else.
+const OwnerStartView = dynamic(() => import('./owner-start').then((mod) => mod.OwnerStartView), {
+  loading: () => <OfficeStartSkeleton />,
+});
 
 /**
  * The count of überfällig maintenance from the Wartung list's own reader,
