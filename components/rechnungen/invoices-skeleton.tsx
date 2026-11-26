@@ -75,3 +75,18 @@ export function InvoicePageSkeleton() {
     </PageShell>
   );
 }
+
+/** „Versand“ while its deliveries load: the title, the two actions and one row. */
+export function InvoiceDeliverySkeleton() {
+  return (
+    <div className="space-y-3" role="status" aria-label="Versand wird geladen">
+      <span className="sr-only">Versand wird geladen.</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <Skeleton className="mr-auto h-4 w-20" />
+        <Skeleton className="h-11 w-56 sm:h-9" />
+        <Skeleton className="h-11 w-40 sm:h-9" />
+      </div>
+      <Skeleton className="h-16 w-full" />
+    </div>
+  );
+}

@@ -92,6 +92,12 @@ describe('a hosted deployment sends through Resend', () => {
     [422, { name: 'validation_error', message: 'Invalid `to` field' }, 'permanent', 'email_validation_error'],
     [409, { name: 'invalid_idempotent_request' }, 'permanent', 'email_invalid_idempotent_request'],
     [200, { unexpected: true }, 'retryable', 'email_provider_invalid_response'],
+    // An id a delivery cannot store is no usable acceptance: the outcome is unclear.
+    [200, { id: ' ' }, 'retryable', 'email_provider_invalid_response'],
+    [200, { id: 'id with spaces' }, 'retryable', 'email_provider_invalid_response'],
+    // A refusal name too long for a stored code (64 characters) keeps only its status.
+    [400, { name: 'a'.repeat(59) }, 'permanent', 'email_provider_400'],
+    [400, { name: 'a'.repeat(58) }, 'permanent', `email_${'a'.repeat(58)}`],
   ] as const)('HTTP %d %j is %s with code %s', async (status, body, outcome, code) => {
     const { fetchImpl } = answering(status, body);
     expect(await sendEmail(message, HOSTED, fetchImpl)).toEqual({ status: outcome, code });
