@@ -5,7 +5,14 @@
 // Each block states one invariant; a failing assert names it.
 import assert from 'node:assert/strict';
 import { ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
-import { OTHER_USER_ID, THREAD_ID, installAiTurnWorld, postTurn, readTurn } from './ai-turn-world';
+import {
+  OTHER_USER_ID,
+  THREAD_ID,
+  installAiTurnWorld,
+  postTurn,
+  readTurn,
+  resetAiTables,
+} from './ai-turn-world';
 
 const world = await installAiTurnWorld();
 signInAs(world, 'employee');
@@ -76,6 +83,40 @@ await readTurn(world, await postTurn('Wie entlüfte ich einen Heizkörper?', { c
   assert.deepEqual(await getAiThreadPage({ organizationId }), { success: false, error: 'not_a_member' });
   assert.equal(world.adminClientRequests, reads, 'a refused read must reach no table');
   signInAs(world, 'employee');
+}
+
+// Threads of one instant across a page boundary: each is listed once, none is skipped.
+{
+  resetAiTables(world);
+  const instant = '2026-11-26T09:00:00.000000+00:00';
+  const ids = Array.from(
+    { length: 31 },
+    (_, index) => `41000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+  );
+  for (const id of ids)
+    tableRows(world, 'ai_threads').push({
+      id,
+      organization_id: organizationId,
+      user_id: world.callerId,
+      title: id,
+      updated_at: instant,
+    });
+  const first = await getAiThreadPage({ organizationId });
+  assert.ok(first.success && first.hasMore, 'a full page says that more follow');
+  const last = first.threads.at(-1);
+  assert.ok(last);
+  const second = await getAiThreadPage({
+    organizationId,
+    before: { updatedAt: last.updatedAt, id: last.id },
+  });
+  assert.ok(second.success);
+  assert.deepEqual(
+    [...first.threads, ...second.threads].map((thread) => thread.id).toSorted(),
+    ids,
+    'threads that share their last activity are each listed once across the page boundary',
+  );
+  assert.equal(second.hasMore, false);
+  resetAiTables(world);
 }
 
 // B21: the model fell for a document that told it to send data out through the chat. The page

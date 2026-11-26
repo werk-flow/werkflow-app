@@ -201,3 +201,29 @@ test('a thread that cannot load shows its retry, and the retry opens it', async 
   await expect(failure).toHaveCount(0);
   await expect(composer(page)).toBeVisible();
 });
+
+test('a refusal keeps what was typed meanwhile, and its reason stays with its own draft', async ({
+  page,
+}) => {
+  await openChat(page);
+  await composer(page).fill('Wie viele Aufträge sind offen?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  await composer(page).fill('Und welche davon sind dringend?');
+  await page.evaluate(() =>
+    window.uiContractKiTurn.resolve?.({
+      kind: 'refused',
+      message: 'Das Monatsbudget für WerkFlow KI ist aufgebraucht.',
+    }),
+  );
+  await expect(composer(page)).toHaveValue(
+    'Wie viele Aufträge sind offen?\n\nUnd welche davon sind dringend?',
+  );
+  const reason = page
+    .getByRole('alert')
+    .filter({ hasText: 'Das Monatsbudget für WerkFlow KI ist aufgebraucht.' });
+  await expect(reason).toBeVisible();
+  await threadLink(page, 'Entlüften').click();
+  await expect(reason).toHaveCount(0);
+  await page.goBack();
+  await expect(reason).toBeVisible();
+});

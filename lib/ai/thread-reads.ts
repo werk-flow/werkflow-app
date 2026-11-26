@@ -53,7 +53,11 @@ export async function getAiThreadPage(
     .select('id, title, updated_at')
     .eq('organization_id', orgId)
     .eq('user_id', userId);
-  if (parsed.data.before) query = query.lt('updated_at', parsed.data.before);
+  const before = parsed.data.before;
+  if (before)
+    query = query.or(
+      `updated_at.lt.${before.updatedAt},and(updated_at.eq.${before.updatedAt},id.gt.${before.id})`,
+    );
   const { data, error } = await query
     .order('updated_at', { ascending: false })
     .order('id')

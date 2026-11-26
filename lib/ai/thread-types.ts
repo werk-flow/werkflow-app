@@ -22,8 +22,8 @@ export type AiThreadWindow = { messages: AiChatMessage[]; hasOlder: boolean };
 
 export const aiThreadPageInput = z.object({
   organizationId: uuidSchema,
-  /** The `updatedAt` of the last thread of the page before. */
-  before: z.string().datetime({ offset: true }).optional(),
+  /** The last thread of the page before, by both sort keys, so threads of one instant are not skipped. */
+  before: z.object({ updatedAt: z.string().datetime({ offset: true }), id: uuidSchema }).optional(),
 });
 
 export const aiThreadWindowInput = z.object({

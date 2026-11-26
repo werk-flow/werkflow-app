@@ -9,13 +9,22 @@ import { TextLink } from '@/components/ui/text-link';
 // talked into sending data out has nothing that loads or navigates. Lint bans
 // every other Markdown renderer in product code (eslint.config.mjs).
 
+const PROBE_ORIGIN = 'https://werkflow.invalid';
+const PRINTABLE_PATH = /^\/(?![/\\])[\x21-\x5b\x5d-\x7e]*$/;
+
 /**
- * A path on this origin: one leading slash, no second slash or backslash
- * after it, and printable ASCII only, so no space, control character or
- * lookalike of a slash can turn it into another host.
+ * The link target of a path on this origin, as the browser resolves it, or
+ * null. The written path is one leading slash and printable ASCII without a
+ * backslash, so no space, control character or lookalike of a slash can turn
+ * it into another host. The resolved path holds the same, because dot
+ * segments (`/.//host`, `/%2e//host`) can collapse into a second slash that a
+ * hard navigation would read as another host.
  */
-export function isSameOriginPath(href: string): boolean {
-  return /^\/(?![/\\])[\x21-\x5b\x5d-\x7e]*$/.test(href);
+export function sameOriginTarget(href: string): string | null {
+  if (!PRINTABLE_PATH.test(href)) return null;
+  const url = new URL(href, PROBE_ORIGIN);
+  const target = `${url.pathname}${url.search}${url.hash}`;
+  return url.origin === PROBE_ORIGIN && PRINTABLE_PATH.test(url.pathname) ? target : null;
 }
 
 const INLINE =
@@ -32,9 +41,10 @@ function inline(text: string): ReactNode[] {
     if (code !== undefined) nodes.push(<code key={key}>{code}</code>);
     else if (label !== undefined && href !== undefined) {
       // An image is never fetched, and a link that leaves the app is its text and its address.
-      if (bang === '' && isSameOriginPath(href))
+      const target = bang === '' ? sameOriginTarget(href) : null;
+      if (target)
         nodes.push(
-          <TextLink key={key} href={href} prefetch={false}>
+          <TextLink key={key} href={target} prefetch={false}>
             {inline(label)}
           </TextLink>,
         );

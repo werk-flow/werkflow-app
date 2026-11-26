@@ -24,7 +24,7 @@ function subscribeDrafts(listener: () => void): () => void {
   return () => draftListeners.delete(listener);
 }
 
-function readDraft(key: string): string {
+export function readDraft(key: string): string {
   const kept = memoryDrafts.get(key);
   if (kept !== undefined) return kept;
   try {
@@ -46,8 +46,9 @@ export function writeDraft(key: string, text: string): void {
   for (const listener of draftListeners) listener();
 }
 
-export function draftKey(userId: string, threadId: string | null): string {
-  return `werkflow:ki-draft:${userId}:${threadId ?? 'neu'}`;
+/** One draft per person, organization and thread; the new chat has its own. */
+export function draftKey(userId: string, organizationId: string, threadId: string | null): string {
+  return `werkflow:ki-draft:${userId}:${organizationId}:${threadId ?? 'neu'}`;
 }
 
 /** Enter sends on a keyboard with a mouse; on a phone it starts a new line. */

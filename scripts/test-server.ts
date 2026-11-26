@@ -156,7 +156,9 @@ await withTestSession(async (signal) => {
   // KI journey seeds; it answers from recorded streams, since no key reaches it.
   if (target === 'local') childEnvironment.AI_ORGANIZATION_IDS = testAiOrganizationId(repositoryRoot);
   else delete childEnvironment.AI_ORGANIZATION_IDS;
-  delete childEnvironment.WERKFLOW_KI_ANTHROPIC_KEY;
+  // Empty, not absent: Next and Bun never replace a variable the process already has, so a key in
+  // an env file of this checkout cannot reach the build or the server (lib/ai/model-key-pin.test.ts).
+  childEnvironment.WERKFLOW_KI_ANTHROPIC_KEY = '';
   const run = async (
     command: readonly string[],
     output: { onStdout: (chunk: Buffer) => void; onStderr: (chunk: Buffer) => void } | undefined = undefined,

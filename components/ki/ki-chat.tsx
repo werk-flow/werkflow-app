@@ -8,7 +8,7 @@ import { SectionError } from '@/components/ui/section-error';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import type { AiThreadWindow } from '@/lib/ai/thread-types';
-import { draftKey, KiComposer } from './ki-composer';
+import { KiComposer } from './ki-composer';
 import { KiThreadList } from './ki-thread-list';
 import { KiTimeline, KiTimelineSkeleton, type TimelineMessage } from './ki-timeline';
 import {
@@ -116,7 +116,7 @@ export function KiChat(props: {
   initialThreads: ThreadList;
   initialWindow: AiThreadWindow | null;
 }): React.JSX.Element {
-  const { list, views, readWindow, threadId, show, openThread, known, turn } = useKiChat(props);
+  const { list, views, readWindow, threadId, show, openThread, turn, draft, error } = useKiChat(props);
   const threads = <KiThreads list={list} threadId={threadId} onOpen={openThread} />;
   return (
     <div className="flex min-h-0 flex-1">
@@ -151,9 +151,9 @@ export function KiChat(props: {
           </div>
         </PageBody>
         <KiComposer
-          draft={draftKey(props.userId, threadId && known(threadId) ? threadId : null)}
+          draft={draft}
           running={turn.live !== null && turn.live.threadId === threadId}
-          error={turn.error}
+          error={error}
           onSend={turn.send}
           onStop={turn.stop}
         />
