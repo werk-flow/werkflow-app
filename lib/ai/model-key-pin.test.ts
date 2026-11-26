@@ -12,18 +12,22 @@ import { temporaryDirectory } from '@/lib/testing/temporary-directory';
 // checkout's .env.local stays out.
 const KEY = 'WERKFLOW_KI_ANTHROPIC_KEY';
 
+type LoadEnvConfig = (directory: string, dev: boolean, log: object, forceReload: boolean) => unknown;
+
+function isEnvModule(value: unknown): value is { loadEnvConfig: LoadEnvConfig } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'loadEnvConfig' in value &&
+    typeof value.loadEnvConfig === 'function'
+  );
+}
+
 /** The env loader of the installed Next, resolved from Next itself: the code `next build` and `next start` run. */
-function nextEnvLoader(): (directory: string, dev: boolean, log: object, forceReload: boolean) => unknown {
-  const fromNext = createRequire(Bun.resolveSync('next/package.json', import.meta.dir));
-  const loaded: unknown = fromNext('@next/env');
-  if (
-    loaded &&
-    typeof loaded === 'object' &&
-    'loadEnvConfig' in loaded &&
-    typeof loaded.loadEnvConfig === 'function'
-  )
-    return (...args) => Reflect.apply(loaded.loadEnvConfig, loaded, args);
-  throw new Error('Next ships no loadEnvConfig');
+function nextEnvLoader(): LoadEnvConfig {
+  const loaded: unknown = createRequire(Bun.resolveSync('next/package.json', import.meta.dir))('@next/env');
+  if (!isEnvModule(loaded)) throw new Error('Next ships no loadEnvConfig');
+  return loaded.loadEnvConfig;
 }
 const original = process.env[KEY];
 
