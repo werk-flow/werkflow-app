@@ -425,6 +425,38 @@ test('the disk reader finds .env.live-backup anywhere in the tree it reads', () 
   }
 });
 
+test('the disk reader follows a linked folder to .env.live-backup and cannot tell a link back up', () => {
+  const root = mkdtempSync(join(tmpdir(), 'live-backup-links-'));
+  try {
+    const target = join(root, 'target');
+    const scan = join(root, 'scan');
+    mkdirSync(target);
+    mkdirSync(scan);
+    writeFileSync(join(target, '.env.live-backup'), 'MADE_UP=1\n');
+    writeFileSync(join(root, 'notes.txt'), 'made up\n');
+    symlinkSync(target, join(scan, 'linked'));
+    // A link to a file or to nothing holds no backup.
+    symlinkSync(join(root, 'notes.txt'), join(scan, 'file-link'));
+    symlinkSync(join(root, 'missing'), join(scan, 'dangling'));
+    expect(liveBackupsOnDisk(scan, Infinity)).toEqual([join(scan, 'linked', '.env.live-backup')]);
+    // Only a real node_modules, .git or .next is skipped; grep -R follows a link of that name too.
+    const named = join(root, 'named');
+    mkdirSync(named);
+    for (const name of ['node_modules', '.git', '.next']) symlinkSync(target, join(named, name));
+    expect(liveBackupsOnDisk(named, Infinity)?.sort()).toEqual(
+      ['.git', '.next', 'node_modules'].map((name) => join(named, name, '.env.live-backup')),
+    );
+    // grep -R follows the link, so its read of the scanned folder is refused.
+    const onDisk = { cwd: root, home, liveBackupsUnder: liveBackupsOnDisk };
+    expect(boatKeyCommandRefusal(`grep -R KEY ${scan}`, onDisk)).toContain('PROD keys');
+    // A link back up the tree repeats it until the walk gives up.
+    symlinkSync(root, join(target, 'up'));
+    expect(liveBackupsOnDisk(scan, Infinity)).toBeUndefined();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a recursive read of a tree too large to walk is refused for .env.live-backup', () => {
   const untold = {
     cwd: checkout,
@@ -452,6 +484,25 @@ test('an rg or Grep glob that brings back .env.live-backup makes the search coun
   const grep = (tool_input: unknown) => boatKeyToolRefusal({ tool_name: 'Grep', tool_input }, withLiveBackup);
   expect(grep({ pattern: 'KEY', glob: '.env*' })).toContain('PROD keys');
   expect(grep({ pattern: 'KEY', glob: '*.ts' })).toBeUndefined();
+});
+
+test('a path-qualified glob counts when its final segment names .env.live-backup', () => {
+  const work = {
+    cwd: checkout,
+    home,
+    liveBackupsUnder: (folder: string) => (folder === '/srv/work' ? ['/srv/work/app/.env.live-backup'] : []),
+  };
+  expect(boatKeyCommandRefusal("rg -g 'app/.env*' KEY /srv/work", work)).toContain('PROD keys');
+  expect(boatKeyCommandRefusal("rg -g 'src/**/*.ts' KEY /srv/work", work)).toBeUndefined();
+  const grep = (glob: string) =>
+    boatKeyToolRefusal({ tool_name: 'Grep', tool_input: { pattern: 'KEY', path: '/srv/work', glob } }, work);
+  expect(grep('app/.env*')).toContain('PROD keys');
+  expect(grep('src/**/*.ts')).toBeUndefined();
+  // A slash inside a brace group leaves no final segment to test, so the glob counts.
+  expect(grep('{src/x,.env*}')).toContain('PROD keys');
+  // rg nests brace groups, so a slash after an inner group's close is still inside the outer one.
+  expect(grep('{a,{b,c},src/.env*}')).toContain('PROD keys');
+  expect(grep('{src,lib}/*.ts')).toBeUndefined();
 });
 
 test('a search for a secret file name in the repository passes, a read of the file does not', () => {
