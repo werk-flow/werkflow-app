@@ -589,7 +589,7 @@ export async function closeRequestOnDetail(page: Page, reasonLabel: string): Pro
   await page.getByRole('option', { name: reasonLabel, exact: true }).click();
   await requestCloseSubmit(dialog).click();
   await expect(dialog).toBeHidden();
-  await expect(visibleText(page, REQUEST_DETAIL_TEXT.closedWithoutWork)).toBeVisible();
+  await expect(confirmed(visibleText(page, REQUEST_DETAIL_TEXT.closedWithoutWork))).toBeVisible();
 }
 
 // Assigns a responsible person on the currently open request detail page via

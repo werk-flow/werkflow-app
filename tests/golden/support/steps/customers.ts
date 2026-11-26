@@ -317,7 +317,7 @@ export function customerDocumentsRegion(page: Page): Locator {
 
 /** A site's Objektnummer im Altsystem on its card of the customer detail. */
 export function customerSiteSourceNumber(page: Page, sourceNumber: string): Locator {
-  return visibleText(page, `Objektnr. ${sourceNumber}`, true);
+  return confirmed(visibleText(page, `Objektnr. ${sourceNumber}`, true));
 }
 
 /** The label of a „Kundendetails“ row, for the shared MetadataSection locators. */

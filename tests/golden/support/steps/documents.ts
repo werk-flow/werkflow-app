@@ -330,7 +330,7 @@ export function documentViewerImage(viewer: Locator, fileName: string): Locator 
 
 /** The viewer shows the file's image decoded: a broken image is visible too, but has no width. */
 export async function expectDocumentImageShown(viewer: Locator, fileName: string): Promise<void> {
-  const image = documentViewerImage(viewer, fileName);
+  const image = confirmed(documentViewerImage(viewer, fileName));
   await expect(image).toBeVisible();
   await expect
     .poll(

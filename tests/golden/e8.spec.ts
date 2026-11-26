@@ -95,7 +95,9 @@ test.describe('E8 Finden und vom Start aus handeln @E8', () => {
       await dismissDialog(viewer);
     });
 
-    await test.step('Büro findet den überfälligen Rückruf auf dem Start und erledigt ihn', async () => {
+    await test.step('Büro findet den überfälligen Rückruf in Aufgaben und auf dem Start und erledigt ihn', async () => {
+      await openAufgaben(bueroPage);
+      await expect(callbackTaskLink(bueroPage, requestNumber)).toBeVisible();
       await openDashboardInApp(bueroPage);
       await callbackTaskLink(startPageRegion(bueroPage, 'office'), requestNumber).click();
       await bueroPage.waitForURL(`**/anfragen/${requestId}`);
@@ -158,7 +160,7 @@ test.describe('E8 Finden und vom Start aus handeln @E8', () => {
     await test.step('Admin erledigt den Rückruf an der Anfrage, die der Start öffnet', async () => {
       await callbackTaskLink(startPageRegion(adminPage, 'owner'), requestNumber).click();
       await adminPage.waitForURL(`**/anfragen/${requestId}`);
-      await closeRequestOnDetail(adminPage, REQUEST_CLOSE_REASON_LABELS.kein_bedarf);
+      await closeRequestOnDetail(adminPage, REQUEST_CLOSE_REASON_LABELS.abgelehnt);
       expect((await getRequestById(requestId)).status).toBe('geschlossen');
     });
 

@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { SEARCH_GROUP_LABELS, type SearchGroupKind } from '../../../../lib/search/global-search';
-import { escapeRegExp } from './shared';
+import { confirmed, escapeRegExp } from './shared';
 
 // E8 — the header search (components/search/).
 
@@ -30,9 +30,11 @@ export async function searchEverywhere(page: Page, query: string): Promise<Locat
 
 /** A hit of one kind, by the title its link starts with; the link's name goes on with the hit's details. */
 export function searchHit(dialog: Locator, kind: SearchGroupKind, title: string): Locator {
-  return dialog
-    .getByRole('region', { name: SEARCH_GROUP_LABELS[kind], exact: true })
-    .getByRole('link', { name: new RegExp(`^${escapeRegExp(title)}`) });
+  return confirmed(
+    dialog
+      .getByRole('region', { name: SEARCH_GROUP_LABELS[kind], exact: true })
+      .getByRole('link', { name: new RegExp(`^${escapeRegExp(title)}`) }),
+  );
 }
 
 /** The answer of a query that matched nothing the role may find. */
