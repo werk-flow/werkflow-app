@@ -13,6 +13,7 @@ import {
   ClipboardList,
   Wrench,
   ReceiptText,
+  Receipt,
   BarChart3,
 } from 'lucide-react';
 
@@ -84,6 +85,12 @@ const navItems: NavItem[] = [
     activePrefix: '/angebote',
     label: 'Angebote',
     icon: ReceiptText,
+    managerOrAbove: true,
+  },
+  {
+    href: '/rechnungen',
+    label: 'Rechnungen',
+    icon: Receipt,
     managerOrAbove: true,
   },
   {

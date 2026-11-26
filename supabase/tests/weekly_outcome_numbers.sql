@@ -1,5 +1,5 @@
 -- The admin's weekly company numbers count each rule as of a Berlin week end
--- (migration 20261218090001_count_weekly_outcome_numbers.sql):
+-- (migration 20270204090001_count_weekly_outcome_numbers.sql):
 -- * workdays are Monday to Friday after the first day up to the last, across
 --   a month end and a leap day; a day before the first counts none;
 -- * K2 counts each overdue kind as it stood at the end of the reading day:

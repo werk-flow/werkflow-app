@@ -34,6 +34,8 @@ export type Machine = {
   log: (line: string) => void;
   /** How often a run reads the command's status; a test's stand-in shortens it. */
   pollMs?: number;
+  /** The checkout whose runs the machine serves: each run's cost is recorded there (boat-runs.ts). */
+  repository?: string;
 };
 
 /** Creates a large, credential-free machine and waits until it accepts commands. */

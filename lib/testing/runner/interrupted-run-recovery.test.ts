@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   assertInterruptedRecoveryOwnership,
@@ -11,6 +10,7 @@ import {
 } from './interrupted-run-recovery';
 import { withWorkspaceTestLock } from './workspace-test-lock';
 import type { RunManifest } from '../../../tests/golden/support/run-state';
+import { temporaryDirectory } from '../temporary-directory';
 
 const unfinished = {
   runKey: 'orphaned-run',
@@ -135,107 +135,92 @@ describe('explicit interrupted-run recovery', () => {
   });
 
   test('requires a separately acquired recovery lock and refuses a live runner lock', async () => {
-    const repositoryRoot = mkdtempSync(join(tmpdir(), 'werkflow-recover-'));
-    try {
-      expect(() => assertInterruptedRecoveryOwnership(repositoryRoot)).toThrow();
-      await withWorkspaceTestLock(
-        { repositoryRoot, operation: 'Playwright certification audit' },
-        async () => {
-          expect(() => assertInterruptedRecoveryOwnership(repositoryRoot)).toThrow('own exclusive');
-          await expect(
-            withWorkspaceTestLock(
-              { repositoryRoot, operation: INTERRUPTED_RECOVERY_OPERATION },
-              async () => undefined,
-            ),
-          ).rejects.toThrow('Another workspace operation');
-        },
-      );
-      await withWorkspaceTestLock({ repositoryRoot, operation: INTERRUPTED_RECOVERY_OPERATION }, async () => {
-        expect(() => assertInterruptedRecoveryOwnership(repositoryRoot)).not.toThrow();
-      });
-    } finally {
-      rmSync(repositoryRoot, { recursive: true, force: true });
-    }
+    const repositoryRoot = temporaryDirectory('werkflow-recover-');
+    expect(() => assertInterruptedRecoveryOwnership(repositoryRoot)).toThrow();
+    await withWorkspaceTestLock({ repositoryRoot, operation: 'Playwright certification audit' }, async () => {
+      expect(() => assertInterruptedRecoveryOwnership(repositoryRoot)).toThrow('own exclusive');
+      await expect(
+        withWorkspaceTestLock(
+          { repositoryRoot, operation: INTERRUPTED_RECOVERY_OPERATION },
+          async () => undefined,
+        ),
+      ).rejects.toThrow('Another workspace operation');
+    });
+    await withWorkspaceTestLock({ repositoryRoot, operation: INTERRUPTED_RECOVERY_OPERATION }, async () => {
+      expect(() => assertInterruptedRecoveryOwnership(repositoryRoot)).not.toThrow();
+    });
   });
 
   test.each(['archive copy failed', 'missing archived world', 'world identity mismatch'])(
     'durably retains ownership before evidence failure: %s',
     (failure) => {
-      const directory = mkdtempSync(join(tmpdir(), 'werkflow-recovery-evidence-'));
-      try {
-        const store = manifestStore();
-        const artifact = join(directory, 'original-output.log');
-        writeFileSync(artifact, 'original forensic output');
-        expect(() =>
-          recoverInterruptedEvidence({
-            manifest: store.read(),
-            reason: 'Host terminated the runner before normal teardown completed.',
-            recoveredAt: '2026-09-05T06:30:00Z',
-            persist: store.persist,
-            archiveAndVerify: () => {
-              expect(store.read()).toMatchObject({
-                status: 'interrupted',
-                retainedAt: '2026-09-05T06:30:00Z',
-                cleanedAt: null,
-              });
-              throw new Error(failure);
-            },
-          }),
-        ).toThrow('retry recover-interrupted');
-        expect(store.read()).toMatchObject({
-          status: 'interrupted',
-          retainedAt: '2026-09-05T06:30:00Z',
-          cleanedAt: null,
-          passed: 41,
-          failed: 0,
-          interruptionRecovery: { archive: { status: 'failed', error: failure } },
-        });
-        expect(readFileSync(artifact, 'utf8')).toBe('original forensic output');
-      } finally {
-        rmSync(directory, { recursive: true, force: true });
-      }
-    },
-  );
-
-  test('named archive repair preserves the original completion time, outcomes and consumed grant', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'werkflow-recovery-repair-'));
-    try {
+      const directory = temporaryDirectory('werkflow-recovery-evidence-');
       const store = manifestStore();
-      const archivePath = join(directory, 'world.json');
-      const archiveAndVerify = (): void => {
-        readFileSync(archivePath, 'utf8');
-      };
+      const artifact = join(directory, 'original-output.log');
+      writeFileSync(artifact, 'original forensic output');
       expect(() =>
         recoverInterruptedEvidence({
           manifest: store.read(),
           reason: 'Host terminated the runner before normal teardown completed.',
           recoveredAt: '2026-09-05T06:30:00Z',
           persist: store.persist,
-          archiveAndVerify,
+          archiveAndVerify: () => {
+            expect(store.read()).toMatchObject({
+              status: 'interrupted',
+              retainedAt: '2026-09-05T06:30:00Z',
+              cleanedAt: null,
+            });
+            throw new Error(failure);
+          },
         }),
-      ).toThrow('archive recovery failed');
-      const firstRecovery = store.read();
-      writeFileSync(archivePath, JSON.stringify({ runId: 'owned-world' }));
-      const repaired = recoverInterruptedEvidence({
-        manifest: firstRecovery,
-        reason: 'Recovered the missing archive from the same owned active world.',
-        recoveredAt: '2026-09-05T07:00:00Z',
-        persist: store.persist,
-        archiveAndVerify,
-      });
-      expect(repaired).toMatchObject({
+      ).toThrow('retry recover-interrupted');
+      expect(store.read()).toMatchObject({
         status: 'interrupted',
-        completedAt: '2026-09-05T06:30:00Z',
         retainedAt: '2026-09-05T06:30:00Z',
         cleanedAt: null,
-        rerunGrantId: 'consumed-grant',
-        interruptionRecovery: { recoveredAt: '2026-09-05T06:30:00Z', archive: { status: 'complete' } },
+        passed: 41,
+        failed: 0,
+        interruptionRecovery: { archive: { status: 'failed', error: failure } },
       });
-      expect(repaired.outcomes).toEqual(firstRecovery.outcomes);
-      expect(repaired.failures).toEqual(firstRecovery.failures);
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
+      expect(readFileSync(artifact, 'utf8')).toBe('original forensic output');
+    },
+  );
+
+  test('named archive repair preserves the original completion time, outcomes and consumed grant', () => {
+    const directory = temporaryDirectory('werkflow-recovery-repair-');
+    const store = manifestStore();
+    const archivePath = join(directory, 'world.json');
+    const archiveAndVerify = (): void => {
+      readFileSync(archivePath, 'utf8');
+    };
+    expect(() =>
+      recoverInterruptedEvidence({
+        manifest: store.read(),
+        reason: 'Host terminated the runner before normal teardown completed.',
+        recoveredAt: '2026-09-05T06:30:00Z',
+        persist: store.persist,
+        archiveAndVerify,
+      }),
+    ).toThrow('archive recovery failed');
+    const firstRecovery = store.read();
+    writeFileSync(archivePath, JSON.stringify({ runId: 'owned-world' }));
+    const repaired = recoverInterruptedEvidence({
+      manifest: firstRecovery,
+      reason: 'Recovered the missing archive from the same owned active world.',
+      recoveredAt: '2026-09-05T07:00:00Z',
+      persist: store.persist,
+      archiveAndVerify,
+    });
+    expect(repaired).toMatchObject({
+      status: 'interrupted',
+      completedAt: '2026-09-05T06:30:00Z',
+      retainedAt: '2026-09-05T06:30:00Z',
+      cleanedAt: null,
+      rerunGrantId: 'consumed-grant',
+      interruptionRecovery: { recoveredAt: '2026-09-05T06:30:00Z', archive: { status: 'complete' } },
+    });
+    expect(repaired.outcomes).toEqual(firstRecovery.outcomes);
+    expect(repaired.failures).toEqual(firstRecovery.failures);
   });
 
   test('no archive operation starts when durable ownership recording fails', () => {

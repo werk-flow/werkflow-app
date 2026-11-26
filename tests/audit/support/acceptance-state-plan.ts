@@ -16,7 +16,11 @@ import { classifyRouteRequest, type RequestHeaders } from '../../../lib/testing/
 /** A screen state other than settled that a capture asks for. */
 export type CaptureState = 'loading' | 'error';
 
-export type StateView = 'page' | 'tab' | 'dialog';
+/**
+ * A dialog over a failed page opens only over a region its server render could
+ * not load in the test world (acceptance-rounds.ts, `overFailedPage`).
+ */
+export type StateView = 'page' | 'tab' | 'dialog' | 'dialog-over-failed-page';
 
 export type StatePlan = {
   /** The client reads, and for a page's loading state its navigation too. */
@@ -29,8 +33,12 @@ export type StatePlan = {
    * (a tab press, a dialog's trigger) on the settled page.
    */
   reach: 'client-navigation' | 'page-load' | 'gesture';
-  /** What must be on screen in the capture's scope; the other marker must not be. */
-  shows: 'skeleton' | 'failed-region';
+  /**
+   * What must be on screen in the capture's scope; the other marker must not
+   * be. `failed-region-behind`: the page's failure behind the dialog, which
+   * itself reads nothing that could fail.
+   */
+  shows: 'skeleton' | 'failed-region' | 'failed-region-behind';
 };
 
 /** A failed region: `SectionError`, or the stale region of a live view whose refresh failed. */
@@ -39,6 +47,14 @@ export const FAILED_REGION_SELECTOR = '[data-slot="section-error"]:visible, [dat
 export const SKELETON_SELECTOR = '[data-slot="skeleton"]:visible';
 
 export function stateCapturePlan(state: CaptureState, view: StateView): StatePlan {
+  if (view === 'dialog-over-failed-page') {
+    if (state === 'loading')
+      throw new Error(
+        'A dialog over a failed page has no loading capture: the page behind it settles first.',
+      );
+    // The failure is the server render's own, so the capture forces nothing.
+    return { intercepts: [], response: 'abort', reach: 'gesture', shows: 'failed-region-behind' };
+  }
   const response = state === 'loading' ? 'hold' : 'abort';
   const shows = state === 'loading' ? 'skeleton' : 'failed-region';
   if (view !== 'page') return { intercepts: ['reads'], response, reach: 'gesture', shows };
@@ -94,6 +110,27 @@ export function isTargetPrefetch(
   return (
     url.origin === target.origin && kind === 'prefetch' && decodeURIComponent(url.pathname) === target.path
   );
+}
+
+/**
+ * A request that brings a route's data or code: any route prefetch of the app,
+ * or a script chunk of the app, such as the one a prefetched loading boundary
+ * imports. A held navigation pushes only once none is in flight. A prefetch of
+ * the same area still running can keep the client router from committing to
+ * the cached loading boundary. A chunk that lands a few milliseconds after the
+ * push leaves the router suspended on the held response, so the boundary never
+ * shows (reproduced with chunks released 2 to 4 ms after the push).
+ */
+export function isRouteLoad(request: ObservedRequest, origin: string): boolean {
+  const url = new URL(request.url);
+  if (url.origin !== origin) return false;
+  if (
+    request.method === 'GET' &&
+    url.pathname.startsWith('/_next/static/chunks/') &&
+    url.pathname.endsWith('.js')
+  )
+    return true;
+  return classifyRouteRequest({ method: request.method, requestHeaders: request.headers }) === 'prefetch';
 }
 
 /** Whether the plan intercepts this request of the page; every other request, a prefetch above all, passes. */

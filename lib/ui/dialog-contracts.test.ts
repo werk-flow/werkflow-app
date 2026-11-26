@@ -26,6 +26,10 @@ const exceptions: Record<string, DialogException> = {
     kind: 'command',
     reason: 'Enter in the staged customer picker selects a result; assignment is explicit.',
   },
+  'components/on-call/on-call-history-dialog.tsx#OnCallHistoryDialog|Verlauf der Bereitschaft': {
+    kind: 'command',
+    reason: 'Read-only history of one shift; its only button closes it, there is nothing to submit.',
+  },
   'components/arbeitsvorlagen/apply-work-template-card.tsx#ApplyWorkTemplateCard|Arbeitsvorlage anwenden': {
     kind: 'command',
     reason:
@@ -64,6 +68,11 @@ const exceptions: Record<string, DialogException> = {
   'components/dokumente/attach-document-dialog.tsx#AttachDocumentDialog|Vorhandenes Dokument verknüpfen': {
     kind: 'browser',
     reason: 'Search and select existing documents before explicit linking.',
+  },
+  'components/search/global-search-dialog.tsx#GlobalSearchDialog|Suchen': {
+    kind: 'browser',
+    reason:
+      'The search reads as the query settles and each hit is a link to its page; there is nothing to submit.',
   },
   'components/dokumente/document-move-destination-dialog.tsx#MoveDestinationDialog|{title}': {
     kind: 'browser',

@@ -175,6 +175,20 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     title: VISUAL_NAMES.offer,
   },
   {
+    id: 'rechnungen',
+    role: 'admin',
+    covers: ['/rechnungen'],
+    route: fixed('/rechnungen'),
+    heading: 'Rechnungen',
+  },
+  {
+    id: 'rechnung',
+    role: 'admin',
+    covers: ['/rechnungen/[invoiceId]'],
+    route: (details) => `/rechnungen/${details.invoiceId}`,
+    heading: 'Rechnungsentwurf',
+  },
+  {
     id: 'angebote-leistungen',
     role: 'admin',
     covers: ['/angebote/leistungen'],
@@ -261,6 +275,15 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     covers: ['/service/wartung'],
     route: fixed('/service/wartung'),
     heading: SERVICE_AREA_HEADER.title,
+  },
+  {
+    id: 'service-bereitschaft',
+    role: 'admin',
+    covers: ['/service/bereitschaft'],
+    // A fixed Monday, so the week's range in the reference never moves with the clock.
+    route: fixed('/service/bereitschaft?woche=2026-03-02'),
+    heading: SERVICE_AREA_HEADER.title,
+    title: 'Bereitschaft',
   },
   {
     id: 'zeiterfassung',

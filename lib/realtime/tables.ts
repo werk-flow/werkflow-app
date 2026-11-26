@@ -51,6 +51,7 @@ export const REALTIME_TABLES = [
   'client_sites',
   'client_site_roles',
   'offers',
+  'invoices',
   'site_access_proposals',
   'client_requests',
   'client_follow_ups',
@@ -59,6 +60,7 @@ export const REALTIME_TABLES = [
   'maintenance_coverages',
   'maintenance_plans',
   'maintenance_due_work',
+  'on_call_shifts',
   'installed_equipment',
   'service_cases',
   'jobs',
@@ -97,6 +99,8 @@ export const REALTIME_TABLES = [
   'inventory_movements',
   'inventory_asset_instances',
   'problem_report_signals',
+  // The billing page's signal: a change of WerkFlow's subscription or invoices reaches the Admin's open page.
+  'werkflow_billing_page_signals',
 ] as const;
 
 export type RealtimeTable = (typeof REALTIME_TABLES)[number];
@@ -161,6 +165,8 @@ export const TRANSACTION_STAMPED_TABLES: readonly RealtimeTable[] = [
   'job_instruction_items',
   'job_material_lines',
   'jobs',
+  'offers',
+  'on_call_shifts',
   'organization_capabilities',
   'organization_exports',
   'organization_qualification_settings',

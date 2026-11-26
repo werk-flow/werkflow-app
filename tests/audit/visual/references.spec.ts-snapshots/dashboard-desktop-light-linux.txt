@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -12,6 +13,7 @@ Aufträge
 Dokumente
 Inventar
 Angebote
+Rechnungen
 Service
 Arbeitsvorlagen
 Mitarbeiter
@@ -23,12 +25,35 @@ MK
 Martin Krämer
 martin.kraemer@haustechnik-kraemer.de
 Dashboard
-Haustechnik Krämer GmbH
-Deine Rolle:
-Admin
-4 Mitglieder
-Organisationscode
-KRH26X
-Code kopieren
-Teile diesen Code mit Mitarbeitern, damit sie deiner Organisation beitreten können.
+Bereitschaft jetzt
+Wer außerhalb der Arbeitszeit erreichbar ist.
+Gerade hat niemand Bereitschaft.
+Bereitschaft planen
+Braucht deine Entscheidung
+Keine offenen Entscheidungen.
+Nichts wartet auf dich. Neue Ausnahmen erscheinen hier sofort.
+Was jetzt ansteht
+Offene Anfragen
+(
+3
+)
+ANF-2026-0301 ·
+Heizung im Dachgeschoss bleibt kalt
+Offen
+· Hoch
+· heute eingegangen
+· Nicht zugewiesen
+ANF-2026-0302 ·
+Angebot für ein barrierefreies Bad
+Offen
+· Normal
+· heute eingegangen
+· Nicht zugewiesen
+ANF-2026-0303 ·
+Wasserfleck an der Decke im Flur
+In Klärung
+· Normal
+· heute eingegangen
+· Nicht zugewiesen
+Alle in Aufgaben
 Nicht eingestempelt

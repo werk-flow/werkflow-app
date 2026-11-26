@@ -19,6 +19,13 @@ begin
         and t.tgname='emit_realtime_deletion' and t.tgenabled='O' and t.tgtype=9
         and t.tgfoid='app_private.emit_realtime_deletion()'::regprocedure)
   ) then raise exception 'published_table_missing_deletion_trigger'; end if;
+  -- An organization's deletion removes thousands of rows in one statement;
+  -- the WHEN clause skips the per-row call for them before it is made.
+  if exists (select 1 from pg_trigger t
+    where t.tgfoid='app_private.emit_realtime_deletion()'::regprocedure
+      and t.tgrelid <> 'public.profiles'::regclass
+      and pg_get_triggerdef(t.oid) not like '% WHEN (%app.deleting_organization_ids%) EXECUTE %')
+  then raise exception 'deletion_trigger_runs_during_organization_deletion'; end if;
   if exists (select 1 from pg_trigger t where t.tgrelid='public.problem_report_signals'::regclass
       and t.tgfoid='app_private.emit_realtime_deletion()'::regprocedure)
   then raise exception 'own_user_table_notifies_its_organization'; end if;

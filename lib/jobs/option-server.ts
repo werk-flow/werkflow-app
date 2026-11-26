@@ -13,6 +13,7 @@ import { authenticateAndAuthorize, type AuthContext } from './auth';
 import {
   loadCoverageOptions,
   loadInventoryItemOptions,
+  loadLeistungOptions,
   loadProjectOptions,
   loadServiceCaseOptions,
 } from './option-records';
@@ -85,6 +86,7 @@ export async function loadJobEntityOptions(context: AuthContext, input: Request)
     const admin = createSupabaseAdminClient();
     if (input.kind === 'projects') return loadProjectOptions(admin, context, input);
     if (input.kind === 'inventory-items') return loadInventoryItemOptions(admin, context, input);
+    if (input.kind === 'leistungen') return loadLeistungOptions(admin, context, input);
     if (input.kind === 'service-cases') return loadServiceCaseOptions(admin, context, input);
     if (input.kind === 'coverages') return loadCoverageOptions(admin, context, input);
     if (input.kind === 'equipment') return loadEquipmentOptions(admin, context, input);
@@ -355,6 +357,7 @@ async function loadJobOptions(
         `client_id.is.null,client_id.eq.${input.clientId}${input.projectId ? `,project_id.eq.${input.projectId}` : ''}`,
       );
   }
+  if (input.purpose === 'invoice-work') query = query.eq('client_id', input.clientId ?? '');
   if (input.purpose === 'equipment-work') {
     if (input.clientId) query = query.eq('client_id', input.clientId);
     if (input.siteId) query = query.eq('site_id', input.siteId);

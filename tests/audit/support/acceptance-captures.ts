@@ -196,7 +196,12 @@ async function captureState(
   route: string,
 ): Promise<void> {
   const { page, world, businessDate, testInfo } = input;
-  const plan = stateCapturePlan(capture.state, capture.view.kind);
+  const plan = stateCapturePlan(
+    capture.state,
+    capture.view.kind === 'dialog' && capture.view.overFailedPage
+      ? 'dialog-over-failed-page'
+      : capture.view.kind,
+  );
   const context = { page, role: capture.role, world, businessDate, route };
   const identity = { id: capture.id, role: capture.role, view: capture.view.kind };
   try {
@@ -219,6 +224,8 @@ export type CaptureSources = {
   openers: Partial<Record<DialogOpenerId, DialogOpener>>;
   /** Opens a record the set seeds instead of the route's layout record (acceptance-sets/). */
   destination?: ((world: TestWorld) => Promise<SurfaceDestination>) | undefined;
+  /** Acts inside the opened dialog before the image, such as typing a search query (acceptance-sets/). */
+  inLayer?: ((layer: Locator, world: TestWorld) => Promise<void>) | undefined;
 };
 
 function openedView(capture: CaptureSpec, openers: CaptureSources['openers']): OpenedView {
@@ -242,6 +249,8 @@ export async function captureAcceptance(
   sources: CaptureSources,
 ): Promise<void> {
   const { page, world, businessDate, testInfo } = input;
+  if (!capture.state && capture.view.kind === 'dialog' && capture.view.overFailedPage)
+    throw new Error(`${capture.id} opens over a failed page, so it is captured in its error state.`);
   const view = openedView(capture, sources.openers);
   await page.setViewportSize(DESKTOP);
   const destination = sources.destination
@@ -267,6 +276,7 @@ export async function captureAcceptance(
       if (view.kind === 'dialog') {
         // Each width opens the dialog anew, the way a user at that width opens it.
         ({ layer: scope } = await openLayerAt(context, view.opener, width, { fresh: true }));
+        if (sources.inLayer) await sources.inLayer(scope, world);
       } else {
         await page.setViewportSize({ width, height: VIEWPORT_HEIGHT[width] ?? 800 });
         if (view.kind === 'tab' && index === 0) {

@@ -104,6 +104,20 @@ export function TaskRow({ task }: { task: AttentionTask }) {
           </p>
         </TaskLink>
       );
+    // The job page plans the next visit or completes the work.
+    case 'job_past_last_visit':
+      return (
+        <TaskLink
+          href={task.jobHref}
+          ariaLabel={`Auftrag ${task.jobLabel} öffnen, letzter Einsatz am ${formatGermanDate(task.lastVisitDate)}`}
+          sourceId={task.sourceId}
+        >
+          <p className="truncate text-sm font-medium">{task.jobLabel}</p>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            Letzter Einsatz am {formatGermanDate(task.lastVisitDate)} · noch nicht abgeschlossen
+          </p>
+        </TaskLink>
+      );
   }
 }
 
@@ -312,7 +326,9 @@ function AttentionClientTaskRow({ task }: { task: AttentionClientTask }) {
             ? ' · Nicht zugewiesen'
             : task.ownerUnavailable
               ? ` · Zuständig: ${task.ownerName} (nicht mehr verfügbar)`
-              : ''}
+              : task.assignedToMe
+                ? ''
+                : ` · Zuständig: ${task.ownerName}`}
         </p>
       </TaskLink>
     );

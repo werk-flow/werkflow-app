@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -12,6 +13,7 @@ Aufträge
 Dokumente
 Inventar
 Angebote
+Rechnungen
 Service
 Arbeitsvorlagen
 Mitarbeiter
@@ -27,6 +29,7 @@ A-2026-0101
 Gastherme warten und Abgasmessung
 Nicht begonnen
 Mittel
+Rechnung erstellen
 Arbeitsstand
 Nächster Schritt:
 Mitarbeiter zuweisen und einplanen

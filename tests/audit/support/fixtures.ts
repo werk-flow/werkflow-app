@@ -4,7 +4,8 @@ import { test as sharedTest, expect } from '../../golden/support/fixtures';
 import { resetPersistedPreferences } from '../../golden/support/preferences-reset';
 import { attachWorldToRun, currentRunKey, updateRunManifest } from '../../golden/support/run-state';
 import { openRolePage } from '../../golden/support/streamed-content';
-import { loadWorld, saveWorld, type TestRole } from '../../golden/support/world';
+import type { SessionRole } from '../../golden/support/sessions';
+import { loadWorld, saveWorld } from '../../golden/support/world';
 
 // One file owns one world until the parent qualifies all assertions and measurements.
 // Multiple files run as separate verifier groups, never as world replacements here.
@@ -15,7 +16,7 @@ export const test = sharedTest.extend<{
    * capture's role, instead of one page fixture per role. Its teardown closes
    * every session it opened, as the page fixtures do.
    */
-  rolePage: (role: TestRole) => Promise<Page>;
+  rolePage: (role: SessionRole) => Promise<Page>;
 }>({
   auditWorldReady: [
     async ({}, provide, testInfo) => {

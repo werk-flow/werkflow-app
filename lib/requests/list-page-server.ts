@@ -33,11 +33,16 @@ const requestPageRowsSchema = z.object({
 });
 
 /**
- * One page of the request list. Internal reader: the page authorizes the
- * current manager and resolves the organization before it calls this. A
- * failed or malformed read throws; it never becomes an empty list.
+ * One page of the request list. Internal reader: the page and the header
+ * search authorize the current manager and resolve the organization before
+ * they call this; the search reads a shorter page. A failed or malformed read
+ * throws; it never becomes an empty list.
  */
-export async function readRequestPage(organizationId: string, query: RequestListQuery): Promise<RequestPage> {
+export async function readRequestPage(
+  organizationId: string,
+  query: RequestListQuery,
+  pageSize: number = LIST_PAGE_SIZE,
+): Promise<RequestPage> {
   const admin = createSupabaseAdminClient();
   const selected = await admin.rpc('list_request_page', {
     p_organization_id: organizationId,
@@ -45,7 +50,7 @@ export async function readRequestPage(organizationId: string, query: RequestList
     p_search: query.search,
     p_categories: requestCategoriesMatching(query.search),
     p_page: query.page,
-    p_page_size: LIST_PAGE_SIZE,
+    p_page_size: pageSize,
   });
   const parsed = requestPageRowsSchema.safeParse(selected.data);
   if (selected.error || !parsed.success) throw new Error('request_page_read_failed');

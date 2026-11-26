@@ -22,7 +22,8 @@ export function AppShellSkeleton() {
           <Skeleton className="h-9 w-40 rounded" />
         </div>
         <div className="border-t" />
-        <div className="p-4">
+        <div className="space-y-2 p-4">
+          <Skeleton className="h-9 w-full rounded-md" />
           <Skeleton className="h-9 w-full rounded-md" />
         </div>
         <div className="border-t" />

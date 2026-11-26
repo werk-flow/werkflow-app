@@ -14,8 +14,23 @@ export const MIDNIGHT_START_WINDOW = { leadMs: 20 * 60_000, trailMs: 10 * 60_000
 /** `timeout-minutes` of the `browser` job in .github/workflows/ci.yml; a test keeps the two equal. */
 export const CI_BROWSER_JOB_TIMEOUT_MS = 45 * 60_000;
 
-/** The lead of a CI hold: a Browser job that starts before it ends, at the latest, as the window opens. */
-const CI_HOLD_LEAD_MS = MIDNIGHT_START_WINDOW.leadMs + CI_BROWSER_JOB_TIMEOUT_MS;
+/**
+ * How long a job's process group may still run after its timeout: SIGTERM, then SIGKILL this much
+ * later (scripts/ci/process-executor.ts).
+ */
+export const CI_JOB_STOP_GRACE_MS = 10_000;
+
+/**
+ * `timeout-minutes` of the `fast` job in .github/workflows/ci.yml, which every browser shard needs
+ * before it starts (lib/testing/ci/dag.ts); a test keeps the two equal.
+ */
+export const CI_FAST_JOB_TIMEOUT_MS = 30 * 60_000;
+
+/**
+ * The lead of a CI hold: a Browser job that the plan lets start now starts at the latest when Fast
+ * times out, and ends, at the latest, as the window opens.
+ */
+const CI_HOLD_LEAD_MS = MIDNIGHT_START_WINDOW.leadMs + CI_FAST_JOB_TIMEOUT_MS + CI_BROWSER_JOB_TIMEOUT_MS;
 
 /** The longest CI hold; the `midnight` job's own timeout in ci.yml covers it. */
 export const CI_MIDNIGHT_HOLD_MAX_MS = CI_HOLD_LEAD_MS + MIDNIGHT_START_WINDOW.trailMs;
@@ -47,12 +62,27 @@ export function midnightStartWaitMs(now: Date): number {
 /**
  * When a CI run's browser shards may start, or undefined to start them now. CI's `Plan` asks this,
  * and the wait runs in the `midnight` job, so a Browser job's timeout measures browser work only.
- * The hold opens one Browser timeout before the window: a shard that starts earlier cannot reach a
- * group inside it, because the job ends first.
+ * The hold opens one Fast and one Browser timeout before the window: a shard that the plan let
+ * start earlier cannot reach a group inside it, because Fast and the shard end first.
  */
 export function ciBrowserHoldUntil(now: Date): Date | undefined {
   const waitMs = waitUntilWindowCloses(now, CI_HOLD_LEAD_MS);
   return waitMs ? new Date(now.getTime() + waitMs) : undefined;
+}
+
+/**
+ * Milliseconds until a CI Browser job whose timeout starts now may start: zero when it ends by its
+ * timeout and the stop's grace before the window opens, else the wait until the window closes.
+ * Plan's hold covers shards that start as soon as Fast passes; a runner that starts them one after
+ * another asks this before each start, and its executor asks again once the job's timeout starts,
+ * after a slot or the stack (startDeferral in lib/testing/ci/run-commit.ts), so a late shard waits
+ * instead of blocking its groups.
+ */
+export function ciBrowserStartWaitMs(now: Date): number {
+  return waitUntilWindowCloses(
+    now,
+    MIDNIGHT_START_WINDOW.leadMs + CI_BROWSER_JOB_TIMEOUT_MS + CI_JOB_STOP_GRACE_MS,
+  );
 }
 
 /** The hold of a CI proof run (`midnight_proof_minutes` in ci.yml), which pretends the window is open. Never on a branch that ships. */
@@ -69,8 +99,9 @@ export function midnightProofHoldUntil(input: { now: Date; minutes: string; ref:
 /**
  * Holds a browser group until the midnight window closes; the signal cancels the wait. A CI job's
  * timeout counts the wait as work, so in CI the group is blocked at once instead: the shard ends
- * with a classified result, never a cancellation. `ciBrowserHoldUntil` keeps a run's shards out of
- * the window; this block is left for a shard that started late, after a queue or a manual rerun.
+ * with a classified result, never a cancellation. `ciBrowserHoldUntil` and `ciBrowserStartWaitMs`
+ * keep a run's shards out of the window; this block is left for a shard that started late, after a
+ * GitHub runner queue or a manual rerun.
  * Returns the block reason, if any.
  */
 export async function holdOutsideMidnightWindow(input: {
@@ -103,6 +134,16 @@ export async function holdOutsideMidnightWindow(input: {
 export function changedTestsFirstBlock(failedFirstTierGroupIds: readonly string[]): string | undefined {
   if (!failedFirstTierGroupIds.length) return undefined;
   return `Changed-spec tier failed (${[...failedFirstTierGroupIds].sort().join(', ')}); the groups selected only by product scope wait for its repair.`;
+}
+
+/**
+ * Whether a group shares the schedule's workers with its neighbours. The static gates and the unit
+ * suite only read the checkout, so they overlap one another: CI's fast job runs them in one
+ * `--jobs` run (scripts/ci/job.ts). A browser group overlaps unless its timing needs the machine
+ * alone. A SQL group and the component contracts run alone.
+ */
+export function overlapsNeighbours(kind: string, exclusive: boolean): boolean {
+  return ['static', 'unit'].includes(kind) || (['audit', 'golden'].includes(kind) && !exclusive);
 }
 
 /**

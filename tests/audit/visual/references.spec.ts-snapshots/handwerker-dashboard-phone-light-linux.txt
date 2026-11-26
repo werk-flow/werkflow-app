@@ -1,7 +1,15 @@
 Menü öffnen
 Dashboard
-Haustechnik Krämer GmbH
-Deine Rolle:
-Handwerker/in
-4 Mitglieder
+Deine Einsätze heute
+Keine Einsätze heute
+Heute ist nichts für dich geplant.
+Zeiterfassung
+Du bist nicht eingestempelt.
+Heute gearbeitet:
+0 Min.
+Aufgaben
+Deine Aufgaben
+Bereitschaft jetzt
+Wer außerhalb der Arbeitszeit erreichbar ist.
+Gerade hat niemand Bereitschaft.
 Nicht eingestempelt

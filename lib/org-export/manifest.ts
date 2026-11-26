@@ -28,6 +28,7 @@ const LINK_KINDS = [
   ['equipment_id', 'Anlage'],
   ['service_case_id', 'Servicefall'],
   ['maintenance_coverage_id', 'Wartungsvertrag'],
+  ['offer_id', 'Angebot'],
 ] as const satisfies readonly (readonly [keyof Tables<'document_links'>, string])[];
 
 const PERSONNEL_CLASS_LABELS: Record<Tables<'personnel_documents'>['access_class'], string> = {

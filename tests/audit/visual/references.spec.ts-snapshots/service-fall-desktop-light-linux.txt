@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -12,6 +13,7 @@ Aufträge
 Dokumente
 Inventar
 Angebote
+Rechnungen
 Service
 Arbeitsvorlagen
 Mitarbeiter
@@ -26,6 +28,7 @@ Service
 Servicefälle
 Anlagen & Geräte
 Wartung
+Bereitschaft
 Servicefälle
 SRV-2026-001
 Neu
@@ -34,6 +37,7 @@ Therme zeigt Störung F.28
 Direkt erfasst
 · Aktualisiert
 01.01.2026, 08:00
+Rechnung erstellen
 Bearbeiten
 Ursprüngliche Kundenaussage
 Die Therme geht nach dem Zünden wieder aus und zeigt F.28 an.

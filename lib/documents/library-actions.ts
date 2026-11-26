@@ -84,7 +84,7 @@ export async function getDocumentLibrary(
         category: input.category ?? 'all',
         linkFilter: input.linkFilter ?? 'all',
         page,
-        pageSize: LIST_PAGE_SIZE,
+        pageSize: input.pageSize ?? LIST_PAGE_SIZE,
       },
     }),
     isFolderView && view !== 'trash'

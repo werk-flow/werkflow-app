@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -12,6 +13,7 @@ Aufträge
 Dokumente
 Inventar
 Angebote
+Rechnungen
 Service
 Arbeitsvorlagen
 Mitarbeiter
@@ -26,6 +28,7 @@ Kunden
 Familie Hoffmann
 Familie Hoffmann
 Privat
+Rechnung erstellen
 Kundendetails
 Name
 Familie Hoffmann

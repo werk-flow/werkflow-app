@@ -1,13 +1,13 @@
 // Rule test: no agent shell call starts a sign-in, hands out an account token or runs the Vercel
 // CLI, directly, through a package runner or wrapper, or hidden where the guard cannot read it.
 import { expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { z } from '../zod';
 
 import { accountSignInRefusal } from './account-sign-in';
+import { temporaryDirectory } from '../testing/temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const REFUSED = 'A sign-in is an owner step';
@@ -305,7 +305,7 @@ test('the Codex hook command refuses a sign-in from a subfolder of the repositor
 
 // Both agents block only on exit 2; any other failure of the guard would let the call through.
 test('both registered hook commands refuse when the guard itself fails', () => {
-  const bin = mkdtempSync(join(tmpdir(), 'broken-bun-'));
+  const bin = temporaryDirectory('broken-bun-');
   writeFileSync(join(bin, 'bun'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
   for (const file of ['.claude/settings.json', '.codex/hooks.json']) {
     const result = runRegistered(registeredGuard(file), {
