@@ -40,7 +40,7 @@ This table is the one home of every deployment and workflow credential. No check
 
 - `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call. A failure opens or updates the issue "Weekly health check failed". Only a failed `prod` check assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
 - The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only `x-health-check-token` and name each check `ok` or `failed`, never a value.
-- Set function secrets in the dashboard: `supabase secrets set` in a checkout also uploads `config.toml`'s mail capture, stopping hosted mail (`local_mail_capture`).
+- Set function secrets in the dashboard: a checkout's `supabase secrets set` also uploads `config.toml`'s mail capture, stopping hosted mail (`local_mail_capture`, `refuse-account-sign-in.ts`).
 
 | Credential | Lives in | Used by | Expires | Rotate |
 | --- | --- | --- | --- | --- |

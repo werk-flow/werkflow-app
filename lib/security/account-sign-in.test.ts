@@ -193,8 +193,23 @@ test('a mention the guard cannot verify as data is refused', () => {
   ])
     expect(accountSignInRefusal(command), command).toContain(REFUSED);
   expect(accountSignInRefusal(`python3 -c "import os; os.system('vercel list')"`)).toContain(
-    'could not place `python3 -c',
+    'could not place line 1:',
   );
+});
+
+// The refusal reaches the agent's transcript and logs: it names programs and line numbers only.
+test('a refusal never repeats an argument, so a secret in the command stays out of it', () => {
+  const secret = 're_synthetic_refusal_secret';
+  for (const command of [
+    `supabase secrets set RESEND_API_KEY=${secret} --project-ref abc`,
+    `gh auth login --with-token <<< ${secret}`,
+    `python3 -c "import os; os.system('supabase secrets set KEY=${secret}')"`,
+    `ls # supabase login ${secret}`,
+  ]) {
+    const refusal = accountSignInRefusal(command);
+    expect(refusal, command).toContain(REFUSED);
+    expect(refusal, command).not.toContain(secret);
+  }
 });
 
 test('everyday commands, other subcommands and mentions as data pass', () => {

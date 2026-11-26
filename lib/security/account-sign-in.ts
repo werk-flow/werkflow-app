@@ -32,9 +32,8 @@ const CLIS: readonly AccountCli[] = [
   // Every call: the Vercel CLI acts for the owner's whole account. Agents use the Vercel MCP connector.
   { names: ['vercel', 'vc'], verbs: [] },
   { names: ['gh'], verbs: [['auth'], ['login', 'refresh', 'switch', 'token', 'setup-git']] },
-  { names: ['supabase'], verbs: [['login']] },
   // Hosted function secrets are set in the project's dashboard (docs/technical/environments.md#credentials).
-  { names: ['supabase'], verbs: [['secrets']] },
+  { names: ['supabase'], verbs: [['login', 'secrets']] },
   { names: ['stripe'], verbs: [['login']] },
   { names: ['wrangler'], verbs: [['login']] },
   { names: ['railway', '@railway/cli'], verbs: [['login']] },
@@ -88,11 +87,11 @@ function mentions(text: string): number {
   return MENTIONS.reduce((sum, pattern) => sum + (text.match(pattern)?.length ?? 0), 0);
 }
 
-/** The entries a word names as a program: without a package runner's `@version`; the path's last part counts too. */
-function clisOf(text: string): AccountCli[] {
+/** A word as a program name: without a package runner's `@version`; the path's last part counts too. */
+function cliOf(text: string): AccountCli | undefined {
   const name = text.replace(/(?<=.)@[^/@]*$/, '');
   const base = name.slice(name.lastIndexOf('/') + 1);
-  return CLIS.filter((cli) => cli.names.includes(name) || cli.names.includes(base));
+  return CLIS.find((cli) => cli.names.includes(name) || cli.names.includes(base));
 }
 
 /**
@@ -224,13 +223,10 @@ function scan(command: string, depth = 0): Scan | undefined {
     accounted += wordMentions(messages);
     const runnable = withoutRedirections(words).filter((word) => !messages.includes(word));
     for (const [index, word] of runnable.entries()) {
-      if (clisOf(word.text).some((cli) => opensWithSignIn(runnable.slice(index + 1), cli.verbs))) {
-        refused.push(
-          runnable
-            .slice(index)
-            .map((each) => each.text)
-            .join(' '),
-        );
+      const cli = cliOf(word.text);
+      if (cli && opensWithSignIn(runnable.slice(index + 1), cli.verbs)) {
+        // The program only: an argument may be a token or a NAME=VALUE secret.
+        refused.push(word.text);
         break;
       }
     }
@@ -254,20 +250,19 @@ export function accountSignInRefusal(command: string): string | undefined {
     return named > 0
       ? `Refused: the sign-in guard cannot tell where a heredoc delimiter in this command ends, and the command names an account CLI. Write the delimiter plainly: <<EOF or <<'EOF'. ${INSTEAD}`
       : undefined;
+  // A refusal names programs and line numbers, never an argument: it may hold a token or secret.
   const [first] = result.refused;
   if (first) {
-    const call = first.length > 80 ? `${first.slice(0, 77)}...` : first;
-    return `Refused: \`${call}\` starts a sign-in, hands out an account token, runs the Vercel CLI, or touches a hosted project's function secrets. ${INSTEAD}`;
+    return `Refused: this \`${first.slice(0, 40)}\` call starts a sign-in, hands out an account token, runs the Vercel CLI, or touches a hosted project's function secrets. ${INSTEAD}`;
   }
   if (named <= result.accounted) return undefined;
   const lines = command
     .split('\n')
-    .filter((line) => mentions(line) > 0)
-    .slice(0, 3)
-    .map((line) => `\`${line.trim().slice(0, 80)}\``);
+    .flatMap((line, index) => (mentions(line) > 0 ? [index + 1] : []))
+    .slice(0, 3);
   return [
     `Refused: the command names an account CLI ${named} times, and the guard could verify only ${result.accounted} of them as data.`,
-    `It could not place ${lines.join(', ')}: an interpreter, a comment or a program that may run its input can hide a call.`,
+    `It could not place line ${lines.join(', ')}: an interpreter, a comment or a program that may run its input can hide a call.`,
     INSTEAD,
   ].join(' ');
 }
