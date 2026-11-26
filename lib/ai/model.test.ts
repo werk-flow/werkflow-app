@@ -1,7 +1,10 @@
 import { afterEach, expect, mock, test } from 'bun:test';
 
 mock.module('server-only', () => ({}));
-const { AI_MODEL_ID, isAllowedModel, resolveAiModel } = await import('./model');
+const { isAllowedModel, resolveAiModel } = await import('./model');
+
+// The one model of decision 30.
+const AI_MODEL_ID = 'claude-haiku-5-5';
 
 const KEY = 'WERKFLOW_KI_ANTHROPIC_KEY';
 const saved = { key: process.env[KEY], vercel: process.env.VERCEL };

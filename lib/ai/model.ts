@@ -7,7 +7,7 @@ import { AI_REPLAY_PROVIDER, createReplayModel } from '@/lib/ai/replay';
 import { logError } from '@/lib/logging';
 
 /** The one model WerkFlow KI runs on (decision 30): the newest Claude Haiku, no picker. */
-export const AI_MODEL_ID = 'claude-haiku-5-5';
+const AI_MODEL_ID = 'claude-haiku-5-5';
 
 /**
  * The Vercel environment variable that holds the Anthropic key (O1 on
