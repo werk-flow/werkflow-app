@@ -17,6 +17,12 @@ on:
 permissions:
   contents: read
 
+# Two quick pushes would both miss the key and race two saves. One run at a time, never cancelled, so
+# the next run looks the key up after the one before it saved.
+concurrency:
+  group: mustang-cache-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   seed:
     name: Seed

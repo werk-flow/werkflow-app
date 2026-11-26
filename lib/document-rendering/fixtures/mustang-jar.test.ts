@@ -213,15 +213,29 @@ test("every push to main and a dispatch seed main's cache with the verified jar 
   expect(seed.at('permissions')).toEqual({ contents: 'read' });
   expect(JSON.stringify(seed.at())).not.toContain('secrets.');
   expect(seed.at('jobs', 'seed', 'timeout-minutes')).toBe(10);
-  const cached = { path: '${{ steps.mustang.outputs.path }}', key: '${{ steps.mustang.outputs.key }}' };
-  const missed = "steps.mustang-cache.outputs.cache-hit != 'true'";
-  expect(seed.step('seed', "Read Mustang's cache key")).toMatchObject({
-    id: 'mustang',
-    run: 'bun lib/document-rendering/fixtures/mustang-jar.ts >> "$GITHUB_OUTPUT"',
+  // A second push's run waits for the first and then finds its key, so two saves never race.
+  expect(seed.at('concurrency')).toEqual({
+    group: 'mustang-cache-${{ github.ref }}',
+    'cancel-in-progress': false,
   });
+  // The seed saves what E-invoices restores: the same key step, path and key.
+  const ci = readWorkflow('ci.yml');
+  expect(seed.step('seed', "Read Mustang's cache key")).toEqual(
+    ci.step('invoices', "Read Mustang's cache key"),
+  );
+  const cached = ci.step('invoices', "Restore Mustang's jar").with;
+  expect(cached).toEqual({
+    path: '${{ steps.mustang.outputs.path }}',
+    key: '${{ steps.mustang.outputs.key }}',
+  });
+  const missed = "steps.mustang-cache.outputs.cache-hit != 'true'";
   expect(seed.step('seed', "Look up Mustang's jar")).toMatchObject({
     id: 'mustang-cache',
-    with: { ...cached, 'lookup-only': true },
+    with: {
+      path: '${{ steps.mustang.outputs.path }}',
+      key: '${{ steps.mustang.outputs.key }}',
+      'lookup-only': true,
+    },
   });
   const steps = seed.at('jobs', 'seed', 'steps');
   if (!Array.isArray(steps)) throw new Error('mustang-cache.yml has no seed steps');
@@ -243,7 +257,7 @@ test("every push to main and a dispatch seed main's cache with the verified jar 
       name: "Cache Mustang's jar",
       if: missed,
       // The same pinned save action as CI's E-invoices job.
-      uses: readWorkflow('ci.yml').step('invoices', "Cache Mustang's jar").uses,
+      uses: ci.step('invoices', "Cache Mustang's jar").uses,
       with: cached,
     },
   ]);
