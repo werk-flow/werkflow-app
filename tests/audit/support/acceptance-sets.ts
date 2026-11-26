@@ -22,14 +22,18 @@ import type { SurfaceDestination } from './surface-routes';
 /** A capture of an open set, which may open a record it seeds instead of its route's layout record. */
 export type SetCapture = CaptureSpec & {
   destination?: (world: TestWorld) => Promise<SurfaceDestination>;
+  /**
+   * Drives the opened page or dialog into the state the capture shows, once
+   * per width, such as typing a search query or a refused submit; it may seed records first.
+   */
+  act?: (scope: Locator, world: TestWorld) => Promise<void>;
   /** A dialog that pictures the page as it opens, such as the report's screenshot, opens anew in each scheme. */
   openInEachScheme?: true;
-  /** Acts inside the opened dialog before the image, such as typing a search query; it may seed records first. */
-  inLayer?: (layer: Locator, world: TestWorld) => Promise<void>;
   /**
    * Captured as the admin of the world's outsider organization instead of the
-   * role's own account. No set seeds anything there, so a capture of an empty
-   * screen stays empty whatever the sets before it seeded.
+   * role's own account. No set seeds work there, so a capture of an empty
+   * screen stays empty whatever the sets before it seeded, and the
+   * organization's deletion meets no retained record.
    */
   session?: 'outsider';
 };

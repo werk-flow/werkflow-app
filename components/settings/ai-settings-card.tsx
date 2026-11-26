@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,7 +51,7 @@ export function AiSettingsCard({
           <AiSwitch
             organizationId={organizationId}
             serverEnabled={state.enabled}
-            serverStamp={state.updatedAt}
+            serverRevision={state.revision}
           />
         ) : (
           <p className="text-sm text-muted-foreground">
@@ -66,25 +66,36 @@ export function AiSettingsCard({
 function AiSwitch({
   organizationId,
   serverEnabled,
-  serverStamp,
+  serverRevision,
 }: {
   organizationId: string;
   serverEnabled: boolean;
-  serverStamp: string | null;
+  serverRevision: number;
 }) {
-  // Every save writes a new stamp, so the rendered props settle a save even
-  // when another admin set the switch back before they landed.
-  const settleOnChange = useSettleOnChange(serverStamp);
+  // The rendered revision, current before useSettleOnChange's effect reports
+  // the render: this effect is declared first, so it runs first.
+  const renderedRevision = useRef(serverRevision);
+  useEffect(() => {
+    renderedRevision.current = serverRevision;
+  }, [serverRevision]);
+  const settleOnChange = useSettleOnChange(serverRevision);
   const sinceRef = useRef<number | undefined>(undefined);
   // The value the admin asked for, shown until the refreshed props carry it.
   const [requested, setRequested] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { run, isPending, isSettling } = useServerAction(setAiEnabled, {
-    // The action revalidates, so its response renders the new props; the
-    // mark taken before the call catches a render that lands first.
+    // The action revalidates, so its response renders the new props. A save
+    // settles once the props carry its own revision or a later one, so the
+    // render of another admin's earlier save does not settle it; the mark
+    // taken before the call catches a render that lands first.
     settle: async (result) => {
       if (!result.success) return;
-      await settleOnChange(sinceRef.current);
+      let since = sinceRef.current;
+      while (renderedRevision.current < result.revision) {
+        const seen = settleOnChange.markChange();
+        if (!(await settleOnChange.confirmChange(since))) break;
+        since = seen;
+      }
       setRequested(null);
     },
   });

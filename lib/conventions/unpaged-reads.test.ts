@@ -152,8 +152,6 @@ const REVIEWED_UNPAGED_RPC_READS: Readonly<Record<string, string>> = {
   'app/(auth)/signup/page.tsx::SignupPage::rpc:get_invite_by_code': ONE_INVITE,
   'app/api/redeem-invite/route.ts::POST::rpc:redeem_organization_invite_for_user': ONE_INVITE,
   'app/auth/callback/route.ts::redeemAfterCodeExchange::rpc:redeem_organization_invite_for_user': ONE_INVITE,
-  'lib/ai/settings-actions.ts::setAiEnabled::rpc:set_ai_organization_enabled':
-    'the one switch row of one organization',
   'lib/dispatch/actions.ts::batchReschedule::rpc:batch_reschedule_planning_occurrences':
     'the occurrences of one batch, at most 100 by its input schema',
   'lib/documents/actions.ts::permanentlyDeleteDocument::rpc:permanently_delete_document':

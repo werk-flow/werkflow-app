@@ -15,12 +15,14 @@ declare global {
   }
 }
 
-window.uiContractAiSwitch = { released: true, enabled: false, updatedAt: null };
+window.uiContractAiSwitch = { released: true, enabled: false, revision: 0 };
 window.uiContractAiReleaseRefresh = null;
 
-let stamp = 0;
-
-/** The real action revalidates, so its response renders the route; the stub holds that render. */
+/**
+ * The real action revalidates, so its response renders the route; the stub
+ * holds that render. The save takes the revision after the stored one, as
+ * the database does under the row lock.
+ */
 export async function setAiEnabled(input: {
   organizationId: string;
   enabled: boolean;
@@ -28,12 +30,13 @@ export async function setAiEnabled(input: {
   const refusal = await holdWrite('set-ai-enabled', input);
   if (refusal === 'update_failed') return { success: false, error: 'update_failed' };
   if (refusal !== null) throw new Error(`Unknown refusal ${refusal}`);
-  stamp += 1;
-  const updatedAt = `2026-11-23T10:00:0${stamp}.000000+00:00`;
-  window.uiContractAiSwitch = { released: true, enabled: input.enabled, updatedAt };
+  const stored = window.uiContractAiSwitch;
+  const revision = (stored.released ? stored.revision : 0) + 1;
+  const updatedAt = `2026-11-23T10:00:${String(revision).padStart(2, '0')}.000000+00:00`;
+  window.uiContractAiSwitch = { released: true, enabled: input.enabled, revision };
   window.uiContractAiReleaseRefresh = () => {
     window.uiContractAiReleaseRefresh = null;
     window.dispatchEvent(new Event(ROUTE_REFRESH_EVENT));
   };
-  return { success: true, enabled: input.enabled, id: 'contract-ai-switch', updatedAt };
+  return { success: true, enabled: input.enabled, id: 'contract-ai-switch', updatedAt, revision };
 }

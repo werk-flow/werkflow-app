@@ -69,6 +69,10 @@ export type FakeStripeBilling = {
   failNextCheckout: boolean;
   /** The subscriptions cancelDuplicateSubscription refunded and cancelled. */
   cancelledDuplicates: string[];
+  /** The subscriptions endCustomerSubscriptions cancelled, without a refund. */
+  endedSubscriptions: string[];
+  /** Each refund as Stripe holds it. */
+  refunds: Map<string, Awaited<ReturnType<StripeSubscriptionGateway['readRefund']>>>;
   /** What each subscription's next renewal invoice would charge; a renewal without one fails its preview. */
   renewalAmounts: Map<string, number>;
   /** The payment method Stripe would charge for each subscription. */
@@ -88,6 +92,8 @@ export function createFakeStripeBilling(): FakeStripeBilling {
     checkoutRequests: [],
     failNextCheckout: false,
     cancelledDuplicates: [],
+    endedSubscriptions: [],
+    refunds: new Map(),
     renewalAmounts: new Map(),
     paymentMethods: new Map(),
     down: false,
@@ -152,6 +158,44 @@ function fakeBillingPageCalls(
         // Stripe refuses to change a subscription that has ended.
         if (!subscription || subscription.status === 'canceled') throw callFailed();
         billing.subscriptions.set(subscriptionId, { ...subscription, cancelAtPeriodEnd });
+      }),
+  };
+}
+
+/** The calls that end a deleted organization's subscriptions and read a refund (werk-flow/werkflow-planning#495). */
+function fakeEndingCalls(
+  billing: FakeStripeBilling,
+  reach: <T>(answer: () => T) => Promise<T>,
+): Pick<StripeSubscriptionGateway, 'endCustomerSubscriptions' | 'readRefund'> {
+  return {
+    endCustomerSubscriptions: (customerId, checkoutSessionId) =>
+      reach(() => {
+        if (
+          checkoutSessionId &&
+          billing.checkoutSessions.get(checkoutSessionId) === null &&
+          !billing.expiredCheckouts.includes(checkoutSessionId)
+        ) {
+          billing.expiredCheckouts.push(checkoutSessionId);
+        }
+        const running = [...billing.subscriptions.values()].filter(
+          (entry) =>
+            entry.customerId === customerId && !['canceled', 'incomplete_expired'].includes(entry.status),
+        );
+        for (const subscription of running) {
+          billing.endedSubscriptions.push(subscription.id);
+          billing.subscriptions.set(subscription.id, {
+            ...subscription,
+            status: 'canceled',
+            cancellationReason: 'cancellation_requested',
+          });
+        }
+        return running.map((entry) => entry.id);
+      }),
+    readRefund: (refundId) =>
+      reach(() => {
+        const refund = billing.refunds.get(refundId);
+        if (!refund) throw callFailed();
+        return refund;
       }),
   };
 }
@@ -223,6 +267,7 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
           cancellationReason: 'cancellation_requested',
         });
       }),
+    ...fakeEndingCalls(billing, reach),
     ...fakeBillingPageCalls(billing, reach),
   };
 }
