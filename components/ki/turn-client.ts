@@ -46,7 +46,8 @@ export type TurnOutcome =
 
 /**
  * Sends one message and calls `onEvent` for each event of its answer. A
- * refusal comes back as its German sentence; an aborted read as `stopped`.
+ * refusal, a lost connection and a stream that closes without its end event
+ * come back as a German sentence; an aborted read as `stopped`.
  * The server goes on writing the answer when the client stops reading.
  */
 export async function sendTurn(input: {
@@ -76,6 +77,7 @@ export async function sendTurn(input: {
     if (!response.headers.get('Content-Type')?.includes('ndjson')) return { kind: 'already_done' };
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
     let pending = '';
+    let ended = false;
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -84,10 +86,13 @@ export async function sendTurn(input: {
       pending = lines.pop() ?? '';
       for (const line of lines) {
         const event = eventSchema.safeParse(JSON.parse(line));
-        if (event.success) onEvent(event.data);
+        if (!event.success) continue;
+        ended ||= event.data.type === 'end';
+        onEvent(event.data);
       }
     }
-    return { kind: 'answered' };
+    // A stream that closes without its end event broke off; it never reads as answered.
+    return ended ? { kind: 'answered' } : { kind: 'refused', message: describeTurnRefusal('unavailable') };
   } catch (error) {
     if (signal.aborted) return { kind: 'stopped' };
     return { kind: 'refused', message: describeTurnRefusal(error instanceof Error ? error.name : '') };

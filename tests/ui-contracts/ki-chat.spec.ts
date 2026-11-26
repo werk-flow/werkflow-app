@@ -312,3 +312,152 @@ for (const order of ['before', 'after'] as const) {
     await expect(threadLink(page, 'Wie viele Aufträge sind offen?')).toHaveAttribute('aria-current', 'page');
   });
 }
+
+// The composer clears at Send, so until the message is saved its text lives only in the turn. A page
+// that goes before then, by a reload or by leaving the chat, gets it back in its draft.
+test('a message whose page went before it was saved comes back into its draft as the same command', async ({
+  page,
+}) => {
+  await openChat(page);
+  await composer(page).fill('Wie viele Aufträge sind offen?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  await expect(composer(page)).toHaveValue('');
+  const [sent] = await page.evaluate(() => window.uiContractKiTurn.calls);
+
+  await openChat(page);
+  await expect(composer(page)).toHaveValue('Wie viele Aufträge sind offen?');
+  // Sent again unchanged, it is the same command: the route answers it once, even if it had saved it.
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  expect(await page.evaluate(() => window.uiContractKiTurn.calls)).toEqual([sent]);
+
+  // Once the message is saved, nothing comes back.
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await openChat(page);
+  await expect(composer(page)).toHaveValue('');
+});
+
+test('what is typed while a new chat waits to be saved stays in the composer once it is saved', async ({
+  page,
+}) => {
+  await openChat(page);
+  await composer(page).fill('Wie viele Aufträge sind offen?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  await composer(page).fill('Und welche davon sind dringend?');
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await expect(threadLink(page, 'Wie viele Aufträge sind offen?')).toHaveAttribute('aria-current', 'page');
+  await expect(composer(page)).toHaveValue('Und welche davon sind dringend?');
+  // The follow-up moved with the thread: the new chat holds nothing of it.
+  await page.getByRole('button', { name: 'Neuer Chat', exact: true }).click();
+  await expect(composer(page)).toHaveValue('');
+});
+
+const savedMessage = (key: string, sequence: number, role: 'user' | 'assistant', text: string) => ({
+  key,
+  sequence,
+  role,
+  status: 'complete' as const,
+  text,
+  failure: null,
+});
+
+test('older messages page in before the oldest one shown, after a live turn too', async ({ page }) => {
+  await openChat(page);
+  const saved = {
+    messages: [
+      savedMessage('k:user', 10, 'user', 'Wie viel Rohr?'),
+      savedMessage('k:assistant', 11, 'assistant', 'Zwei Meter.'),
+    ],
+    hasOlder: true,
+  };
+  await page.evaluate(
+    ([id, value]) => {
+      window.uiContractKiWindows[id] = value;
+    },
+    [THREAD_A, saved] as const,
+  );
+  await threadLink(page, 'Material für die Heizung').click();
+  await expect(timeline(page).getByText('Zwei Meter.', { exact: true })).toBeVisible();
+  await composer(page).fill('Und Fittinge?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 12 },
+    assistantItem: { id: 'a', sequence: 13 },
+  });
+  await emit(page, { type: 'text', delta: 'Vier Stück.' });
+  await emit(page, { type: 'end', status: 'complete' });
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'answered' }));
+  // The thread is read again and now holds the turn as the server saved it.
+  const [turn] = await page.evaluate(() => window.uiContractKiTurn.calls);
+  const reread = {
+    ...saved,
+    messages: [
+      ...saved.messages,
+      savedMessage(`${turn?.commandId}:user`, 12, 'user', 'Und Fittinge?'),
+      savedMessage(`${turn?.commandId}:assistant`, 13, 'assistant', 'Vier Stück.'),
+    ],
+  };
+  await page.evaluate(
+    ([id, value]) => {
+      window.uiContractKiWindows[id] = value;
+    },
+    [THREAD_A, reread] as const,
+  );
+  await threadLink(page, 'Entlüften').click();
+  await page.goBack();
+  await expect(page.getByRole('button', { name: 'Frühere Nachrichten laden' })).toBeVisible();
+  await page.evaluate(() => {
+    window.uiContractKiReadInputs = [];
+  });
+  await page.getByRole('button', { name: 'Frühere Nachrichten laden' }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.uiContractKiReadInputs))
+    .toEqual([expect.objectContaining({ threadId: THREAD_A, beforeSequence: 10 })]);
+});
+
+test('a read of the latest messages that answers after a newer one changes nothing', async ({ page }) => {
+  await openChat(page);
+  const writing = (text: string) => ({
+    messages: [
+      savedMessage('k:user', 1, 'user', 'Wie viel Rohr?'),
+      { ...savedMessage('k:assistant', 2, 'assistant', text), status: 'streaming' as const },
+    ],
+    hasOlder: false,
+  });
+  const answerWith = (value: ReturnType<typeof writing>) =>
+    page.evaluate(
+      ([id, next]) => {
+        window.uiContractKiWindows[id] = next;
+      },
+      [THREAD_A, value] as const,
+    );
+  await page.evaluate(() => {
+    window.uiContractKiHeldReads = [];
+  });
+  await answerWith(writing('Zwei'));
+  await threadLink(page, 'Material für die Heizung').click();
+  await threadLink(page, 'Entlüften').click();
+  await answerWith(writing('Zwei Meter Rohr.'));
+  await page.goBack();
+  await expect.poll(() => page.evaluate(() => window.uiContractKiHeldReads?.length)).toBe(3);
+  // The newer read of the thread answers first, then the earlier one.
+  const release = (index: number) =>
+    page.evaluate((at) => window.uiContractKiHeldReads?.[at]?.release(), index);
+  await release(2);
+  await expect(timeline(page).getByText('Zwei Meter Rohr.', { exact: true })).toBeVisible();
+  await release(0);
+  // The late answer has reached the page once two frames have passed.
+  await page.evaluate(
+    () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+  );
+  await expect(timeline(page).getByText('Zwei', { exact: true })).toHaveCount(0);
+  await expect(timeline(page).getByText('Zwei Meter Rohr.', { exact: true })).toBeVisible();
+});

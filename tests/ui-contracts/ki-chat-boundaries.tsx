@@ -5,6 +5,7 @@
 import { KiChat } from '@/components/ki/ki-chat';
 import { describeTurnRefusal, type TurnEvent, type TurnOutcome } from '@/components/ki/turn-client';
 import { BannerProvider } from '@/components/ui/banner';
+import type { AiThreadWindow } from '@/lib/ai/thread-types';
 
 export { describeTurnRefusal };
 
@@ -21,23 +22,31 @@ declare global {
     uiContractKiReadsFail: 'background_read_failed' | 'not_found' | false;
     /** Set by the spec to a list: each thread read waits there, with its answer, until the spec releases it. */
     uiContractKiHeldReads: { threadId: unknown; release: () => void }[] | null;
+    /** Set by the spec: what a listed thread's read answers, in place of an empty window. */
+    uiContractKiWindows: Record<string, AiThreadWindow>;
+    /** Every thread read's input, in the order the page sent them. */
+    uiContractKiReadInputs: unknown[];
   }
 }
 
 window.uiContractKiTurn = { calls: [], emit: null, resolve: null };
 window.uiContractKiReadsFail = false;
 window.uiContractKiHeldReads = null;
+window.uiContractKiWindows = {};
+window.uiContractKiReadInputs = [];
 
-/** A listed thread opens empty: the spec drives each turn. Any other thread is not the person's. */
+/** A listed thread opens with the window the spec set, or empty: the spec drives each turn. Any other thread is not the person’s. */
 function answerKiThreadWindow(threadId: unknown) {
   if (window.uiContractKiReadsFail) return { success: false, error: window.uiContractKiReadsFail };
-  return KI_CONTRACT_THREADS.some((thread) => thread.id === threadId)
-    ? { success: true, window: { messages: [], hasOlder: false } }
+  const listed = KI_CONTRACT_THREADS.find((thread) => thread.id === threadId);
+  return listed
+    ? { success: true, window: window.uiContractKiWindows[listed.id] ?? { messages: [], hasOlder: false } }
     : { success: false, error: 'not_found' };
 }
 
 export function readKiThreadWindowContract(input: unknown) {
   const threadId = input && typeof input === 'object' && 'threadId' in input ? input.threadId : null;
+  window.uiContractKiReadInputs.push(input);
   const answer = answerKiThreadWindow(threadId);
   const held = window.uiContractKiHeldReads;
   if (!held) return answer;

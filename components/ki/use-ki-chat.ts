@@ -5,7 +5,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useClientRead } from '@/hooks/use-client-read';
 import type { AiThreadSummary, AiThreadWindow } from '@/lib/ai/thread-types';
 import { readInBackground } from '@/lib/data/background-read-client';
-import { draftKey, readDraft, writeDraft } from '@/lib/ai/chat-drafts';
+import {
+  draftKey,
+  holdSending,
+  readDraft,
+  releaseSending,
+  takeSending,
+  writeDraft,
+} from '@/lib/ai/chat-drafts';
 import { kiThreadHref } from './ki-thread-list';
 import type { TimelineMessage } from './ki-timeline';
 import { describeTurnRefusal, sendTurn, type TurnEvent, type TurnOutcome } from './turn-client';
@@ -171,6 +178,13 @@ export function useThreadList(organizationId: string, initial: ThreadList) {
   return { list, failure: older.failure, loadingMore: older.loading, loadMore, touch, evict };
 }
 
+/** Moves the thread's count on by one and returns it. */
+function countOn(counts: Map<string, number>, id: string): number {
+  const next = (counts.get(id) ?? 0) + 1;
+  counts.set(id, next);
+  return next;
+}
+
 function useThreadViews(
   organizationId: string,
   initialThreadId: string | null,
@@ -191,15 +205,14 @@ function useThreadViews(
   }, []);
   // Each thread's stamp moves on with every read and every turn sent to it.
   const stamps = useRef(new Map<string, number>());
-  const stamp = useCallback((id: string): number => {
-    const next = (stamps.current.get(id) ?? 0) + 1;
-    stamps.current.set(id, next);
-    return next;
-  }, []);
+  const stamp = useCallback((id: string): number => countOn(stamps.current, id), []);
+  // And with every read of its latest messages: only the newest of those may show what it read.
+  const latestReads = useRef(new Map<string, number>());
   const readWindow = useCallback(
     async (id: string, beforeSequence?: number): Promise<WindowRead> => {
       const signal = reads.current.signal;
       const mine = stamp(id);
+      const latest = beforeSequence === undefined ? countOn(latestReads.current, id) : null;
       const result = await readInBackground(
         'ki-thread-window',
         { organizationId, threadId: id, ...(beforeSequence ? { beforeSequence } : {}) },
@@ -213,6 +226,9 @@ function useThreadViews(
         missing.current(id);
         return 'missing';
       }
+      // An earlier read of the latest messages that answers after a newer one would show older text.
+      if (latest !== null && latestReads.current.get(id) !== latest)
+        return result.success ? 'found' : 'failed';
       setViews((all) => {
         const current = all[id]?.window ?? null;
         // A passing failure keeps what was shown, still marked unconfirmed.
@@ -314,6 +330,7 @@ function markStarted(
   event: Extract<TurnEvent, { type: 'started' }>,
   host: TurnHost,
 ): LiveTurn {
+  releaseSending(turn.draft);
   if (turn.provisional && host.shownRef.current === turn.threadId) {
     const typed = readDraft(turn.draft);
     const destination = draftKey(host.userId, host.organizationId, turn.threadId);
@@ -342,6 +359,14 @@ function settleSaved(current: LiveTurn, outcome: TurnOutcome, host: TurnHost): v
 function restoreDraft(key: string, text: string): void {
   const typed = readDraft(key);
   writeDraft(key, typed ? `${text}\n\n${typed}` : text);
+}
+
+/** Messages whose page went before their turns started go back into their drafts, each as the same command. */
+function restoreUnsent(host: TurnHost, refused: Map<string, Refused>): void {
+  for (const { draft, threadId, commandId, text } of takeSending(host.userId, host.organizationId)) {
+    refused.set(draft, { threadId, commandId, text });
+    restoreDraft(draft, text);
+  }
 }
 
 function newTurn(
@@ -413,10 +438,12 @@ function useLiveTurn(host: TurnHost) {
     hostRef.current = host;
   });
   // Leaving the page ends this client's reading; the server finishes the answer, and nothing of
-  // the turn may touch the page the person went to.
+  // the turn may touch the page the person went to. A message whose turn had not started by then
+  // comes back into its draft when the chat opens again, as the same command.
   const leftRef = useRef(false);
   useEffect(() => {
     leftRef.current = false;
+    restoreUnsent(hostRef.current, refusedRef.current);
     return () => {
       leftRef.current = true;
       abortRef.current?.abort();
@@ -444,6 +471,7 @@ function useLiveTurn(host: TurnHost) {
       if (leftRef.current || liveRef.current?.commandId !== turn.commandId) return;
       const current = liveRef.current;
       abortRef.current = null;
+      releaseSending(current.draft);
       update(() => null);
       if (current.started || outcome.kind === 'already_done')
         return settleSaved(current, outcome, hostRef.current);
@@ -463,6 +491,7 @@ function useLiveTurn(host: TurnHost) {
       }
       const { target, commandId } = commandFor(text, host, refusedRef.current.get(draft));
       refusedRef.current.delete(draft);
+      holdSending({ draft, threadId: target, commandId, text });
       host.supersedeReads(target);
       const controller = new AbortController();
       abortRef.current = controller;

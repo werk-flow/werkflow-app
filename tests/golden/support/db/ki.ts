@@ -29,12 +29,47 @@ function kiUser(world: TestWorld, role: KiRole, firstName: string): TestUser {
   };
 }
 
+/** Creates the people a set-up attempt of this run has not created yet. */
+async function createMissingUsers(
+  admin: ReturnType<typeof createAdminClient>,
+  users: TestUser[],
+): Promise<void> {
+  const { data: existing } = await admin
+    .from('profiles')
+    .select('id')
+    .in(
+      'id',
+      users.map((user) => user.id),
+    )
+    .throwOnError();
+  const created = new Set(existing.map((profile) => profile.id));
+  for (const user of users) if (!created.has(user.id)) await createTestUser(admin, user);
+}
+
+/** Whether the organization is this run's and its set-up finished: switching WerkFlow KI on is its last write. */
+async function setUpForRun(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  name: string,
+  existing: { name: string } | null,
+): Promise<boolean> {
+  if (existing?.name !== name) return false;
+  const { data: settings } = await admin
+    .from('ai_organization_settings')
+    .select('enabled')
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+    .throwOnError();
+  return settings?.enabled === true;
+}
+
 /**
  * This checkout's KI organization, the one the local test server releases
  * (lib/testing/ai-test-organization.ts), with WerkFlow KI switched on and its
  * own three people, so the world's roles keep one organization. Seeded once
- * per run. The world owns the people's addresses and the organization's name,
- * so its teardown removes both.
+ * per run; an attempt that stopped part-way is set up again, with the people
+ * it already created. The world owns the people's addresses and the
+ * organization's name, so its teardown removes both.
  */
 export async function kiOrganizationFor(world: TestWorld): Promise<KiOrganization> {
   const admin = createAdminClient();
@@ -51,10 +86,11 @@ export async function kiOrganizationFor(world: TestWorld): Promise<KiOrganizatio
     .eq('id', organizationId)
     .maybeSingle()
     .throwOnError();
-  if (existing?.name === name) return { organizationId, users };
-  // A crashed run's organization would still hold the id.
+  if (await setUpForRun(admin, organizationId, name, existing)) return { organizationId, users };
+  // A crashed run's organization, or this run's half set-up one, would still hold the id.
   if (existing) await admin.from('organizations').delete().eq('id', organizationId).throwOnError();
-  for (const user of Object.values(users)) await createTestUser(admin, user);
+  await createMissingUsers(admin, Object.values(users));
+  await admin.from('subscriptions').delete().eq('user_id', users.admin.id).throwOnError();
   await admin
     .from('subscriptions')
     .insert({ user_id: users.admin.id, status: 'active', plan_id: 'golden-test' })

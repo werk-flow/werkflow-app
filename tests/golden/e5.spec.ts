@@ -15,7 +15,7 @@ import {
 // the checkout's released KI organization. The local test server has no model
 // key, so every answer replays a recorded synthetic stream (lib/ai/replay.ts).
 // lib/ui/ai-markdown.test.tsx owns the renderer corpus,
-// lib/ai/thread-reads.test.ts the reads' boundaries and
+// lib/ui/ai-thread-reads.test.ts the reads' boundaries and
 // tests/ui-contracts/ki-chat.spec.ts the frozen blocks and the composer.
 
 test.describe('E5 WerkFlow KI @E5', () => {

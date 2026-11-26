@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 
 import { temporaryDirectory } from '@/lib/testing/temporary-directory';
+import { z } from '@/lib/zod';
 
 // The local test server replays recorded streams and must never call a paid
 // model (werk-flow/werkflow-planning#530). scripts/test-server.ts pins
@@ -29,19 +30,35 @@ function nextEnvLoader(): LoadEnvConfig {
   if (!isEnvModule(loaded)) throw new Error('Next ships no loadEnvConfig');
   return loaded.loadEnvConfig;
 }
-const original = process.env[KEY];
+const original = { key: process.env[KEY], mode: process.env.NODE_ENV };
+
+/** Sets or removes a variable; Next types NODE_ENV as read-only. */
+function setEnv(name: string, value: string | undefined): void {
+  if (value === undefined) Reflect.deleteProperty(process.env, name);
+  else Reflect.set(process.env, name, value);
+}
 
 afterEach(() => {
-  if (original === undefined) delete process.env[KEY];
-  else process.env[KEY] = original;
+  setEnv(KEY, original.key);
+  setEnv('NODE_ENV', original.mode);
 });
+
+const loaded = z.object({ loadedEnvFiles: z.array(z.object({ path: z.string() })) });
 
 test('an env file cannot override the test server’s empty model key', () => {
   const directory = temporaryDirectory('model-key-pin-');
   writeFileSync(join(directory, '.env.local'), `${KEY}=synthetic-key-from-a-file\n`);
   writeFileSync(join(directory, '.env.production'), `${KEY}=synthetic-key-from-a-file\n`);
-  process.env[KEY] = '';
-  nextEnvLoader()(directory, false, { info: () => undefined, error: () => undefined }, true);
+  setEnv(KEY, '');
+  // `bun test` runs with NODE_ENV=test, where Next loads only the test files; the server runs in production mode.
+  setEnv('NODE_ENV', 'production');
+  const result = loaded.parse(
+    nextEnvLoader()(directory, false, { info: () => undefined, error: () => undefined }, true),
+  );
+  expect(
+    result.loadedEnvFiles.map((file) => file.path).toSorted(),
+    'the loader must read the env files that carry a key',
+  ).toEqual(['.env.local', '.env.production']);
   expect(process.env[KEY]).toBe('');
 });
 

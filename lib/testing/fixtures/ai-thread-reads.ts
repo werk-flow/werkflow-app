@@ -119,6 +119,37 @@ await readTurn(world, await postTurn('Wie entlüfte ich einen Heizkörper?', { c
   resetAiTables(world);
 }
 
+// The window's cap counts UTF-8 bytes: twenty answers of 10,000 „ä“ are 200,000 characters but
+// 400,000 bytes, so the window stops under its cap and says that older messages follow.
+{
+  resetAiTables(world);
+  const threadId = '42000000-0000-4000-8000-000000000001';
+  tableRows(world, 'ai_threads').push({
+    id: threadId,
+    organization_id: organizationId,
+    user_id: world.callerId,
+    title: 'Umlaute',
+    updated_at: '2026-11-26T09:00:00.000Z',
+  });
+  for (let sequence = 1; sequence <= 20; sequence += 1)
+    tableRows(world, 'ai_thread_items').push({
+      id: `42000000-0000-4000-8000-${String(sequence).padStart(12, '0')}`,
+      organization_id: organizationId,
+      thread_id: threadId,
+      idempotency_key: `umlaute:${sequence}`,
+      sequence,
+      kind: 'assistant_message',
+      status: 'complete',
+      body: { text: 'ä'.repeat(10_000) },
+    });
+  const window = await getAiThreadWindow({ organizationId, threadId });
+  assert.ok(window.success);
+  const bytes = window.window.messages.reduce((sum, message) => sum + Buffer.byteLength(message.text), 0);
+  assert.ok(bytes <= 256_000, `the window must carry at most 256,000 bytes of text, carried ${bytes}`);
+  assert.equal(window.window.hasOlder, true, 'a window cut at its byte cap says that older messages follow');
+  resetAiTables(world);
+}
+
 // B21: the model fell for a document that told it to send data out through the chat. The page
 // reads the saved answer as it was written; lib/ui/ai-thread-reads.test.ts renders it.
 {

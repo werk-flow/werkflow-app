@@ -135,3 +135,22 @@ test('a code block keeps its blank lines and stands alone', () => {
     '> Hinweis',
   ]);
 });
+
+// An answer may hold up to `maxAnswerBytes`, and a paragraph without a blank line is one block that
+// renders again with every batch while it streams. When an opener that never closes may run across
+// later openers, the scan restarts at each of them: quadratic, and 48,000 „[“ froze the page for
+// seconds. So no opener spans the next one, and the match starts at the opener that closes.
+const LATER_OPENER_CLOSES: ReadonlyArray<readonly [string, string, string]> = [
+  ['a link label', '[a [b](/x)', '[a <a href="/x">b</a>'],
+  ['a link target', '[a](/x[b](/y)', '[a](/x<a href="/y">b</a>'],
+  ['emphasis with stars', '*a *b*', '*a <em>b</em>'],
+  ['emphasis with underscores', '_a _b_', '_a <em>b</em>'],
+  ['a backtick run', '``a`b`', '``a<code>b</code>'],
+];
+
+for (const [name, text, expected] of LATER_OPENER_CLOSES) {
+  test(`${name} that does not close leaves the next opener to close`, () => {
+    const markup = render(text).replaceAll(/ (?:class|data-slot)="[^"]*"/g, '');
+    expect(markup, 'an unclosed opener must not run across a later one').toContain(expected);
+  });
+}

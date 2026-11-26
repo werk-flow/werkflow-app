@@ -10,8 +10,11 @@ import { FENCE, sameOriginTarget, splitAnswerBlocks } from '@/lib/ui/ai-markdown
 // talked into sending data out has nothing that loads or navigates. Lint bans
 // every other Markdown renderer in product code (eslint.config.mjs).
 
+// An opener that does not close fails before the next opener, so a line full of them renders in
+// linear time: a link label and target stop at a bracket, emphasis at its own marker, and a backtick
+// run that closes nowhere is taken whole as text (lib/ui/ai-markdown.test.tsx).
 const INLINE =
-  /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)|(!?)\[([^\]\n]+)\]\(([^)\s]*)\)|\*\*(.+?)\*\*|__(.+?)__|\*(\S(?:.*?\S)?)\*|\b_(\S(?:.*?\S)?)_\b/g;
+  /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)|(!?)\[([^[\]\n]+)\]\(([^()[\]\s]*)\)|\*\*(.+?)\*\*|__(.+?)__|\*([^*\s](?:[^*]*[^*\s])?)\*|\b_([^_\s](?:[^_]*[^_\s])?)_\b|`+/g;
 
 function inline(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -34,7 +37,9 @@ function inline(text: string): ReactNode[] {
       else nodes.push(bang === '' ? `${label} (${href})` : whole);
     } else if (strong !== undefined || strongAlt !== undefined)
       nodes.push(<strong key={key}>{inline(strong ?? strongAlt ?? '')}</strong>);
-    else nodes.push(<em key={key}>{inline(em ?? emAlt ?? '')}</em>);
+    else if (em !== undefined || emAlt !== undefined)
+      nodes.push(<em key={key}>{inline(em ?? emAlt ?? '')}</em>);
+    else nodes.push(whole);
   }
   nodes.push(text.slice(last));
   return nodes;
