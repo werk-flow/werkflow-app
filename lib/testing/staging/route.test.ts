@@ -5,6 +5,7 @@ import { expect, test } from 'bun:test';
 import { STAGING_ORIGIN, type BrowserRequest } from './boundary';
 import {
   navigationTo,
+  redirectMethod,
   redirectTarget,
   sendThroughBoundary,
   type FetchedResponse,
@@ -14,17 +15,25 @@ import {
 const DEV = 'devref0000000000000';
 const SECRET = 'MadeUpBypassSecret0123456789abcd';
 
-type Sent = { url: string; headers: Record<string, string> | undefined; method: string | undefined };
+type Sent = {
+  url: string;
+  headers: Record<string, string> | undefined;
+  method: string | undefined;
+  postData: string | undefined;
+};
 
 /** A route whose network answers from `answers` by URL; it records each hop it sent. */
-function fakeRoute(request: BrowserRequest, answers: Record<string, { status: number; location?: string }>) {
+function fakeRoute(
+  request: BrowserRequest & { method: string },
+  answers: Record<string, { status: number; location?: string }>,
+) {
   const sent: Sent[] = [];
   const outcome: { fulfilled?: unknown; aborted: boolean } = { aborted: false };
   const route: RouteHop = {
     request: { ...request, headers: { accept: '*/*' } },
     fetch: async (options) => {
       const url = options.url ?? request.url;
-      sent.push({ url, headers: options.headers, method: options.method });
+      sent.push({ url, headers: options.headers, method: options.method, postData: options.postData });
       const answer = answers[url] ?? { status: 200 };
       const response: FetchedResponse = {
         status: () => answer.status,
@@ -47,8 +56,8 @@ function fakeRoute(request: BrowserRequest, answers: Record<string, { status: nu
   return { sent, outcome, refused, run };
 }
 
-const asset = (url: string) => ({ url, navigation: false, mainFrame: true });
-const page = (url: string) => ({ url, navigation: true, mainFrame: true });
+const asset = (url: string, method = 'GET') => ({ url, method, navigation: false, mainFrame: true });
+const page = (url: string) => ({ url, method: 'GET', navigation: true, mainFrame: true });
 
 test('a staging redirect to a refused origin never reaches it, whether page or asset', async () => {
   for (const request of [page(`${STAGING_ORIGIN}/go`), asset(`${STAGING_ORIGIN}/api/go`)]) {
@@ -83,10 +92,50 @@ test("an asset's redirect is followed hop by hop, and the bypass stays on stagin
       url: `${STAGING_ORIGIN}/api/file`,
       headers: { accept: '*/*', 'x-vercel-protection-bypass': SECRET },
       method: undefined,
+      postData: undefined,
     },
-    { url: `https://${DEV}.supabase.co/storage/x`, headers: undefined, method: 'GET' },
+    {
+      url: `https://${DEV}.supabase.co/storage/x`,
+      headers: undefined,
+      method: undefined,
+      postData: undefined,
+    },
   ]);
   expect(route.outcome.aborted).toBe(false);
+});
+
+test('a redirect changes the method as a browser does, and only a changed method drops the body', () => {
+  expect(redirectMethod('POST', 302)).toBe('GET');
+  expect(redirectMethod('POST', 301)).toBe('GET');
+  expect(redirectMethod('PUT', 302)).toBe('PUT');
+  expect(redirectMethod('PUT', 303)).toBe('GET');
+  expect(redirectMethod('HEAD', 303)).toBe('HEAD');
+  expect(redirectMethod('POST', 307)).toBe('POST');
+  expect(redirectMethod('DELETE', 308)).toBe('DELETE');
+});
+
+test('a 307 after a 303 repeats the GET the 303 made, not the original POST', async () => {
+  const start = `${STAGING_ORIGIN}/api/form`;
+  const route = fakeRoute(asset(start, 'POST'), {
+    [start]: { status: 303, location: '/api/done' },
+    [`${STAGING_ORIGIN}/api/done`]: { status: 307, location: '/api/final' },
+  });
+  await route.run();
+  expect(route.sent.map(({ url, method, postData }) => ({ url, method, postData }))).toEqual([
+    { url: start, method: undefined, postData: undefined },
+    { url: `${STAGING_ORIGIN}/api/done`, method: 'GET', postData: '' },
+    { url: `${STAGING_ORIGIN}/api/final`, method: 'GET', postData: '' },
+  ]);
+});
+
+test('a PUT redirected by 302 keeps its method and body', async () => {
+  const start = `${STAGING_ORIGIN}/api/item`;
+  const route = fakeRoute(asset(start, 'PUT'), { [start]: { status: 302, location: '/api/item/2' } });
+  await route.run();
+  expect(route.sent.map(({ method, postData }) => ({ method, postData }))).toEqual([
+    { method: undefined, postData: undefined },
+    { method: undefined, postData: undefined },
+  ]);
 });
 
 test('a redirect loop ends refused', async () => {

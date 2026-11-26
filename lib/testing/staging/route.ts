@@ -8,7 +8,7 @@ import { bypassHeaders, requestVerdict, type BrowserRequest } from './boundary';
 
 /** The parts of a Playwright route the handler uses; the kit adapts the real one. */
 export type RouteHop<R extends FetchedResponse = FetchedResponse> = {
-  request: BrowserRequest & { headers: Record<string, string> };
+  request: BrowserRequest & { method: string; headers: Record<string, string> };
   /** Sends one hop and never follows its redirect. */
   fetch(options: {
     maxRedirects: 0;
@@ -38,6 +38,16 @@ export function redirectTarget(from: string, status: number, location: string | 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' };
 
 /** A page that sends the browser to `target` as a new navigation, which passes the route again. */
+/**
+ * The method a redirect's next hop takes, as a browser does: 303 turns all but GET and HEAD into GET,
+ * 301 and 302 turn POST into GET, and every other method and status keeps the request as it is.
+ */
+export function redirectMethod(method: string, status: number): string {
+  if (status === 303) return method === 'HEAD' ? 'HEAD' : 'GET';
+  if ((status === 301 || status === 302) && method === 'POST') return 'GET';
+  return method;
+}
+
 export function navigationTo(target: string): string {
   const escaped = target.replace(/[&"<>]/g, (character) => HTML_ESCAPES[character] ?? character);
   return `<!doctype html><meta http-equiv="refresh" content="0;url=${escaped}">`;
@@ -54,6 +64,7 @@ export async function sendThroughBoundary<R extends FetchedResponse>(
   refuse: (request: BrowserRequest) => void,
 ): Promise<void> {
   let hop: BrowserRequest = route.request;
+  let method = route.request.method;
   let override: { url?: string; method?: string; postData?: string } = {};
   for (let count = 0; count <= MAX_HOPS; count += 1) {
     if (requestVerdict(hop, devRef) === 'refused') {
@@ -80,9 +91,13 @@ export async function sendThroughBoundary<R extends FetchedResponse>(
       await route.fulfillPage(navigationTo(target));
       return;
     }
-    // 301, 302 and 303 turn into a GET without a body, as a browser does; 307 and 308 repeat the request.
-    const repeats = response.status() === 307 || response.status() === 308;
-    override = repeats ? { url: target } : { url: target, method: 'GET', postData: '' };
+    // A hop that changes its method drops the body; one that keeps it repeats the method and body sent last.
+    const nextMethod = redirectMethod(method, response.status());
+    override =
+      nextMethod === method
+        ? { ...override, url: target }
+        : { url: target, method: nextMethod, postData: '' };
+    method = nextMethod;
     hop = next;
   }
   refuse(hop);

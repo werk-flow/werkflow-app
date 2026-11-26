@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { chromium, expect, type Page } from '@playwright/test';
+import { chromium, expect, type Page, type Request } from '@playwright/test';
 
 import { supabaseProjectRefs } from '../../lib/security/production-access';
 import { readStagingAgentKeys, type StagingAgentKeyName } from '../../lib/security/staging-agent-keys';
@@ -223,7 +223,6 @@ const RUN_MARKER = 'werkflow_agent_run';
 function issue(actor: Actor): Actor {
   const issued = Object.freeze({ ...actor });
   issuedActors.add(issued);
-  writeFileSync(join(runFolder(actor.runId), 'actor.json'), JSON.stringify(issued), { mode: 0o600 });
   return issued;
 }
 
@@ -275,7 +274,9 @@ export async function createActor(kit: Kit, runId: string): Promise<Actor> {
   );
   if (created.email !== email || created.app_metadata[RUN_MARKER] !== runId)
     throw new StagingFailure('The created user carries another address or no run marker.');
-  return issue({ runId, id: created.id, email, password });
+  const actor = issue({ runId, id: created.id, email, password });
+  writeFileSync(join(runFolder(runId), 'actor.json'), JSON.stringify(actor), { mode: 0o600 });
+  return actor;
 }
 
 /**
@@ -310,6 +311,7 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
   const browser = await chromium.launch({ channel: 'chromium' });
   const refused = new Set<string>();
   const blocked = new Set<string>();
+  let outcome: { result: T } | { error: unknown };
   try {
     // No service worker: its requests pass no route, so they would miss the bypass.
     const context = await browser.newContext({
@@ -324,7 +326,7 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
       const asked = {
         url: request.url(),
         navigation: request.isNavigationRequest(),
-        mainFrame: request.frame().parentFrame() === null,
+        mainFrame: isMainFrame(request),
       };
       // A refused page fails the journey; a refused asset or frame, such as a wallet button, is left out.
       const refuse = (hop: BrowserRequest) =>
@@ -332,7 +334,7 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
       try {
         await sendThroughBoundary(
           {
-            request: { ...asked, headers: request.headers() },
+            request: { ...asked, method: request.method(), headers: request.headers() },
             fetch: (options) => route.fetch(options),
             fulfill: (response) => route.fulfill({ response }),
             fulfillPage: (body) => route.fulfill({ status: 200, contentType: 'text/html', body }),
@@ -358,15 +360,30 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
     });
     const page = await context.newPage();
     try {
-      const result = await journey(page);
-      if (refused.size === 0) return result;
+      outcome = { result: await journey(page) };
     } catch (error) {
       if (blocked.size) kit.log('blocked', { origins: [...blocked].join(',') });
-      if (refused.size === 0) throw error;
+      outcome = { error };
     }
-    throw new StagingFailure(`The browser refused pages outside staging: ${[...refused].join(', ')}.`);
   } finally {
     await browser.close();
+  }
+  // Read after the close, so a hop refused while the browser closed still fails the journey.
+  if (refused.size)
+    throw new StagingFailure(`The browser refused pages outside staging: ${[...refused].join(', ')}.`);
+  if ('error' in outcome) throw outcome.error;
+  return outcome.result;
+}
+
+/**
+ * Whether a request belongs to its page's main frame. A popup's first navigation is routed before its
+ * frame exists, and Playwright then throws: that request is the new page's main frame.
+ */
+function isMainFrame(request: Request): boolean {
+  try {
+    return request.frame().parentFrame() === null;
+  } catch {
+    return request.isNavigationRequest();
   }
 }
 
