@@ -148,9 +148,12 @@ rollback;
 -- that broke off) and at the end. Its one committed time entry, the one the
 -- edit moves, is deleted before the organization, which refuses deletion
 -- while it holds time. Both sessions roll back every time write. The main
--- session only orchestrates and rolls back.
+-- session only orchestrates and rolls back. It holds an advisory lock from
+-- before the setup until its rollback, so a run from another worktree on the
+-- shared stack waits instead of deleting this run's rows.
 begin;
 set local search_path = public, extensions, pg_temp;
+select pg_advisory_xact_lock(hashtextextended('supabase/tests/clock_job_row_lock.sql#361', 0));
 create extension if not exists dblink with schema extensions;
 select dblink_connect('entry_lock_setup', 'dbname=postgres user=postgres');
 select dblink_connect('entry_lock_first', 'dbname=postgres user=postgres');
@@ -221,14 +224,16 @@ $$;
 
 -- The first session runs p_hold (a time write without a job, which holds the
 -- revision row), the second p_second (a write onto the job), which must wait
--- for it. The first then runs p_lock_job, which locks the job; both must go
--- through.
-create function pg_temp.check_overlap(p_case text, p_hold text, p_second text, p_lock_job text)
-returns void language plpgsql as $$
+-- for it. The first then runs p_lock_job, which locks the job and must answer
+-- p_locked when given; both must go through.
+create function pg_temp.check_overlap(
+  p_case text, p_hold text, p_second text, p_lock_job text, p_locked text default null
+) returns void language plpgsql as $$
 declare
   v_pid integer := (select pid from entry_lock_second_pid);
   v_deadline timestamptz := clock_timestamp() + interval '10 seconds';
   v_message text;
+  v_locked text;
 begin
   perform dblink_exec('entry_lock_first', 'begin');
   perform dblink_exec('entry_lock_first', 'set local role service_role');
@@ -244,11 +249,14 @@ begin
   end loop;
 
   begin
-    perform * from dblink('entry_lock_first', p_lock_job) as locked(result text);
+    select result into v_locked from dblink('entry_lock_first', p_lock_job) as locked(result text);
   exception when others then
     raise exception '%: the first session failed to lock the job while the second waited: %',
       p_case, sqlerrm;
   end;
+  if p_locked is not null and v_locked is distinct from p_locked then
+    raise exception '%: the first session''s job write answered % instead of %', p_case, v_locked, p_locked;
+  end if;
   perform dblink_exec('entry_lock_first', 'rollback');
 
   perform * from dblink_get_result('entry_lock_second', false) as result(status text);
@@ -297,10 +305,11 @@ select pg_temp.check_overlap('a manual clock-in against the clock starting work 
       p_request_hash => repeat('b', 64), p_action => 'switch',
       p_expected_session_id => session.id, p_expected_version => session.version,
       p_segment_kind => 'work', p_allocation_kind => 'job',
-      p_job_id => '36100000-0000-4000-8000-000000000021')
+      p_job_id => '36100000-0000-4000-8000-000000000021') ->> 'outcome'
     from public.time_sessions session
     where session.user_id = '36100000-0000-4000-8000-000000000002' and session.ended_at is null
-  $switch$);
+  $switch$,
+  'active');
 
 select dblink_exec('entry_lock_setup', statement) from entry_lock_cleanup;
 
