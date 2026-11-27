@@ -12,7 +12,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorText } from '@/components/ui/error-text';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { useServerAction } from '@/hooks/use-server-action';
-import { useMountedWallClockTick, useWallClockTick } from '@/hooks/use-wall-clock-tick';
+import { useMountedWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { describeFailure } from '@/lib/action-messages';
 import {
   DELIVERY_STATE_LABELS,
@@ -21,7 +21,7 @@ import {
   type DeliveryMailDefaults,
   type DeliveryState,
 } from '@/lib/delivery/delivery-types';
-import { deliveryFailureAdvice, pastDeliveryOutcome, priorEmailAdvice } from '@/lib/delivery/failure-advice';
+import { deliveryFailureAdvice, deliveryOutcome, priorEmailAdvice } from '@/lib/delivery/failure-advice';
 import { retryWindowAt, retryWindowEnd } from '@/lib/delivery/retry-window';
 import { retryInvoiceDelivery } from '@/lib/invoices/delivery-actions';
 import { formatBerlinDateTime } from '@/lib/utils';
@@ -49,59 +49,45 @@ function deliveryMeta(entry: DeliveryEntry): string {
   return parts.join(' · ');
 }
 
-/** The row's retry window by the minute tick, until the clock can no longer change it. */
-function useRetryWindow(entry: DeliveryEntry): { retryable: boolean; unanswered: boolean } {
-  const end = retryWindowEnd(entry);
-  return retryWindowAt(entry, useWallClockTick(60_000, end !== null, end));
-}
-
-/** A delivery's state, what went out how, and when by whom; `children` adds the row's advice. */
-function DeliveryFacts({ entry, children }: { entry: DeliveryEntry; children: React.ReactNode }) {
-  return (
-    <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5 sm:flex-row sm:gap-3">
-      <Badge variant={STATE_BADGE[entry.state]}>{DELIVERY_STATE_LABELS[entry.state]}</Badge>
-      <div className="min-w-0 flex-1 space-y-0.5">
-        <p className="text-sm font-medium wrap-anywhere">{deliveryTitle(entry)}</p>
-        <p className="text-xs text-muted-foreground wrap-anywhere">{deliveryMeta(entry)}</p>
-        {children}
-      </div>
-    </div>
-  );
+/**
+ * The instant after which no row changes by the clock alone; null when none
+ * does. A row that offers no retry changes only when its attempt turns
+ * unanswered.
+ */
+function lastClockChange(entries: readonly DeliveryEntry[], sendable: boolean): number | null {
+  const ends = entries.flatMap((entry) => {
+    const end = sendable
+      ? retryWindowEnd(entry)
+      : entry.state === 'sending' && entry.retryFrom
+        ? Date.parse(entry.retryFrom)
+        : null;
+    return end === null ? [] : [end];
+  });
+  return ends.length > 0 ? Math.max(...ends) : null;
 }
 
 /**
- * A delivery of a cancelled invoice: what happened to it, with no step to
- * take. Only a sending row changes by the clock, when its attempt goes
- * unanswered; an attempt without the provider's answer may have reached the
+ * A delivery with its state at `now`, null before hydration, so the server
+ * and the hydrating render show no clock-driven text. A sendable row offers
+ * „Erneut senden“ while that may help; a cancelled invoice's row names no
+ * step. An attempt without the provider's answer may have reached the
  * customer, also when a later one failed.
  */
-function PastDeliveryRow({ entry }: { entry: DeliveryEntry }) {
-  const unansweredFrom = entry.state === 'sending' && entry.retryFrom ? Date.parse(entry.retryFrom) : null;
-  // The server and the hydrating render show no clock-driven text, so both render the same.
-  const now = useMountedWallClockTick(60_000, unansweredFrom !== null, unansweredFrom);
-  const unanswered = now !== null && retryWindowAt(entry, now).unanswered;
-  return (
-    <li className="py-3">
-      <DeliveryFacts entry={entry}>
-        {(entry.state === 'failed' || unanswered) && (
-          <p className="text-sm text-destructive">
-            {unanswered
-              ? pastDeliveryOutcome({ failureCode: 'email_provider_unreachable', outcomeUnknown: true })
-              : pastDeliveryOutcome(entry)}
-          </p>
-        )}
-      </DeliveryFacts>
-    </li>
-  );
-}
-
-/** A delivery of an invoice the office can still send: its state, and „Erneut senden“ while that may help. */
-function DeliveryRow({ entry }: { entry: DeliveryEntry }) {
+function DeliveryRow({
+  entry,
+  now,
+  sendable,
+}: {
+  entry: DeliveryEntry;
+  now: number | null;
+  sendable: boolean;
+}) {
   const router = useRouter();
   const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(retryInvoiceDelivery);
   const [error, setError] = useState<string | null>(null);
-  const { retryable, unanswered } = useRetryWindow(entry);
+  const { retryable, unanswered } =
+    now === null ? { retryable: false, unanswered: false } : retryWindowAt(entry, now);
   const retry = async () => {
     setError(null);
     const result = await run({ deliveryId: entry.id, expectedAttempt: entry.attempts }).catch(() => null);
@@ -119,16 +105,24 @@ function DeliveryRow({ entry }: { entry: DeliveryEntry }) {
       className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:gap-3"
       aria-busy={isPending || undefined}
     >
-      <DeliveryFacts entry={entry}>
-        {(entry.state === 'failed' || unanswered) && (
-          <p className="text-sm text-destructive">
-            {deliveryFailureAdvice(unanswered ? 'email_provider_unreachable' : entry.failureCode)}
-          </p>
-        )}
-        {/* A later send, here or in another session, makes an earlier retry's error stale. */}
-        <ErrorText>{entry.state === 'sent' ? null : error}</ErrorText>
-      </DeliveryFacts>
-      {retryable && (
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5 sm:flex-row sm:gap-3">
+        <Badge variant={STATE_BADGE[entry.state]}>{DELIVERY_STATE_LABELS[entry.state]}</Badge>
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <p className="text-sm font-medium wrap-anywhere">{deliveryTitle(entry)}</p>
+          <p className="text-xs text-muted-foreground wrap-anywhere">{deliveryMeta(entry)}</p>
+          {(entry.state === 'failed' || unanswered) && (
+            <p className="text-sm text-destructive">
+              {deliveryOutcome(
+                unanswered ? { failureCode: 'email_provider_unreachable', outcomeUnknown: true } : entry,
+                sendable,
+              )}
+            </p>
+          )}
+          {/* A later send, here or in another session, makes an earlier retry's error stale. */}
+          <ErrorText>{entry.state === 'sent' ? null : error}</ErrorText>
+        </div>
+      </div>
+      {sendable && retryable && (
         <Button
           type="button"
           variant="outline"
@@ -164,6 +158,9 @@ export function InvoiceDeliveries({
   defaults: DeliveryMailDefaults | null;
 }) {
   useRealtimeRouterRefresh({ tables: ['document_deliveries'] });
+  const sendable = defaults !== null;
+  const clockEnd = lastClockChange(list.entries, sendable);
+  const now = useMountedWallClockTick(60_000, clockEnd !== null, clockEnd);
   const [open, setOpen] = useState<'email' | 'manual' | null>(null);
   const hidden = list.total - list.entries.length;
   return (
@@ -200,13 +197,9 @@ export function InvoiceDeliveries({
         />
       ) : (
         <ul className="divide-y rounded-lg border bg-card px-4 shadow-xs">
-          {list.entries.map((entry) =>
-            defaults ? (
-              <DeliveryRow key={entry.id} entry={entry} />
-            ) : (
-              <PastDeliveryRow key={entry.id} entry={entry} />
-            ),
-          )}
+          {list.entries.map((entry) => (
+            <DeliveryRow key={entry.id} entry={entry} now={now} sendable={sendable} />
+          ))}
         </ul>
       )}
       {hidden > 0 && (

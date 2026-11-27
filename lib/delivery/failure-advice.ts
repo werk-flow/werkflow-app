@@ -48,12 +48,17 @@ function nextStep(code: string | null, retryStep: string): string {
 }
 
 /**
- * What became of a delivery that takes no further step, as on a cancelled
- * invoice: the last attempt's reason, and whether an earlier attempt without
- * the provider's answer may have reached the customer.
+ * What became of a failed delivery: the last attempt's reason, and whether an
+ * earlier attempt without the provider's answer may have reached the customer.
+ * `withStep` adds what helps; a cancelled invoice takes no further step.
  */
-export function pastDeliveryOutcome(entry: Pick<DeliveryEntry, 'failureCode' | 'outcomeUnknown'>): string {
-  const reason = deliveryFailureSentence(entry.failureCode);
+export function deliveryOutcome(
+  entry: Pick<DeliveryEntry, 'failureCode' | 'outcomeUnknown'>,
+  withStep: boolean,
+): string {
+  const reason = withStep
+    ? deliveryFailureAdvice(entry.failureCode)
+    : deliveryFailureSentence(entry.failureCode);
   if (!entry.outcomeUnknown || outcomeUnknown(entry.failureCode)) return reason;
   return `Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: ${reason}`;
 }

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { textInDom, visibleText } from '../golden/support/steps/shared';
-import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fixture';
+import { answerHeldWrite, expectHeldWrite, openContractFixture, openHydrationFixture } from './open-fixture';
 
 // The invoice page (docs/features/commercial-and-finance.md, "Invoice drafts" and "Issuing"): an
 // issued invoice shows what it says, so a catalog line whose price read answers after another
@@ -72,4 +72,29 @@ test('an issued invoice offers sending, a manual record and the retry of a faile
   for (const name of ['Per E-Mail senden', 'Als manuell versendet markieren', 'Erneut senden']) {
     await expect(page.getByRole('button', { name })).toBeVisible();
   }
+});
+
+// An unanswered first attempt may have reached the customer, though the retry failed: the row
+// keeps saying so, so the office asks before it sends a duplicate.
+test('an issued invoice keeps a send unclear when an unanswered attempt was followed by a failed retry', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'invoice-deliveries-issued');
+  await expect(
+    visibleText(
+      page,
+      'Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: Die E-Mail ist nicht rausgegangen.',
+    ),
+  ).toBeVisible();
+});
+
+// The server renders „Versand“ by its clock, the browser hydrates it by its own. An attempt that
+// turns unanswered in between must not make the two renders differ.
+test("an issued invoice's send row renders without a clock on the server and turns unanswered after hydration", async ({
+  page,
+}) => {
+  await openHydrationFixture(page, 'invoice-deliveries-hydration');
+  await expect(visibleText(page, 'Der Mailanbieter hat nicht geantwortet.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Erneut senden' })).toBeVisible();
+  expect(await page.evaluate(() => window.uiContractHydrationErrors)).toEqual([]);
 });

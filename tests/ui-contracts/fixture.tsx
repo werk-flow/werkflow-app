@@ -84,6 +84,7 @@ import {
   InvoiceDeliveriesContractFixture,
   InvoiceEditorContractFixture,
   InvoiceSettingsContractFixture,
+  mountInvoiceDeliveriesHydration,
 } from './invoice-editor-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
@@ -605,7 +606,9 @@ const root = document.getElementById('root');
 if (!root) throw new Error('UI contract fixture root is missing.');
 // The hydration contracts server-render their page into its own container.
 const hydrationRoot = document.getElementById('hydration-root');
-if (hydrationRoot)
+if (hydrationRoot?.dataset.fixture === 'invoice-deliveries-hydration')
+  mountInvoiceDeliveriesHydration(hydrationRoot);
+else if (hydrationRoot)
   mountHydrationFixture(
     hydrationRoot,
     hydrationRoot.dataset.fixture === 'instruction-hydration'
