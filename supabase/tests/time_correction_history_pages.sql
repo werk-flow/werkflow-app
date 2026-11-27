@@ -146,18 +146,32 @@ begin
   if public.list_time_correction_history_page(org_id,buero,'own_and_employee_subjects')->'ids'->>0 is distinct from removed then raise exception 'an employee-subject approver''s history lost a request of a record its subject no longer holds'; end if;
 end $$;
 
--- The Data API follows the same rule: the caller reads their request on the
--- record they hold, not the one on their old record; Büro reads both.
+-- The Data API follows the same rule. Two more requests: the caller filed one
+-- about the colleague, who holds its record (096), and the Büro member filed
+-- one about themself on the record that lost its login (097).
 reset role;
+set local session_replication_role = replica;
+insert into public.time_correction_requests(id,organization_id,subject_employee_record_id,subject_user_id,requested_by,kind,status,source_scope_key,created_at) values
+('77000000-0000-4000-8000-000000000096','77000000-0000-4000-8000-000000000010',
+  (select record.id from public.employee_records record where record.organization_id='77000000-0000-4000-8000-000000000010' and record.user_id='77000000-0000-4000-8000-000000000004'),
+  '77000000-0000-4000-8000-000000000004','77000000-0000-4000-8000-000000000003','add','withdrawn',md5('tc-filed-a')||md5('tc-filed-b'),'2025-06-01'),
+('77000000-0000-4000-8000-000000000097','77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-0000000000a7','77000000-0000-4000-8000-000000000002','77000000-0000-4000-8000-000000000002','add','withdrawn',md5('tc-own-old-a')||md5('tc-own-old-b'),'2025-06-01');
+set local session_replication_role = origin;
 set local role authenticated;
+-- The caller reads their request on the record they hold and the one they filed
+-- about the colleague, never their request on the record they no longer hold.
 select set_config('request.jwt.claims','{"sub":"77000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 do $$ begin
   if not exists(select 1 from public.time_correction_requests where id=md5('tc-1055')::uuid) then raise exception 'the caller cannot read their request on the record they hold'; end if;
+  if not exists(select 1 from public.time_correction_requests where id='77000000-0000-4000-8000-000000000096') then raise exception 'the caller cannot read a request they filed about a colleague who holds its record'; end if;
   if exists(select 1 from public.time_correction_requests where id='77000000-0000-4000-8000-000000000095') then raise exception 'the caller reads a request of a record they no longer hold'; end if;
 end $$;
+-- Büro reads another person's request on a record its subject no longer holds,
+-- never its own.
 select set_config('request.jwt.claims','{"sub":"77000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
   if not exists(select 1 from public.time_correction_requests where id='77000000-0000-4000-8000-000000000095') then raise exception 'Büro cannot read a request of a record its subject no longer holds'; end if;
+  if exists(select 1 from public.time_correction_requests where id='77000000-0000-4000-8000-000000000097') then raise exception 'Büro reads its own request on a record it no longer holds'; end if;
 end $$;
 
 -- A browser session cannot execute the reader, even for its own organization.
