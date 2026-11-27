@@ -3,13 +3,15 @@ import { NextResponse } from 'next/server';
 import { logError } from '@/lib/logging';
 import { receiveSignal, type SignalReceipt } from '@/lib/werkflow-billing/signals/receive';
 import { resolveStripeGateway } from '@/lib/werkflow-billing/stripe';
+import { runAgainOnceItsOrganizationExists } from '@/lib/werkflow-billing/waiting-signals';
 
 // Stripe's signals to WerkFlow's own billing (werk-flow/werkflow-planning#250).
 // No session: the caller is Stripe, proven by the `Stripe-Signature` header
 // over the raw body with STRIPE_WEBHOOK_SECRET, checked before anything of the
 // body is parsed or stored. A missing, forged or stale signature answers 400
 // and records nothing. A verified event is handled at most once
-// (lib/werkflow-billing/signals/receive.ts); any answer but 2xx makes Stripe
+// (lib/werkflow-billing/signals/receive.ts), and runs once more when it failed
+// only because its organization was created meanwhile (waiting-signals.ts); any answer but 2xx makes Stripe
 // deliver it again, for up to three days. proxy.ts does not run on /api/.
 
 const STATUS_BY_RECEIPT: Record<SignalReceipt, number> = {
@@ -34,5 +36,6 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!signature) return answer(400);
   const event = await stripe.gateway.verifySignal(await request.text(), signature);
   if (!event) return answer(400);
-  return answer(STATUS_BY_RECEIPT[await receiveSignal(event, stripe.gateway)]);
+  const receipt = await receiveSignal(event, stripe.gateway);
+  return answer(STATUS_BY_RECEIPT[await runAgainOnceItsOrganizationExists(event, stripe.gateway, receipt)]);
 }

@@ -1,10 +1,12 @@
 import 'server-only';
 
+import type Stripe from 'stripe';
+
 import { logError } from '@/lib/logging';
-import { readOrganizationSubscription } from '@/lib/subscription/helpers';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { readCompleteRows } from '@/lib/supabase/query-batches';
 import { billingFailure } from '@/lib/werkflow-billing/failure';
-import { receiveSignal } from '@/lib/werkflow-billing/signals/receive';
+import { receiveSignal, type SignalReceipt } from '@/lib/werkflow-billing/signals/receive';
 import { resolveStripeGateway, type StripeGateway } from '@/lib/werkflow-billing/stripe';
 import { z } from '@/lib/zod';
 
@@ -14,55 +16,87 @@ import { z } from '@/lib/zod';
 // `invoice.finalized` and `invoice.paid` fail with
 // `werkflow_invoice_organization_unknown` and stay pending in the signal
 // ledger. Stripe's next delivery can come hours later, and a sandbox may send
-// none. Once the organization exists, its customer's waiting signals run again
-// here: each is read back from Stripe by id and handled through the same
-// ledger as a delivery (signals/receive.ts), so a claim runs it once and its
-// original, number, mails and alarms follow the signal path. A signal that
-// fails again stays pending for Stripe's next delivery and the daily comparison.
+// none. Two paths run such a signal again, each through the same ledger as a
+// delivery (signals/receive.ts), so a claim runs it once and its original,
+// number, mails and alarms follow the signal path:
+// 1. once the organization exists, its customer's waiting signals, each read
+//    back from Stripe by id;
+// 2. a delivery that fails this way after the organization was created
+//    meanwhile, right after its failure is recorded.
+// Whichever of the creation and the recorded failure commits last finds the
+// other. A signal that fails again waits for Stripe's next delivery and the
+// daily comparison.
 
 const WAITING_CODE = 'werkflow_invoice_organization_unknown';
-const DAY_MS = 24 * 3_600_000;
+const MINUTE_MS = 60_000;
+/** Stripe's clock and the database's may differ by this much. */
+const CLOCK_SKEW_MS = 10 * MINUTE_MS;
 /** Stripe keeps events 30 days; an older one cannot be read back. */
-const EVENT_DAYS = 30;
-/** The newest waiting signals read: a new organization's own are the newest. */
-const WAITING_SIGNALS_READ = 100;
+const EVENT_MS = 30 * 24 * 60 * MINUTE_MS;
+/** More signals waiting for an organization than this is an outage, not WerkFlow's volume. */
+const WAITING_SIGNALS_CAP = 1_000;
 
-const waitingSignalsSchema = z.array(
-  z.object({ stripe_event_id: z.string(), stripe_created_at: z.string() }),
-);
+const waitingSignalSchema = z.object({ stripe_event_id: z.string() });
+const subscriptionSchema = z.object({ stripe_customer_id: z.string(), created_at: z.string() });
 // A Stripe invoice or credit note names its customer by id.
 const eventCustomerSchema = z.object({ data: z.object({ object: z.object({ customer: z.string() }) }) });
 
-/** The ids of the signals that wait for an organization, oldest first. */
-async function readWaitingSignals(now: Date): Promise<string[]> {
-  const { data, error } = await createSupabaseAdminClient()
-    .from('werkflow_billing_signals')
-    .select('stripe_event_id, stripe_created_at')
-    .eq('state', 'pending')
-    .eq('last_failure_code', WAITING_CODE)
-    .gte('stripe_created_at', new Date(now.getTime() - EVENT_DAYS * DAY_MS).toISOString())
-    .order('stripe_created_at', { ascending: false })
-    .order('stripe_event_id', { ascending: false })
-    .limit(WAITING_SIGNALS_READ);
-  const rows = waitingSignalsSchema.safeParse(data);
+/** The customer of a Stripe event's object; null when it names none. */
+function customerOf(event: Stripe.Event): string | null {
+  const parsed = eventCustomerSchema.safeParse(event);
+  return parsed.success ? parsed.data.data.object.customer : null;
+}
+
+/**
+ * The ids of the signals that wait for an organization since `since`, oldest
+ * first; more than the cap fails the read instead of leaving any out.
+ */
+async function readWaitingSignals(since: string): Promise<string[]> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('werkflow_billing_signals')
+        .select('stripe_event_id')
+        .eq('state', 'pending')
+        .eq('last_failure_code', WAITING_CODE)
+        .gte('stripe_created_at', since)
+        .order('stripe_created_at')
+        .order('stripe_event_id')
+        .range(from, to),
+    WAITING_SIGNALS_CAP,
+  );
+  const rows = waitingSignalSchema.array().safeParse(data);
   if (error || !rows.success) {
     logError('runSignalsWaitingForOrganization: werkflow_billing_signals read failed', error);
     throw billingFailure('waiting_signals_read_failed');
   }
-  // Oldest first, as Stripe sent them; a payment signal issues a missing original as well.
-  return rows.data
-    .toSorted((left, right) => Date.parse(left.stripe_created_at) - Date.parse(right.stripe_created_at))
-    .map((row) => row.stripe_event_id);
+  return rows.data.map((row) => row.stripe_event_id);
+}
+
+/** The organization's Stripe customer and when its Checkout reserved it; null without a subscription row. */
+async function readSubscription(organizationId: string): Promise<z.infer<typeof subscriptionSchema> | null> {
+  const { data, error } = await createSupabaseAdminClient()
+    .from('werkflow_subscriptions')
+    .select('stripe_customer_id, created_at')
+    .eq('organization_id', organizationId)
+    .maybeSingle();
+  const row = subscriptionSchema.nullable().safeParse(data);
+  if (error || !row.success) {
+    logError('runSignalsWaitingForOrganization: werkflow_subscriptions read failed', error);
+    throw billingFailure('waiting_signals_read_failed');
+  }
+  return row.data;
 }
 
 /** Runs one waiting signal again when its object belongs to `customerId`. */
 async function runIfOwn(eventId: string, customerId: string, stripe: StripeGateway): Promise<void> {
   const event = await stripe.readEvent(eventId);
-  const owner = eventCustomerSchema.safeParse(event);
-  if (!owner.success || owner.data.data.object.customer !== customerId) return;
+  if (customerOf(event) !== customerId) return;
   const receipt = await receiveSignal(event, stripe);
-  if (receipt !== 'settled')
+  if (receipt !== 'settled') {
     logError('runSignalsWaitingForOrganization: a waiting signal is still open', receipt);
+  }
 }
 
 /**
@@ -80,10 +114,12 @@ export async function runSignalsWaitingForOrganization(
       logError('runSignalsWaitingForOrganization: Stripe is not configured', stripe.code);
       return;
     }
-    const subscription = await readOrganizationSubscription(organizationId);
+    const subscription = await readSubscription(organizationId);
     if (!subscription) return;
-    for (const eventId of await readWaitingSignals(now)) {
-      await runIfOwn(eventId, subscription.stripeCustomerId, stripe.gateway).catch((error: unknown) => {
+    // The customer's signals all follow its Checkout, which its row precedes.
+    const since = Math.max(Date.parse(subscription.created_at) - CLOCK_SKEW_MS, now.getTime() - EVENT_MS);
+    for (const eventId of await readWaitingSignals(new Date(since).toISOString())) {
+      await runIfOwn(eventId, subscription.stripe_customer_id, stripe.gateway).catch((error: unknown) => {
         // best-effort: the signal stays pending, and Stripe's next delivery runs it.
         logError('runSignalsWaitingForOrganization: a waiting signal failed', error);
       });
@@ -92,4 +128,51 @@ export async function runSignalsWaitingForOrganization(
     // best-effort: the organization exists; Stripe's next delivery and the daily comparison still cover each signal.
     logError('runSignalsWaitingForOrganization: failed', error);
   }
+}
+
+/** Whether the ledger keeps `eventId` as failed only for want of its organization. */
+async function waitsForOrganization(eventId: string): Promise<boolean> {
+  const { data, error } = await createSupabaseAdminClient()
+    .from('werkflow_billing_signals')
+    .select('last_failure_code')
+    .eq('stripe_event_id', eventId)
+    .maybeSingle();
+  if (error) throw billingFailure('waiting_signals_read_failed');
+  return data?.last_failure_code === WAITING_CODE;
+}
+
+/** Whether the organization a Stripe customer reserved exists now. */
+async function customerHasOrganization(customerId: string): Promise<boolean> {
+  // tenant-scope: cross-organization-by-design — the Stripe customer of a verified signal names its one subscription row.
+  const { data, error } = await createSupabaseAdminClient()
+    .from('werkflow_subscriptions')
+    .select('linked_at')
+    .eq('stripe_customer_id', customerId)
+    .maybeSingle();
+  if (error) throw billingFailure('waiting_signals_read_failed');
+  return typeof data?.linked_at === 'string';
+}
+
+/**
+ * The receipt of a verified signal's delivery. One that failed only because
+ * its organization did not exist yet, while the organization was created
+ * meanwhile, runs once more: the creation's own run may have read the ledger
+ * before this failure.
+ */
+export async function runAgainOnceItsOrganizationExists(
+  event: Stripe.Event,
+  stripe: StripeGateway,
+  receipt: SignalReceipt,
+): Promise<SignalReceipt> {
+  if (receipt !== 'failed') return receipt;
+  const customerId = customerOf(event);
+  try {
+    if (!customerId || !(await waitsForOrganization(event.id))) return receipt;
+    if (!(await customerHasOrganization(customerId))) return receipt;
+  } catch (error) {
+    // best-effort: the failed signal stays pending, and Stripe's next delivery runs it.
+    logError('runAgainOnceItsOrganizationExists: recheck failed', error);
+    return receipt;
+  }
+  return receiveSignal(event, stripe);
 }

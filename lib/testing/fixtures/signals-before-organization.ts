@@ -2,12 +2,15 @@
 // finalizes and pays it during Checkout, before the payer creates the
 // organization, so `invoice.finalized` and `invoice.paid` fail with
 // `werkflow_invoice_organization_unknown` and wait in the signal ledger. The
-// real organization creation runs them again after it answers, read back from
-// Stripe and handled through the real signal ledger: each once, only after
-// the organization exists. Another customer's waiting signal, a settled one,
-// one that failed for another reason and one Stripe no longer keeps stay as
-// they are. An unreachable Stripe fails neither the creation nor the run, and
-// leaves the signals for Stripe's next delivery.
+// real organization creation runs the payer's waiting signals after it
+// answers, read back from Stripe and handled through the real signal ledger:
+// each once, only after the organization exists. A delivery whose attempt
+// fails this way while the organization is created meanwhile runs once more,
+// though the creation's run read the ledger before its failure. Another
+// customer's waiting signal, a settled one, one that failed for another
+// reason, one older than the payer's Checkout and one Stripe no longer keeps
+// stay as they are. A failure before the organization exists runs nothing
+// again, and an unreachable Stripe fails neither the creation nor the run.
 // The ledger functions answer as supabase/tests/werkflow_billing_signals.sql proves.
 import assert from 'node:assert/strict';
 import { mock, setSystemTime } from 'bun:test';
@@ -15,6 +18,7 @@ import type Stripe from 'stripe';
 
 import { CALLER_ID, installActionWorld, signInAs, tableRows } from './action-boundary-world';
 import type { FakeStripeRequests } from './fake-stripe-gateway';
+import { billingFailure } from '@/lib/werkflow-billing/failure';
 
 const NOW = new Date('2026-11-26T19:12:30Z');
 setSystemTime(NOW);
@@ -47,11 +51,10 @@ const world = installActionWorld({
       holds_subscription: true,
       runs_subscription: true,
       checkout_session_id: 'cs_test_card',
+      created_at: secondsAgo(300),
     },
   ],
   werkflow_billing_signals: [
-    // Listed newest first, so the run's order is its own.
-    signal('evt_test_card_paid', 'invoice.paid', secondsAgo(60)),
     signal('evt_test_card_finalized', 'invoice.finalized', secondsAgo(62)),
     signal('evt_test_other_customer', 'invoice.finalized', secondsAgo(90)),
     signal('evt_test_card_other_code', 'invoice.finalized', secondsAgo(61), {
@@ -61,6 +64,7 @@ const world = installActionWorld({
       state: 'handled',
       last_failure_code: WAITING,
     }),
+    signal('evt_test_before_checkout', 'invoice.finalized', secondsAgo(3600)),
     signal('evt_test_card_expired', 'invoice.finalized', secondsAgo(31 * 24 * 3600)),
   ],
 });
@@ -82,7 +86,18 @@ world.rpc = ({ name, args }) => {
     return { data: reservation.organization_id, error: null };
   }
   if (name === 'claim_werkflow_billing_signal') {
-    assert.ok(row, 'a run claimed a signal the ledger never recorded');
+    if (!row) {
+      tableRows(world, 'werkflow_billing_signals').push({
+        ...signal(
+          String(args.p_stripe_event_id),
+          String(args.p_event_type),
+          String(args.p_stripe_created_at),
+        ),
+        claimed: true,
+        last_failure_code: null,
+      });
+      return { data: [{ result: 'claimed', attempt: 1 }], error: null };
+    }
     if (row.state !== 'pending') return { data: [{ result: 'settled', attempt: row.attempts }], error: null };
     if (row.claimed) return { data: [{ result: 'busy', attempt: row.attempts }], error: null };
     row.attempts = Number(row.attempts) + 1;
@@ -114,12 +129,19 @@ mock.module('next/server', () => ({
   },
 }));
 
-// Each family records what it handled; its issue step is proven in issue-invoice.test.ts.
+// Each family fails as the issue step does while the organization is missing, and records what
+// it handled otherwise; the issue step itself is proven in issue-invoice.test.ts.
 const handled: string[] = [];
+// Runs once in the next attempt, after its organization check: what happens meanwhile.
+let duringNextAttempt: (() => Promise<void>) | null = null;
 const family = (type: string) => ({
   eventTypes: [type],
   handle: async (event: Stripe.Event) => {
-    assert.ok(organizationExists(), `${event.id} ran before its organization existed`);
+    const organizationKnown = organizationExists();
+    const meanwhile = duringNextAttempt;
+    duringNextAttempt = null;
+    await meanwhile?.();
+    if (!organizationKnown) throw billingFailure(WAITING);
     handled.push(event.id);
   },
 });
@@ -157,55 +179,92 @@ const storedEvents = {
     CUSTOMER,
   ),
   'GET /v1/events/evt_test_card_settled': stripeEvent('evt_test_card_settled', 'invoice.finalized', CUSTOMER),
+  'GET /v1/events/evt_test_before_checkout': stripeEvent(
+    'evt_test_before_checkout',
+    'invoice.finalized',
+    CUSTOMER,
+  ),
 };
-// Empty while Stripe is unreachable: every read fails.
-const answers: Record<string, unknown> = {};
+const answers: Record<string, unknown> = { ...storedEvents };
 const requests: FakeStripeRequests = [];
 const { createFakeStripeGateway } = await import('./fake-stripe-gateway');
 const gateway = createFakeStripeGateway('whsec_fixture_only', { answers, requests });
 mock.module('@/lib/werkflow-billing/stripe', () => ({ resolveStripeGateway: () => ({ ok: true, gateway }) }));
 
 const { createOrganization } = await import('@/lib/org/actions');
-const untouched = structuredClone(tableRows(world, 'werkflow_billing_signals'));
+const { runAgainOnceItsOrganizationExists } = await import('@/lib/werkflow-billing/waiting-signals');
+const { receiveSignal } = await import('@/lib/werkflow-billing/signals/receive');
+/** One delivery as the webhook route makes it. */
+const deliver = async (event: Stripe.Event) =>
+  runAgainOnceItsOrganizationExists(event, gateway, await receiveSignal(event, gateway));
+const ledger = () => tableRows(world, 'werkflow_billing_signals');
+const paid = await gateway.readEvent('evt_test_card_paid');
+// Unreachable until the fixture says: every read fails.
+const reachStripe = (reachable: boolean) => {
+  for (const key of Object.keys(storedEvents)) Reflect.deleteProperty(answers, key);
+  if (reachable) Object.assign(answers, storedEvents);
+};
+reachStripe(false);
 
-// The organization is created at once; its waiting signals run after the answer.
-assert.deepEqual(await createOrganization('Haustechnik Sonnenberg GmbH'), {
-  success: true,
-  organizationId: RESERVED,
-});
-assert.equal(afterAnswer.length, 1, 'the creation left the waiting signals for Stripe alone');
-assert.deepEqual(handled, [], 'a waiting signal ran before the creation answered');
-const [runWaiting] = afterAnswer;
-assert.ok(runWaiting);
-
-// An unreachable Stripe fails nothing and leaves every signal waiting for Stripe's next delivery.
-await runWaiting();
+// Before the organization exists, the payment signal fails and waits; nothing runs it again.
+assert.equal(await deliver(paid), 'failed');
 assert.deepEqual(handled, []);
-assert.deepEqual(
-  tableRows(world, 'werkflow_billing_signals'),
-  untouched,
-  'an unreachable Stripe changed the ledger',
-);
+assert.deepEqual(signalRow('evt_test_card_paid'), {
+  stripe_event_id: 'evt_test_card_paid',
+  event_type: 'invoice.paid',
+  stripe_created_at: new Date(paid.created * 1000).toISOString(),
+  state: 'pending',
+  attempts: 1,
+  claimed: false,
+  last_failure_code: WAITING,
+});
 
-// Once Stripe answers, the payer's invoice signals run once each, oldest first, and settle.
-Object.assign(answers, storedEvents);
-requests.length = 0;
-await runWaiting();
+// Stripe's next delivery is in flight when the payer creates the organization: the creation
+// answers at once and its run handles the waiting signals after the answer.
+let runWaiting: (() => Promise<unknown>) | undefined;
+duringNextAttempt = async () => {
+  assert.deepEqual(await createOrganization('Haustechnik Sonnenberg GmbH'), {
+    success: true,
+    organizationId: RESERVED,
+  });
+  assert.equal(afterAnswer.length, 1, 'the creation left the waiting signals for Stripe alone');
+  assert.deepEqual(handled, [], 'a waiting signal ran before the creation answered');
+  [runWaiting] = afterAnswer;
+  assert.ok(runWaiting);
+
+  // An unreachable Stripe fails nothing and leaves every signal for Stripe's next delivery.
+  const atCreation = structuredClone(ledger());
+  await runWaiting();
+  assert.deepEqual(handled, []);
+  assert.deepEqual(ledger(), atCreation, 'an unreachable Stripe changed the ledger');
+
+  // Once Stripe answers, the waiting finalized signal runs once and settles; the payment
+  // signal's own attempt still holds its claim.
+  reachStripe(true);
+  requests.length = 0;
+  await runWaiting();
+  assert.deepEqual(handled, ['evt_test_card_finalized']);
+  assert.equal(signalRow('evt_test_card_finalized')?.state, 'handled');
+  assert.equal(signalRow('evt_test_card_finalized')?.attempts, 2, 'the finalized signal ran more than once');
+  // Only the signals waiting since the payer's Checkout are read back, and only the payer's run.
+  assert.deepEqual(requests.map((request) => request.path).toSorted(), [
+    '/v1/events/evt_test_card_finalized',
+    '/v1/events/evt_test_card_paid',
+    '/v1/events/evt_test_other_customer',
+  ]);
+};
+const untouched = structuredClone(ledger());
+// The in-flight attempt fails for want of its organization, then runs once more because it exists now.
+assert.equal(await deliver(paid), 'settled');
+assert.equal(duringNextAttempt, null, 'the organization was never created');
 assert.deepEqual(handled, ['evt_test_card_finalized', 'evt_test_card_paid']);
-for (const id of ['evt_test_card_finalized', 'evt_test_card_paid']) {
-  assert.equal(signalRow(id)?.state, 'handled', `${id} stayed open after it ran`);
-  assert.equal(signalRow(id)?.attempts, 2, `${id} ran more than once`);
-}
-// Only the signals waiting for an organization are read back, and only the payer's run.
-assert.deepEqual(requests.map((request) => request.path).toSorted(), [
-  '/v1/events/evt_test_card_finalized',
-  '/v1/events/evt_test_card_paid',
-  '/v1/events/evt_test_other_customer',
-]);
+assert.equal(signalRow('evt_test_card_paid')?.state, 'handled', 'the payment signal stayed open');
+assert.equal(signalRow('evt_test_card_paid')?.attempts, 3);
 for (const id of [
   'evt_test_other_customer',
   'evt_test_card_other_code',
   'evt_test_card_settled',
+  'evt_test_before_checkout',
   'evt_test_card_expired',
 ]) {
   assert.deepEqual(
@@ -216,5 +275,6 @@ for (const id of [
 }
 
 // A second run handles nothing again.
+assert.ok(runWaiting);
 await runWaiting();
 assert.deepEqual(handled, ['evt_test_card_finalized', 'evt_test_card_paid'], 'a settled signal ran twice');
