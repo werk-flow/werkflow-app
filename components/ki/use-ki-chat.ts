@@ -14,16 +14,19 @@ import {
 import type { AiChatMessage, AiThreadSummary, AiThreadWindow } from '@/lib/ai/thread-types';
 import { readInBackground } from '@/lib/data/background-read-client';
 import {
+  type RetryCommand,
   draftKey,
+  holdRetry,
   holdSending,
   readDraft,
   releaseSending,
+  takeRetry,
   takeSending,
   writeDraft,
 } from '@/lib/ai/chat-drafts';
 import { kiThreadHref } from './ki-thread-list';
 import type { TimelineMessage } from './ki-timeline';
-import { describeTurnRefusal, sendTurn, type TurnEvent, type TurnOutcome } from './turn-client';
+import { describeTurnRefusal, sendTurn, stopTurn, type TurnEvent, type TurnOutcome } from './turn-client';
 import { useKiLive } from './use-ki-live';
 
 // The chat page's state (werk-flow/werkflow-planning#530): the thread list,
@@ -50,10 +53,14 @@ export type LiveTurn = {
   /** The answer's sequence in its thread, from the moment the message is saved. */
   answerSequence: number;
   started: boolean;
+  /** The answer's length when the person pressed „Antwort anhalten“: the screen holds it there until the end. */
+  stoppedAt: number | null;
   end: { status: 'complete' | 'failed' | 'cancelled'; message: string | null } | null;
 };
 
 type WindowRead = 'found' | 'missing' | 'failed';
+
+const STOP_FAILED = 'Die Antwort konnte nicht angehalten werden. Versuch es noch einmal.';
 
 /** A read that says the thread is not this person's here: what the page showed of it goes. */
 const DENIED_READS = new Set([
@@ -90,7 +97,8 @@ export function answerMessage(live: LiveTurn): TimelineMessage {
     sequence: live.answerSequence,
     role: 'assistant',
     status: live.end?.status ?? 'streaming',
-    text: live.answer,
+    // Held still only until the end: an answer that completed before the stop landed is whole.
+    text: live.stoppedAt === null || live.end ? live.answer : live.answer.slice(0, live.stoppedAt),
     failure: live.end?.message ?? null,
   };
 }
@@ -426,8 +434,6 @@ type TurnHost = {
   supersedeReads: (threadId: string) => void;
 };
 
-type Refused = { threadId: string; commandId: string; text: string };
-
 /** The draft the composer shows: the thread's own, or the new chat's while a new thread waits to be saved. */
 function draftFor(host: TurnHost, live: LiveTurn | null): string {
   const provisional = live?.provisional && !live.started && live.threadId === host.threadId;
@@ -463,16 +469,17 @@ function markStarted(
   return { ...turn, started: true, user, answerSequence: event.assistantItem.sequence };
 }
 
-/** Puts a saved turn into its thread and the list; without its end event, the saved answer says how it went on. */
+/**
+ * Puts a saved turn into its thread and the list. Only a whole answer is
+ * final as streamed: an answer that ended early, a stopped one above all,
+ * keeps the text the server saved, and without its end event the saved
+ * answer says how it went on, so a read shows both.
+ */
 function settleSaved(current: LiveTurn, outcome: TurnOutcome, host: TurnHost): void {
   showAddress(host, current.threadId);
   host.touch(current.threadId, current.user.text);
-  if (current.end) return host.settle(current.threadId, [current.user, answerMessage(current)], true);
-  if (outcome.kind === 'stopped') {
-    // A stopped answer keeps what this page showed; the thread's next read shows how it went on.
-    const end: LiveTurn['end'] = { status: 'cancelled', message: 'Du hast die Antwort angehalten.' };
-    return host.settle(current.threadId, [current.user, answerMessage({ ...current, end })], true);
-  }
+  if (current.end?.status === 'complete')
+    return host.settle(current.threadId, [current.user, answerMessage(current)], true);
   // Without its end event the answer stays open: the server goes on writing it, the thread's live
   // channel brings the rest, and a read now shows what is saved.
   host.settle(
@@ -490,9 +497,9 @@ function restoreDraft(key: string, text: string): void {
 }
 
 /** Messages whose page went before their turns started go back into their drafts, each as the same command. */
-function restoreUnsent(host: TurnHost, refused: Map<string, Refused>): void {
+function restoreUnsent(host: TurnHost): void {
   for (const { draft, threadId, commandId, text } of takeSending(host.userId, host.organizationId)) {
-    refused.set(draft, { threadId, commandId, text });
+    holdRetry(draft, { threadId, commandId, text });
     restoreDraft(draft, text);
   }
 }
@@ -514,6 +521,7 @@ function newTurn(
     answer: '',
     answerSequence: 0,
     started: false,
+    stoppedAt: null,
     end: null,
   };
 }
@@ -525,14 +533,9 @@ function newTurn(
  * it refused, so the thread is read again, and a new thread that exists after
  * all joins the list.
  */
-function settleRefused(
-  turn: LiveTurn,
-  outcome: TurnOutcome,
-  host: TurnHost,
-  refused: Map<string, Refused>,
-): void {
+function settleRefused(turn: LiveTurn, outcome: TurnOutcome, host: TurnHost): void {
   const commandId = outcome.kind === 'refused' && outcome.spent ? crypto.randomUUID() : turn.commandId;
-  refused.set(turn.draft, { threadId: turn.threadId, commandId, text: turn.user.text });
+  holdRetry(turn.draft, { threadId: turn.threadId, commandId, text: turn.user.text });
   restoreDraft(turn.draft, turn.user.text);
   if (turn.provisional && host.shownRef.current === turn.threadId) host.showOnly(null);
   void host.readWindow(turn.threadId).then((read) => {
@@ -548,7 +551,7 @@ function settleRefused(
 function commandFor(
   text: string,
   host: TurnHost,
-  refused: Refused | undefined,
+  refused: RetryCommand | undefined,
 ): { target: string; commandId: string } {
   const retry =
     refused?.text === text && (host.threadId === null || host.threadId === refused.threadId)
@@ -560,6 +563,52 @@ function commandFor(
   };
 }
 
+/**
+ * „Antwort anhalten“: the answer holds still at once, and the server ends the
+ * turn and sends its end on the turn's own stream. A stop pressed before the
+ * message is saved goes once the turn has its answer (`requestStop`); one the
+ * server did not take lets the answer run on and says so at its draft.
+ */
+function useStop(refs: {
+  liveRef: React.RefObject<LiveTurn | null>;
+  leftRef: React.RefObject<boolean>;
+  hostRef: React.RefObject<TurnHost>;
+  update: (change: (current: LiveTurn) => LiveTurn | null) => void;
+  setError: (error: { draft: string; message: string } | null) => void;
+}) {
+  const { liveRef, leftRef, hostRef, update, setError } = refs;
+  const stopOwnerRef = useRef<string | null>(null);
+  const requestStop = useCallback(
+    (turn: LiveTurn) => {
+      const host = hostRef.current;
+      stopOwnerRef.current = turn.commandId;
+      void stopTurn({
+        organizationId: host.organizationId,
+        threadId: turn.threadId,
+        commandId: turn.commandId,
+      }).then((taken) => {
+        if (taken || leftRef.current || stopOwnerRef.current !== turn.commandId) return;
+        // The answer runs on: the screen shows it again, or the channel does once the turn has settled.
+        if (liveRef.current?.commandId === turn.commandId)
+          update((current) => ({ ...current, stoppedAt: null }));
+        setError({ draft: draftKey(host.userId, host.organizationId, turn.threadId), message: STOP_FAILED });
+      });
+    },
+    [liveRef, leftRef, stopOwnerRef, hostRef, update, setError],
+  );
+  const stop = useCallback(() => {
+    const turn = liveRef.current;
+    if (!turn || turn.stoppedAt !== null || turn.end) return;
+    setError(null);
+    update((current) => ({ ...current, stoppedAt: current.answer.length }));
+    if (turn.started) requestStop(turn);
+  }, [liveRef, update, setError, requestStop]);
+  const invalidateStop = useCallback(() => {
+    stopOwnerRef.current = null;
+  }, []);
+  return { requestStop, stop, invalidateStop };
+}
+
 /** The one turn that runs at a time: it sends, streams the answer and puts it into its thread when it ends. */
 function useLiveTurn(host: TurnHost) {
   const [live, setLive] = useState<LiveTurn | null>(null);
@@ -567,7 +616,6 @@ function useLiveTurn(host: TurnHost) {
   const [error, setError] = useState<{ draft: string; message: string } | null>(null);
   const liveRef = useRef<LiveTurn | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const refusedRef = useRef(new Map<string, Refused>());
   const hostRef = useRef(host);
   useEffect(() => {
     hostRef.current = host;
@@ -578,7 +626,7 @@ function useLiveTurn(host: TurnHost) {
   const leftRef = useRef(false);
   useEffect(() => {
     leftRef.current = false;
-    restoreUnsent(hostRef.current, refusedRef.current);
+    restoreUnsent(hostRef.current);
     return () => {
       leftRef.current = true;
       abortRef.current?.abort();
@@ -590,6 +638,8 @@ function useLiveTurn(host: TurnHost) {
     setLive(liveRef.current);
   }, []);
 
+  const { requestStop, stop, invalidateStop } = useStop({ liveRef, leftRef, hostRef, update, setError });
+
   const receive = useCallback(
     (event: TurnEvent) => {
       if (leftRef.current) return;
@@ -597,8 +647,11 @@ function useLiveTurn(host: TurnHost) {
       if (event.type === 'end')
         return update((turn) => ({ ...turn, end: { status: event.status, message: event.message ?? null } }));
       update((turn) => markStarted(turn, event, hostRef.current));
+      // A stop pressed before the message was saved goes once the turn has its answer.
+      const started = liveRef.current;
+      if (started && started.stoppedAt !== null) requestStop(started);
     },
-    [update],
+    [update, requestStop],
   );
 
   const finish = useCallback(
@@ -610,7 +663,7 @@ function useLiveTurn(host: TurnHost) {
       update(() => null);
       if (current.started || outcome.kind === 'already_done')
         return settleSaved(current, outcome, hostRef.current);
-      settleRefused(current, outcome, hostRef.current, refusedRef.current);
+      settleRefused(current, outcome, hostRef.current);
       if (outcome.kind === 'refused') setError({ draft: current.draft, message: outcome.message });
     },
     [update],
@@ -624,8 +677,8 @@ function useLiveTurn(host: TurnHost) {
         restoreDraft(draft, text);
         return setError({ draft, message: describeTurnRefusal('run_active') });
       }
-      const { target, commandId } = commandFor(text, host, refusedRef.current.get(draft));
-      refusedRef.current.delete(draft);
+      const { target, commandId } = commandFor(text, host, takeRetry(draft));
+      invalidateStop();
       holdSending({ draft, threadId: target, commandId, text });
       host.supersedeReads(target);
       const controller = new AbortController();
@@ -643,10 +696,8 @@ function useLiveTurn(host: TurnHost) {
         onEvent: receive,
       }).then((outcome) => finish(turn, outcome));
     },
-    [receive, finish],
+    [receive, finish, invalidateStop],
   );
-
-  const stop = useCallback(() => abortRef.current?.abort(), []);
   return { live, error, send, stop, draft: draftFor(host, live) };
 }
 

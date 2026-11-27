@@ -120,8 +120,9 @@ function applyKiLiveEvent(
     if (!fresh) return unchanged;
     next = { ...answer, text: answer.text + fresh };
   } else {
-    // The answer's end with text this page never received: the saved answer holds it.
-    if (answer.text.length < event.length) return { window, applied: false };
+    // An end whose length differs from what the page holds reads the saved answer: text the page
+    // missed, or text past what a stopped answer kept.
+    if (answer.text.length !== event.length) return { window, applied: false };
     next = { ...answer, status: event.status, failure: event.failure };
   }
   return {

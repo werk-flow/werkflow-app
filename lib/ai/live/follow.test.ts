@@ -112,6 +112,23 @@ test('an end applies only when the page holds the whole answer; otherwise the sa
   );
 });
 
+test('a stopped answer that kept less than the page holds is read, never cut on the page', () => {
+  let window = applyKiLiveEvent(earlier, started).window;
+  window = applyKiLiveEvent(window, text(0, 'Erst das Ventil öffnen')).window;
+  const stopped = (length: number): KiLiveEvent => ({
+    v,
+    type: 'end',
+    command,
+    status: 'cancelled',
+    failure: 'Du hast die Antwort angehalten.',
+    length,
+  });
+  expect(applyKiLiveEvent(window, stopped(15)).applied, 'text past what the stop kept is read').toBe(false);
+  const ended = applyKiLiveEvent(window, stopped(22)).window;
+  expect(answerOf(ended)?.status).toBe('cancelled');
+  expect(answerOf(ended)?.failure).toBe('Du hast die Antwort angehalten.');
+});
+
 test('a turn that starts past messages the page never saw waits for a read, so the cursor does not skip them', () => {
   const later: KiLiveEvent = {
     ...started,

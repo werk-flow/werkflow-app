@@ -25,6 +25,29 @@ export function describeTurnRefusal(code: string): string {
   );
 }
 
+/**
+ * „Antwort anhalten“: asks the server to stop the answer to one command. The
+ * running turn ends at its next save and sends its end on the answer's own
+ * stream, so the page keeps reading it. Resolves whether the server took it.
+ */
+export async function stopTurn(input: {
+  organizationId: string;
+  threadId: string;
+  commandId: string;
+}): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/ki/threads/${input.threadId}/stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ organizationId: input.organizationId, commandId: input.commandId }),
+    });
+    return response.ok;
+  } catch {
+    // best-effort: a stop that does not arrive leaves the answer running, and the page says so.
+    return false;
+  }
+}
+
 const itemRef = z.object({ id: z.string(), sequence: z.number() });
 const eventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('started'), userItem: itemRef, assistantItem: itemRef }),
