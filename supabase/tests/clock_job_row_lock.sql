@@ -131,7 +131,7 @@ rollback;
 -- can lock a job that a second time entry references. A time entry takes a
 -- key-share lock on its job (the foreign key check) and then waits for the
 -- revision row. Before migration
--- 20270503090001_let_a_time_entry_reference_a_job_while_its_work_starts.sql a
+-- 20270602090001_let_a_time_entry_reference_a_job_while_its_work_starts.sql a
 -- clock-in on the job (transition_work_on_time_start) and the clock starting
 -- work on a job (transition_work_execution_p1_15) locked it FOR UPDATE, which
 -- waits for that key share: `deadlock detected`. FOR NO KEY UPDATE does not.
