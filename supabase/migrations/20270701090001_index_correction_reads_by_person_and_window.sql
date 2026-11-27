@@ -6,7 +6,19 @@
 -- its own transaction, the span of each person's facts per snapshot into a
 -- side table, and the read starts from an index on organization, person and
 -- span. The approval also signals a person it moves time to, so their open
--- views read again (sections 4 and 5).
+-- views read again (sections 0 and 4).
+
+-- 0. The records linked to a login before
+-- 20270503090002_signal_target_changes_to_the_employee.sql have no signal row
+-- yet; their people would miss this signal and the target signals alike. This
+-- runs first: a new row's key locks its organization's row, and an
+-- organization's deletion holds that row while its cascade waits for the
+-- tables the later sections lock.
+insert into public.employment_target_signals (organization_id, employee_record_id, user_id)
+select employee.organization_id, employee.id, employee.user_id
+from public.employee_records employee
+where employee.user_id is not null
+on conflict (employee_record_id) do nothing;
 
 -- 1. One row per application, snapshot and person: the first and last fact
 -- timestamp of that person in that snapshot. Both snapshots count: moving time
@@ -76,19 +88,21 @@ begin
   -- organization's timeline revision here, and a clock transition locks its
   -- personnel record before it writes time, so this touches only the existing
   -- signal rows: no lock on employee_records, and no new row whose foreign key
-  -- would lock one. Section 5 gives every record with a login its row; the
-  -- record's insert and relink triggers keep it.
+  -- would lock one. Section 0 gives every record with a login its row; the
+  -- record's insert and relink triggers keep it. A row signals only the login
+  -- a fact names on that record: after a relink, the new login holds none of
+  -- the facts and hears nothing.
   update public.employment_target_signals signal
   set updated_at = now()
   where signal.organization_id = new.organization_id
-    and signal.employee_record_id in (
-      select (facts.fact ->> 'employeeRecordId')::uuid
+    and (signal.employee_record_id, signal.user_id) in (
+      select (facts.fact ->> 'employeeRecordId')::uuid, (facts.fact ->> 'userId')::uuid
       from (
         select fact from pg_catalog.jsonb_array_elements(new.before_snapshot -> 'facts') fact
         union all
         select fact from pg_catalog.jsonb_array_elements(new.applied_snapshot -> 'facts') fact
       ) facts
-      where facts.fact ->> 'employeeRecordId' is not null
+      where facts.fact ->> 'employeeRecordId' is not null and facts.fact ->> 'userId' is not null
     )
     and signal.employee_record_id <> (
       select request.subject_employee_record_id from public.time_correction_requests request
@@ -103,22 +117,13 @@ create trigger record_time_correction_application
   after insert on public.time_correction_applications
   for each row execute function app_private.record_time_correction_application();
 
--- 5. The records linked to a login before
--- 20270503090002_signal_target_changes_to_the_employee.sql have no signal row
--- yet; their people would miss this signal and the target signals alike.
-insert into public.employment_target_signals (organization_id, employee_record_id, user_id)
-select employee.organization_id, employee.id, employee.user_id
-from public.employee_records employee
-where employee.user_id is not null
-on conflict (employee_record_id) do nothing;
-
 -- The applications approved before this migration.
 insert into public.time_correction_application_spans (application_id, organization_id, snapshot, user_id, span)
 select application.id, application.organization_id, spans.snapshot, spans.user_id, spans.span
 from public.time_correction_applications application
 cross join lateral app_private.time_correction_snapshot_spans(application.before_snapshot, application.applied_snapshot) spans;
 
--- 6. The read, same signature and rows as before. Without person and window it
+-- 5. The read, same signature and rows as before. Without person and window it
 -- returns the organization's history (correction validation). Otherwise it
 -- starts from the spans: a fact interval that overlaps the window, inclusive at
 -- both ends, includes overnight facts whose endpoints lie outside it. The
