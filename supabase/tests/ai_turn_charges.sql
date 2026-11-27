@@ -1,4 +1,4 @@
--- WerkFlow KI keeps every charge (migration 20270311090001,
+-- WerkFlow KI keeps every charge (migration 20270415100000,
 -- werk-flow/werkflow-planning#559): a turn starts in one call that writes
 -- once per command; an open run counts at its reserved amount until it
 -- settles; the job settles a stale run at its reserved amount and finishes
