@@ -73,8 +73,16 @@ async function runFixture(): Promise<void> {
     getCachedMemberships: async () => [{ orgId: organization, role: 'employee' }],
     getOwnEmployeeRecordId: async () => employeeRecord,
   }));
+  // As read_time_correction_applications filters: an application with a fact inside the read.
   mock.module('@/lib/time-corrections/approved-projection', () => ({
-    loadApprovedCorrectionProjection: async () => applications,
+    loadApprovedCorrectionProjection: async (_admin: unknown, input: { from: string; to: string }) =>
+      applications.filter((application) =>
+        application.snapshot.facts.some(
+          (fact) =>
+            Date.parse(fact.timestamp) >= Date.parse(input.from) &&
+            Date.parse(fact.timestamp) <= Date.parse(input.to),
+        ),
+      ),
   }));
   mock.module('@/lib/time-corrections/actions', () => ({
     getProvisionalTimeCorrectionProjection: async () => ({ entries: [], sources: [] }),
@@ -135,6 +143,43 @@ async function runFixture(): Promise<void> {
     },
   ];
   assert.equal(await sundayPresence(), 30, 'a corrected clock-out at midnight closes Sunday');
+
+  // A correction that only moves the shift's end to midnight holds no fact inside the week.
+  tables.time_entries = [
+    legacyEntry('sunday-in', 'clock_in', berlin('2026-11-29T22:00')),
+    legacyEntry('late-out', 'clock_out', berlin('2026-11-30T00:30')),
+  ];
+  applications = [
+    {
+      applicationId: 'ended-at-midnight',
+      requestId: 'request-ended-at-midnight',
+      appliedAt: berlin('2026-12-01T09:00'),
+      appliedBy: employee,
+      sourceFingerprint: 'ended-at-midnight',
+      snapshot: { schemaVersion: 1, facts: [fact('clock_out', NEXT_MONDAY)] },
+      sources: [{ kind: 'legacy_entry', id: 'late-out', version: '1' }],
+    },
+  ];
+  assert.equal(await sundayPresence(), 120, 'a correction of only the midnight clock-out closes Sunday');
+
+  // The next week's read leaves Sunday's closing clock-out to Sunday and keeps its own midnight start.
+  applications = [];
+  tables.time_entries = [
+    legacyEntry('sunday-out', 'clock_out', NEXT_MONDAY),
+    legacyEntry('next-week-in', 'clock_in', NEXT_MONDAY),
+  ];
+  const nextWeek = await getTimeEntries({
+    organizationId: organization,
+    from: NEXT_MONDAY,
+    to: berlin('2026-12-06T23:59'),
+    userId: employee,
+  });
+  assert.ok(nextWeek.success, 'the next week reads');
+  assert.deepEqual(
+    nextWeek.entries.map((entry) => entry.id),
+    ['next-week-in'],
+    'a window that starts at midnight holds no event that closes the day before',
+  );
 
   // A segment that runs past midnight closes Sunday there, to the minute.
   applications = [];

@@ -26,7 +26,8 @@ import { canViewEntries } from './helpers';
 import { jobIntervalEntries } from './activity-intervals';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
-import { entryLocalDate, windowReadEnd } from './work-sessions';
+import { entryBusinessDate } from './closed-period-dates';
+import { windowReadEnd } from './work-sessions';
 import { getCanonicalTimeEntries } from './canonical-entries';
 import { readWindowProjections } from './entry-window-projections';
 import type { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/actions';
@@ -137,7 +138,7 @@ export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<G
     }
     const normalizedFrom = new Date(fromTimestamp).toISOString();
     const normalizedTo = new Date(toTimestamp).toISOString();
-    // The read reaches the clock-out that closes the window's last day at the next midnight.
+    // The read reaches the events that close the window's last day at the next midnight.
     const readTo = new Date(windowReadEnd(toTimestamp)).toISOString();
 
     const callerRole = await verifyCurrentMembership(organizationId);
@@ -176,7 +177,7 @@ export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<G
         organizationId,
         from: normalizedFrom,
         to: normalizedTo,
-        canonicalTo: readTo,
+        readTo,
         status,
         subjectUserId: userId ?? (callerRole === 'employee' ? user.id : undefined),
         effectiveUserId,
@@ -245,9 +246,9 @@ async function loadJobParticipants(
   }));
 }
 
-/** The key of one person's local day in one organization, the day a midnight clock-out closes included. */
+/** The key of one person's local day in one organization, the day a midnight end closes included. */
 function userDayKey(entry: TimeEntry): string {
-  return `${entry.userId}:${entry.organizationId}:${entryLocalDate(entry)}`;
+  return `${entry.userId}:${entry.organizationId}:${entryBusinessDate(entry)}`;
 }
 
 /** What one job's time read needs: the caller and the approved corrections the caller loaded once. */

@@ -1,5 +1,6 @@
 import type { BreakSession, TimeEntry, WorkSession } from './types';
 import { formatBerlinLocalDate, isSameLocalDay } from '@/lib/date-time/berlin';
+import { entryBusinessDate } from './closed-period-dates';
 import { getEffectiveTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
 
@@ -31,39 +32,34 @@ function determinePendingState(
 }
 
 /**
- * The Berlin date an entry counts on. A clock-out counts on the day of the
- * instant before it, so one at exactly midnight closes the day it ends: the
- * split at midnight closes each day's slice there
- * (`splitSegmentAtLocalDayBoundaries`). Every other entry counts on its own date.
- */
-export function entryLocalDate(entry: Pick<TimeEntry, 'entryType' | 'timestamp'>): string {
-  const instant = Date.parse(entry.timestamp);
-  return formatBerlinLocalDate(new Date(entry.entryType === 'clock_out' ? instant - 1 : instant));
-}
-
-/**
  * The instant a read of a window has to reach: a window that ends on a Berlin
- * day's last instant also holds the clock-out at the next midnight that
- * closes that day.
+ * day's last instant also holds the events at the next midnight that close
+ * that day (`entryBusinessDate`).
  */
 export function windowReadEnd(toMs: number): number {
   const endsADay = formatBerlinLocalDate(new Date(toMs)) !== formatBerlinLocalDate(new Date(toMs + 1));
   return endsADay ? toMs + 1 : toMs;
 }
 
-/** Whether an entry belongs to a window: inside it, or its last day's closing clock-out (`windowReadEnd`). */
+/**
+ * Whether an entry belongs to a window, its ends included. An event that
+ * closes a day at the next midnight (`entryBusinessDate`) counts at the
+ * instant before it: it belongs to a window that ends with that day, never to
+ * one that starts with the next.
+ */
 export function isInEntryWindow(
   entry: Pick<TimeEntry, 'entryType' | 'timestamp'>,
   window: { fromMs: number; toMs: number },
 ): boolean {
   const instant = Date.parse(entry.timestamp);
-  if (instant >= window.fromMs && instant <= window.toMs) return true;
-  return entry.entryType === 'clock_out' && instant > window.toMs && instant === windowReadEnd(window.toMs);
+  const closesDayBefore = entryBusinessDate(entry) !== formatBerlinLocalDate(new Date(instant));
+  const countedAt = closesDayBefore ? instant - 1 : instant;
+  return countedAt >= window.fromMs && countedAt <= window.toMs;
 }
 
 /** Whether an end counts on the same Berlin day as the start it would close. */
 function closesOnStartDay(start: TimeEntry, end: TimeEntry): boolean {
-  return entryLocalDate(start) === entryLocalDate(end);
+  return entryBusinessDate(start) === entryBusinessDate(end);
 }
 
 /** A work start that no end closes on its own day: open while it is today's, otherwise an orphan. */
