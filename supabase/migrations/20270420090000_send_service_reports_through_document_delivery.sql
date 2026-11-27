@@ -50,9 +50,6 @@ create index document_deliveries_service_report_idx
   on public.document_deliveries (service_report_id, organization_id, created_at desc)
   where service_report_id is not null;
 
--- A manager's session hears of a report's delivery as of an invoice's.
-grant select (service_report_id) on table public.document_deliveries to authenticated;
-
 -- 2. The subject's filed document, locked against a concurrent change of the
 -- subject. An invoice sends only its own registered original while it is
 -- issued (a Stornorechnung is an issued invoice of its own). A service report

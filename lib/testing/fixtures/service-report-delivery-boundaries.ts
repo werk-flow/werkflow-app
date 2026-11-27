@@ -5,12 +5,18 @@
 // client sends; the same report sent twice puts one mail in the local outbox;
 // a failed delivery is retried once; a manual send is recorded for the
 // report; the „Versand“ read lists the report's sends and proposes the visit
-// job's Ansprechpartner. The world stands in for the database functions, which
+// job's Ansprechpartner, and no address once the job's customer changed. The world stands in for the database functions, which
 // supabase/tests/document_deliveries.sql proves.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mock } from 'bun:test';
-import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
+import {
+  ORGANIZATION_A,
+  ORGANIZATION_B,
+  installActionWorld,
+  signInAs,
+  tableRows,
+} from './action-boundary-world';
 import { companyProfileRow } from './company-profile-rows';
 import { assertRefused } from './operations-boundary-refusals';
 
@@ -22,6 +28,7 @@ const dueWorkId = '98300000-0000-4000-8000-000000000201';
 const jobId = '98300000-0000-4000-8000-000000000301';
 const clientId = '98300000-0000-4000-8000-000000000401';
 const contactId = '98300000-0000-4000-8000-000000000501';
+const otherClientId = '98300000-0000-4000-8000-000000000409';
 const reportPath = `${ORGANIZATION_A}/service-reports/${dueWorkId}/${reportId}.pdf`;
 const pdf = new TextEncoder().encode('%PDF-1.7 Servicebericht A-2037-0042');
 const contentHash = createHash('sha256').update(pdf).digest('hex');
@@ -77,7 +84,19 @@ const world = installActionWorld({
       contact_id: contactId,
     },
   ],
-  clients: [{ id: clientId, organization_id: ORGANIZATION_A, email: 'verwaltung@lindenhof.example' }],
+  clients: [
+    { id: clientId, organization_id: ORGANIZATION_A, email: 'verwaltung@lindenhof.example' },
+    { id: otherClientId, organization_id: ORGANIZATION_A, email: 'einkauf@sonnenhof.example' },
+  ],
+  // The filed report's customer link (register_maintenance_service_report).
+  document_links: [
+    {
+      id: crypto.randomUUID(),
+      organization_id: ORGANIZATION_A,
+      document_id: documentId,
+      client_id: clientId,
+    },
+  ],
   client_contacts: [
     {
       id: contactId,
@@ -258,12 +277,20 @@ assert.equal(memoryOutbox.messages().length, 0, 'a refused call sent a mail');
 const read = await getServiceReportDelivery({ reportId });
 assert.ok(read.success, JSON.stringify(read));
 assert.deepEqual(read.delivery.list, { total: 0, entries: [] });
-assert.equal(read.delivery.defaults.recipient, recipient);
-assert.equal(read.delivery.defaults.subject, mailSubject);
+assert.equal(read.delivery.defaults?.recipient, recipient);
+assert.equal(read.delivery.defaults?.subject, mailSubject);
 assert.match(
-  read.delivery.defaults.text,
+  read.delivery.defaults?.text ?? '',
   /Servicebericht zur Wartung vom 12\.11\.2037 \(Auftrag A-2037-0042\)/,
 );
+// A job whose customer changed since the report proposes no address: the report belongs to its own customer.
+const [visitJob] = tableRows(world, 'jobs');
+assert.ok(visitJob);
+visitJob.client_id = otherClientId;
+const moved = await getServiceReportDelivery({ reportId });
+assert.ok(moved.success, JSON.stringify(moved));
+assert.equal(moved.delivery.defaults?.recipient, '');
+visitJob.client_id = clientId;
 
 // The same report sent twice, as after a lost answer: one delivery, one mail,
 // with the report's own PDF, whatever document the client named.

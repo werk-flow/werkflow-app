@@ -32,5 +32,5 @@ export type CompletedVisitPage = {
   pageSize: number;
 };
 
-/** „Versand“ of one Servicebericht: its deliveries and what the email form proposes. */
-export type ServiceReportDelivery = { list: DeliveryList; defaults: DeliveryMailDefaults };
+/** „Versand“ of one Servicebericht: its deliveries and what the email form proposes, null when that read failed. */
+export type ServiceReportDelivery = { list: DeliveryList; defaults: DeliveryMailDefaults | null };

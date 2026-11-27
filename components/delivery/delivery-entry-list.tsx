@@ -65,6 +65,8 @@ type RowHost = {
   failureMessages: Readonly<Record<string, string>>;
   /** Reads the sends again after a retry: the page's refresh or the dialog's read. */
   onChange: () => void;
+  /** True while the rows are not current, so no retry starts from a stale attempt. */
+  stale?: boolean;
 };
 
 function DeliveryRow({ entry, host }: { entry: DeliveryEntry; host: RowHost }) {
@@ -112,7 +114,7 @@ function DeliveryRow({ entry, host }: { entry: DeliveryEntry; host: RowHost }) {
           variant="outline"
           size="sm"
           pending={isPending}
-          disabled={isPending}
+          disabled={isPending || host.stale}
           onClick={retry}
         >
           <Send className="size-4" />

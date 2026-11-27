@@ -27,7 +27,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { DELIVERY_LIMITS, type DeliveryMailDefaults } from '@/lib/delivery/delivery-types';
-import { deliveryFailureAdvice, priorEmailAdvice } from '@/lib/delivery/failure-advice';
+import { priorEmailAdvice } from '@/lib/delivery/failure-advice';
 import {
   markServiceReportSentManually,
   retryServiceReportDelivery,
@@ -62,28 +62,32 @@ type StepAction<Action extends (...args: never[]) => Promise<unknown>> = {
   isPending: boolean;
 };
 
-/** The email step: the report's filed PDF to one recipient, once per filled form. */
+/**
+ * The email step: the report's filed PDF to one recipient, once per filled
+ * form. The dialog keeps the form, so a send the provider refused returns to
+ * the sends, where „Erneut senden“ repeats it, and a new email starts from
+ * what the office typed.
+ */
 function EmailStep({
   reportId,
   action,
-  defaults,
+  form,
+  setForm,
   sentBefore,
   onDone,
-  onRecorded,
   onBack,
 }: {
   reportId: string;
   action: StepAction<typeof sendServiceReportEmail>;
-  defaults: DeliveryMailDefaults;
+  form: DeliveryMailDefaults;
+  /** The form's new state; null once it went out. */
+  setForm: (form: DeliveryMailDefaults | null) => void;
   sentBefore: string | null;
   onDone: () => void;
-  /** Reads the sends again while the step stays open. */
-  onRecorded: () => void;
   onBack: () => void;
 }): ReactElement {
   const { showBanner } = useBanner();
   const { run, isPending } = action;
-  const [form, setForm] = useState(defaults);
   const [attemptKey, setAttemptKey] = useState(() => crypto.randomUUID());
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,11 +105,7 @@ function EmailStep({
     if (!result) return setError(SEND_FAILED);
     if (!result.success)
       return setError(describeFailure(result.error, REPORT_DELIVERY_FAILURES, SEND_FAILED));
-    // A send the provider refused keeps the form, so the office corrects the address and sends anew.
-    if (result.state === 'failed') {
-      setError(deliveryFailureAdvice(result.failureCode, 'Versuche es erneut.'));
-      return onRecorded();
-    }
+    if (result.state !== 'failed') setForm(null);
     showBanner(sendBanner(result, 'Der Servicebericht', form.recipient.trim()));
     onDone();
   };
@@ -211,6 +211,11 @@ function OverviewStep({
     <>
       <DialogBody className="space-y-3 py-1" aria-busy={read.loading || undefined}>
         {read.failure && <SectionError failure={read.failure} />}
+        {delivery && !delivery.defaults && !read.failure && (
+          <SectionError onRetry={read.reload} retryPending={read.loading}>
+            Die Vorschläge für die E-Mail konnten nicht geladen werden.
+          </SectionError>
+        )}
         {delivery ? (
           <DeliveryEntryList
             list={delivery.list}
@@ -219,6 +224,7 @@ function OverviewStep({
               description: 'Sende den Servicebericht per E-Mail oder vermerke, dass er per Post rausging.',
             }}
             retry={retry}
+            stale={!current}
             failureMessages={REPORT_DELIVERY_FAILURES}
             onChange={read.reload}
           />
@@ -234,7 +240,7 @@ function OverviewStep({
           <Stamp className="size-4" />
           Als manuell versendet markieren
         </Button>
-        <Button type="button" disabled={!current} onClick={() => onStep('email')}>
+        <Button type="button" disabled={!current || !delivery?.defaults} onClick={() => onStep('email')}>
           <Mail className="size-4" />
           Per E-Mail senden
         </Button>
@@ -260,6 +266,7 @@ export function ServiceReportDeliveryDialog({
   onClose: () => void;
 }): ReactElement {
   const [step, setStep] = useState<Step>('overview');
+  const [draft, setDraft] = useState<DeliveryMailDefaults | null>(null);
   const send = useServerAction(sendServiceReportEmail);
   const manual = useServerAction(markServiceReportSentManually);
   const retry = useServerAction(retryServiceReportDelivery);
@@ -285,26 +292,29 @@ export function ServiceReportDeliveryDialog({
     if (next === 'email') read.reload();
   };
   const pending = send.isPending || manual.isPending || retry.isPending;
+  // The email step opens on a current read of the sends, so its note of an earlier email is current too.
+  const defaults = !read.loading && !read.failure ? delivery?.defaults : null;
+  const shown: Step = step === 'email' && !defaults ? 'overview' : step;
   return (
     <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()} pending={pending}>
       <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Servicebericht versenden</DialogTitle>
           <DialogDescription>
-            {visitLabel}. {STEP_DESCRIPTIONS[step]}
+            {visitLabel}. {STEP_DESCRIPTIONS[shown]}
           </DialogDescription>
         </DialogHeader>
-        {step === 'email' && delivery ? (
+        {shown === 'email' && delivery && defaults ? (
           <EmailStep
             reportId={reportId}
             action={send}
-            defaults={delivery.defaults}
+            form={draft ?? defaults}
+            setForm={setDraft}
             sentBefore={priorEmailAdvice(delivery.list.entries)}
             onDone={done}
-            onRecorded={read.reload}
             onBack={back}
           />
-        ) : step === 'manual' ? (
+        ) : shown === 'manual' ? (
           <ManualStep reportId={reportId} action={manual} onDone={done} onBack={back} />
         ) : (
           <OverviewStep

@@ -47,9 +47,10 @@ export async function readDeliveryReport(
 
 /**
  * What „Per E-Mail senden“ proposes: the visit job's Ansprechpartner's email,
- * else its customer's, else that customer's main contact's; a subject and a
- * text naming the visit day and the job, signed with the sender's name. A
- * failed read throws.
+ * else its customer's, else that customer's main contact's, while the job
+ * still has the customer the report was filed for, else no address; a
+ * subject and a text naming the visit day and the job, signed with the
+ * sender's name. A failed read throws.
  */
 async function readReportMailDefaults(
   context: ServiceManagerContext,
@@ -78,9 +79,23 @@ async function readReportMailDefaults(
       )
     : { data: null, error: null };
   if (job.error) throw new Error('report_job_read_failed');
+  // The report's own customer link (register_maintenance_service_report), so an
+  // edited job never proposes another customer's address for this report.
+  const reportClient = await loggedRead(
+    'readReportMailDefaults: report customer read failed',
+    context.admin
+      .from('document_links')
+      .select('client_id')
+      .eq('organization_id', context.organizationId)
+      .eq('document_id', report.document_id)
+      .not('client_id', 'is', null)
+      .limit(1)
+      .maybeSingle(),
+  );
+  if (reportClient.error) throw new Error('report_customer_read_failed');
   const clientId = job.data?.client_id;
   const [recipient, sender] = await Promise.all([
-    clientId
+    clientId && clientId === reportClient.data?.client_id
       ? readRecipientEmail(context.organizationId, { clientId, contactId: job.data?.contact_id ?? null })
       : '',
     readDeliverySender(deliveryCallerOf(context)),
@@ -99,7 +114,10 @@ async function readReportMailDefaults(
   };
 }
 
-/** The report's deliveries from E2c's reader and what the email form proposes. */
+/**
+ * The report's deliveries from E2c's reader and what the email form proposes.
+ * A failed proposal leaves the sends readable: defaults are then null.
+ */
 export async function readServiceReportDelivery(
   context: ServiceManagerContext,
   reportId: string,
@@ -107,14 +125,18 @@ export async function readServiceReportDelivery(
   const read = await readDeliveryReport(context, reportId);
   if (!read.success) return read;
   if (!read.report) return { success: false, error: 'service_report_not_found' };
-  try {
-    const [list, defaults] = await Promise.all([
-      readDocumentDeliveries(context.organizationId, { kind: 'service_report', id: reportId }),
-      readReportMailDefaults(context, read.report),
-    ]);
-    return { success: true, delivery: { list, defaults } };
-  } catch (error) {
-    logError('readServiceReportDelivery: read failed', error);
+  const [list, defaults] = await Promise.allSettled([
+    readDocumentDeliveries(context.organizationId, { kind: 'service_report', id: reportId }),
+    readReportMailDefaults(context, read.report),
+  ]);
+  if (list.status === 'rejected') {
+    logError('readServiceReportDelivery: delivery list read failed', list.reason);
     return { success: false, error: 'load_failed' };
   }
+  if (defaults.status === 'rejected')
+    logError('readServiceReportDelivery: mail defaults failed', defaults.reason);
+  return {
+    success: true,
+    delivery: { list: list.value, defaults: defaults.status === 'fulfilled' ? defaults.value : null },
+  };
 }
