@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { textInDom, visibleText } from '../golden/support/steps/shared';
-import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fixture';
+import { answerHeldWrite, expectHeldWrite, openContractFixture, openHydrationFixture } from './open-fixture';
 
 // The invoice page (docs/features/commercial-and-finance.md, "Invoice drafts" and "Issuing"): an
 // issued invoice shows what it says, so a catalog line whose price read answers after another
@@ -72,4 +72,76 @@ test('an issued invoice offers sending, a manual record and the retry of a faile
   for (const name of ['Per E-Mail senden', 'Als manuell versendet markieren', 'Erneut senden']) {
     await expect(page.getByRole('button', { name })).toBeVisible();
   }
+});
+
+// An unanswered first attempt may have reached the customer, though the retry failed: the row
+// keeps saying so, so the office asks before it sends a duplicate.
+test('an issued invoice keeps a send unclear when an unanswered attempt was followed by a failed retry', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'invoice-deliveries-issued');
+  await expect(
+    visibleText(
+      page,
+      'Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: Die E-Mail ist nicht rausgegangen.',
+    ),
+  ).toBeVisible();
+});
+
+// A retry of such a send fails for another reason: its outcome replaces the stored one at once and
+// keeps the send unclear, and once the refreshed row shows the new attempt, the row alone says it.
+test('a failed retry of a send that may have gone out stays unclear and gives way to the refreshed row', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'invoice-deliveries-retry');
+  const unclear = 'Ob die E-Mail rausging, ist unklar';
+  const refused = 'Letzter Versuch: Der Mailanbieter hat die E-Mail abgelehnt. Frag beim Kunden nach';
+  await expect(textInDom(page, 'Letzter Versuch: Die E-Mail ist nicht rausgegangen.')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Erneut senden' }).click();
+  await expectHeldWrite(page, 'retryInvoiceDelivery');
+  await answerHeldWrite(page, null);
+  await expect(visibleText(page, refused)).toBeVisible();
+  await expect(textInDom(page, 'Die E-Mail ist nicht rausgegangen.')).toHaveCount(0);
+  await expect(textInDom(page, unclear)).toHaveCount(1);
+  await page.evaluate(() => window.uiContractDeliveryRefresh?.());
+  await expect(visibleText(page, '3 Versuche')).toBeVisible();
+  await expect(textInDom(page, refused)).toHaveCount(1);
+  await expect(textInDom(page, unclear)).toHaveCount(1);
+});
+
+// A retry past its window is refused. While the send is unclear, the refusal asks the office to
+// check with the customer before a new email, and it names the 23 hours the window lasts.
+test('a retry refused past its window asks about an unclear send before a new email', async ({ page }) => {
+  await openContractFixture(page, 'invoice-deliveries-retry');
+  await page.getByRole('button', { name: 'Erneut senden' }).click();
+  await expectHeldWrite(page, 'retryInvoiceDelivery');
+  await answerHeldWrite(page, 'delivery_retry_expired');
+  await expect(
+    visibleText(page, 'Der Versand ist älter als 23 Stunden und lässt sich nicht mehr wiederholen.'),
+  ).toBeVisible();
+  await expect(visibleText(page, 'Frag beim Kunden nach, ob sie ankam')).toBeVisible();
+  await expect(textInDom(page, 'Sende die Rechnung bei Bedarf neu per E-Mail.')).toHaveCount(0);
+});
+
+// A page that predates another session's unanswered attempt shows a known failure. The server's
+// answer to its retry says the outcome is unknown, and the message keeps that, not the row's view.
+test('a retry from a page older than an unanswered attempt keeps the send unclear', async ({ page }) => {
+  await openContractFixture(page, 'invoice-deliveries-stale-retry');
+  const unclear = 'Ob die E-Mail rausging, ist unklar';
+  await expect(textInDom(page, unclear)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Erneut senden' }).click();
+  await expectHeldWrite(page, 'retryInvoiceDelivery');
+  await answerHeldWrite(page, null);
+  await expect(visibleText(page, `${unclear}: Ein früherer Versuch blieb ohne klare Antwort.`)).toBeVisible();
+});
+
+// The server renders „Versand“ by its clock, the browser hydrates it by its own. An attempt that
+// turns unanswered in between must not make the two renders differ.
+test("an issued invoice's send row renders without a clock on the server and turns unanswered after hydration", async ({
+  page,
+}) => {
+  await openHydrationFixture(page, 'invoice-deliveries-hydration');
+  await expect(visibleText(page, 'Der Mailanbieter hat nicht geantwortet.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Erneut senden' })).toBeVisible();
+  expect(await page.evaluate(() => window.uiContractHydrationErrors)).toEqual([]);
 });
