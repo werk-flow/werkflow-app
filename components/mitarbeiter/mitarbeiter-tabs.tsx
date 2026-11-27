@@ -55,6 +55,9 @@ const MITARBEITER_TABS_REFRESH_TABLES = [
   'organization_responsibility_configurations',
   'organization_responsibility_assignments',
   'organization_responsibility_delegations',
+  // A co-holder's access decides whether a removal strands a group (removalBlockedByUserId).
+  'personnel_access_lifecycles',
+  'personnel_onboarding_requirements',
   'teams',
   'team_memberships',
   'organization_capabilities',

@@ -42,6 +42,12 @@ const DETAIL_REFRESH_TABLES: readonly RealtimeTable[] = [
   'team_memberships',
   'organization_capabilities',
   'employee_capabilities',
+  // The removal block: the selected groups and each co-holder's access.
+  'organization_responsibility_configurations',
+  'organization_responsibility_assignments',
+  'organization_responsibility_delegations',
+  'personnel_access_lifecycles',
+  'personnel_onboarding_requirements',
 ];
 
 /** The live status and week cards of one member. */
