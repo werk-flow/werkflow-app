@@ -27,7 +27,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { DELIVERY_LIMITS, type DeliveryMailDefaults } from '@/lib/delivery/delivery-types';
-import { priorEmailAdvice } from '@/lib/delivery/failure-advice';
+import { deliveryFailureAdvice, priorEmailAdvice } from '@/lib/delivery/failure-advice';
 import {
   markServiceReportSentManually,
   retryServiceReportDelivery,
@@ -69,6 +69,7 @@ function EmailStep({
   defaults,
   sentBefore,
   onDone,
+  onRecorded,
   onBack,
 }: {
   reportId: string;
@@ -76,6 +77,8 @@ function EmailStep({
   defaults: DeliveryMailDefaults;
   sentBefore: string | null;
   onDone: () => void;
+  /** Reads the sends again while the step stays open. */
+  onRecorded: () => void;
   onBack: () => void;
 }): ReactElement {
   const { showBanner } = useBanner();
@@ -98,6 +101,11 @@ function EmailStep({
     if (!result) return setError(SEND_FAILED);
     if (!result.success)
       return setError(describeFailure(result.error, REPORT_DELIVERY_FAILURES, SEND_FAILED));
+    // A send the provider refused keeps the form, so the office corrects the address and sends anew.
+    if (result.state === 'failed') {
+      setError(deliveryFailureAdvice(result.failureCode, 'Versuche es erneut.'));
+      return onRecorded();
+    }
     showBanner(sendBanner(result, 'Der Servicebericht', form.recipient.trim()));
     onDone();
   };
@@ -179,22 +187,30 @@ type DeliveryRead = ReturnType<typeof useClientRead<Awaited<ReturnType<typeof re
 const readDelivery = (reportId: string, signal: AbortSignal) =>
   readInBackground('service-report-delivery', { reportId }, signal);
 
-/** The sends of the report, or its read's skeleton or failure, and the two ways to send it. */
+/**
+ * The sends of the report, or its read's skeleton, and the two ways to send
+ * it. A failed read shows with its retry, also beside the rows it read
+ * before; a new send waits for a current read and for a running retry.
+ */
 function OverviewStep({
   read,
   retry,
+  retrying,
   onClose,
   onStep,
 }: {
   read: DeliveryRead;
   retry: RetryDelivery;
+  retrying: boolean;
   onClose: () => void;
   onStep: (step: Step) => void;
 }): ReactElement {
   const delivery = read.data?.delivery;
+  const current = Boolean(delivery) && !read.loading && !read.failure && !retrying;
   return (
     <>
       <DialogBody className="space-y-3 py-1" aria-busy={read.loading || undefined}>
+        {read.failure && <SectionError failure={read.failure} />}
         {delivery ? (
           <DeliveryEntryList
             list={delivery.list}
@@ -206,21 +222,19 @@ function OverviewStep({
             failureMessages={REPORT_DELIVERY_FAILURES}
             onChange={read.reload}
           />
-        ) : read.failure ? (
-          <SectionError failure={read.failure} />
         ) : (
-          <Skeleton className="h-16 w-full" />
+          !read.failure && <Skeleton className="h-16 w-full" />
         )}
       </DialogBody>
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button type="button" variant="outline" disabled={retrying} onClick={onClose}>
           Schließen
         </Button>
-        <Button type="button" variant="outline" disabled={!delivery} onClick={() => onStep('manual')}>
+        <Button type="button" variant="outline" disabled={!current} onClick={() => onStep('manual')}>
           <Stamp className="size-4" />
           Als manuell versendet markieren
         </Button>
-        <Button type="button" disabled={!delivery} onClick={() => onStep('email')}>
+        <Button type="button" disabled={!current} onClick={() => onStep('email')}>
           <Mail className="size-4" />
           Per E-Mail senden
         </Button>
@@ -265,8 +279,14 @@ export function ServiceReportDeliveryDialog({
     read.reload();
   };
   const back = () => setStep('overview');
+  // The email step reads the sends again, so its note of an earlier email includes another session's.
+  const open = (next: Step) => {
+    setStep(next);
+    if (next === 'email') read.reload();
+  };
+  const pending = send.isPending || manual.isPending || retry.isPending;
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()} pending={send.isPending || manual.isPending}>
+    <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()} pending={pending}>
       <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Servicebericht versenden</DialogTitle>
@@ -281,12 +301,19 @@ export function ServiceReportDeliveryDialog({
             defaults={delivery.defaults}
             sentBefore={priorEmailAdvice(delivery.list.entries)}
             onDone={done}
+            onRecorded={read.reload}
             onBack={back}
           />
         ) : step === 'manual' ? (
           <ManualStep reportId={reportId} action={manual} onDone={done} onBack={back} />
         ) : (
-          <OverviewStep read={read} retry={retry.run} onClose={onClose} onStep={setStep} />
+          <OverviewStep
+            read={read}
+            retry={retry.run}
+            retrying={retry.isPending}
+            onClose={onClose}
+            onStep={open}
+          />
         )}
       </DialogContent>
     </Dialog>

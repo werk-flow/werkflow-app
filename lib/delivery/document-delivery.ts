@@ -271,22 +271,25 @@ export async function sendDocument(
 }
 
 /**
- * Sends a failed email delivery again with its stored content, once per
- * attempt the office saw; a sent one is never sent twice. It counts against
- * its stored recipient's limit too.
+ * Sends a failed email delivery of the caller's subject kind again with its
+ * stored content, once per attempt the office saw; a sent one is never sent
+ * twice. A delivery of another kind reads as none. It counts against its
+ * stored recipient's limit too.
  */
 export async function retryDocumentDelivery(
   caller: DeliveryCaller,
-  delivery: { id: string; expectedAttempt: number },
+  delivery: { id: string; expectedAttempt: number; subjectKind: DeliverySubject['kind'] },
 ): Promise<DeliveryOutcome> {
   const stored = await createSupabaseAdminClient()
     .from('document_deliveries')
-    .select('recipient_email')
+    .select('recipient_email, subject_kind')
     .eq('organization_id', caller.orgId)
     .eq('id', delivery.id)
     .maybeSingle();
   if (stored.error)
     return refusal(stored.error, 'send_failed', 'retryDocumentDelivery: delivery read failed');
+  if (stored.data && stored.data.subject_kind !== delivery.subjectKind)
+    return { success: false, error: 'delivery_not_found' };
   const limited = await passRateLimit(caller, stored.data?.recipient_email ?? null);
   if (limited) return limited;
   const answer = await createSupabaseAdminClient().rpc('retry_document_delivery', {

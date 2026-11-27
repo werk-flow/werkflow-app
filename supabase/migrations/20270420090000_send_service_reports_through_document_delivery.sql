@@ -9,7 +9,9 @@
 --    invoice_id. Each row names exactly one subject.
 -- 2. lock_delivery_document sends a report's own filed document while it is
 --    the visit's latest report: a report the office has regenerated since is
---    stale, so the customer never receives an older version.
+--    stale, so no send or retry of an older version is claimed. The claim is
+--    the cutoff: an attempt claimed before a regeneration commits still goes
+--    out, as the office pressed „Senden“ on the report it saw.
 -- 3. request_document_delivery, retry_document_delivery,
 --    record_manual_delivery and list_document_deliveries read and write the
 --    subject id of either kind; their signatures and answers stay as they are.
@@ -55,8 +57,9 @@ grant select (service_report_id) on table public.document_deliveries to authenti
 -- subject. An invoice sends only its own registered original while it is
 -- issued (a Stornorechnung is an issued invoice of its own). A service report
 -- sends only its own filed document, and only while no newer report of the
--- same visit exists; the visit's lock orders it with a regeneration, which
--- takes that lock too (register_maintenance_service_report). Refusals:
+-- same visit exists when the attempt is claimed; the visit's lock orders the
+-- claim with a regeneration, which takes that lock too
+-- (register_maintenance_service_report). Refusals:
 -- invoice_not_found, invoice_not_issued, service_report_not_found,
 -- service_report_stale, document_not_found.
 create or replace function app_private.lock_delivery_document(

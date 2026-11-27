@@ -303,7 +303,8 @@ begin
   execute pg_temp.request_report(v_admin, v_org, '47160000-0000-4000-8000-000000000083',
     '47160000-0000-4000-8000-000000000094', 'service_report', v_attempt) into v_payload;
   select * into strict v_delivery from public.document_deliveries where id = (v_payload ->> 'deliveryId')::uuid;
-  if not (v_payload ->> 'claimed')::boolean or v_payload ->> 'contentHash' is distinct from repeat('c', 64)
+  if (v_payload ->> 'claimed')::boolean is distinct from true
+     or v_payload ->> 'contentHash' is distinct from repeat('c', 64)
      or (v_delivery.subject_kind, v_delivery.service_report_id, v_delivery.invoice_id, v_delivery.document_id)
        is distinct from ('service_report', '47160000-0000-4000-8000-000000000083'::uuid, null::uuid,
          '47160000-0000-4000-8000-000000000094'::uuid) then
@@ -311,7 +312,7 @@ begin
   end if;
   execute pg_temp.request_report(v_admin, v_org, '47160000-0000-4000-8000-000000000083',
     '47160000-0000-4000-8000-000000000094', 'service_report', v_attempt) into v_payload;
-  if (v_payload ->> 'claimed')::boolean
+  if (v_payload ->> 'claimed')::boolean is distinct from false
      or (select count(*) from public.document_deliveries where organization_id = v_org::uuid) <> 1 then
     raise exception 'a repeated request recorded or claimed again';
   end if;

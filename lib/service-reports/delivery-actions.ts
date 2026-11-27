@@ -76,6 +76,7 @@ export async function retryServiceReportDelivery(
     return await retryDocumentDelivery(deliveryCallerOf(context), {
       id: parsed.data.deliveryId,
       expectedAttempt: parsed.data.expectedAttempt,
+      subjectKind: 'service_report',
     });
   } catch (error) {
     logError('retryServiceReportDelivery: unexpected error', error);

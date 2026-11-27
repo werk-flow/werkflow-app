@@ -177,13 +177,23 @@ world.rpc = ({ name, args }) => {
   }
   return { data: settles, error: null };
 };
-// A retry reads its stored recipient from the table.
+// A retry reads its stored recipient and subject kind from the table; one invoice delivery stands beside.
+const invoiceDeliveryId = '98300000-0000-4000-8000-000000000601';
 const syncTable = () => {
-  world.tables.document_deliveries = deliveries.map((delivery) => ({
-    id: delivery.id,
-    organization_id: delivery.organizationId,
-    recipient_email: delivery.stored.recipient,
-  }));
+  world.tables.document_deliveries = [
+    ...deliveries.map((delivery) => ({
+      id: delivery.id,
+      organization_id: delivery.organizationId,
+      recipient_email: delivery.stored.recipient,
+      subject_kind: 'service_report',
+    })),
+    {
+      id: invoiceDeliveryId,
+      organization_id: ORGANIZATION_A,
+      recipient_email: 'buchhaltung@lindenhof.example',
+      subject_kind: 'invoice',
+    },
+  ];
 };
 
 const mailsOf = (deliveryId: string) =>
@@ -291,6 +301,15 @@ assert.deepEqual(
   [['Servicebericht A-2037-0042.pdf', [...pdf]]],
 );
 assert.equal(memoryOutbox.messages().length, 1);
+
+// An invoice's delivery is no report's: refused before any claim.
+syncTable();
+world.rpcCalls.length = 0;
+assert.deepEqual(await retryServiceReportDelivery({ deliveryId: invoiceDeliveryId, expectedAttempt: 1 }), {
+  success: false,
+  error: 'delivery_not_found',
+});
+assert.equal(callsNamed('retry_document_delivery').length, 0, 'an invoice delivery was claimed as a report');
 
 // A failed delivery is retried once; a second press of the same retry sends nothing.
 const failed: Delivery = {
