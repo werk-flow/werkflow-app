@@ -167,17 +167,24 @@ from (values
    (now() at time zone 'Europe/Berlin')::date - 1)
 ) as cases(label, expected_number, expected_day);
 -- A used-up series has no number for the Stornorechnung: the server sends an empty one, and the cancel
--- is refused as used up, not as a moved number the server would check again.
-select set_config('app.invoice_number_write', 'on', true);
+-- is refused as used up, not as a moved number the server would check again. Only an issue moves the
+-- series, so the seed passes its guard and puts it back.
+reset role;
+set local session_replication_role = replica;
 update public.invoice_settings set next_number = 999999999
 where organization_id = '38080000-0000-4000-8000-000000000010';
+set local session_replication_role = origin;
+set local role service_role;
 select pg_temp.expect_refusal('a used-up series', format('select public.cancel_invoice(%L, %L, %L,
   gen_random_uuid(), ''Falsch'', false, '''', %L)', '38080000-0000-4000-8000-000000000002',
   '38080000-0000-4000-8000-000000000010', pg_temp.id('cancelled'), (now() at time zone 'Europe/Berlin')::date),
   'invoice_numbers_exhausted');
-select set_config('app.invoice_number_write', 'on', true);
+reset role;
+set local session_replication_role = replica;
 update public.invoice_settings set next_number = 4
 where organization_id = '38080000-0000-4000-8000-000000000010';
+set local session_replication_role = origin;
+set local role service_role;
 do $$
 begin
   if (select next_number from public.invoice_settings
@@ -254,6 +261,10 @@ begin
   -- A retry under the same key answers the first cancel and uses no number.
   if pg_temp.cancel('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010', 'cancelled',
       '38080000-0000-4000-8000-000000000301', 'Falscher Rechnungsempfänger', false) is distinct from v_answer
+    -- Also with the empty number the server sends once the series is used up.
+    or public.cancel_invoice('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
+      v_original.id, '38080000-0000-4000-8000-000000000301', 'Falscher Rechnungsempfänger', false, '',
+      (now() at time zone 'Europe/Berlin')::date) is distinct from v_answer
     or (select count(*) from public.invoices where cancels_invoice_id = v_original.id) <> 1 then
     raise exception 'a retried cancel cancelled again';
   end if;
@@ -277,12 +288,23 @@ from (values
     recipient_client_id, corrects_invoice_id) values (%L, %L, %L, %L)$insert$,
     '38080000-0000-4000-8000-000000000010', '38080000-0000-4000-8000-000000000020',
     '38080000-0000-4000-8000-000000000020', pg_temp.id('kept')), 'invoice_link_fixed'),
-  -- Even inside a cancel of that invoice, a second Stornorechnung is refused by the unique index.
-  ('a second Stornorechnung', format($insert$insert into public.invoices (organization_id, client_id,
-    recipient_client_id, cancels_invoice_id, cancellation_reason)
+  -- The guard checks the rows a cancel leaves, not cancel_invoice's former flag: a link needs the cancel's
+  -- history entry naming it, so under the flag a Stornorechnung or a correction is refused as before.
+  ('a second Stornorechnung under the former cancel flag', format($insert$insert into public.invoices (organization_id,
+    client_id, recipient_client_id, cancels_invoice_id, cancellation_reason)
     select %1$L, %2$L, %2$L, %3$L, 'Nochmal' where set_config('app.invoice_cancel', %3$L, true) is not null$insert$,
     '38080000-0000-4000-8000-000000000010', '38080000-0000-4000-8000-000000000020', pg_temp.id('cancelled')),
-    '23505'),
+    'invoice_link_fixed'),
+  ('a Stornorechnung under the former cancel flag', format($insert$insert into public.invoices (organization_id,
+    client_id, recipient_client_id, cancels_invoice_id, cancellation_reason)
+    select %1$L, %2$L, %2$L, %3$L, 'Nochmal' where set_config('app.invoice_cancel', %3$L, true) is not null$insert$,
+    '38080000-0000-4000-8000-000000000010', '38080000-0000-4000-8000-000000000020', pg_temp.id('kept')),
+    'invoice_link_fixed'),
+  ('a correction of a cancelled invoice under the former cancel flag', format($insert$insert into public.invoices (
+    organization_id, client_id, recipient_client_id, corrects_invoice_id)
+    select %1$L, %2$L, %2$L, %3$L where set_config('app.invoice_cancel', %3$L, true) is not null$insert$,
+    '38080000-0000-4000-8000-000000000010', '38080000-0000-4000-8000-000000000020', pg_temp.id('cancelled')),
+    'invoice_link_fixed'),
   ('back to Ausgestellt', format('update public.invoices set status = ''ausgestellt'' where id = %L',
     pg_temp.id('cancelled')), 'invoice_issued'),
   ('change the cancelled invoice', format('update public.invoices set order_reference = ''X'' where id = %L',
@@ -295,7 +317,7 @@ from (values
     'invoice_issued'),
   ('delete a Storno line', format('delete from public.invoice_lines where invoice_id = %L', pg_temp.id('storno')),
     'invoice_issued'),
-  -- Storniert only inside cancel_invoice for that invoice, and only beside its issued Stornorechnung.
+  -- Storniert only beside its issued Stornorechnung, which the cancel's history entry names.
   ('mark an invoice Storniert directly', format('update public.invoices set status = ''storniert'' where id = %L',
     pg_temp.id('kept')), 'invoice_issued'),
   ('mark it Storniert under the cancel flag without a Stornorechnung', format('update public.invoices
@@ -394,9 +416,9 @@ begin
 end;
 $$;
 
--- Inside a cancel, the link goes on a new draft only, since only issue_invoice issues and only the
--- registration names an original. Each half is refused on its own: an issued Stornorechnung without an
--- original, and a draft that names a filed invoice document.
+-- Every insert is a draft without an original, also under the former cancel flag, since only
+-- issue_invoice issues and only the registration names an original. Each half is refused on its own: an
+-- issued Stornorechnung without an original, and a draft that names a filed invoice document.
 select pg_temp.expect_refusal('an issued Stornorechnung written under the cancel flag', format(
   $insert$insert into public.invoices (organization_id, client_id, recipient_client_id, cancels_invoice_id,
     cancellation_reason, status, invoice_number, issue_date, issued_at, issue_snapshot)
@@ -452,32 +474,134 @@ begin
 end;
 $$;
 
--- The guard's one exception is narrow. Inside a cancel of „kept“ (the flag cancel_invoice raises), with
--- its issued Stornorechnung beside it, only its status may change; the bare transition passes.
-do $$
-declare
-  v_storno uuid;
-begin
-  perform set_config('app.invoice_cancel', pg_temp.id('kept')::text, true);
-  insert into public.invoices (organization_id, client_id, recipient_client_id, service_start, service_end,
-    cancels_invoice_id, cancellation_reason)
-  values ('38080000-0000-4000-8000-000000000010', '38080000-0000-4000-8000-000000000020',
-    '38080000-0000-4000-8000-000000000020', '2037-11-02', '2037-11-02', pg_temp.id('kept'), 'Probe')
-  returning id into v_storno;
-  insert into public.invoice_lines (organization_id, invoice_id, position, name, quantity, unit, unit_price_cents,
-    tax_category, tax_rate_basis_points, net_cents)
-  values ('38080000-0000-4000-8000-000000000010', v_storno, 1, 'Probe', 1, 'piece', 0, 'S', 1900, 0);
-  perform public.issue_invoice('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
-    v_storno, 1, gen_random_uuid(), (select issue_snapshot from issued where id = pg_temp.id('kept')),
+-- The guard checks the rows a cancel leaves, never a session setting. „kept“ gets a Stornorechnung beside
+-- a cancel: seeded past the link guard as a draft that negates it, then issued through issue_invoice.
+insert into ids values ('kept storno', gen_random_uuid());
+reset role;
+set local session_replication_role = replica;
+insert into public.invoices (id, organization_id, client_id, recipient_client_id, job_id, service_start,
+  service_end, payment_due_days, order_reference, buyer_reference, line_net_cents, tax_cents, gross_cents,
+  cancels_invoice_id, cancellation_reason, created_by, updated_by)
+select pg_temp.id('kept storno'), organization_id, client_id, recipient_client_id, job_id, service_start,
+  service_end, 0, order_reference, buyer_reference, -line_net_cents, -tax_cents, -gross_cents, id, 'Probe',
+  created_by, created_by
+from issued where id = pg_temp.id('kept');
+insert into public.invoice_lines (organization_id, invoice_id, position, name, description, quantity, unit,
+  unit_price_cents, price_quantity, tax_category, tax_rate_basis_points, net_cents, leistung_id, item_id)
+select organization_id, pg_temp.id('kept storno'), position, name, description, -quantity, unit, unit_price_cents,
+  price_quantity, tax_category, tax_rate_basis_points, -net_cents, leistung_id, item_id
+from issued_lines where invoice_id = pg_temp.id('kept');
+set local session_replication_role = origin;
+set local role service_role;
+create function pg_temp.issue_kept_storno() returns jsonb language sql as $$
+  select public.issue_invoice('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
+    pg_temp.id('kept storno'), 1, gen_random_uuid(), (select issue_snapshot from issued where id = pg_temp.id('kept')),
     public.get_invoice_settings('38080000-0000-4000-8000-000000000010') ->> 'nextInvoiceNumber',
-    (now() at time zone 'Europe/Berlin')::date);
-  perform set_config('app.invoice_cancel', '', true);
+    (now() at time zone 'Europe/Berlin')::date)
+$$;
+-- A Stornorechnung is issued only as the exact negation of the invoice it cancels.
+select pg_temp.expect_refusal(label, format('do $x$ begin %s; perform pg_temp.issue_kept_storno(); end $x$',
+  statement), 'invoice_issued')
+from (values
+  ('a Stornorechnung with a line more', format($line$insert into public.invoice_lines (organization_id, invoice_id,
+    position, name, quantity, unit, unit_price_cents, tax_category, tax_rate_basis_points, net_cents)
+    values (%L, %L, 9, 'Nachtrag', 1, 'piece', 0, 'S', 1900, 0)$line$, '38080000-0000-4000-8000-000000000010',
+    pg_temp.id('kept storno'))),
+  ('a Stornorechnung line without its catalog source', format($line$delete from public.invoice_lines
+      where invoice_id = %1$L and position = 1;
+    insert into public.invoice_lines (organization_id, invoice_id, position, name, description, quantity, unit,
+      unit_price_cents, price_quantity, tax_category, tax_rate_basis_points, net_cents)
+    select organization_id, %1$L, position, name, description, -quantity, unit, unit_price_cents, price_quantity,
+      tax_category, tax_rate_basis_points, -net_cents
+    from issued_lines where invoice_id = %2$L and position = 1$line$, pg_temp.id('kept storno'), pg_temp.id('kept'))),
+  ('a Stornorechnung without a line of the original', format(
+    'delete from public.invoice_lines where invoice_id = %L and position = 2', pg_temp.id('kept storno'))),
+  ('a Stornorechnung with another Leistungszeitraum', format(
+    'update public.invoices set service_end = service_end + 1 where id = %L', pg_temp.id('kept storno'))),
+  ('a Stornorechnung with another order reference', format(
+    'update public.invoices set order_reference = ''BE-0815'' where id = %L', pg_temp.id('kept storno'))),
+  ('a Stornorechnung with something due', format(
+    'update public.invoices set payment_due_days = 14 where id = %L', pg_temp.id('kept storno')))
+) as cases(label, statement);
+-- An issue that inserts no history entry still meets the commit-time check: beside a matching `issued` entry
+-- written before (seeded past the triggers), the Stornorechnung issued directly while its original stays
+-- Ausgestellt is refused at commit (here at once).
+savepoint seeded_issue_entry;
+reset role;
+set local session_replication_role = replica;
+insert into public.invoice_events (organization_id, invoice_id, event_type, status, version, payload, actor_id,
+  attempt_key)
+select storno.organization_id, storno.id, 'issued', 'ausgestellt', 2,
+  jsonb_build_object('invoiceNumber', public.get_invoice_settings(storno.organization_id) ->> 'nextInvoiceNumber',
+    'issueDate', (now() at time zone 'Europe/Berlin')::date, 'grossCents', storno.gross_cents),
+  '38080000-0000-4000-8000-000000000002', gen_random_uuid()
+from public.invoices storno where storno.id = pg_temp.id('kept storno');
+set local session_replication_role = origin;
+set local role service_role;
+select pg_temp.expect_refusal('a Stornorechnung issued beside an earlier issue entry, its original Ausgestellt',
+  format($sql$do $x$ begin
+    update public.invoices storno set status = 'ausgestellt', version = 2, issued_at = now(),
+      issue_date = (now() at time zone 'Europe/Berlin')::date, issued_by = %1$L, updated_by = %1$L,
+      invoice_number = public.get_invoice_settings(storno.organization_id) ->> 'nextInvoiceNumber',
+      issue_snapshot = kept.issue_snapshot, logo_storage_path = kept.logo_storage_path,
+      stationery_first_storage_path = kept.stationery_first_storage_path,
+      stationery_following_storage_path = kept.stationery_following_storage_path
+    from issued kept where storno.id = %2$L and kept.id = %3$L;
+    set constraints all immediate;
+  end $x$$sql$, '38080000-0000-4000-8000-000000000002', pg_temp.id('kept storno'), pg_temp.id('kept')),
+  'invoice_history_unkept');
+rollback to savepoint seeded_issue_entry;
+release savepoint seeded_issue_entry;
+set constraints invoice_history_kept, storno_original_cancelled deferred;
+select pg_temp.issue_kept_storno();
+-- At commit (here at once) no issued Stornorechnung stands beside an original still Ausgestellt.
+select pg_temp.expect_refusal('a Stornorechnung issued beside an original still Ausgestellt',
+  'do $x$ begin set constraints invoice_history_kept immediate; end $x$', 'invoice_history_unkept');
+set constraints invoice_history_kept deferred;
+-- Beside its issued Stornorechnung, even under the former cancel flag, „kept“ stays Ausgestellt while no
+-- cancel's history entry names that Stornorechnung.
+select pg_temp.expect_refusal(label, format(statement, pg_temp.id('kept')), 'invoice_issued')
+from (values
+  ('Storniert beside its Stornorechnung', 'update public.invoices set status = ''storniert'' where id = %L'),
+  ('Storniert beside its Stornorechnung under the former cancel flag', 'update public.invoices
+    set status = ''storniert'' where id = %1$L and set_config(''app.invoice_cancel'', %1$L, true) is not null')
+) as cases(label, statement);
+-- A cancel's history entry stands only beside its finished cancel, checked at commit (here at once): with
+-- „kept“ still Ausgestellt the transaction is refused.
+create function pg_temp.kept_cancelled_event(p_correction uuid default null) returns text language sql as $$
+  select format($sql$insert into public.invoice_events (organization_id, invoice_id, event_type, status, version,
+      payload, actor_id, attempt_key)
+    select original.organization_id, original.id, 'cancelled', 'storniert', original.version,
+      jsonb_build_object('stornoId', storno.id, 'stornoNumber', storno.invoice_number, 'issueDate', storno.issue_date,
+        'correctionId', %L::uuid), %L, gen_random_uuid()
+    from public.invoices original join public.invoices storno on storno.cancels_invoice_id = original.id
+    where original.id = %L$sql$, p_correction, '38080000-0000-4000-8000-000000000002', pg_temp.id('kept'))
+$$;
+select pg_temp.expect_refusal('a cancel''s history entry beside an unfinished cancel', format(
+  'do $x$ begin %s; set constraints invoice_history_kept immediate; end $x$', pg_temp.kept_cancelled_event()),
+  'invoice_history_unkept');
+-- A correction the entry names carries the original's terms and lines: one with other terms and no lines
+-- is refused at commit, though the rest of the cancel is finished.
+select pg_temp.expect_refusal('a cancel whose correction lacks the original''s terms and lines', format(
+  $sql$do $x$ begin
+    %s;
+    insert into public.invoices (id, organization_id, client_id, recipient_client_id, payment_due_days,
+      corrects_invoice_id, created_by, updated_by)
+    values (%L, %L, %L, %L, 99, %L, %L, %L);
+    update public.invoices set status = 'storniert' where id = %L;
+    set constraints invoice_history_kept immediate;
+  end $x$$sql$, pg_temp.kept_cancelled_event('38080000-0000-4000-8000-000000000501'),
+  '38080000-0000-4000-8000-000000000501', '38080000-0000-4000-8000-000000000010',
+  '38080000-0000-4000-8000-000000000020', '38080000-0000-4000-8000-000000000020', pg_temp.id('kept'),
+  '38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000002', pg_temp.id('kept')),
+  'invoice_history_unkept');
+set constraints invoice_history_kept deferred;
+-- With that history entry the status alone turns, whoever writes: these are the rows a cancel leaves.
+do $$
+begin
+  execute pg_temp.kept_cancelled_event();
 end;
 $$;
--- Beside its issued Stornorechnung but outside the cancel, the status stays.
-select pg_temp.expect_refusal('Storniert beside its Stornorechnung without the cancel flag',
-  format('update public.invoices set status = ''storniert'' where id = %L', pg_temp.id('kept')), 'invoice_issued');
-select set_config('app.invoice_cancel', pg_temp.id('kept')::text, true);
 select pg_temp.expect_refusal(label, format(statement, pg_temp.id('kept')), 'invoice_issued')
 from (values
   ('Storniert with another change',
@@ -490,7 +614,6 @@ from (values
   ('back to a draft', 'update public.invoices set status = ''entwurf'' where id = %L')
 ) as cases(label, statement);
 update public.invoices set status = 'storniert' where id = pg_temp.id('kept');
-select set_config('app.invoice_cancel', '', true);
 
 -- A credit (negative total) is not cancelled: its Stornorechnung would ask the customer to pay.
 insert into ids values ('credit', public.create_invoice('38080000-0000-4000-8000-000000000002',
@@ -507,10 +630,23 @@ select pg_temp.expect_refusal('cancel a credit', format(
   'select pg_temp.cancel(%L, %L, ''credit'', gen_random_uuid(), ''Falsch'', false)',
   '38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010'), 'invoice_not_cancellable');
 
+-- Only the cancel's own transaction links a correction: an entry from an earlier transaction names no new one.
+select pg_temp.expect_refusal('a correction named by an earlier cancel''s entry', format($sql$do $x$ begin
+    insert into public.invoice_events (organization_id, invoice_id, event_type, status, version, payload, actor_id,
+      attempt_key, created_at)
+    values (%1$L, %2$L, 'cancelled', 'storniert', 3, jsonb_build_object('correctionId', %3$L::uuid), %4$L,
+      gen_random_uuid(), now() - interval '1 day');
+    insert into public.invoices (id, organization_id, client_id, recipient_client_id, corrects_invoice_id)
+    values (%3$L, %1$L, %5$L, %5$L, %2$L);
+  end $x$$sql$, '38080000-0000-4000-8000-000000000010', pg_temp.id('cancelled'), '38080000-0000-4000-8000-000000000502',
+  '38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000020'), 'invoice_link_fixed');
+
 -- The correction is a draft like any: it is edited, and deleted with its link.
 select pg_temp.expect_refusal('move the correction to another invoice',
   format('update public.invoices set corrects_invoice_id = %L where id = %L', pg_temp.id('kept'),
     pg_temp.id('correction')), 'invoice_link_fixed');
+-- Every issue's and cancel's history entry stands beside its finished issue or cancel, as at commit.
+set constraints invoice_history_kept, storno_original_cancelled immediate;
 reset role;
 
 -- An employee and another organization read neither the Stornorechnung nor the correction; the office reads both.
