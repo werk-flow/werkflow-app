@@ -82,7 +82,8 @@ export type KiLiveBroadcast = {
 /**
  * Tells every tab that the person stopped an answer, from the stop itself:
  * the saved answer holds `length` of its text, whether or not the turn's
- * invocation still runs. The turn sends its own end too; a tab takes the first.
+ * invocation still runs. The turn sends no end of its own for a stopped
+ * answer: its last confirmed save may be shorter than one that landed.
  */
 export async function sendKiLiveStop(input: {
   threadId: string;
@@ -202,11 +203,8 @@ export function createKiLiveBroadcast(
       stop();
       await inFlight;
       if (revoked) return;
-      // A stopped answer keeps the text of its last partial save; a tab that holds more cuts back to it.
-      if (end.status !== 'complete' && end.failure === 'stopped') {
-        await post([endMessage(input.commandId, end, saved)], 2);
-        return;
-      }
+      // The stop route told every tab, with the length the database kept; this turn may know less.
+      if (end.status !== 'complete' && end.failure === 'stopped') return;
       const length = sent + pending.length;
       const last = takeText();
       await post([...(last ? [last] : []), endMessage(input.commandId, end, length)], 2);

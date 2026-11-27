@@ -97,7 +97,8 @@ export function answerMessage(live: LiveTurn): TimelineMessage {
     sequence: live.answerSequence,
     role: 'assistant',
     status: live.end?.status ?? 'streaming',
-    text: live.stoppedAt === null ? live.answer : live.answer.slice(0, live.stoppedAt),
+    // Held still only until the end: an answer that completed before the stop landed is whole.
+    text: live.stoppedAt === null || live.end ? live.answer : live.answer.slice(0, live.stoppedAt),
     failure: live.end?.message ?? null,
   };
 }

@@ -83,11 +83,8 @@ const outputCap = costMicroUsd(
   const ends = liveEvents().filter((event) => event.type === 'end');
   assert.deepEqual(
     ends.map((event) => event.type === 'end' && [event.status, event.length]),
-    [
-      ['cancelled', kept.length],
-      ['cancelled', kept.length],
-    ],
-    'every tab learns the stop from the stop itself and from the turn, at the saved text',
+    [['cancelled', kept.length]],
+    'every tab learns the stop once, from the stop itself, at the length the database kept',
   );
   assert.deepEqual(
     await (await postStop(command)).json(),
@@ -125,9 +122,10 @@ const outputCap = costMicroUsd(
   );
   assert.equal(answerItem()?.status, 'cancelled');
   assert.equal(ends[0], kept.length, 'the stop must tell every tab the length the database kept');
-  assert.ok(
-    ends.every((length) => length <= kept.length),
-    'no end may promise more text than the stop kept',
+  assert.deepEqual(
+    ends,
+    [kept.length],
+    'only the stop, which knows the saved length, may end a stopped answer',
   );
 }
 
@@ -224,6 +222,7 @@ const outputCap = costMicroUsd(
 // was spent.
 {
   resetAiTables(world);
+  const callsBefore = world.rpcCalls.length;
   const answer = world.rpc;
   let partialSaves = 0;
   let refusedText: string | null = null;
@@ -246,10 +245,36 @@ const outputCap = costMicroUsd(
     'a lost thread must stop the sending tab’s stream at once',
   );
   assert.equal(events.at(-1)?.failure, 'revoked');
+  assert.equal(
+    world.rpcCalls
+      .slice(callsBefore)
+      .filter((call) => call.name === 'update_ai_thread_item' && call.args.p_status !== 'streaming').length,
+    0,
+    'a turn whose author lost the thread writes no final answer',
+  );
   assert.deepEqual(runStatus(), ['cancelled'], 'a run whose author lost access settles at once');
   assert.equal(lastAttempt()?.p_outcome, 'revoked');
   assert.ok(
     Number(lastAttempt()?.p_cost_micro_usd) >= outputCap,
     'a revoked attempt is charged never less than it spent',
   );
+}
+
+// A final save that finds the author lost the thread is not tried again: the run settles at once.
+{
+  resetAiTables(world);
+  const answer = world.rpc;
+  let finalSaves = 0;
+  world.rpc = (call) => {
+    if (call.name === 'update_ai_thread_item' && call.args.p_status !== 'streaming') {
+      finalSaves += 1;
+      return { data: null, error: { message: 'ai_actor_without_access' } };
+    }
+    return answer(call);
+  };
+  const events = await readTurn(world, await postTurn('Wie lege ich einen Auftrag an?'));
+  world.rpc = answer;
+  assert.equal(finalSaves, 1, 'a lost thread at the final save must not be tried again');
+  assert.equal(events.at(-1)?.failure, 'revoked');
+  assert.deepEqual(runStatus(), ['cancelled']);
 }

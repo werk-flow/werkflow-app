@@ -775,6 +775,24 @@ test('a stop pressed before the message is saved goes once the turn has its answ
     .toEqual([{ threadId: THREAD_A, commandId: command }]);
 });
 
+test('an answer that completed before the stop landed shows whole, with no stop', async ({ page }) => {
+  await openChat(page);
+  await sendInThreadA(page, 'Wie entlüfte ich?');
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await emit(page, { type: 'text', delta: 'Erst ' });
+  await stopButton(page).click();
+  await emit(page, { type: 'text', delta: 'das Ventil.' });
+  await expect(timeline(page).getByText('Erst', { exact: true })).toBeVisible();
+  await emit(page, { type: 'end', status: 'complete' });
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'answered' }));
+  await expect(timeline(page).getByText('Erst das Ventil.', { exact: true })).toBeVisible();
+  await expect(timeline(page).getByText('Du hast die Antwort angehalten.', { exact: true })).toHaveCount(0);
+});
+
 test('a stop the server did not take lets the answer run on and says so', async ({ page }) => {
   await openChat(page);
   const command = await sendInThreadA(page, 'Wie entlüfte ich?');

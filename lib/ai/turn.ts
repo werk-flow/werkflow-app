@@ -363,7 +363,8 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
   const body =
     end.status === 'complete' ? { text: answer.text } : { text: answer.text, failure: end.failure };
   await answer.saving;
-  const saved = await saveAnswer(context, answer, end.status, body);
+  // An author who lost the thread gets no final write: it would only be refused again.
+  const saved = answer.halted !== 'revoked' && (await saveAnswer(context, answer, end.status, body));
   // A stop that landed after the last partial save is first seen by the final save, which it refused.
   if (answer.halted) end = failedEnd('cancelled', answer.halted);
   else if (!saved) end = failedEnd('failed', 'interrupted');
@@ -377,8 +378,9 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
  * Writes an answer's end, trying again within its time limit. An answer
  * already finished counts as saved: while the run is open, only the run and
  * the person's stop finish its answer, and a stopped one refuses as stopped,
- * so a plain refusal says an earlier try landed. Left streaming, the answer
- * keeps its last partial save, and the database job finishes it.
+ * so a plain refusal says an earlier try landed. A stop or a lost thread ends
+ * the tries and halts the turn. Left streaming, the answer keeps its last
+ * partial save, and the database job finishes it.
  */
 async function saveAnswer(
   context: TurnContext,
@@ -402,7 +404,8 @@ async function saveAnswer(
         .abortSignal(signal),
     (message) => {
       haltOnRefusal(context, answer, message);
-      return message === 'ai_thread_item_finished' || message === STOPPED;
+      // A stop or a lost thread is final: no try changes it.
+      return message === 'ai_thread_item_finished' || message === STOPPED || LOST_ACCESS.has(message);
     },
   );
 }
