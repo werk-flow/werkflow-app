@@ -21,7 +21,7 @@ Write the set-up into the climb's issue or brief, and get the owner's yes on it:
 - **Evidence:** how closeness to the goal is shown. Prefer a measurement (job-minutes, lab counts, timings, failure rates). Where none exists, such as UI and UX, name the rubric and the captures the council judges.
 - **Pass score:** the overall score out of 10 that every member must give, for example 9.
 - **Scope:** what may change and what stays out. Name the hard limits, such as "no lower coverage" or "no new paid service".
-- **Members:** the default is two Claude Opus and two GPT Sol at their newest versions. The owner may name others.
+- **Members:** the default is one Claude Opus and one GPT Sol at their newest versions. The owner may name others.
 - **Round budget:** at most 4 rounds unless the owner sets another number.
 
 Only the owner changes the goal, the pass score, the scope or the budget, and only between rounds. A member never adds a goal.
@@ -93,8 +93,8 @@ Goal: <goal>  Pass score: <n>/10  Rounds: <N>  Result: <passed|budget ended|plat
 
 | Member | Round 1 | Round 2 |
 | --- | --- | --- |
-| Claude Opus A | 6/10 | 8/10 |
-| GPT Sol A | 5/10 | 8/10 |
+| Claude Opus | 6/10 | 8/10 |
+| GPT Sol | 5/10 | 8/10 |
 ```
 
 Write `no score` where a member gave none. Never invent one. Edit an open PR's description; do not post a comment. Without a PR, put the table in the final reply.
