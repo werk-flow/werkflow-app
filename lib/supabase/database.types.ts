@@ -12594,6 +12594,41 @@ export type Database = {
           },
         ];
       };
+      time_correction_application_spans: {
+        Row: {
+          application_id: string;
+          id: number;
+          organization_id: string;
+          snapshot: string;
+          span: unknown;
+          user_id: string | null;
+        };
+        Insert: {
+          application_id: string;
+          id?: never;
+          organization_id: string;
+          snapshot: string;
+          span: unknown;
+          user_id?: string | null;
+        };
+        Update: {
+          application_id?: string;
+          id?: never;
+          organization_id?: string;
+          snapshot?: string;
+          span?: unknown;
+          user_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_correction_application_spans_application_id_fkey";
+            columns: ["application_id"];
+            isOneToOne: false;
+            referencedRelation: "time_correction_applications";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       time_correction_applications: {
         Row: {
           applied_at: string;

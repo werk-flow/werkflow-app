@@ -236,17 +236,24 @@ export async function acquireHeavySlot(label: string, signal?: AbortSignal): Pro
 }
 
 /**
- * Runs one command inside a heavy slot when `heavy` holds, and resolves with
- * its exit code. The command leads its own process group: Ctrl+C, a closed
- * terminal or SIGTERM stop its whole tree before the slot frees
- * (lib/testing/local-stack/test-session.ts). `scripts/heavy.ts` and
+ * Runs commands one after another inside one heavy slot when `heavy` holds,
+ * and resolves with the first failed exit code, or 0. Every command runs, so
+ * a failed one hides no later output. Each command leads its own process group:
+ * Ctrl+C, a closed terminal or SIGTERM stop its whole tree before the slot
+ * frees (lib/testing/local-stack/test-session.ts). `scripts/heavy.ts` and
  * `scripts/lint.ts` use it.
  */
-export function runInHeavySlot(command: readonly string[], heavy = true): Promise<number> {
+export function runInHeavySlot(commands: readonly (readonly string[])[], heavy = true): Promise<number> {
   return withTestSession(async (signal) => {
-    const slot = heavy ? await acquireHeavySlot(command.join(' ').slice(0, 80), signal) : null;
+    const label = commands.map((command) => command.join(' ')).join(' && ');
+    const slot = heavy ? await acquireHeavySlot(label.slice(0, 80), signal) : null;
     try {
-      return await runSessionCommand(command, { signal, stdio: 'inherit' });
+      let exitCode = 0;
+      for (const command of commands) {
+        const code = await runSessionCommand(command, { signal, stdio: 'inherit' });
+        if (exitCode === 0) exitCode = code;
+      }
+      return exitCode;
     } finally {
       slot?.release();
     }

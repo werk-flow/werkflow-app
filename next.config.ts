@@ -47,6 +47,14 @@ const nextConfig = (phase: string): NextConfig => ({
     // app/sw.js/route.ts (docs/decisions/0010-offline-field-sync-contract.md).
     WERKFLOW_SERVICE_WORKER: serviceWorkerScript(__dirname, phase, process.env),
   },
+  // Server Actions can run from any page; keep their app-root assets in every function bundle.
+  outputFileTracingIncludes: {
+    '/**': [
+      './lib/document-rendering/fonts/*.ttf',
+      './lib/document-rendering/color/*.icc',
+      './lib/invoicing/rules/en16931-cii.sef.json.gz',
+    ],
+  },
   cacheComponents: true,
   // Keeps the prefetch behaviour the lab references measured (Next 16.4 warns
   // while this is unset). Partial Prefetching changes what every <Link> and

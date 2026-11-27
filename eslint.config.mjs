@@ -1199,6 +1199,16 @@ const eslintConfig = defineConfig([
       'quality/function-size': ['error', { max: FUNCTION_LINE_LIMIT }],
     },
   },
+  {
+    files: ['app/**/*.{ts,tsx,js,mjs}', 'lib/**/*.{ts,tsx,js,mjs}', 'components/**/*.{ts,tsx,js,mjs}'],
+    ignores: [
+      '**/*.test.{ts,tsx,mjs}',
+      // rules:en16931 runs this compiler in Bun to prepare assets, never in the app bundle.
+      'lib/invoicing/rules/compile.ts',
+    ],
+    plugins: { quality: qualityRules },
+    rules: { 'quality/no-import-meta-file-read': 'error' },
+  },
   // Narrow instead of asserting: `!` hides the missing-value branch the strict
   // index and optional flags exist to surface (typescript-best-practices
   // skill). Every TypeScript file: product code, tests, scripts and hooks.

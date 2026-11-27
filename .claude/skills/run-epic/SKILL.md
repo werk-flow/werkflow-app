@@ -81,8 +81,20 @@ The notifier checks every 10 minutes that your PRs and your epic move: a thread 
 - the owner: a question through the question tool;
 - a time: snooze your thread until then with `t3_thread_update` (`snoozedUntil`), and say why in the State;
 - another epic's issue or PR: a `Waiting: <your threadId>` comment on it.
+- a `ci-alert` issue: a `Waiting:` comment counts only while a live thread owns the alert. If nobody owns it, take it: comment `ci-alert owner: <your threadId>` on it and fix it.
 
 A snooze or a `Waiting:` comment stops counting once its item shows no movement for 4 hours; an open question to the owner counts until it is answered. A message that starts with `[notifier]` lists the facts: act on them, or record a real reason. At the third stall message in a row for the same item, ask the owner through the question tool.
+
+## Reach another lead
+
+A comment on another lead's epic wakes nobody. Send the message to their thread, from a werkflow-planning checkout:
+
+```bash
+python3 ops/lead.py find planning#16                      # the lead thread of epic #16, or of app#694 for a PR
+python3 ops/lead.py send planning#16 "To the E2a lead: …"  # prints started, steered or queued
+```
+
+A non-zero exit means nothing arrived: no live lead resolved (1) or T3 confirmed no delivery (3). Keep a `Lead thread: <your threadId>` line in your epic's body, so others find you. A comment on an epic that begins `To the <name> lead:` also reaches that epic's lead through the notifier, once.
 
 ## Hand over at about 400k
 

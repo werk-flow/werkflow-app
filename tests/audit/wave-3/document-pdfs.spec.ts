@@ -5,7 +5,7 @@ import {
 } from '../../golden/support/db/maintenance-visits';
 import { expect, test } from '../support/fixtures';
 import {
-  COMPLETED_VISITS_PATH,
+  openCompletedVisits,
   completedVisitRow,
   createServiceReportButton,
   downloadServiceReportButton,
@@ -58,7 +58,7 @@ test.describe('Document PDFs in the built app @AUDIT-W3-DOCUMENT-PDFS @AUDIT-W3'
     });
 
     await test.step('„Servicebericht erstellen“ renders, files and offers the report', async () => {
-      await bueroPage.goto(COMPLETED_VISITS_PATH);
+      await openCompletedVisits(bueroPage);
       const row = completedVisitRow(bueroPage, visit.planNumber);
       await createServiceReportButton(row).click();
       await expect(serviceReportFiledBanner(bueroPage)).toBeVisible();

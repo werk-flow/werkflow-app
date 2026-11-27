@@ -244,11 +244,14 @@ function useClockServerView(activeOrgId: string | null, viewerId: string | null)
   const view = useLiveView<ServerClock | null>({
     // An approved correction of the viewer's own time changes today's totals
     // (its approval updates the request), and a saved break rule the running day's.
+    // Time the office moves to the viewer arrives through their own signal row:
+    // they cannot read that request.
     tables: [
       'time_entries',
       'time_sessions',
       'time_segments',
       'time_correction_requests',
+      'employment_target_signals',
       'organization_settings',
       'jobs',
     ],
