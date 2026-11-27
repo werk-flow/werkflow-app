@@ -7,7 +7,7 @@ import {
   type TimeSegmentFact,
 } from '@/lib/time-tracking/segments';
 import type { BreakPolicy } from '@/lib/time-tracking/settings';
-import type { LiveClockState, TimeEntry } from '@/lib/time-tracking/types';
+import type { LiveClockState, TimeEntry, WeeklyTimeDataPoint } from '@/lib/time-tracking/types';
 import { buildWeeklyTimeData } from '@/lib/time-tracking/weekly';
 import { automaticBreakRuleArbitrary } from './break-rule-arbitraries';
 
@@ -159,7 +159,11 @@ export function liveDayTarget(targetMinutes: number): DailyTarget {
 }
 
 /** The week's split of the live day once it has ended at `nowMs`; an unknown target leaves the week without one. */
-export function weekDayOf(day: LiveDay, policy: BreakPolicy, target: number | undefined) {
+export function weekDayOf(
+  day: LiveDay,
+  policy: BreakPolicy,
+  target: number | undefined,
+): WeeklyTimeDataPoint | undefined {
   const [weekDay] = buildWeeklyTimeData(
     liveDayEntriesOf(endedAtNow(day)),
     LIVE_DAY_START,
@@ -170,7 +174,7 @@ export function weekDayOf(day: LiveDay, policy: BreakPolicy, target: number | un
 }
 
 /** The day's segments as the week and the member status read them: projected clock entries carrying their activity. */
-export function liveDayEntriesOf(segments: TimeSegmentFact[], now = new Date()): TimeEntry[] {
+export function liveDayEntriesOf(segments: TimeSegmentFact[], now: Date = new Date()): TimeEntry[] {
   const kindOf = new Map(segments.map((fact) => [fact.id, fact.kind]));
   return projectTimeSegmentsToLegacyTransitions(segments, LIVE_DAY_START, LIVE_DAY_END, now).map(
     (point, index) => ({
