@@ -93,6 +93,7 @@ declare global {
       | 'invoice-deliveries-retry'
       | 'invoice-deliveries-stale-retry'
       | 'service-report-delivery'
+      | 'offer-delivery'
       | 'site-access-review'
       | 'site-access-proposal'
       | AuthUrlFixtureName

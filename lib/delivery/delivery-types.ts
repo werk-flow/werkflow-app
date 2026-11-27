@@ -5,8 +5,8 @@ import { z } from '@/lib/zod';
 // send and record actions (supabase/migrations/20270310100000_record_document_deliveries.sql).
 // The table checks repeat the limits.
 
-/** What a delivery sends: an issued invoice's original or a filed Servicebericht. Offers join as a kind. */
-export type DeliverySubject = { kind: 'invoice' | 'service_report'; id: string };
+/** What a delivery sends: an issued invoice's original, a filed Servicebericht or a sent offer revision's PDF. */
+export type DeliverySubject = { kind: 'invoice' | 'service_report' | 'offer_revision'; id: string };
 
 export const DELIVERY_STATES = ['sending', 'sent', 'failed'] as const;
 export type DeliveryState = (typeof DELIVERY_STATES)[number];
@@ -55,6 +55,9 @@ export type DeliveryList = { total: number; entries: DeliveryEntry[] };
 
 /** What the email form proposes; the office changes each before it sends. */
 export type DeliveryMailDefaults = { recipient: string; subject: string; text: string };
+
+/** „Versand“ of one subject: its deliveries and what the email form proposes, null when that read failed. */
+export type DeliveryView = { list: DeliveryList; defaults: DeliveryMailDefaults | null };
 
 /** An address the transport takes: one recipient, no display name. */
 export const recipientSchema = z.email().max(254);
