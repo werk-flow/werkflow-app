@@ -487,9 +487,9 @@ select pg_temp.id('kept storno'), organization_id, client_id, recipient_client_i
   created_by, created_by
 from issued where id = pg_temp.id('kept');
 insert into public.invoice_lines (organization_id, invoice_id, position, name, description, quantity, unit,
-  unit_price_cents, price_quantity, tax_category, tax_rate_basis_points, net_cents)
+  unit_price_cents, price_quantity, tax_category, tax_rate_basis_points, net_cents, leistung_id, item_id)
 select organization_id, pg_temp.id('kept storno'), position, name, description, -quantity, unit, unit_price_cents,
-  price_quantity, tax_category, tax_rate_basis_points, -net_cents
+  price_quantity, tax_category, tax_rate_basis_points, -net_cents, leistung_id, item_id
 from issued_lines where invoice_id = pg_temp.id('kept');
 set local session_replication_role = origin;
 set local role service_role;
@@ -507,6 +507,13 @@ from (values
     position, name, quantity, unit, unit_price_cents, tax_category, tax_rate_basis_points, net_cents)
     values (%L, %L, 9, 'Nachtrag', 1, 'piece', 0, 'S', 1900, 0)$line$, '38080000-0000-4000-8000-000000000010',
     pg_temp.id('kept storno'))),
+  ('a Stornorechnung line without its catalog source', format($line$delete from public.invoice_lines
+      where invoice_id = %1$L and position = 1;
+    insert into public.invoice_lines (organization_id, invoice_id, position, name, description, quantity, unit,
+      unit_price_cents, price_quantity, tax_category, tax_rate_basis_points, net_cents)
+    select organization_id, %1$L, position, name, description, -quantity, unit, unit_price_cents, price_quantity,
+      tax_category, tax_rate_basis_points, -net_cents
+    from issued_lines where invoice_id = %2$L and position = 1$line$, pg_temp.id('kept storno'), pg_temp.id('kept'))),
   ('a Stornorechnung without a line of the original', format(
     'delete from public.invoice_lines where invoice_id = %L and position = 2', pg_temp.id('kept storno'))),
   ('a Stornorechnung with another Leistungszeitraum', format(

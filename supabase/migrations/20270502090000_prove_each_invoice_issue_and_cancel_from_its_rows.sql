@@ -272,22 +272,26 @@ begin
           is distinct from (0, null::integer, null::integer, '', '')
         or exists (
           (select line.position, line.name, line.description, -line.quantity, line.unit, line.unit_price_cents,
-              line.price_quantity, line.tax_category, line.tax_rate_basis_points, -line.net_cents
+              line.price_quantity, line.tax_category, line.tax_rate_basis_points, -line.net_cents,
+              line.leistung_id, line.item_id
             from public.invoice_lines line
             where line.invoice_id = v_cancelled.id and line.organization_id = new.organization_id)
           except
           (select line.position, line.name, line.description, line.quantity, line.unit, line.unit_price_cents,
-              line.price_quantity, line.tax_category, line.tax_rate_basis_points, line.net_cents
+              line.price_quantity, line.tax_category, line.tax_rate_basis_points, line.net_cents,
+              line.leistung_id, line.item_id
             from public.invoice_lines line
             where line.invoice_id = new.id and line.organization_id = new.organization_id))
         or exists (
           (select line.position, line.name, line.description, line.quantity, line.unit, line.unit_price_cents,
-              line.price_quantity, line.tax_category, line.tax_rate_basis_points, line.net_cents
+              line.price_quantity, line.tax_category, line.tax_rate_basis_points, line.net_cents,
+              line.leistung_id, line.item_id
             from public.invoice_lines line
             where line.invoice_id = new.id and line.organization_id = new.organization_id)
           except
           (select line.position, line.name, line.description, -line.quantity, line.unit, line.unit_price_cents,
-              line.price_quantity, line.tax_category, line.tax_rate_basis_points, -line.net_cents
+              line.price_quantity, line.tax_category, line.tax_rate_basis_points, -line.net_cents,
+              line.leistung_id, line.item_id
             from public.invoice_lines line
             where line.invoice_id = v_cancelled.id and line.organization_id = new.organization_id))
       then
@@ -304,7 +308,7 @@ begin
       on storno.cancels_invoice_id = old.id and storno.organization_id = old.organization_id
       and storno.status = 'ausgestellt' and event.payload ->> 'stornoId' = storno.id::text
     where event.organization_id = old.organization_id and event.invoice_id = old.id
-      and event.event_type = 'cancelled' and event.status = 'storniert';
+      and event.event_type = 'cancelled' and event.status = 'storniert' and event.version = old.version;
     if v_event.id is not null then
       perform app_private.lock_office_actor(old.organization_id, v_event.actor_id);
       return new;
@@ -361,8 +365,9 @@ revoke all on function app_private.guard_issued_invoice() from public, anon, aut
 
 -- 4. An issue's or a cancel's history entry, written first, stands only beside the rows it names: checked
 -- at commit, so a transaction that wrote the entry but left the issue or cancel unfinished rolls back. A
--- cancel's entry names its Storniert invoice, its issued Stornorechnung with that number and day, and the
--- correction draft it opened, if any. Refusal: invoice_history_unkept.
+-- cancel's entry names its Storniert invoice at that version, its issued Stornorechnung with that number
+-- and day, and the correction draft it opened, if any; so no issued Stornorechnung commits beside an
+-- original still Ausgestellt. Refusal: invoice_history_unkept.
 create function app_private.check_invoice_history_kept()
 returns trigger
 language plpgsql
@@ -383,7 +388,7 @@ begin
     not exists (
       select 1 from public.invoices original
       where original.id = new.invoice_id and original.organization_id = new.organization_id
-        and original.status = 'storniert')
+        and original.status = 'storniert' and original.version = new.version)
     or not exists (
       select 1 from public.invoices storno
       where storno.id::text = new.payload ->> 'stornoId' and storno.organization_id = new.organization_id
