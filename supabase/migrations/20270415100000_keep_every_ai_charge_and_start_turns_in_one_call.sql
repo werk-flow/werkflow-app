@@ -22,7 +22,9 @@
 create index ai_thread_items_streaming_idx on public.ai_thread_items (created_at)
   where status = 'streaming';
 
--- Unchanged but for one line: every open hold counts, whatever its age.
+-- Changed in the open holds only: every open run counts, whatever its age,
+-- and its hold deducts only the attempts this month's spend already counts,
+-- so a run open across midnight holds its full reservation.
 create or replace function public.reserve_ai_run(
   p_organization_id uuid,
   p_user_id uuid,
@@ -81,6 +83,7 @@ begin
       left join lateral (
         select sum(attempt.cost_micro_usd) as cost from public.ai_run_attempts attempt
         where attempt.run_id = run.id and attempt.organization_id = p_organization_id
+          and attempt.created_at >= v_month_start
       ) recorded on true
       where run.organization_id = p_organization_id and run.status = 'reserved'
     ), 0)
@@ -100,12 +103,20 @@ end;
 $$;
 
 -- Finishes an answer nobody will finish: as interrupted, with the text its
--- last save held. A finished answer stays as it was.
+-- last save held. A finished answer stays as it was. A body the failure code
+-- would push over the item cap (the harness saves at most 48 KB, so only a
+-- body written past it) loses its text instead, so the finish never fails.
 create function app_private.abandon_ai_answer(p_organization_id uuid, p_item_id uuid)
 returns void language plpgsql security definer set search_path = '' as $$
 begin
   update public.ai_thread_items item
-  set status = 'failed', body = item.body || '{"failure":"interrupted"}'::jsonb, updated_at = now()
+  set status = 'failed',
+    body = case
+      when octet_length((item.body || '{"failure":"interrupted"}'::jsonb)::text) <= 65536
+        then item.body || '{"failure":"interrupted"}'::jsonb
+      else '{"text":"","failure":"interrupted"}'::jsonb
+    end,
+    updated_at = now()
   where item.id = p_item_id and item.organization_id = p_organization_id
     and item.kind = 'assistant_message' and item.status = 'streaming';
 end;

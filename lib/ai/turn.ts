@@ -325,7 +325,7 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
   try {
     const history = await readHistory(context.admin, command, context.userItem.sequence, turnSignal);
     if (history === 'load_failed') {
-      end = failedEnd('failed', 'interrupted');
+      end = turnSignal.aborted ? failedEnd('cancelled', 'timeout') : failedEnd('failed', 'interrupted');
     } else {
       const modelContext = await buildAiContext({
         role: command.role,

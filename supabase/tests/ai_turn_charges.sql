@@ -126,8 +126,11 @@ begin
     'af000000-0000-4000-8000-000000000002', 'af000000-0000-4000-8000-000000000021', 'Aus',
     'af000000-0000-4000-8000-000000000032', 'Zweite Frage', 1000000) started);
   if verdict is distinct from 'run_active'
-    or exists (select 1 from public.ai_runs where organization_id = 'af000000-0000-4000-8000-000000000011') then
-    raise exception 'A person''s open run in another organization did not block a second run';
+    or exists (select 1 from public.ai_runs where organization_id = 'af000000-0000-4000-8000-000000000011')
+    or (select string_agg(item.kind::text || '=' || (item.body ->> 'text'), ',') from public.ai_thread_items item
+        where item.idempotency_key like 'af000000-0000-4000-8000-000000000032%')
+      is distinct from 'user_message=Zweite Frage' then
+    raise exception 'A person''s open run in another organization did not block a second run, or it left more than the message';
   end if;
 
   -- Another person's thread is not found, and the failed start writes nothing.
@@ -241,7 +244,7 @@ insert into public.ai_run_attempts (organization_id, run_id, idempotency_key, mo
  'claude-haiku-5-5', 'prompt-v1', 10, 10, 0, 0, 2000000, 'completed');
 insert into public.ai_threads (id, organization_id, user_id, title, last_sequence) values
 ('af000000-0000-4000-8000-000000000023', 'af000000-0000-4000-8000-000000000011',
- 'af000000-0000-4000-8000-000000000002', 'Liegen geblieben', 3);
+ 'af000000-0000-4000-8000-000000000002', 'Liegen geblieben', 4);
 insert into public.ai_thread_items (id, organization_id, thread_id, sequence, kind, status, idempotency_key, body,
   created_at) values
 ('af000000-0000-4000-8000-000000000050', 'af000000-0000-4000-8000-000000000011',
@@ -252,7 +255,11 @@ insert into public.ai_thread_items (id, organization_id, thread_id, sequence, ki
  '{"text":"Fertig"}', now() - interval '20 minutes'),
 ('af000000-0000-4000-8000-000000000052', 'af000000-0000-4000-8000-000000000011',
  'af000000-0000-4000-8000-000000000023', 3, 'assistant_message', 'streaming', 'live:assistant',
- '{"text":"Läuft"}', now() - interval '14 minutes 59 seconds');
+ '{"text":"Läuft"}', now() - interval '14 minutes 59 seconds'),
+-- A body at the item cap, which the failure code would push over it.
+('af000000-0000-4000-8000-000000000053', 'af000000-0000-4000-8000-000000000011',
+ 'af000000-0000-4000-8000-000000000023', 4, 'assistant_message', 'streaming', 'full:assistant',
+ jsonb_build_object('text', repeat('x', 65524)), now() - interval '20 minutes');
 
 select app_private.settle_stale_ai_runs();
 -- A second run of the job books nothing more.
@@ -288,6 +295,42 @@ begin
     or (select status from public.ai_thread_items where id = 'af000000-0000-4000-8000-000000000052')
       is distinct from 'streaming' then
     raise exception 'The job changed a finished answer or one still being written';
+  end if;
+  if (select status::text || body::text from public.ai_thread_items where id = 'af000000-0000-4000-8000-000000000053')
+      is distinct from 'failed{"text": "", "failure": "interrupted"}' then
+    raise exception 'An answer at the item cap was not finished as interrupted';
+  end if;
+end;
+$$;
+
+-- A run open across the Berlin midnight that starts a month holds its full
+-- reservation: the attempt it recorded last month counts there, not against
+-- this month's hold.
+insert into public.ai_threads (id, organization_id, user_id, title) values
+('af000000-0000-4000-8000-000000000024', 'af000000-0000-4000-8000-000000000010',
+ 'af000000-0000-4000-8000-000000000001', 'Über Mitternacht');
+insert into public.ai_runs (id, organization_id, thread_id, user_id, idempotency_key, reserved_micro_usd, created_at)
+values ('af000000-0000-4000-8000-000000000044', 'af000000-0000-4000-8000-000000000010',
+  'af000000-0000-4000-8000-000000000024', 'af000000-0000-4000-8000-000000000001', 'midnight-run', 30000000,
+  (date_trunc('month', now() at time zone 'Europe/Berlin') at time zone 'Europe/Berlin') - interval '1 minute');
+insert into public.ai_run_attempts (organization_id, run_id, idempotency_key, model_id, prompt_version,
+  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, outcome, created_at) values
+('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000044', 'midnight-run:1:0',
+ 'claude-haiku-5-5', 'prompt-v1', 10, 10, 0, 0, 10000000, 'completed',
+ (date_trunc('month', now() at time zone 'Europe/Berlin') at time zone 'Europe/Berlin') - interval '1 microsecond');
+set local role service_role;
+do $$
+declare
+  verdict text;
+begin
+  -- This month: at most EUR 1 spent, EUR 15 held by the started turn and EUR 30
+  -- by the midnight run. EUR 6 more is over EUR 50; deducting last month's
+  -- EUR 10 from the hold would let it fit.
+  verdict := (select started.verdict from public.start_ai_turn('af000000-0000-4000-8000-000000000010',
+    'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000024', 'Über Mitternacht',
+    'af000000-0000-4000-8000-000000000036', 'Neue Frage', 6000000) started);
+  if verdict is distinct from 'budget_exhausted' then
+    raise exception 'A run open across the month start held less than its reservation: %', verdict;
   end if;
 end;
 $$;

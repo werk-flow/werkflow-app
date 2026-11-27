@@ -150,6 +150,13 @@ const isOpen = (run: Row): boolean =>
 /** `start_ai_turn`: the thread, the message, the open-run check, the reservation and the empty answer. */
 function startTurn(world: AiTurnWorld, args: Row): Outcome {
   const rows = (table: string): Row[] => tableRows(world, table);
+  // An error rolls the whole call back, as the SQL function's transaction does.
+  const [threads, items] = [rows('ai_threads').length, rows('ai_thread_items').length];
+  const rollBack = (outcome: Outcome): Outcome => {
+    rows('ai_threads').splice(threads);
+    rows('ai_thread_items').splice(items);
+    return outcome;
+  };
   const thread = rows('ai_threads').find((row) => row.id === args.p_thread_id);
   if (!thread) {
     rows('ai_threads').push({
@@ -191,8 +198,8 @@ function startTurn(world: AiTurnWorld, args: Row): Outcome {
   if (rows('ai_runs').some((run) => run.user_id === args.p_user_id && isOpen(run)))
     return verdict('run_active');
   const reservation = reserve(world, { ...args, p_idempotency_key: command });
-  if (reservation.status !== 'reserved')
-    return reservation.status === 'raised' ? reservation.outcome : verdict(reservation.status);
+  if (reservation.status === 'raised') return rollBack(reservation.outcome);
+  if (reservation.status !== 'reserved') return verdict(reservation.status);
   const answerItem = appendItem(
     world,
     args,
