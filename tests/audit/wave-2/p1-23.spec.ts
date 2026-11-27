@@ -89,7 +89,7 @@ test.describe('P1-23 time-account audit @AUDIT-W2-P1-23 @AUDIT-W2', () => {
       const bueroSettings = timeAccountSettings(bueroPage);
       await expect(visibleText(bueroSettings, TIME_ACCOUNT_COPY.bueroMayRequest)).toBeVisible();
       await requestTimeAccountAdjustment(bueroSettings, employeeName, {
-        minutes: 45,
+        hours: '+0:45',
         reason: 'Audit: nicht übernehmen',
         effectiveDate: ownedBerlinDateAtOffset('p1-23', 120),
       });
