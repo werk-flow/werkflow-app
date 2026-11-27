@@ -36,7 +36,7 @@ jobs:
     outputs:
       run: ${{ steps.decide.outputs.run }}
     steps:
-      # The rule diffs main since its newest full run and plans that diff; no step needs the job
+      # The rule reads main's diff since its newest full run; no step needs the job
       # token in .git/config.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

@@ -153,15 +153,15 @@ test('the nightly shares the release cron line, so the release usually reuses it
   expect(nightlyWorkflow).toMatch(/- cron: '\d+ \d+ \* \* \*'\n {6}timezone: Europe\/Berlin/);
 });
 
-test('main gets a full run after a tooling change or every 3 hours from 06:00 to 20:00 Berlin, and no job waits for it', () => {
+test('main gets a full run for landed changes every 6 hours from 06:00 to 20:00 Berlin, and no job waits for it', () => {
   // GitHub starts scheduled runs hours late (#184), so ops/ci-alert.py in werk-flow/werkflow-planning
   // dispatches the workflow, and the workflow decides at once whether a full run is due.
   expect(mainFullRunWorkflow).toMatch(/\non:\n {2}workflow_dispatch:\n\n/);
   expect(mainFullRunWorkflow).not.toMatch(/\n {2}(schedule|push):/);
   expect(mainFullRunWorkflow).not.toMatch(/\bsleep\b/);
-  // Berlin's window and the interval (ops/ci-alert.py keeps the same three for its dispatches); the
+  // Berlin's window and the interval belong to the
   // repository's rule owns them (lib/testing/ci/full-run.ts), and the script asks it.
-  expect(FULL_RUN_SLOTS).toEqual({ first: '06:00', last: '20:00', intervalMs: 3 * 3600 * 1000 });
+  expect(FULL_RUN_SLOTS).toEqual({ first: '06:00', last: '20:00', intervalMs: 6 * 3600 * 1000 });
   expect(mainFullRunScript).toContain('bun scripts/ci/full-run.ts due');
   // The decision ends in minutes.
   expect(mainFullRunWorkflow).toMatch(

@@ -90,11 +90,15 @@ export function fullRunDue(input: {
   const due = input.now.getTime() - started >= FULL_RUN_SLOTS.intervalMs;
   if (daytime && due)
     return { run: true, reason: `main moved ${behind} commits since the full run on ${commit}.` };
+  const nextClock = berlinClock(new Date(started + FULL_RUN_SLOTS.intervalMs));
   return {
     run: false,
-    reason: daytime
-      ? `The full run on ${commit} started ${Math.floor((input.now.getTime() - started) / 60_000)} min ago; the next slot is at ${berlinClock(new Date(started + FULL_RUN_SLOTS.intervalMs))} Berlin time.`
-      : `It is ${clock} in Berlin; daytime full runs start from ${FULL_RUN_SLOTS.first} to ${FULL_RUN_SLOTS.last}.`,
+    reason:
+      daytime && nextClock >= FULL_RUN_SLOTS.first && nextClock < FULL_RUN_SLOTS.last
+        ? `The full run on ${commit} started ${Math.floor((input.now.getTime() - started) / 60_000)} min ago; the next slot is at ${nextClock} Berlin time.`
+        : daytime
+          ? `The next interval after the full run on ${commit} falls outside the daytime window; changes wait for the nightly.`
+          : `It is ${clock} in Berlin; daytime full runs start from ${FULL_RUN_SLOTS.first} to ${FULL_RUN_SLOTS.last}.`,
   };
 }
 

@@ -89,6 +89,19 @@ test('a daytime slot starts a full run 6 hours after the last one, and never at 
   );
 });
 
+test('a daytime landing waits for the nightly when the next interval is outside the window', () => {
+  const started = new Date('2026-11-21T13:30:00Z'); // 14:30 Berlin.
+  const runs = [ended('c1', started)];
+  const change = landed(['scripts/ci/job.ts']);
+  const afternoon = decide(runs, { now: new Date('2026-11-21T14:00:00Z'), landed: change });
+  expect(afternoon).toEqual({
+    run: false,
+    reason:
+      'The next interval after the full run on c1 falls outside the daytime window; changes wait for the nightly.',
+  });
+  expect(decide(runs, { now: new Date('2026-11-21T19:30:00Z'), landed: change }).run).toBe(false);
+});
+
 test("a slot follows Berlin's clock in winter and in summer", () => {
   const at = (iso: string) =>
     decide([ended('c1', hoursBefore(new Date(iso), 9))], { now: new Date(iso) }).run;
@@ -118,7 +131,9 @@ test('two tooling landings inside one slot share its next full run', () => {
   expect(secondLanding.run).toBe(false);
   const both = landed(['scripts/ci/job.ts', 'scripts/ci/prepare.ts']);
   expect(decide(runs, { landed: both }).run).toBe(true);
-  expect(decide([...runs, ended('c3', NOON)], { landed: both }).run).toBe(false);
+  expect(
+    decide([...runs, ended('c2', NOON)], { now: new Date(NOON.getTime() + 3600_000), landed: both }).run,
+  ).toBe(false);
 });
 
 test('tooling and unreadable diffs wait for the next daytime slot, with no immediate run at night', () => {
