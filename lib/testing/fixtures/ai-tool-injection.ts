@@ -133,6 +133,33 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
   seedToolTables(world);
 }
 
+// A job description at its 20,000-character maximum reaches the model shortened and marked, and the
+// turn's next step stays under its input cap instead of ending the turn (B13).
+{
+  resetAiTables(world);
+  seedToolTables(world);
+  const [job] = tableRows(world, 'jobs');
+  if (!job) throw new Error('the seed holds the assigned job');
+  Object.assign(job, { description: '€'.repeat(20_000) });
+  signInAs(world, 'buero');
+  const request = JSON.stringify({ name: 'auftrag_lesen', input: { nummer: 'A-1' } });
+  const events = await readTurn(world, await postTurn(`[replay:werkzeug] ${request}`));
+  assert.deepEqual(
+    events.at(-1),
+    { type: 'end', status: 'complete' },
+    'a long description must not end the turn',
+  );
+  const [read] = toolResults(world.streamRequests[1]);
+  const text = JSON.stringify(read?.output);
+  assert.equal(
+    text.includes('"beschreibungGekuerzt":true'),
+    true,
+    'the model must learn the description was cut',
+  );
+  assert.equal(text.includes('€'.repeat(2_001)), false, 'the description must reach the model shortened');
+  seedToolTables(world);
+}
+
 // A tool result without record text leaves the memory write in the turn: only untrusted text taints it.
 {
   signInAs(world, 'buero');

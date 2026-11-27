@@ -11,6 +11,20 @@ import { formatEmployeeRecordName } from '@/lib/personnel/types';
 import { z } from '@/lib/zod';
 
 /**
+ * Characters of one long text a call returns. A job description may hold
+ * 20,000, and a turn's next step must stay under its input cap; the job page
+ * shows the rest.
+ */
+const TEXT_LIMIT = 2_000;
+
+/** A long text cut at `TEXT_LIMIT` characters, and whether it was cut. */
+function boundedText(text: string | null): { text: string | null; cut: boolean } {
+  const characters = Array.from(text ?? '');
+  if (characters.length <= TEXT_LIMIT) return { text, cut: false };
+  return { text: characters.slice(0, TEXT_LIMIT).join(''), cut: true };
+}
+
+/**
  * One Auftrag through the reader of `/auftraege/[jobNumber]`: the office reads
  * any job of its organization, an employee only an assigned one, in the field
  * view. The page's billing parties and work leads stay out.
@@ -38,6 +52,10 @@ export const auftragLesen = defineTool({
     // The field view already emptied what an employee may not read: customer number, address, emails, notes.
     const { job } = read;
     const { client, site, contact, project } = job;
+    const description = boundedText(job.description);
+    const access = boundedText(site?.accessNotes ?? null);
+    // A job with several visits is planned on the Plantafel; its own date names only one, so the page shows none.
+    const severalVisits = (job.scheduledVisitCount ?? 0) > 1;
     return {
       status: 'ok',
       value: {
@@ -45,11 +63,12 @@ export const auftragLesen = defineTool({
           nummer: recordText(job.jobNumber),
           altnummer: recordText(job.sourceNumber ?? null),
           titel: recordText(job.title),
-          beschreibung: recordText(job.description),
+          beschreibung: recordText(description.text),
+          beschreibungGekuerzt: description.cut,
           status: UNIFIED_STATUS_LABELS[getEntryUnifiedStatus({ type: 'standalone-job', job })],
           prioritaet: JOB_PRIORITY_LABELS[job.priority],
-          termin: job.plannedDate,
-          uhrzeit: job.plannedTime,
+          termin: severalVisits ? null : job.plannedDate,
+          uhrzeit: severalVisits ? null : job.plannedTime,
           geplanteMinuten: job.plannedWorkingMinutes,
           erledigtAm: job.actualCompletionDate,
           geplanteEinsaetze: job.scheduledVisitCount ?? 0,
@@ -64,7 +83,8 @@ export const auftragLesen = defineTool({
           einsatzort: {
             name: recordText(site?.name ?? null),
             adresse: recordText((site && formatSiteAddress(site)) || job.location),
-            zugang: recordText(site?.accessNotes ?? null),
+            zugang: recordText(access.text),
+            zugangGekuerzt: access.cut,
           },
           ansprechpartner: contact
             ? {
