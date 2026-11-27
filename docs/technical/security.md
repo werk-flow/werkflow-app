@@ -188,4 +188,4 @@ Membership alone authorizes no retained data of a removed employee; the clock-st
 
 ## Calendar correction input boundary
 
-A calendar gesture sends source references and proposed boundaries to the one correction action. The server loads the source facts again inside the organization, refuses a stale or partial replacement, and takes no accounting context from the client. A correction commits only while the time revision captured before validation is current. Server readers filter correction history by the effective employee: a person reads, on the server and through the Data API, only the corrections and requests of the record they hold now. Approvers keep every request of the organization's records, since an open request blocks its month's close.
+A calendar gesture sends source references and proposed boundaries to the one correction action. The server loads the source facts again inside the organization, refuses a stale or partial replacement, and takes no accounting context from the client. A correction commits only while the time revision captured before validation is current. Every reader filters correction history by the effective employee.
