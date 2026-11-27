@@ -9,6 +9,7 @@ import {
   kiLiveTopic,
 } from '@/lib/ai/live/events';
 import type { AiTurnEnd, AiTurnSink } from '@/lib/ai/turn';
+import { AI_TURN_FAILURE_MESSAGES } from '@/lib/ai/turn-messages';
 import { type Schedule, timerSchedule } from '@/lib/ai/turn-stream';
 import { getSupabaseUrl } from '@/lib/env/public';
 import { getSupabaseSecretKey } from '@/lib/env/server';
@@ -77,6 +78,35 @@ export type KiLiveBroadcast = {
   /** Sends what is left and the answer's end; resolves within two sends' time limits. */
   end: (end: AiTurnEnd) => Promise<void>;
 };
+
+/**
+ * Tells every tab that the person stopped an answer, from the stop itself:
+ * the saved answer holds `length` of its text, whether or not the turn's
+ * invocation still runs. The turn sends no end of its own for a stopped
+ * answer: its last confirmed save may be shorter than one that landed.
+ */
+export async function sendKiLiveStop(input: {
+  threadId: string;
+  commandId: string;
+  entryPoint: AiEntryPoint;
+  length: number;
+}): Promise<void> {
+  const post = createPost(
+    kiLiveTopic(input.threadId),
+    sendThroughRest,
+    AI_TURN_LIMITS[input.entryPoint].liveSendTimeoutMs,
+  );
+  await post(
+    [
+      endMessage(
+        input.commandId,
+        { status: 'cancelled', failure: 'stopped', message: AI_TURN_FAILURE_MESSAGES.stopped },
+        input.length,
+      ),
+    ],
+    2,
+  );
+}
 
 function endMessage(command: string, end: AiTurnEnd, length: number): KiLiveMessage {
   return {
@@ -173,6 +203,8 @@ export function createKiLiveBroadcast(
       stop();
       await inFlight;
       if (revoked) return;
+      // The stop route told every tab, with the length the database kept; this turn may know less.
+      if (end.status !== 'complete' && end.failure === 'stopped') return;
       const length = sent + pending.length;
       const last = takeText();
       await post([...(last ? [last] : []), endMessage(input.commandId, end, length)], 2);

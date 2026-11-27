@@ -223,7 +223,7 @@ assert.ok(opened.window.messages.length <= 40, 'a thread opens with at most 40 m
   );
   const events = sends.flatMap((send) => parseEvents(send.events));
   assert.ok(
-    events.every((event) => event.v === 1 && event.command === command),
+    events.every((event) => event.v === 2 && event.command === command),
     'an answer must not set the protocol version or name another command',
   );
   assert.equal(events.filter((event) => event.type === 'end').length, 1, 'only the real end ends the answer');

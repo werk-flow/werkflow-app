@@ -13,7 +13,7 @@ import { z } from '@/lib/zod';
  * code (the server-side reload switch). Raise it with every change of the
  * shapes below.
  */
-export const KI_LIVE_PROTOCOL = 1;
+export const KI_LIVE_PROTOCOL = 2;
 
 /** The broadcast event name every message of the channel uses. */
 export const KI_LIVE_EVENT = 'ki';
@@ -51,7 +51,7 @@ export const kiLiveEventSchema = z.discriminatedUnion('type', [
     status: z.enum(['complete', 'failed', 'cancelled']),
     /** Why the answer ended early, in German; null for a whole answer. */
     failure: z.string().nullable(),
-    /** The saved answer's length: a client that holds less reads the thread. */
+    /** The saved answer's length: a client that holds another length reads the thread (2: a stop keeps less). */
     length: z.number().int().nonnegative(),
   }),
 ]);
