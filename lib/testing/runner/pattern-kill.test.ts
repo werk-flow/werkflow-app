@@ -1,0 +1,73 @@
+// Rule test: an agent stops only explicit processes, never other agents' runs discovered by pattern.
+import { expect, test } from 'bun:test';
+import { resolve } from 'node:path';
+import { patternKillRefusal } from './pattern-kill';
+
+const refused = [
+  'pkill bun',
+  'pkill -f "scripts/verify.ts run$"',
+  'sudo /usr/bin/pkill -TERM -f verify',
+  'killall bun',
+  'killall -9 bun',
+  'pgrep -f "scripts/verify.ts run$" | xargs -r kill',
+  'pgrep verify | xargs kill',
+  'ps aux | grep verify | xargs kill',
+  'ps -eo pid,args | grep verify | awk "{print $1}" | xargs -r kill -TERM',
+  'pgrep verify | kill',
+  'kill $(pgrep verify)',
+  'kill "$(pgrep -f verify)"',
+  'kill `pgrep verify`',
+  'kill $(ps aux | grep verify)',
+  'kill "$pid"',
+  'pid=$(pgrep verify); kill "$pid"',
+  'run & pid=$!; pid=$(pgrep verify); kill "$pid"',
+  'echo pid=$!; kill "$pid"',
+  'kill bun',
+  'kill -TERM -1 123',
+  'kill -- -1',
+  'kill 123 "$other"',
+];
+const allowed = [
+  'kill 123',
+  'kill -TERM 123',
+  'kill -0 123',
+  'kill %1',
+  'kill "$!"',
+  'kill $!',
+  'kill -s TERM 123',
+  'kill -- 123 456',
+  'run & pid=$!; kill "$pid"',
+  'run & pid="$!"; kill ${pid}',
+  'echo "pkill bun; kill $(not_a_process_lookup)"',
+  "printf '%s' 'pgrep verify | xargs kill'",
+  'echo killall # pkill verify',
+  '# kill $(pgrep verify)\necho done',
+  'pgrep -f verify',
+  "cat <<'EOF'\npkill bun\nEOF",
+];
+
+test('process discovery and unrecorded kill targets are refused', () => {
+  for (const command of refused) expect(patternKillRefusal(command), command).toContain("other agents' runs");
+});
+
+test('literal targets, recorded background PIDs and quoted mentions pass', () => {
+  for (const command of allowed) expect(patternKillRefusal(command), command).toBeUndefined();
+});
+
+test('the Bash hook enforces refusals with exit 2 and accepts other input', () => {
+  const script = resolve(import.meta.dir, '../../../.claude/hooks/refuse-pattern-kill.ts');
+  const call = (input: string) =>
+    Bun.spawnSync({
+      cmd: [process.execPath, script],
+      stdin: Buffer.from(input),
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+  for (const command of [...refused, ...allowed]) {
+    const result = call(JSON.stringify({ tool_name: 'Bash', tool_input: { command } }));
+    expect(result.exitCode, command).toBe(refused.includes(command) ? 2 : 0);
+    if (result.exitCode === 2) expect(result.stderr.toString()).toContain("tool's own stop");
+  }
+  for (const input of ['not json', '{}', JSON.stringify({ tool_name: 'Edit', tool_input: {} })])
+    expect(call(input).exitCode).toBe(0);
+});
