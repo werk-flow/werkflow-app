@@ -9,13 +9,9 @@ import type {
 } from './types';
 import { DEFAULT_DAILY_TARGET_MINUTES } from '@/lib/personnel/targets';
 import { MANAGED_ROLES } from './types';
-import {
-  formatBerlinLocalDate,
-  getLocalDayEnd,
-  getLocalDayStart,
-  isSameLocalDay,
-} from '@/lib/date-time/berlin';
+import { getLocalDayEnd, getLocalDayStart, isSameLocalDay } from '@/lib/date-time/berlin';
 import { getEffectiveTimeEntries } from './effective-entries';
+import { entryLocalDate } from './work-sessions';
 import {
   canHolderApproveTarget,
   type EffectiveResponsibilityHolder,
@@ -535,13 +531,14 @@ export function formatSignedDuration(minutes: number): string {
 }
 
 /**
- * Group entries by date (YYYY-MM-DD)
+ * Group entries by the Berlin date they count on (YYYY-MM-DD): a clock-out at
+ * exactly midnight closes the day before (`entryLocalDate`).
  */
 export function groupEntriesByDate(entries: TimeEntry[]): Record<string, TimeEntry[]> {
   const grouped: Record<string, TimeEntry[]> = {};
 
   for (const entry of entries) {
-    const date = formatBerlinLocalDate(entry.timestamp);
+    const date = entryLocalDate(entry);
     if (!grouped[date]) {
       grouped[date] = [];
     }

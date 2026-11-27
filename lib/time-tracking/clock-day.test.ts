@@ -19,6 +19,7 @@ const employee = '20000000-0000-4000-8000-000000000001';
 const employeeRecord = '30000000-0000-4000-8000-000000000001';
 const colleague = '20000000-0000-4000-8000-000000000002';
 const colleagueRecord = '30000000-0000-4000-8000-000000000002';
+const rejoinedRecord = '30000000-0000-4000-8000-000000000003';
 const job = '40000000-0000-4000-8000-000000000001';
 const morningSession = '50000000-0000-4000-8000-000000000001';
 const afternoonSession = '50000000-0000-4000-8000-000000000002';
@@ -107,6 +108,11 @@ async function runFixture(): Promise<void> {
     breakPolicyHistory: [],
   };
   let applications: TimeCorrectionApplicationProjection[] = [];
+  // Each person's effective employee record in the organization.
+  const recordOf = new Map([
+    [employee, employeeRecord],
+    [colleague, colleagueRecord],
+  ]);
   const tables: InMemoryTables = {
     time_sessions: [],
     time_entries: [],
@@ -131,6 +137,7 @@ async function runFixture(): Promise<void> {
     CACHE_TAGS: {},
     getAuthenticatedUser: async () => ({ id: caller }),
     getCachedMemberships: async () => [{ orgId: organization, role: 'employee' }],
+    getOwnEmployeeRecordId: async (userId: string) => recordOf.get(userId) ?? null,
     getCachedOrganizationSettings: async () => settings,
     getCachedOrganizationCalendar: async () => null,
   }));
@@ -257,6 +264,21 @@ async function runFixture(): Promise<void> {
   caller = colleague;
   const received = await readState();
   assert.equal(received.todayMinutes, 120, 'the colleague’s clock counts the reassigned hours only');
+
+  // The caller's employee record was removed and they hold a new one. The
+  // standby correction names their user on the removed record: it is retained
+  // data of the removed employee, so none of its facts reach the new clock.
+  caller = employee;
+  applications = [
+    correctSegment('late', 420, 540, { userId: employee, recordId: employeeRecord, kind: 'standby' }),
+  ];
+  recordOf.set(employee, rejoinedRecord);
+  const rejoined = await readState();
+  assert.equal(rejoined.standbyMinutes, 0, 'no fact of the removed record counts');
+  assert.equal(rejoined.todayMinutes, 300, 'the replaced segment stays replaced');
+  recordOf.delete(employee);
+  const withoutRecord = await readState();
+  assert.equal(withoutRecord.standbyMinutes, 0, 'without an effective record no correction fact counts');
 }
 
 if (process.env[FIXTURE_FLAG] === '1') {

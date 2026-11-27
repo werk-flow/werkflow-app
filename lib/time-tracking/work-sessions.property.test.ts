@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, setSystemTime, test } from 'bun:test';
 import fc from 'fast-check';
+import { addLocalDays } from '@/lib/date-time/berlin';
+import { berlinDateArbitrary, berlinMidnightMs } from '@/lib/testing/berlin-arbitraries';
 import { RECORDED_DAY_CLOCK, recordedDayArbitrary } from '@/lib/testing/time-entry-arbitraries';
 import type { TimeEntry } from './types';
 import { calculateBreakSessions, calculateWorkSessions } from './work-sessions';
@@ -75,5 +77,52 @@ describe('A recorded day’s sessions', () => {
         );
       }),
     );
+  });
+
+  test('close a start with a clock-out at the next midnight, and orphan it past that midnight', () => {
+    // After every drawn day, so no entry is still ahead.
+    setSystemTime(new Date(Date.UTC(2101, 0, 1)));
+    try {
+      fc.assert(
+        fc.property(
+          berlinDateArbitrary,
+          fc.integer({ min: 1, max: 600 }),
+          fc.oneof(fc.constant(0), fc.integer({ min: 1, max: 600 * 60_000 })),
+          (date, minutesBeforeMidnight, millisecondsPastMidnight) => {
+            const midnight = berlinMidnightMs(addLocalDays(date, 1));
+            const entry = (entryType: 'clock_in' | 'clock_out', instant: number, id: string): TimeEntry => ({
+              id,
+              userId: 'user-1',
+              organizationId: 'organization-1',
+              entryType,
+              timestamp: new Date(instant).toISOString(),
+              isManual: false,
+              jobId: null,
+              status: 'approved',
+              reviewedBy: null,
+              reviewedAt: null,
+              createdAt: new Date(instant).toISOString(),
+              updatedAt: new Date(instant).toISOString(),
+            });
+            const work = calculateWorkSessions([
+              entry('clock_in', midnight - minutesBeforeMidnight * 60_000, 'start'),
+              entry('clock_out', midnight + millisecondsPastMidnight, 'end'),
+            ]);
+            if (millisecondsPastMidnight === 0) {
+              // The split at midnight closes the day's slice there: the minutes stay on the day.
+              expect(work.map((session) => session.durationMinutes)).toEqual([minutesBeforeMidnight]);
+            } else {
+              // A real gap: the start stays uncounted, as „Ende fehlt“.
+              expect(work.map((session) => [session.durationMinutes, session.isOrphan])).toEqual([
+                [null, true],
+                [null, true],
+              ]);
+            }
+          },
+        ),
+      );
+    } finally {
+      setSystemTime(RECORDED_DAY_CLOCK);
+    }
   });
 });

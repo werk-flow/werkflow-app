@@ -2,6 +2,7 @@
 
 import { getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
+import { isCorrectionEventFor } from '@/lib/time-tracking/clock-state-events';
 import { memberStatusOf, type MemberStatus } from '@/lib/time-tracking/member-day';
 import { readInBackground, type BackgroundReadFailure } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
@@ -43,6 +44,7 @@ export function useMemberStatus({
 } {
   const view = useLiveView<MemberStatusMap>({
     // An approved correction changes the day: its approval updates the request.
+    // The filter below reads only for the shown members' requests.
     tables: [
       'time_entries',
       'time_sessions',
@@ -50,6 +52,7 @@ export function useMemberStatus({
       'time_correction_requests',
       'organization_settings',
     ],
+    eventFilter: (event) => isCorrectionEventFor(event, memberIds),
     read: async ({ signal }): Promise<LiveViewResult<MemberStatusMap>> => {
       if (!organizationId || memberIds.length === 0) {
         return { ok: true, data: EMPTY_STATUS_MAP };

@@ -1,5 +1,5 @@
 import type { BreakSession, TimeEntry, WorkSession } from './types';
-import { isSameLocalDay } from '@/lib/date-time/berlin';
+import { formatBerlinLocalDate, isSameLocalDay } from '@/lib/date-time/berlin';
 import { getEffectiveTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
 
@@ -28,6 +28,22 @@ function determinePendingState(
   if (clockInPending && clockOutPending) return 'full';
   if (clockInPending || clockOutPending) return 'partial';
   return 'none';
+}
+
+/**
+ * The Berlin date an entry counts on. A clock-out counts on the day of the
+ * instant before it, so one at exactly midnight closes the day it ends: the
+ * split at midnight closes each day's slice there
+ * (`splitSegmentAtLocalDayBoundaries`). Every other entry counts on its own date.
+ */
+export function entryLocalDate(entry: Pick<TimeEntry, 'entryType' | 'timestamp'>): string {
+  const instant = Date.parse(entry.timestamp);
+  return formatBerlinLocalDate(new Date(entry.entryType === 'clock_out' ? instant - 1 : instant));
+}
+
+/** Whether an end counts on the same Berlin day as the start it would close. */
+function closesOnStartDay(start: TimeEntry, end: TimeEntry): boolean {
+  return entryLocalDate(start) === entryLocalDate(end);
 }
 
 /** A work start that no end closes on its own day: open while it is today's, otherwise an orphan. */
@@ -73,10 +89,7 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
   for (let index = 0; index < activeEntries.length; index += 1) {
     const entry = activeEntries[index];
     if (!entry) continue;
-    if (
-      currentWorkStart &&
-      !isSameLocalDay(new Date(currentWorkStart.timestamp), new Date(entry.timestamp))
-    ) {
+    if (currentWorkStart && !closesOnStartDay(currentWorkStart, entry)) {
       sessions.push(unpairedWorkStartSession(currentWorkStart, true));
       currentWorkStart = null;
     }
@@ -91,10 +104,7 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
       }
       currentWorkStart = entry;
     } else if (entry.entryType === 'clock_out' || entry.entryType === 'break_start') {
-      if (
-        currentWorkStart &&
-        isSameLocalDay(new Date(currentWorkStart.timestamp), new Date(entry.timestamp))
-      ) {
+      if (currentWorkStart && closesOnStartDay(currentWorkStart, entry)) {
         const startTime = new Date(currentWorkStart.timestamp).getTime();
         const endTime = new Date(entry.timestamp).getTime();
         const durationMinutes = (endTime - startTime) / 60000;
@@ -145,10 +155,7 @@ export function calculateBreakSessions(entries: TimeEntry[]): BreakSession[] {
   let currentBreakStart: TimeEntry | null = null;
 
   for (const entry of activeEntries) {
-    if (
-      currentBreakStart &&
-      !isSameLocalDay(new Date(currentBreakStart.timestamp), new Date(entry.timestamp))
-    ) {
+    if (currentBreakStart && !closesOnStartDay(currentBreakStart, entry)) {
       sessions.push({
         breakStart: currentBreakStart,
         breakEnd: null,

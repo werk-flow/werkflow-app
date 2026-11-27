@@ -86,6 +86,18 @@ function weekOf(segments: readonly TimeSegmentFact[], date: string): WeeklyTimeD
   return buildWeeklyTimeData(entries, monday, MANUAL_RULE);
 }
 
+/** A week day's counts. */
+function weekCounts(day: WeeklyTimeDataPoint): DayCounts {
+  return {
+    presenceMinutes: day.totalMinutes,
+    breakMinutes: day.breakMinutes,
+    travelMinutes: day.travelMinutes ?? 0,
+    standbyMinutes: day.standbyMinutes ?? 0,
+    calloutMinutes: day.calloutMinutes ?? 0,
+    internalMinutes: day.internalMinutes ?? 0,
+  };
+}
+
 /** The day's counts as the clock and as the week count them. */
 function countsOf(segments: readonly TimeSegmentFact[], date: string): { clock: DayCounts; week: DayCounts } {
   const { presenceMinutes, breakMinutes, travelMinutes, standbyMinutes, calloutMinutes, internalMinutes } =
@@ -94,14 +106,34 @@ function countsOf(segments: readonly TimeSegmentFact[], date: string): { clock: 
   if (!day) throw new Error('the week holds the day');
   return {
     clock: { presenceMinutes, breakMinutes, travelMinutes, standbyMinutes, calloutMinutes, internalMinutes },
-    week: {
-      presenceMinutes: day.totalMinutes,
-      breakMinutes: day.breakMinutes,
-      travelMinutes: day.travelMinutes ?? 0,
-      standbyMinutes: day.standbyMinutes ?? 0,
-      calloutMinutes: day.calloutMinutes ?? 0,
-      internalMinutes: day.internalMinutes ?? 0,
-    },
+    week: weekCounts(day),
+  };
+}
+
+/** The oracle: each kind's minutes of the segments that fall on a Berlin day, from the segments' own times. */
+function minutesOnDay(segments: readonly TimeSegmentFact[], date: string): Map<TimeSegmentKind, number> {
+  const dayStart = berlinMidnightMs(date);
+  const dayEnd = berlinMidnightMs(addLocalDays(date, 1));
+  const minutesByKind = new Map<TimeSegmentKind, number>();
+  for (const fact of segments) {
+    const from = Math.max(Date.parse(fact.startedAt), dayStart);
+    const to = Math.min(Date.parse(fact.endedAt ?? fact.startedAt), dayEnd);
+    if (to > from)
+      minutesByKind.set(fact.kind, (minutesByKind.get(fact.kind) ?? 0) + (to - from) / MINUTE_MS);
+  }
+  return minutesByKind;
+}
+
+/** The oracle's counts of a day: the presence is the sum of every kind. */
+function expectedCounts(minutesByKind: ReadonlyMap<TimeSegmentKind, number>): DayCounts {
+  const minutes = (kind: TimeSegmentKind): number => minutesByKind.get(kind) ?? 0;
+  return {
+    presenceMinutes: [...minutesByKind.values()].reduce((sum, value) => sum + value, 0),
+    breakMinutes: minutes('break'),
+    travelMinutes: minutes('travel'),
+    standbyMinutes: minutes('standby'),
+    calloutMinutes: minutes('callout'),
+    internalMinutes: minutes('internal_activity'),
   };
 }
 
@@ -123,11 +155,15 @@ const sessionArbitrary = fc
     });
   });
 
-/** Segments of known kinds and minutes that lie inside one Berlin day, so nothing is clipped. */
-const inDaySessionArbitrary = fc
+/**
+ * Segments of known kinds and minutes that end inside one Berlin day: the
+ * clock reads a day while it runs, so its first segment may start the evening
+ * before, as a night shift that ended this morning does.
+ */
+const daySessionArbitrary = fc
   .tuple(
     berlinDateArbitrary,
-    fc.integer({ min: 0, max: 300 }),
+    fc.integer({ min: -300, max: 300 }),
     fc.array(fc.tuple(fc.constantFrom(...KINDS), fc.integer({ min: 1, max: 120 })), {
       minLength: 1,
       maxLength: 8,
@@ -135,29 +171,20 @@ const inDaySessionArbitrary = fc
   )
   .map(([date, offset, parts]) => {
     let cursor = berlinMidnightMs(date) + offset * MINUTE_MS;
-    const minutesByKind = new Map<TimeSegmentKind, number>();
     const segments = parts.map(([kind, minutes], index) => {
       const fact = segment(kind, cursor, minutes, index);
       cursor += minutes * MINUTE_MS;
-      minutesByKind.set(kind, (minutesByKind.get(kind) ?? 0) + minutes);
       return fact;
     });
-    return { date, segments, minutesByKind };
+    return { date, segments };
   });
 
 describe('A day’s totals on the clock and in the week, counted from its projected transitions', () => {
   test('give each activity of a Berlin day its own minutes, and the day’s presence their sum', () => {
     fc.assert(
-      fc.property(inDaySessionArbitrary, ({ date, segments, minutesByKind }) => {
-        const minutes = (kind: TimeSegmentKind): number => minutesByKind.get(kind) ?? 0;
-        const expected: DayCounts = {
-          presenceMinutes: [...minutesByKind.values()].reduce((sum, value) => sum + value, 0),
-          breakMinutes: minutes('break'),
-          travelMinutes: minutes('travel'),
-          standbyMinutes: minutes('standby'),
-          calloutMinutes: minutes('callout'),
-          internalMinutes: minutes('internal_activity'),
-        };
+      fc.property(daySessionArbitrary, ({ date, segments }) => {
+        const minutesByKind = minutesOnDay(segments, date);
+        const expected = expectedCounts(minutesByKind);
         const { clock, week } = countsOf(segments, date);
         expect(clock).toEqual(expected);
         expect(week).toEqual(expected);
@@ -171,7 +198,7 @@ describe('A day’s totals on the clock and in the week, counted from its projec
         } = clock;
         expect(
           presenceMinutes - breakMinutes - travelMinutes - standbyMinutes - calloutMinutes - internalMinutes,
-        ).toBe(minutes('work'));
+        ).toBe(minutesByKind.get('work') ?? 0);
       }),
     );
   });
@@ -205,7 +232,16 @@ describe('A day’s totals on the clock and in the week, counted from its projec
           ),
         );
         expect(clockDay(sliced, date)).toEqual(clockDay(segments, date));
-        expect(weekOf(sliced, date)).toEqual(weekOf(segments, date));
+        const week = weekOf(segments, date);
+        expect(weekOf(sliced, date)).toEqual(week);
+        // Each day of the week keeps the minutes that fall on it: a slice that
+        // ends at midnight closes its own day. The week's window ends at
+        // Sunday's last instant, so a session that runs past it is checked up to Saturday.
+        const { sunday } = getWeekBounds(new Date(berlinMidnightMs(date)));
+        const sessionEnd = Math.max(...segments.map((fact) => Date.parse(fact.endedAt ?? fact.startedAt)));
+        for (const day of week.slice(0, sessionEnd > sunday.getTime() ? 6 : 7)) {
+          expect(weekCounts(day)).toEqual(expectedCounts(minutesOnDay(segments, day.date)));
+        }
       }),
     );
   });

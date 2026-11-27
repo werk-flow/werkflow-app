@@ -5,7 +5,7 @@ import { logError } from '@/lib/logging';
 import { resolveActionContextFor, type ActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
-import { getAuthenticatedUser } from '@/lib/data/cached';
+import { getAuthenticatedUser, getOwnEmployeeRecordId } from '@/lib/data/cached';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { readOrganizationSettings } from './organization-settings-read';
 import { type LiveClockState, type TimeActivitySelection, toTimeEntries } from './types';
@@ -175,18 +175,36 @@ async function buildLegacyClockState(
   };
 }
 
-/** The approved corrections of the caller's day, as the week reads them; null when the read fails. */
+/**
+ * The approved corrections of the caller's day, as the week reads them; null
+ * when a read fails. Each keeps every source it replaces, and only the facts
+ * of the caller's effective employee record: a fact that names the caller's
+ * user on a record they no longer hold is retained data of a removed
+ * employee (docs/technical/security.md, "Calendar correction input boundary").
+ */
 async function readTodaysCorrections(
   admin: AdminClient,
   input: { organizationId: string; userId: string; dayStart: Date; dayEnd: Date },
 ): Promise<TimeCorrectionApplicationProjection[] | null> {
   try {
-    return await loadApprovedCorrectionProjection(admin, {
-      organizationId: input.organizationId,
-      userIds: [input.userId],
-      from: input.dayStart.toISOString(),
-      to: input.dayEnd.toISOString(),
-    });
+    const [employeeRecordId, applications] = await Promise.all([
+      getOwnEmployeeRecordId(input.userId, input.organizationId),
+      loadApprovedCorrectionProjection(admin, {
+        organizationId: input.organizationId,
+        userIds: [input.userId],
+        from: input.dayStart.toISOString(),
+        to: input.dayEnd.toISOString(),
+      }),
+    ]);
+    return applications.map((application) => ({
+      ...application,
+      snapshot: {
+        ...application.snapshot,
+        facts: application.snapshot.facts.filter(
+          (fact) => fact.employeeRecordId === employeeRecordId && fact.userId === input.userId,
+        ),
+      },
+    }));
   } catch (error) {
     logReadFailure('getCurrentClockState: approved corrections read failed', error);
     return null;

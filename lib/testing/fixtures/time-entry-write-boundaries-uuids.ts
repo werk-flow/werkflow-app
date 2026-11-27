@@ -216,6 +216,7 @@ mock.module('@/lib/data/cached', () => ({
   CACHE_TAGS: {},
   getAuthenticatedUser: async () => ({ id: callerUser }),
   getCachedMemberships: async () => [{ orgId: ownOrganization, role: callerRole }],
+  getOwnEmployeeRecordId: async () => null,
   getCachedOrganizationSettings: async () => {
     if (settingsReadFails) throw new Error('organization_settings_read_failed');
     return { breakMode: 'manual', autoBreakThresholdMinutes: 360, autoBreakDurationMinutes: 30 };

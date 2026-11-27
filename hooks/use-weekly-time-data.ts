@@ -13,6 +13,7 @@ import {
   targetsOfWeek,
 } from '@/lib/time-tracking/weekly';
 import { breakPolicyKey, type BreakPolicy } from '@/lib/time-tracking/settings';
+import { isCorrectionEventFor } from '@/lib/time-tracking/clock-state-events';
 
 export type DayData = WeeklyTimeDataPoint;
 
@@ -95,12 +96,14 @@ export function useWeeklyTimeData({
       'time_sessions',
       'time_segments',
       // An approved correction changes its days: its approval updates the request.
+      // The filter below reads only for the shown person's requests.
       'time_correction_requests',
       // Every source of a daily target, approved vacation and sickness and the
       // entry and exit dates included. A saved break rule also reads the week
       // again through the policy view.
       ...DAILY_TARGET_LIVE_TABLES,
     ],
+    eventFilter: (event) => isCorrectionEventFor(event, userId ? [userId] : []),
     read: async ({ signal }): Promise<LiveViewResult<WeekSnapshot>> => {
       // Recompute week bounds fresh on every read so we never use stale dates
       const { monday, sunday } = getWeekBounds();

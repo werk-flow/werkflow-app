@@ -69,7 +69,12 @@ test('Mitarbeiter: a correction approved in another session reaches the open lis
   // The approval updates the request; the corrected entries end the shift after six hours.
   await page.evaluate(() => {
     window.breakRuleWeekContract.correctionApproved = true;
-    window.calendarContract.emit('time_correction_requests', { organization_id: 'org-a' });
+    // The approved request names the shown member as its subject.
+    window.calendarContract.emit('time_correction_requests', {
+      organization_id: 'org-a',
+      subject_user_id: '20000000-0000-4000-8000-000000000161',
+      requested_by: '20000000-0000-4000-8000-000000000161',
+    });
   });
 
   await expect(list).toHaveAttribute('aria-label', 'Tagesfortschritt: 69%');
