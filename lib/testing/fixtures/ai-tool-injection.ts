@@ -133,20 +133,30 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
   seedToolTables(world);
 }
 
-// A job description at its 20,000-character maximum and a team of 200 long names reach the model
-// shortened and marked, and the turn's next step stays under its input cap instead of ending the turn (B13).
+// Every text of a job at its longest, in a character that NFC triples, and a team of 200 long names
+// reach the model shortened and marked, and the turn's next step stays under its input cap (B13).
 {
   resetAiTables(world);
   seedToolTables(world);
+  // One UTF-16 unit and 3 bytes, but three code points and 6 bytes once NFC-normalized.
+  const expanding = (length: number) => '\uFB2C'.repeat(length);
   const [job] = tableRows(world, 'jobs');
   if (!job) throw new Error('the seed holds the assigned job');
-  Object.assign(job, { description: '€'.repeat(20_000) });
+  Object.assign(job, { description: expanding(20_000) });
+  Object.assign(job, { title: expanding(2_000), source_number: expanding(2_000) });
+  const long = expanding(2_000);
+  for (const row of tableRows(world, 'clients'))
+    Object.assign(row, { name: long, customer_number: long, address: long, phone: long });
+  for (const row of tableRows(world, 'client_sites'))
+    Object.assign(row, { name: long, street: long, access_notes: expanding(20_000) });
+  for (const row of tableRows(world, 'client_contacts'))
+    Object.assign(row, { name: long, role: long, phone: long });
   // A team of 200 people with long names: no column bounds a name.
   for (let index = 0; index < 200; index += 1) {
     const userId = `38000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
     tableRows(world, 'profiles').push({
       id: userId,
-      first_name: '€'.repeat(300),
+      first_name: expanding(300),
       last_name: null,
       email: null,
     });
@@ -162,24 +172,11 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
   signInAs(world, 'buero');
   const request = JSON.stringify({ name: 'auftrag_lesen', input: { nummer: 'A-1' } });
   const events = await readTurn(world, await postTurn(`[replay:werkzeug] ${request}`));
-  assert.deepEqual(
-    events.at(-1),
-    { type: 'end', status: 'complete' },
-    'a long description must not end the turn',
-  );
-  const [read] = toolResults(world.streamRequests[1]);
-  const text = JSON.stringify(read?.output);
-  assert.equal(
-    text.includes('"beschreibungGekuerzt":true'),
-    true,
-    'the model must learn the description was cut',
-  );
-  assert.equal(text.includes('€'.repeat(2_001)), false, 'the description must reach the model shortened');
-  assert.equal(
-    text.includes('"teamGesamt":202'),
-    true,
-    'the model must learn the size of a team it reads in part',
-  );
+  assert.deepEqual(events.at(-1), { type: 'end', status: 'complete' }, 'a long job must not end the turn');
+  const text = JSON.stringify(toolResults(world.streamRequests[1])[0]?.output);
+  for (const marker of ['"beschreibungGekuerzt":true', '"zugangGekuerzt":true', '"teamGesamt":202']) {
+    assert.equal(text.includes(marker), true, `${marker}: the model must learn what it reads in part`);
+  }
   seedToolTables(world);
 }
 

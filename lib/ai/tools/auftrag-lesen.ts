@@ -11,30 +11,43 @@ import { WORK_EXECUTION_LABELS } from '@/lib/work-lifecycle/types';
 import { z } from '@/lib/zod';
 
 /**
- * What one call returns at most, so a turn's next step stays under its input
- * cap: no column bounds these texts, and a description may hold 20,000
- * characters. The job page shows the rest.
+ * The UTF-8 bytes one call returns at most per text, and the names of the
+ * team, so a turn's next step stays under its input cap: no column bounds
+ * these texts, and a description may hold 20,000 characters. The job page
+ * shows the rest.
  */
-const LIMITS = { longText: 2_000, shortText: 200, team: 20 } as const;
+const LIMITS = { longTextBytes: 4_000, shortTextBytes: 400, team: 20 } as const;
 
-/** A text cut at `limit` characters, and whether it was cut. */
-function bounded(text: string | null, limit: number): { text: string | null; cut: boolean } {
-  const characters = Array.from(text ?? '');
-  if (characters.length <= limit) return { text, cut: false };
-  return { text: characters.slice(0, limit).join(''), cut: true };
+/**
+ * A text NFC-normalized and cut at `maxBytes` UTF-8 bytes, and whether it was
+ * cut. Normalized first, because NFC can lengthen a text and `recordText`
+ * normalizes it again, which then changes nothing.
+ */
+function bounded(text: string | null, maxBytes: number): { text: string | null; cut: boolean } {
+  const normalized = text?.normalize('NFC') ?? null;
+  if (normalized === null || Buffer.byteLength(normalized) <= maxBytes)
+    return { text: normalized, cut: false };
+  let kept = '';
+  let bytes = 0;
+  for (const character of normalized) {
+    bytes += Buffer.byteLength(character);
+    if (bytes > maxBytes) break;
+    kept += character;
+  }
+  return { text: kept, cut: true };
 }
 
 /** A short field as record text; a cut one ends in „…“. */
 function shortText(text: string | null): ToolValue {
-  const { text: kept, cut } = bounded(text, LIMITS.shortText);
+  const { text: kept, cut } = bounded(text, LIMITS.shortTextBytes);
   return recordText(cut ? `${kept}…` : kept);
 }
 
 /** The job as the model reads it, from the page reader's result for the caller's role. */
 function jobValue(job: JobWithDetails): ToolValue {
   const { client, site, contact, project } = job;
-  const description = bounded(job.description, LIMITS.longText);
-  const access = bounded(site?.accessNotes ?? null, LIMITS.longText);
+  const description = bounded(job.description, LIMITS.longTextBytes);
+  const access = bounded(site?.accessNotes ?? null, LIMITS.longTextBytes);
   // A job with several visits is planned on the Plantafel; its own date names only one, so the page shows none.
   const severalVisits = (job.scheduledVisitCount ?? 0) > 1;
   return {
