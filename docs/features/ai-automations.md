@@ -39,7 +39,7 @@ Phase 1 provides these foundations:
 
 1. Read the action's row in the WerkFlow KI action inventory (werk-flow/werkflow-planning#526). A tool calls the server-only domain function the page or button calls. When that logic sits in a `'use server'` module or resolves its own context, extract a function that takes the context, and let both call it.
 2. Define the tool with `defineTool` in `lib/ai/tools/` and list it in `lib/ai/tools/registry.ts`. Its `z.strictObject` input caps every string and list and names no organization, user, membership or role; `execute(input, ctx)` takes those from the session. Lint bans every other way to give the model a tool.
-3. Return only the fields the task needs. Wrap every text a person typed into a record in `untrustedText('record_text', …)`, name people by display name, and return no personnel, health, time, Zeitkonto, payroll or bank data.
+3. Return only the fields the task needs. Return every text a person typed into a record through `recordText`, name people by display name, and return no personnel, health, time, Zeitkonto, payroll or bank data.
 4. Add its foreign-organization, lower-role and suspended-member cases to `lib/testing/fixtures/ai-tool-boundaries.ts`, and the injection cases its data invites to `ai-tool-injection.ts`.
 5. Write the measured sizes into `lib/ai/agent-context-budget.json`. Growth needs the owner's `approved: context growth`.
 6. Run `bun run test:unit lib/ai lib/security lib/conventions/server-action-input.test.ts`.

@@ -9,8 +9,6 @@ import type { OrgRole } from '@/lib/roles';
 /** Every tool WerkFlow KI has. A tool ships here only with its boundary cases (B5). */
 export const AI_TOOLS = [auftraegeFinden, kundenFinden, artikelFinden] as const;
 
-export type AiToolName = (typeof AI_TOOLS)[number]['name'];
-
 /** The tools a person of `role` may use; the model never sees another (B6). */
 export function aiToolsFor(role: OrgRole): readonly AiTool[] {
   return AI_TOOLS.filter((tool) => tool.roles.includes(role));

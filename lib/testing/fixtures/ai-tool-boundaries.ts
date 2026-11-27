@@ -4,13 +4,14 @@
 // only its own work; a suspended member's turn never starts. The walk at the end fails when a
 // registered tool has no case.
 import assert from 'node:assert/strict';
-import type { AiToolName } from '@/lib/ai/tools/registry';
+import type { AI_TOOLS as RegisteredTools } from '@/lib/ai/tools/registry';
 import { missingBoundaryCases } from '@/lib/testing/ai-tool-walk';
 import { CALLER_ID, ORGANIZATION_A, signInAs, tableRows } from './action-boundary-world';
 import { toolCallOutcomes } from './ai-turn-world';
 import { IDS, SALE_PRICE_CENTS, callTool, installAiToolWorld, offeredTools } from './ai-tool-world';
 
 type Input = Record<string, unknown>;
+type AiToolName = (typeof RegisteredTools)[number]['name'];
 
 const world = await installAiToolWorld();
 const { AI_TOOLS } = await import('@/lib/ai/tools/registry');

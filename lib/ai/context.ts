@@ -47,7 +47,7 @@ export function hasVisibleText(text: string): boolean {
 }
 
 /** Untrusted text from `source`, cleaned before anything can read it. */
-export function untrustedText(source: UntrustedSource, text: string): UntrustedText {
+function untrustedText(source: UntrustedSource, text: string): UntrustedText {
   return { source, [TEXT]: visibleText(text) };
 }
 
