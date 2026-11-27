@@ -96,7 +96,8 @@ function EmailStep({
     setError(null);
     const result = await run({ reportId, attemptKey, ...form }).catch(() => null);
     if (!result) return setError(SEND_FAILED);
-    if (!result.success) return setError(describeFailure(result.error, REPORT_DELIVERY_FAILURES, SEND_FAILED));
+    if (!result.success)
+      return setError(describeFailure(result.error, REPORT_DELIVERY_FAILURES, SEND_FAILED));
     showBanner(sendBanner(result, 'Der Servicebericht', form.recipient.trim()));
     onDone();
   };

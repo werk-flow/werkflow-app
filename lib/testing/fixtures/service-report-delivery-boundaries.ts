@@ -44,7 +44,10 @@ mock.module('@/lib/storage/r2', () => ({
 
 const world = installActionWorld({
   company_document_profiles: [
-    { ...companyProfileRow(ORGANIZATION_A, 'Haustechnik Sonnenberg GmbH', ''), email: 'buero@sonnenberg.example' },
+    {
+      ...companyProfileRow(ORGANIZATION_A, 'Haustechnik Sonnenberg GmbH', ''),
+      email: 'buero@sonnenberg.example',
+    },
   ],
   maintenance_service_reports: [
     {
@@ -218,7 +221,11 @@ await assertRefused(
     [
       'markServiceReportSentManually foreign',
       () =>
-        markServiceReportSentManually({ reportId: foreignReportId, attemptKey: crypto.randomUUID(), note: '' }),
+        markServiceReportSentManually({
+          reportId: foreignReportId,
+          attemptKey: crypto.randomUUID(),
+          note: '',
+        }),
     ],
     ['getServiceReportDelivery foreign', () => getServiceReportDelivery({ reportId: foreignReportId })],
   ],
@@ -243,7 +250,10 @@ assert.ok(read.success, JSON.stringify(read));
 assert.deepEqual(read.delivery.list, { total: 0, entries: [] });
 assert.equal(read.delivery.defaults.recipient, recipient);
 assert.equal(read.delivery.defaults.subject, mailSubject);
-assert.match(read.delivery.defaults.text, /Servicebericht zur Wartung vom 12\.11\.2037 \(Auftrag A-2037-0042\)/);
+assert.match(
+  read.delivery.defaults.text,
+  /Servicebericht zur Wartung vom 12\.11\.2037 \(Auftrag A-2037-0042\)/,
+);
 
 // The same report sent twice, as after a lost answer: one delivery, one mail,
 // with the report's own PDF, whatever document the client named.
@@ -309,7 +319,11 @@ assert.deepEqual(
   { success: true },
 );
 assert.deepEqual(
-  callsNamed('record_manual_delivery').map(({ args }) => [args.p_subject_kind, args.p_subject_id, args.p_document_id]),
+  callsNamed('record_manual_delivery').map(({ args }) => [
+    args.p_subject_kind,
+    args.p_subject_id,
+    args.p_document_id,
+  ]),
   [['service_report', reportId, documentId]],
 );
 assert.equal(memoryOutbox.messages().length, before, 'a manual send sent a mail');

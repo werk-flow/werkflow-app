@@ -80,8 +80,7 @@ function DeliveryRow({ entry, host }: { entry: DeliveryEntry; host: RowHost }) {
         .retry({ deliveryId: entry.id, expectedAttempt: entry.attempts })
         .catch(() => null);
       if (!result) return setError(RETRY_FAILED);
-      if (!result.success)
-        return setError(describeFailure(result.error, host.failureMessages, RETRY_FAILED));
+      if (!result.success) return setError(describeFailure(result.error, host.failureMessages, RETRY_FAILED));
       if (result.state === 'failed')
         setError(deliveryFailureAdvice(result.failureCode, 'Versuche es später erneut.'));
       else if (result.state === 'sent')
