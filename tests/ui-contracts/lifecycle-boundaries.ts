@@ -89,6 +89,7 @@ declare global {
       | 'invoice-deliveries-issued'
       | 'invoice-deliveries-cancelled'
       | 'service-report-delivery'
+      | 'offer-delivery'
       | 'site-access-review'
       | 'site-access-proposal'
       | AuthUrlFixtureName

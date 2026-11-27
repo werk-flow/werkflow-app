@@ -524,13 +524,14 @@ export const DIALOG_INVENTORY = {
       { route: '/service/wartung', role: 'admin', opener: 'service.due-completion' },
     ],
   },
-  'components/service/service-report-delivery-dialog.tsx#ServiceReportDeliveryDialog|Servicebericht versenden':
-    {
-      audits: [
-        { route: '/service/wartung', role: 'admin', opener: 'service.report-delivery' },
-        { route: '/service/wartung', role: 'admin', opener: 'service.report-delivery-email' },
-      ],
-    },
+  'components/delivery/document-delivery-dialog.tsx#DocumentDeliveryDialog|{host.title}': {
+    audits: [
+      { route: '/service/wartung', role: 'admin', opener: 'service.report-delivery' },
+      { route: '/service/wartung', role: 'admin', opener: 'service.report-delivery-email' },
+      { route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-delivery' },
+      { route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-delivery-email' },
+    ],
+  },
   'components/service/maintenance-plan-action-dialog.tsx#MaintenancePlanActionDialog|{title}': {
     audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.plan-action' }],
   },

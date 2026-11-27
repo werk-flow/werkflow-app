@@ -307,6 +307,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('service-report-delivery-dialog.tsx'))
                 return { path: join(import.meta.dir, 'service-report-delivery-boundaries.tsx') };
             });
+            // An offer revision's „Versenden“ sends through a held stand-in.
+            builder.onResolve({ filter: /^@\/lib\/offers\/delivery-actions$/ }, (args) => {
+              if (args.importer.endsWith('offer-revision-delivery.tsx'))
+                return { path: join(import.meta.dir, 'offer-delivery-boundaries.tsx') };
+            });
             // The WerkFlow KI chat sends its turns through a held stand-in the spec answers.
             builder.onResolve({ filter: /^\.\/turn-client$/ }, (args) => {
               if (args.importer.endsWith('components/ki/use-ki-chat.ts'))

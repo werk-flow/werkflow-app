@@ -98,7 +98,7 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
             Versuche es in einem Moment erneut.
           </RegionLoadError>
         ) : (
-          <OfferRevisions revisions={revisions} />
+          <OfferRevisions offerId={offer.id} revisions={revisions} />
         )}
         {/* Only a draft's content changes; a sent offer keeps its revisions. */}
         {offer.status === 'entwurf' && <OfferContentEditor key={offer.id} offer={offer} />}
