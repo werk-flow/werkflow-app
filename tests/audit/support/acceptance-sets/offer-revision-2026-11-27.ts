@@ -41,7 +41,8 @@ function roleCaptures(role: 'admin' | 'buero'): SetCapture[] {
       route,
       destination: offerPage('editing'),
       view: { kind: 'page' },
-      reveal: 'Du bearbeitest Revision 2. Bis du sie als gesendet festhältst, bleibt Revision 1 die zuletzt gesendete.',
+      reveal:
+        'Du bearbeitest Revision 2. Bis du sie als gesendet festhältst, bleibt Revision 1 die zuletzt gesendete.',
       ...both,
     },
     {
