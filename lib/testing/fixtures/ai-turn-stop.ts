@@ -86,11 +86,19 @@ const outputCap = costMicroUsd(
     [['cancelled', kept.length]],
     'every tab learns the stop once, from the stop itself, at the length the database kept',
   );
+  // A repeat, such as a retry after a lost reply, changes nothing and tells every tab again.
+  const sendsBefore = world.liveSends.length;
   assert.deepEqual(
     await (await postStop(command)).json(),
-    { verdict: 'finished' },
-    'a repeated stop changes nothing',
+    { verdict: 'stopped' },
+    'a repeated stop answers again',
   );
+  assert.deepEqual(
+    liveEvents(world.liveSends.slice(sendsBefore)).map((event) => event.type === 'end' && event.length),
+    [kept.length],
+    'a repeated stop tells every tab the kept length again',
+  );
+  assert.equal(textOf(answerItem()?.body), kept, 'a repeated stop changes nothing');
   assert.equal(answerItem()?.status, 'cancelled');
 }
 

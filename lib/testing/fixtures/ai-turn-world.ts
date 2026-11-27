@@ -178,7 +178,7 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
 const isStopped = (item: Row): boolean =>
   item.status === 'cancelled' && z.object({ failure: z.literal('stopped') }).safeParse(item.body).success;
 
-/** `cancel_ai_turn`: only the author stops their answer, and only while it is written. */
+/** `cancel_ai_turn`: only the author stops their answer, and only while it is written; a repeat answers again. */
 function cancelTurn(world: AiTurnWorld, args: Row): Outcome {
   const thread = tableRows(world, 'ai_threads').find(
     (row) =>
@@ -192,8 +192,9 @@ function cancelTurn(world: AiTurnWorld, args: Row): Outcome {
       row.thread_id === args.p_thread_id && row.idempotency_key === `${String(args.p_command_id)}:assistant`,
   );
   if (!item) return ok([{ verdict: 'not_found', text_length: null }]);
-  if (item.status !== 'streaming') return ok([{ verdict: 'finished', text_length: null }]);
-  stopAnswer(item);
+  if (item.status !== 'streaming' && !isStopped(item))
+    return ok([{ verdict: 'finished', text_length: null }]);
+  if (item.status === 'streaming') stopAnswer(item);
   const { text } = z.object({ text: z.string() }).parse(item.body);
   return ok([{ verdict: 'stopped', text_length: text.length }]);
 }

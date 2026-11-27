@@ -409,15 +409,16 @@ begin
   exception when raise_exception then
     if sqlerrm <> 'ai_thread_item_stopped' then raise; end if;
   end;
-  if (select verdict from public.cancel_ai_turn('af000000-0000-4000-8000-000000000010',
+  -- A repeat, such as a retry after a lost reply, changes nothing and answers the kept length again.
+  if (select verdict || ':' || text_length from public.cancel_ai_turn('af000000-0000-4000-8000-000000000010',
       'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000025', 'stop-cmd'))
-      is distinct from 'finished'
+      is distinct from 'stopped:18'
     or (select status::text || body::text from public.ai_thread_items where id = answer_id)
       is distinct from 'cancelled{"text": "Erst das Ventil 🔧", "failure": "stopped"}'
     or (select verdict from public.cancel_ai_turn('af000000-0000-4000-8000-000000000010',
       'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000025', 'kein-befehl'))
       is distinct from 'not_found' then
-    raise exception 'A repeated stop changed the answer, or an unknown command did not answer not_found';
+    raise exception 'A repeated stop changed the answer or did not answer the kept length, or an unknown command did not answer not_found';
   end if;
 end;
 $$;
@@ -437,6 +438,11 @@ begin
   exception when raise_exception then
     if sqlerrm <> 'ai_thread_item_finished' then raise; end if;
   end;
+  if (select verdict from public.cancel_ai_turn('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000025', 'done-cmd'))
+      is distinct from 'finished' then
+    raise exception 'A stop of an answer the run finished itself did not answer finished';
+  end if;
 end;
 $$;
 

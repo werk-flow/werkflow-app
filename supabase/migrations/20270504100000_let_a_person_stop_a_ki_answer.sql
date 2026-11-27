@@ -41,9 +41,10 @@ end;
 $$;
 
 -- Stops the author's answer to one command. Verdicts: 'stopped' (it was being
--- written and is now stopped), 'finished' (it had ended already, or was
--- stopped before) and 'not_found' (the command has no answer in the author's
--- thread). With 'stopped' comes the kept text's length in UTF-16 code units,
+-- written and is now stopped, or a stop before did that: a repeat changes
+-- nothing and may tell the tabs again), 'finished' (it had ended otherwise)
+-- and 'not_found' (the command has no answer in the author's thread). With
+-- 'stopped' comes the kept text's length in UTF-16 code units,
 -- as the live channel counts it: the stop route tells every tab at once, also
 -- when the turn's invocation is gone.
 create function public.cancel_ai_turn(
@@ -56,6 +57,7 @@ returns table (verdict text, text_length integer)
 language plpgsql security definer set search_path = '' set lock_timeout = '3s' as $$
 declare
   v_item public.ai_thread_items;
+  v_stopped boolean;
   v_text text;
 begin
   perform app_private.assert_ai_thread_author(p_organization_id, p_user_id, p_thread_id);
@@ -67,13 +69,16 @@ begin
     return query select 'not_found'::text, null::integer;
     return;
   end if;
-  if v_item.status <> 'streaming' then
+  v_stopped := v_item.status = 'cancelled' and (v_item.body ->> 'failure') is not distinct from 'stopped';
+  if v_item.status <> 'streaming' and not v_stopped then
     return query select 'finished'::text, null::integer;
     return;
   end if;
-  update public.ai_thread_items item
-  set status = 'cancelled', body = item.body || '{"failure":"stopped"}'::jsonb, updated_at = now()
-  where item.id = v_item.id and item.organization_id = p_organization_id;
+  if v_item.status = 'streaming' then
+    update public.ai_thread_items item
+    set status = 'cancelled', body = item.body || '{"failure":"stopped"}'::jsonb, updated_at = now()
+    where item.id = v_item.id and item.organization_id = p_organization_id;
+  end if;
   v_text := coalesce(v_item.body ->> 'text', '');
   -- JavaScript counts a character outside the Basic Multilingual Plane twice.
   return query select 'stopped'::text, char_length(v_text)

@@ -24,7 +24,8 @@ const stopSchema = z.discriminatedUnion('verdict', [
  * the database finishes it as stopped with the text of its last partial save
  * and returns that text's length, and the running turn ends at its next save
  * or model step, aborts the provider request and settles at what it spent.
- * The stop's key is the turn's command id, so a repeat changes nothing.
+ * The stop's key is the turn's command id, so a repeat changes nothing and
+ * answers the kept length again.
  */
 export async function stopAiTurn(input: {
   organizationId: string;
@@ -32,14 +33,19 @@ export async function stopAiTurn(input: {
   threadId: string;
   commandId: string;
 }): Promise<AiStopVerdict> {
-  const { data, error } = await createSupabaseAdminClient()
-    .rpc('cancel_ai_turn', {
-      p_organization_id: input.organizationId,
-      p_user_id: input.userId,
-      p_thread_id: input.threadId,
-      p_command_id: input.commandId,
-    })
-    .single();
+  const call = () =>
+    createSupabaseAdminClient()
+      .rpc('cancel_ai_turn', {
+        p_organization_id: input.organizationId,
+        p_user_id: input.userId,
+        p_thread_id: input.threadId,
+        p_command_id: input.commandId,
+      })
+      .single();
+  let { data, error } = await call();
+  // A failure may hide a stop that landed with its reply lost: a repeat answers it again, with the kept length.
+  if (error && error.message !== 'ai_thread_not_found' && error.message !== 'ai_actor_without_access')
+    ({ data, error } = await call());
   if (error) {
     if (error.message === 'ai_thread_not_found' || error.message === 'ai_actor_without_access')
       return { verdict: 'thread_not_found' };
