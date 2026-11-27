@@ -211,16 +211,14 @@ export type DayPresence = {
  */
 export function computeDayBreakdown(
   day: DayPresence,
-  settings: BreakPolicyValues | null | undefined,
+  settings: BreakPolicyValues,
   targetMinutes: number | undefined,
 ): TimeBreakdown {
   // Minutes are milliseconds / 60 000; subtracting them in floating point can
   // land a hair under a step's threshold, so the difference is taken in whole ms.
   const stepMinutes = Math.round((day.presenceMinutes - day.standbyMinutes) * 60_000) / 60_000;
   const breakMinutes =
-    !settings || settings.breakMode === 'manual'
-      ? day.trackedBreakMinutes
-      : automaticBreakMinutes(stepMinutes, settings);
+    settings.breakMode === 'manual' ? day.trackedBreakMinutes : automaticBreakMinutes(stepMinutes, settings);
   const presenceMinutes = Math.max(0, day.presenceMinutes);
   const clampedBreakMinutes = Math.max(0, Math.min(breakMinutes, presenceMinutes));
   const netWorkMinutes = presenceMinutes - clampedBreakMinutes;

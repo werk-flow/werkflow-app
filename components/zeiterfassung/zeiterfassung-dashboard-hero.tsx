@@ -124,14 +124,14 @@ export function ZeiterfassungDashboardHero({
   todayTargetHint,
   totals,
 }: ZeiterfassungDashboardHeroProps) {
-  const { liveBreakMinutes, ringTimelineSegments, workPercentage } = totals;
+  const { breakdown, ringTimelineSegments, workPercentage } = totals;
   const activity = describeClockActivity(effectiveState);
 
   return (
     <div className="flex flex-col items-center py-8">
       <TimeProgressRing
         totalMinutes={liveTotalMinutes}
-        breakMinutes={liveBreakMinutes}
+        breakMinutes={breakdown.breakMinutes}
         timelineSegments={ringTimelineSegments}
         // An unknown target draws no overtime ring, never one past 8 h.
         targetMinutes={todayTargetMinutes ?? Number.POSITIVE_INFINITY}

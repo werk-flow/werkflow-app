@@ -4,7 +4,6 @@ import type { ClockTimelineSegment, LiveClockState } from './types';
 
 export type ZeiterfassungLiveTotals = {
   breakdown: TimeBreakdown;
-  liveBreakMinutes: number;
   workPercentage: number | null;
   ringTimelineSegments: ClockTimelineSegment[] | undefined;
   liveTravelMinutes: number;
@@ -66,7 +65,6 @@ export function computeZeiterfassungLiveTotals(
     todayTargetMinutes,
   );
   const liveWorkMinutes = breakdown.workMinutes;
-  const liveBreakMinutes = breakdown.breakMinutes;
   const workPercentage =
     todayTargetMinutes !== undefined && todayTargetMinutes > 0
       ? Math.min(Math.round((liveWorkMinutes / todayTargetMinutes) * 100), 100)
@@ -85,7 +83,6 @@ export function computeZeiterfassungLiveTotals(
 
   return {
     breakdown,
-    liveBreakMinutes,
     workPercentage,
     ringTimelineSegments,
     liveTravelMinutes,
