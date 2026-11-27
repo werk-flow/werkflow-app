@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, setSystemTime, test } from 'bun:test';
+import { afterEach, describe, expect, setSystemTime, test } from 'bun:test';
 import fc from 'fast-check';
 import {
   LIVE_DAY_END,
@@ -17,8 +17,6 @@ import { liveMinutes, todayRunningSince } from './helpers';
 import { computeZeiterfassungLiveTotals } from './live-totals';
 import type { BreakPolicy } from './settings';
 
-// The clock state's totals live in a server-only module; they are a pure function.
-mock.module('server-only', () => ({}));
 const { clockTotalsState } = await import('./canonical-clock-state');
 
 // Property tests (docs/technical/testing.md, "Property tests"). The rules come from

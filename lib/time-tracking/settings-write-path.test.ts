@@ -113,7 +113,6 @@ ${stderr}`,
 
 if (ISOLATED) {
   setSystemTime(NOW);
-  mock.module('server-only', () => ({}));
   // The harness gives the action a complete request context: a cookie store
   // and the caller's current membership. The action reads its organization
   // and role from that one membership read (lib/org/action-context.ts).
