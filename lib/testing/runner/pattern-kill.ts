@@ -65,8 +65,10 @@ function xargsUtility(args: ShellWord[]): ReturnType<typeof program> {
       continue;
     }
     // A required short-option value consumes the rest of its cluster, or the next word.
-    const valueFlag = [...arg.text.slice(1)].findIndex((flag) => XARGS_VALUE_FLAGS.has(`-${flag}`));
-    if (valueFlag >= 0 && valueFlag === arg.text.length - 2) index++;
+    const flags = [...arg.text.slice(1)];
+    const valueFlag = flags.findIndex((flag) => XARGS_VALUE_FLAGS.has(`-${flag}`) || 'eil'.includes(flag));
+    const flag = flags[valueFlag];
+    if (flag && XARGS_VALUE_FLAGS.has(`-${flag}`) && valueFlag === flags.length - 1) index++;
   }
   return undefined;
 }
@@ -80,14 +82,18 @@ export function patternKillRefusal(command: string): string | undefined {
   for (const words of reading.commands) {
     const call = unwrappedProgram(words);
     if (!call && words.every((word) => /^[A-Za-z_]\w*=/.test(word.text))) {
-      // Only standalone assignments persist. Do not infer bindings across subshells or pipelines.
-      for (const word of words) {
-        const [name, value] = word.text.split('=');
-        if (!name) continue;
-        if (word.expands && value === '$!' && !/[|()`]|&&/.test(command) && !/\$!["']?\s*&/.test(command))
-          recorded.add(name);
-        else recorded.delete(name);
-      }
+      // Keep only one plainly written foreground assignment; lists can run in a child shell.
+      recorded.clear();
+      const word = words.length === 1 ? words[0] : undefined;
+      const name = word?.text.split('=')[0];
+      if (
+        word &&
+        name &&
+        /^[A-Za-z_]\w*=(?:\$!|"\$!")$/.test(word.raw) &&
+        !/[|()`\\]|&&/.test(command) &&
+        !/\$!"?\s*&/.test(command)
+      )
+        recorded.add(name);
       continue;
     }
     if (call?.name === 'pkill' || call?.name === 'killall') return REFUSAL;
