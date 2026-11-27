@@ -69,18 +69,18 @@ The three agent machines (`pc`, `mac`, `netcup`) share one setup. Apart from OS 
 | Job | Runs on |
 | --- | --- |
 | `worktree-cleanup`: removes finished worktrees and their branches, and fast-forwards each root checkout's `main` | Each machine, for itself |
-| Load watch (`workstation-load`), [notifier](#keep-the-agents-moving) | Each machine, for itself |
-| `boat-starts`: counts Boat's machine starts per day and raises an alert before the plan's limit | Each machine; only the lease holder counts |
-| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert` | The PC and the Mac; only the lease holder acts |
+| Load watch (`workstation-load`), [notifier](#keep-the-agents-moving) | Each machine, for itself. The notifier's GitHub read for all machines runs on the netcup VM |
+| `boat-starts`: counts Boat's machine starts per day and raises an alert before the plan's limit | The netcup VM; the PC only while the VM is gone (a shared lease) |
+| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert` | The netcup VM; the PC only while the VM is gone (a shared lease). `ci-alert` also checks the Boat key of the machine it runs on |
 | The production watcher's PC copy (`ops/prod_watch.py` in `ci-alert`), with the Vercel token `werkflow app prod-watch` | The PC, until werk-flow/werkflow-planning#573 removes the job and its token file after the first green scheduled run of `prod-watch.yml`. Then the owner revokes the token; revoked earlier, the PC copy fails and opens `Production alert: watcher` |
-| [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The PC, beside the stack |
+| [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The netcup VM, beside its stack; no other copy |
 | `report-dispatch`: starts one report thread per waiting [problem report](../features/problem-reports.md#current-product-baseline), blockers first; does nothing while the hand-out is off | The netcup VM, the one machine with the hand-out [file](environments.md#credentials). The Mac's installer and the Linux unit skip a machine without it |
 | `werkflow-uptime`: every 5 minutes, checks that PROD's and DEV's login pages and Supabase health endpoints answer | The netcup VM |
 | `dev-deploy-alert`: opens a `CI alert` issue when `werkflow-uptime` misses twice in a row, and closes it on the next green pass | The netcup VM, beside `werkflow-uptime` |
 
 A root checkout (`~/code/<repository>` of each workspace repository) on another branch, with changes, or with commits that `origin/main` lacks keeps its state, and `~/.local/state/worktree-cleanup.log` names it. A thread started at a project's root runs that checkout's hooks and skills, so leave each root on a clean `main`.
 
-A lease is the ref `refs/leases/<job>` (`ops/lease.py`): its holder renews it every pass; another machine takes over once it lapses. A lease is read with `git fetch` and swapped with `git push --force-with-lease`, so it costs no GitHub API call.
+A lease is the ref `refs/leases/<job>` (`ops/lease.py`): its holder renews it every pass; another machine takes over once it lapses. A lease is read with `git fetch` and swapped with `git push --force-with-lease`, so it costs no GitHub API call. The lease carries the job's state, so a takeover reports nothing twice. A shared lease belongs to the netcup VM, which is always on. The PC takes one only 15 minutes after it lapsed, so a late VM pass never moves a job, and lets it lapse back once the VM's notifier runs again. The Mac runs only its own jobs (`ops/install-mac.py`).
 
 ## Keep the agents moving
 
