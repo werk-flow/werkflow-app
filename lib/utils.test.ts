@@ -140,7 +140,6 @@ describe('formatBerlin', () => {
   // The inline copies the styles replaced on 2026-10-16, pinned to Berlin:
   // each style renders the same text for every instant.
   const replacedOptions: Record<BerlinLabelStyle, Intl.DateTimeFormatOptions> = {
-    numericDate: {},
     date: { day: '2-digit', month: '2-digit', year: 'numeric' },
     shortYearDate: { day: '2-digit', month: '2-digit', year: '2-digit' },
     compactDate: { day: 'numeric', month: 'numeric', year: '2-digit' },
@@ -197,7 +196,6 @@ describe('formatBerlin', () => {
     // Exact text, so a platform's ICU that renders a style differently fails
     // here: some builds drop the comma after an abbreviated weekday.
     const samples: Record<BerlinLabelStyle, string> = {
-      numericDate: '3.9.2026',
       date: '03.09.2026',
       shortYearDate: '03.09.26',
       compactDate: '3.9.26',
@@ -223,9 +221,6 @@ describe('formatBerlin', () => {
 
   test('a calendar date renders as that date, like the noon and local-midnight copies', () => {
     for (const date of ['2026-01-01', '2026-03-29', '2026-09-03', '2026-10-25', '2026-12-31']) {
-      expect(formatBerlin(date, 'numericDate')).toBe(
-        new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin' }).format(new Date(`${date}T12:00:00Z`)),
-      );
       expect(formatBerlin(date, 'date')).toBe(formatGermanDate(date));
       expect(formatBerlin(date, 'monthYear')).toBe(
         new Intl.DateTimeFormat('de-DE', {
@@ -243,7 +238,7 @@ describe('formatBerlin', () => {
       localMidnight.toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric', year: '2-digit' }),
     );
     expect(formatLocalCalendarDay(localMidnight, 'shortMonthYear')).toBe('Sept. 2026');
-    expect(formatLocalCalendarDay(new Date(2026, 8, 3, 23, 59), 'numericDate')).toBe('3.9.2026');
+    expect(formatLocalCalendarDay(new Date(2026, 8, 3, 23, 59), 'date')).toBe('03.09.2026');
   });
 });
 

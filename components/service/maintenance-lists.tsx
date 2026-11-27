@@ -11,7 +11,7 @@ import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { SkeletonColumn } from '@/components/ui/skeleton-table';
 import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
-import { cn, formatBerlin } from '@/lib/utils';
+import { cn, formatGermanDate } from '@/lib/utils';
 import {
   MAINTENANCE_COVERAGE_STATUS_LABELS,
   MAINTENANCE_DUE_STATUS_LABELS,
@@ -22,7 +22,7 @@ import {
 import type { MaintenanceCoveragePendingDraft } from './maintenance-coverage-dialog';
 
 export function formatMaintenanceDate(value: string | null): string {
-  return value ? formatBerlin(value, 'numericDate') : 'Nicht festgelegt';
+  return formatGermanDate(value, { empty: 'Nicht festgelegt' });
 }
 
 // One column definition for the due list header and its skeleton (design canon).

@@ -1,12 +1,9 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  formatDelegationDate,
-  holderSourceLabel,
-  personName,
-} from '@/components/settings/responsibility-display';
+import { holderSourceLabel, personName } from '@/components/settings/responsibility-display';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import { ORGANIZATION_RESPONSIBILITIES, RESPONSIBILITY_LABELS } from '@/lib/responsibilities/types';
+import { formatGermanDate } from '@/lib/utils';
 
 export function OwnResponsibilitySummary({ data }: { data: ResponsibilitySettingsData }) {
   const ownRecordId = data.currentEmployeeRecordId;
@@ -41,8 +38,7 @@ export function OwnResponsibilitySummary({ data }: { data: ResponsibilitySetting
                   {delegation.substituteEmployeeRecordId === ownRecordId
                     ? `Vertretung für ${personName(data.people, delegation.delegatorEmployeeRecordId)}`
                     : `Vertreten durch ${personName(data.people, delegation.substituteEmployeeRecordId)}`}{' '}
-                  vom {formatDelegationDate(delegation.validFrom)} bis{' '}
-                  {formatDelegationDate(delegation.validUntil)}
+                  vom {formatGermanDate(delegation.validFrom)} bis {formatGermanDate(delegation.validUntil)}
                 </p>
               ))}
             </section>

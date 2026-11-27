@@ -1,4 +1,4 @@
-import { formatBerlin, formatBerlinDateTime } from '@/lib/utils';
+import { formatBerlinDateTime, formatGermanDate } from '@/lib/utils';
 
 import { ACCESS_STATE_LABELS, EMPLOYMENT_LIFECYCLE_LABELS } from './lifecycle';
 import { ACCESS_STEP_LABELS, EMPLOYMENT_STEP_LABELS } from './lifecycle-steps';
@@ -41,7 +41,7 @@ function effectiveText(eventType: string, payload: Readonly<Record<string, unkno
   if (payload.transitionKind === 'cancel_scheduled') return null;
   if (eventType === 'employment_transition') {
     const day = parsableDate(payload.effectiveOn);
-    return day ? formatBerlin(day, 'numericDate') : null;
+    return day ? formatGermanDate(day) : null;
   }
   const instant = parsableDate(payload.effectiveAt);
   return instant && SCHEDULED_ACCESS_STEPS.has(String(payload.transitionKind))

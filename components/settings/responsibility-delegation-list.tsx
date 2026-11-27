@@ -3,7 +3,6 @@
 import {
   ERROR_MESSAGES,
   responsibilityErrorMessage,
-  formatDelegationDate,
   personName,
 } from '@/components/settings/responsibility-display';
 import { useBanner } from '@/components/ui/banner';
@@ -14,6 +13,7 @@ import { endResponsibilityDelegation } from '@/lib/responsibilities/actions';
 import { delegationWindowState, type DelegationWindowState } from '@/lib/responsibilities/delegation-window';
 import type { ResponsibilityDelegation } from '@/lib/responsibilities/resolution';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
+import { formatGermanDate } from '@/lib/utils';
 
 const DELEGATION_BADGES = {
   planned: { label: 'Geplant', variant: 'outline' },
@@ -75,7 +75,7 @@ export function DelegationList({
               <p className="font-medium">{personName(data.people, delegation.substituteEmployeeRecordId)}</p>
               <p className="text-muted-foreground">
                 Für {personName(data.people, delegation.delegatorEmployeeRecordId)} ·{' '}
-                {formatDelegationDate(delegation.validFrom)}–{formatDelegationDate(delegation.validUntil)}
+                {formatGermanDate(delegation.validFrom)}–{formatGermanDate(delegation.validUntil)}
               </p>
             </div>
             <div className="flex items-center gap-2">

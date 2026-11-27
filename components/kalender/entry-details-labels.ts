@@ -32,11 +32,11 @@ export function formatDateTime(date: Date): string {
   return formatBerlin(date, 'weekdayDateTime');
 }
 
-/** 3.9.2026: the viewer's calendar day of an entry, as the dialog's date fields show it. */
+/** 03.09.2026: the viewer's calendar day of an entry, as the dialog's date fields show it. */
 export function formatEntryDay(date: Date): string;
 export function formatEntryDay(date: Date | null | undefined): string | undefined;
 export function formatEntryDay(date: Date | null | undefined): string | undefined {
-  return date ? formatLocalCalendarDay(date, 'numericDate') : undefined;
+  return date ? formatLocalCalendarDay(date, 'date') : undefined;
 }
 
 /** Pass the whole failure: a time rule refusal names its times beside its code. */

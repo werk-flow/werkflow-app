@@ -12,7 +12,7 @@ import { useLiveView } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { EquipmentOpenFinding } from '@/lib/installed-equipment/open-findings-reads';
 import { MAINTENANCE_NEXT_ACTION_LABELS, MAINTENANCE_SCOPE_OUTCOME_LABELS } from '@/lib/maintenance/types';
-import { formatBerlin } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 
 /**
  * „Offene Mängel“ of the Anlage and its Vorgänger: what an unfinished visit
@@ -87,7 +87,7 @@ function OpenFindingEntry({ finding }: { finding: EquipmentOpenFinding }): React
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-medium">Wartungsbesuch am {formatBerlin(finding.visitDate, 'numericDate')}</p>
+        <p className="font-medium">Wartungsbesuch am {formatGermanDate(finding.visitDate)}</p>
         <Badge variant="warning">{MAINTENANCE_SCOPE_OUTCOME_LABELS[finding.outcome]}</Badge>
       </div>
       <p className="text-xs text-muted-foreground">
@@ -109,7 +109,7 @@ function OpenFindingEntry({ finding }: { finding: EquipmentOpenFinding }): React
       <p>
         <span className="font-medium">Nächster Schritt:</span>{' '}
         {MAINTENANCE_NEXT_ACTION_LABELS[finding.nextAction]}
-        {finding.targetDate && ` bis ${formatBerlin(finding.targetDate, 'numericDate')}`}
+        {finding.targetDate && ` bis ${formatGermanDate(finding.targetDate)}`}
         {finding.ownerName && ` · verantwortlich: ${finding.ownerName}`}
       </p>
       {finding.note && <p className="text-muted-foreground">Begründung: {finding.note}</p>}
