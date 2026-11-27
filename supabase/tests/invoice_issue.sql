@@ -309,6 +309,55 @@ begin
 end;
 $$;
 
+-- The server queues each original's key for the storage purge before it
+-- stores the bytes (lib/invoices/original.ts), for an issue and a cancel alike.
+-- Inside the purge's eight days nothing is claimed. Then the purge claims the
+-- key of an original no issue registered, such as one whose issue never
+-- committed, under its own organization, and releases the original the issue
+-- registered, which it never deletes. No organization queues another's key.
+do $$
+declare
+  v_org constant uuid := '38060000-0000-4000-8000-000000000010';
+  v_other constant uuid := '38060000-0000-4000-8000-000000000011';
+  v_filed constant text := v_org || '/38060000-0000-4000-8000-000000000304/Rechnung.pdf';
+  v_lost constant text := v_org || '/38060000-0000-4000-8000-000000000398/Rechnung.pdf';
+  v_foreign constant text := v_other || '/38060000-0000-4000-8000-000000000399/Stornorechnung.pdf';
+  v_claimed jsonb;
+begin
+  perform public.queue_storage_purge(v_org, array[v_filed, v_lost]);
+  perform public.queue_storage_purge(v_other, array[v_foreign]);
+  if (select count(*) from public.storage_purge_queue
+      where organization_id in (v_org, v_other) and storage_path in (v_filed, v_lost, v_foreign)
+        and purge_after = now() + interval '8 days') <> 3 then
+    raise exception 'an original was not queued eight days ahead';
+  end if;
+  if exists (select 1 from public.claim_storage_purge(100000) claimed
+      where claimed.storage_path in (v_filed, v_lost, v_foreign)) then
+    raise exception 'the purge claimed an original inside its delay';
+  end if;
+
+  -- Past the delay, ahead of every other due entry.
+  update public.storage_purge_queue set purge_after = now() - interval '100 years'
+  where organization_id in (v_org, v_other) and storage_path in (v_filed, v_lost, v_foreign);
+  select jsonb_object_agg(claimed.storage_path, claimed.organization_id) into v_claimed
+  from public.claim_storage_purge(100000) claimed
+  where claimed.storage_path in (v_filed, v_lost, v_foreign);
+  if v_claimed is distinct from jsonb_build_object(v_lost, v_org, v_foreign, v_other) then
+    raise exception 'the purge claimed % instead of the unregistered originals', v_claimed;
+  end if;
+  if exists (select 1 from public.storage_purge_queue where organization_id = v_org and storage_path = v_filed)
+    or not exists (select 1 from public.documents where organization_id = v_org and storage_path = v_filed) then
+    raise exception 'the purge kept the registered original queued or lost its row';
+  end if;
+
+  begin
+    perform public.queue_storage_purge(v_other, array[v_org || '/38060000-0000-4000-8000-000000000397/Rechnung.pdf']);
+    raise exception 'another organization queued this one''s original';
+  exception when check_violation then null;
+  end;
+end;
+$$;
+
 -- A filed ten-year invoice document of the first invoice, linked to its customer
 -- only, written directly: everything the registration leaves but its history entry.
 insert into public.documents (

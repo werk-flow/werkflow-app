@@ -40,7 +40,12 @@ const EMAIL_CHANGE_STATE_RECOVERY =
 // separate by design. Shrink only; a stale entry fails the test.
 const DOCUMENT_MAIL_ORDER =
   'Ordered around a mail: the rate-limit attempt persists when the send is refused; the delivery is recorded as sending in one transaction (request_document_delivery or retry_document_delivery) before the mail, and settle_document_delivery records the answer after it, because a mail cannot join a transaction.';
+const INVOICE_ORIGINAL_ORDER =
+  'Ordered around storage: the original’s fresh key is queued for the storage purge (queue_storage_purge) before its bytes are stored, and the one call that issues, cancels or files registers it after, because a storage write cannot join a transaction; the purge deletes the key once due unless that registration committed.';
 const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
+  'lib/invoices/issue-actions.ts::issueInvoice': INVOICE_ORIGINAL_ORDER,
+  'lib/invoices/issue-actions.ts::fileInvoiceOriginal': INVOICE_ORIGINAL_ORDER,
+  'lib/invoices/cancel-actions.ts::cancelInvoice': INVOICE_ORIGINAL_ORDER,
   'lib/time-tracking/clock-state-actions.ts::clockOutBeforeSignOut':
     'Independent by design: each organization’s open session is clocked out on its own, best effort before sign-out; one refusal must not keep the others running.',
   'lib/org/delete-action.ts::deleteOrganization':

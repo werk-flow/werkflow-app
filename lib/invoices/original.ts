@@ -19,7 +19,7 @@ import type { CalculatedInvoice } from '@/lib/invoicing/model';
 import { toEn16931 } from '@/lib/invoicing/to-en16931';
 import { logError } from '@/lib/logging';
 import { discardStorageObjects, putStorageObject } from '@/lib/storage/r2';
-import type { AdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { isConfirmedWriteRefusal } from '@/lib/supabase/write-refusal';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
@@ -225,7 +225,13 @@ export type StoredOriginal = {
   contentHash: string;
 };
 
-/** Stores the bytes of the original of `invoice` under a new document id. */
+/**
+ * Stores the bytes of the original of `invoice` under a new document id. Its
+ * key is queued for the storage purge first: the purge deletes it after eight
+ * days unless a document row names it by then, so an issue, cancel or filing
+ * that never commits leaves no billing data behind, and a registered original
+ * stays. A key that could not be queued is never written.
+ */
 async function storeInvoiceOriginal(
   organizationId: string,
   invoice: OriginalOf,
@@ -234,6 +240,14 @@ async function storeInvoiceOriginal(
   const documentId = randomUUID();
   const fileName = originalFileName(invoice);
   const path = buildDocumentStoragePath({ organizationId, documentId, fileName });
+  const { error } = await createSupabaseAdminClient().rpc('queue_storage_purge', {
+    p_organization_id: organizationId,
+    p_paths: [path],
+  });
+  if (error) {
+    logError('storeInvoiceOriginal: queue_storage_purge failed', error);
+    throw new Error('original_not_queued');
+  }
   await putStorageObject({ organizationId, path, body: bytes, contentType: 'application/pdf' });
   const contentHash = createHash('sha256').update(bytes).digest('hex');
   return { documentId, path, fileName, sizeBytes: bytes.byteLength, contentHash };
