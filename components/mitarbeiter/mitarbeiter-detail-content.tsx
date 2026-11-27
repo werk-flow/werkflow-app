@@ -42,7 +42,9 @@ const DETAIL_REFRESH_TABLES: readonly RealtimeTable[] = [
   'team_memberships',
   'organization_capabilities',
   'employee_capabilities',
-  // The removal block: the selected groups and each co-holder's access.
+  // The removal block: the selected groups, each co-holder's access, and the
+  // roles that make Admin and Büro default holders.
+  'organization_members',
   'organization_responsibility_configurations',
   'organization_responsibility_assignments',
   'organization_responsibility_delegations',
