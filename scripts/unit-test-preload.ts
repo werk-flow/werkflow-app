@@ -18,8 +18,11 @@ setDefaultTimeout(UNIT_TEST_TIMEOUT_MS);
 // The 'server-only' package throws on load outside the React server build, so
 // every unit test needs it replaced before a server module loads. Mocked here
 // once, before any test file runs, a test cannot load a server module unmocked,
-// whether it imports statically, alone or after another file. A fixture that
-// runs as a plain `bun <file>` process gets no preload and mocks it itself.
+// whether it imports statically, alone or after another file. Bun reads
+// bunfig.toml from the working directory only: `bun run test:unit <path>` runs
+// from the repository root wherever it starts, a bare `bun test` in a
+// subfolder gets no preload. A fixture that runs as a plain `bun <file>`
+// process gets none either and mocks it itself.
 mock.module('server-only', () => ({}));
 
 // Every property test draws from one seed and run count (lib/testing/property-runs.ts). A random
