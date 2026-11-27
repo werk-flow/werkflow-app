@@ -110,6 +110,7 @@ describe('pending correction projection (PF-19)', () => {
     const holder: EffectiveResponsibilityHolder = {
       employeeRecordId: 'rec-emil',
       userId: 'emil',
+      isLastingHolder: true,
       source: { kind: 'direct_assignment', configurationId: 'c1', assignmentId: 'a1' },
     };
     const { port, calls } = fakePort(
