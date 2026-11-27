@@ -587,7 +587,7 @@ test('the sibling step refuses a trusted folder that is a link', async () => {
   expect(existsSync(join(folder, 'prepare-siblings.env'))).toBe(false);
 });
 
-test("a task learns of its body's launch after its steps, and a launch that cannot be recorded ends the body", async () => {
+test("a task learns of its body's launch after its steps, before the body runs", async () => {
   const seen: string[] = [];
   const launched = await executor().run(
     {
@@ -601,19 +601,6 @@ test("a task learns of its body's launch after its steps, and a launch that cann
   );
   expect(launched.exitCode, launched.detail).toBe(0);
   expect(seen).toEqual(['prepare:true', 'body:false']);
-  rmSync(join(folder, 'job-fast.env'));
-  const refused = await executor().run(
-    {
-      ...task('sql'),
-      onLaunch: () => {
-        throw new Error('the work root is read-only');
-      },
-    },
-    new AbortController().signal,
-  );
-  expect(refused.exitCode, refused.detail).toBeNull();
-  expect(refused.detail).toContain('its launch could not be recorded: the work root is read-only');
-  expect(existsSync(join(folder, 'job-sql.env'))).toBe(false);
 });
 
 // However long the record takes, the body waits for it: a launch that cannot be recorded never runs
@@ -645,7 +632,7 @@ test('a body whose launch cannot be recorded never runs, however long the record
   );
   expect(launched, 'the launched process was not found').toBeDefined();
   expect(run.exitCode, run.detail).toBeNull();
-  expect(run.detail).toContain('its launch could not be recorded');
+  expect(run.detail).toContain('its launch could not be recorded: the work root is read-only');
   expect(existsSync(`${firstAct}.ran`), 'the body ran although its launch was never recorded').toBe(false);
 });
 

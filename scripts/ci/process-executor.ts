@@ -179,7 +179,7 @@ async function lockStack(
 /**
  * Runs a command as its own process group until it exits; `signal` ends the group. With `onSpawn`, the
  * command's process exists but the command waits at a gate until `onSpawn` returned: it never runs
- * before. When `onSpawn` throws, the gate never opens, the group is killed at once and the command
+ * before. When `onSpawn` throws, the group is killed at once, the gate never opens and the command
  * gives no exit code.
  */
 function runGroup(
@@ -191,13 +191,14 @@ function runGroup(
   if (signal.aborted) return Promise.resolve(null);
   return new Promise((resolve, reject) => {
     const output = openSync(options.log, 'a');
-    // The gate: a shell that execs the command only once it reads the go line, which is written
-    // after onSpawn returned. A closed stdin ends it without the command; the command itself reads
-    // no stdin, as without a gate.
+    // The gate: a shell that execs the command once its stdin gives the go line, written after
+    // onSpawn returned, or ends because this process died: a crash after onSpawn still launches the
+    // command. A refused launch kills the gate before it closes its stdin, so it never execs. The
+    // command itself reads no stdin, as without a gate.
     const gated = options.onSpawn !== undefined;
     const child = spawn(
       gated ? '/bin/sh' : command,
-      gated ? ['-c', 'read -r go && exec "$@" </dev/null', 'sh', command, ...args] : args,
+      gated ? ['-c', 'read -r go; exec "$@" </dev/null', 'sh', command, ...args] : args,
       {
         cwd: options.cwd,
         env: options.env,
@@ -225,8 +226,10 @@ function runGroup(
         options.onSpawn?.();
       } catch {
         refused = true;
-        child.stdin?.destroy();
+        // Killed first: a process with a pending SIGKILL runs no further instruction, so the
+        // gate never sees its stdin close.
         signalGroup('SIGKILL');
+        child.stdin?.destroy();
         return;
       }
       child.stdin?.end('go\n');
