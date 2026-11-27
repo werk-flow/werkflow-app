@@ -146,6 +146,20 @@ begin
   if public.list_time_correction_history_page(org_id,buero,'own_and_employee_subjects')->'ids'->>0 is distinct from removed then raise exception 'an employee-subject approver''s history lost a request of a record its subject no longer holds'; end if;
 end $$;
 
+-- The Data API follows the same rule: the caller reads their request on the
+-- record they hold, not the one on their old record; Büro reads both.
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"77000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+  if not exists(select 1 from public.time_correction_requests where id=md5('tc-1055')::uuid) then raise exception 'the caller cannot read their request on the record they hold'; end if;
+  if exists(select 1 from public.time_correction_requests where id='77000000-0000-4000-8000-000000000095') then raise exception 'the caller reads a request of a record they no longer hold'; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"77000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+  if not exists(select 1 from public.time_correction_requests where id='77000000-0000-4000-8000-000000000095') then raise exception 'Büro cannot read a request of a record its subject no longer holds'; end if;
+end $$;
+
 -- A browser session cannot execute the reader, even for its own organization.
 reset role;
 set local role authenticated;

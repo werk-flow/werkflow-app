@@ -63,3 +63,30 @@ create or replace function public.list_time_correction_history_page(
 $$;
 revoke all on function public.list_time_correction_history_page(uuid, uuid, text, integer, integer) from public, anon, authenticated;
 grant execute on function public.list_time_correction_history_page(uuid, uuid, text, integer, integer) to service_role;
+
+-- The Data API applies the same rule. Through their own branch a login reads
+-- a request, and with it its revisions, sources, events and applications,
+-- only while the request's record is one it holds now
+-- (`get_user_employee_record_ids`). Admin, Büro and time-approval holders
+-- keep reading every request of the organization. `alter policy` keeps the
+-- policy in place, so no reader is ever without one.
+-- @destructive: after release 8a73d1d0aa07: that build reads correction requests through the service role only and hears them over Realtime, so a login losing the Data API read of a record it no longer holds breaks none of its reads.
+alter policy time_correction_requests_select_permitted
+on public.time_correction_requests
+using (
+  organization_id in (select app_private.get_user_org_ids((select auth.uid())))
+  and (
+    (
+      (requested_by = (select auth.uid()) or subject_user_id = (select auth.uid()))
+      and subject_employee_record_id in (
+        select app_private.get_user_employee_record_ids((select auth.uid()))
+      )
+    )
+    or organization_id in (
+      select app_private.get_user_admin_or_manager_org_ids((select auth.uid()))
+    )
+    or app_private.is_time_approval_holder(
+      organization_id, (select auth.uid()), subject_user_id
+    )
+  )
+);
