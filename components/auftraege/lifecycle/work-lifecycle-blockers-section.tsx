@@ -14,10 +14,6 @@ import {
 } from '@/lib/work-lifecycle/types';
 import type { WorkLifecycleDialogOpener } from './work-lifecycle-dialog-state';
 
-function formatReviewDate(value: string | null): string {
-  return formatGermanDate(value, { empty: 'Ohne Datum' });
-}
-
 type WorkLifecycleBlockersSectionProps = {
   snapshot: WorkLifecycleSnapshot;
   isManager: boolean;
@@ -119,7 +115,7 @@ export function WorkLifecycleBlockersSection({
                   {blocker.responsible_employee_record_id
                     ? (ownerNames.get(blocker.responsible_employee_record_id) ?? 'Unbekannt')
                     : 'nicht hinterlegt'}{' '}
-                  · Wiedervorlage: {formatReviewDate(blocker.next_review_date)}
+                  · Wiedervorlage: {formatGermanDate(blocker.next_review_date, { empty: 'Ohne Datum' })}
                 </p>
               </div>
               {!readOnly &&
