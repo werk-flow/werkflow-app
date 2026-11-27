@@ -62,6 +62,18 @@ export function bypassHeaders(request: BrowserRequest, secret: string): Record<s
   return URL.parse(request.url)?.origin === STAGING_ORIGIN ? { 'x-vercel-protection-bypass': secret } : {};
 }
 
+/**
+ * What a refused request does besides being aborted. `fail`: a page in the journey's own page fails the
+ * journey. `close`: a page in any other page, such as a popup Stripe opens during the Checkout, closes
+ * that page and is printed as blocked. `block`: an asset, a frame or a socket is printed as blocked.
+ */
+export type Refusal = 'fail' | 'close' | 'block';
+
+export function refusalOf(request: BrowserRequest, inJourneyPage: boolean): Refusal {
+  if (!request.navigation || !request.mainFrame) return 'block';
+  return inJourneyPage ? 'fail' : 'close';
+}
+
 /** A refused request's origin for the journey's failure line; never its path, which may carry a token. */
 export function refusedOrigin(url: string): string {
   return URL.parse(url)?.origin ?? 'an unreadable URL';

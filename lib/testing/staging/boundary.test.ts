@@ -6,6 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   STAGING_ORIGIN,
   bypassHeaders,
+  refusalOf,
   refusedOrigin,
   requestVerdict,
   type BrowserRequest,
@@ -142,4 +143,22 @@ test("a refused request is named by its origin, never by its path's tokens", () 
     'https://app.werk-flow.app',
   );
   expect(refusedOrigin('::')).toBe('an unreadable URL');
+});
+
+describe('what a refusal does', () => {
+  test("a page refused in the journey's own page fails the journey", () => {
+    expect(refusalOf(page('https://stripe.com/'), true)).toBe('fail');
+  });
+
+  test('a page refused in a popup Stripe opens closes that popup and fails nothing', () => {
+    expect(verdict(page('https://stripe.com/'))).toBe('refused');
+    expect(refusalOf(page('https://stripe.com/'), false)).toBe('close');
+  });
+
+  test('a refused asset or frame is blocked in any page', () => {
+    for (const inJourneyPage of [true, false]) {
+      expect(refusalOf(asset('https://pay.google.com/gp/p/js/pay.js'), inJourneyPage)).toBe('block');
+      expect(refusalOf(embedded('https://pay.google.com/'), inJourneyPage)).toBe('block');
+    }
+  });
 });

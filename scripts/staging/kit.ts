@@ -8,6 +8,7 @@ import { supabaseProjectRefs } from '../../lib/security/production-access';
 import { readStagingAgentKeys, type StagingAgentKeyName } from '../../lib/security/staging-agent-keys';
 import {
   STAGING_ORIGIN,
+  refusalOf,
   refusedOrigin,
   requestVerdict,
   type BrowserRequest,
@@ -17,7 +18,6 @@ import {
   pendingInviteCodeQuery,
   sandboxAnswer,
   scopedReadQuery,
-  type MemberRole,
   type ReadableTable,
   type ScopedRead,
   type StripeFacts,
@@ -25,14 +25,17 @@ import {
 import {
   RUN_PATTERNS,
   StagingFailure,
+  actorRunId,
   failureText,
   factLine,
   isRunId,
   runActorEmail,
+  runMemberEmail,
   runOrganizationName,
   selectRuns,
   type ActorRow,
   type Fact,
+  type MemberRole,
   type OrganizationRow,
   type RunRows,
 } from '../../lib/testing/staging/runs';
@@ -184,8 +187,8 @@ async function readRunRows(kit: Kit): Promise<{ actors: ActorRow[]; organization
   const [actors, organizations] = await Promise.all([
     readOnlySql(
       kit,
-      "select id, email, created_at, raw_app_meta_data->>'werkflow_agent_run' as run_marker from auth.users where email like $1",
-      [RUN_PATTERNS.actorEmail],
+      "select id, email, created_at, raw_app_meta_data->>'werkflow_agent_run' as run_marker from auth.users where email like $1 or email like $2",
+      [RUN_PATTERNS.actorEmail, RUN_PATTERNS.memberEmail],
     ),
     readOnlySql(kit, 'select id, name, admin_id from public.organizations where name like $1', [
       RUN_PATTERNS.organizationName,
@@ -230,7 +233,7 @@ export async function readStripe(kit: Kit, path: string): Promise<StripeFacts[]>
   return sandboxAnswer(await json(response, 'The Stripe read'));
 }
 
-// --- The actor: a confirmed DEV user through the secret key, so no mail goes out ---
+// --- The actor: a confirmed DEV user through the secret key, so no sign-up mail goes out ---
 
 export type Actor = {
   readonly runId: string;
@@ -276,8 +279,12 @@ function newPassword(): string {
   return `${randomBytes(24).toString('base64url')}-Aa1`;
 }
 
-export async function createActor(kit: Kit, runId: string): Promise<Actor> {
-  const email = runActorEmail(runId);
+/**
+ * A new confirmed actor for `runId`. An actor the journey invites as `invitedAs` gets Resend's simulated
+ * delivery address, so its invite mail reaches no person; every other actor keeps the `.test` address.
+ */
+export async function createActor(kit: Kit, runId: string, invitedAs?: MemberRole): Promise<Actor> {
+  const email = invitedAs ? runMemberEmail(runId, invitedAs) : runActorEmail(runId);
   const password = newPassword();
   kit.secrets.push(password);
   const created = userAnswer.parse(
@@ -307,11 +314,11 @@ export async function createActor(kit: Kit, runId: string): Promise<Actor> {
  * and after any other machine's attempt. The user must still carry the run's address and run marker.
  */
 async function actorFor(kit: Kit, run: RunRows): Promise<Actor> {
-  const email = runActorEmail(run.runId);
   const user = userAnswer.parse(
     await json(await authAdmin(kit, `users/${run.actorId}`), 'Reading the actor'),
   );
-  if (user.email !== email || user.app_metadata[RUN_MARKER] !== run.runId)
+  const email = user.email;
+  if (actorRunId(email) !== run.runId || user.app_metadata[RUN_MARKER] !== run.runId)
     throw new StagingFailure('The user does not carry its run address and marker; nothing changed.');
   const password = newPassword();
   kit.secrets.push(password);
@@ -326,14 +333,17 @@ async function actorFor(kit: Kit, run: RunRows): Promise<Actor> {
 
 /**
  * Runs `journey` on a fresh browser whose pages come from staging only, with the bypass sent to
- * staging's host only (lib/testing/staging/boundary.ts), and closes it after. A refused page fails the
- * journey with its origin, whatever else failed. It takes no screenshot: a page may render a provider's
- * error body.
+ * staging's host only (lib/testing/staging/boundary.ts), and closes it after. A refused page in the
+ * journey's own page fails the journey with its origin, whatever else failed; a refused page in another
+ * page, such as a popup Stripe opens, closes that page (`refusalOf`). It takes no screenshot: a page may
+ * render a provider's error body.
  */
 export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => Promise<T>): Promise<T> {
   const browser = await chromium.launch({ channel: 'chromium' });
   const refused = new Set<string>();
   const blocked = new Set<string>();
+  // The page the journey drives, and whether another page had a page refused.
+  const own: { page: Page | null; strayRefused: boolean } = { page: null, strayRefused: false };
   let outcome: { result: T } | { error: unknown };
   try {
     // No service worker: its requests pass no route, so they would miss the bypass.
@@ -343,6 +353,13 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
       locale: 'de-DE',
       timezoneId: 'Europe/Berlin',
     });
+    const closeStray = (opened: Page) => {
+      if (own.page && opened !== own.page) void opened.close().catch(() => undefined);
+    };
+    // A popup's first page is refused before its page is reported, so it closes when it opens.
+    context.on('page', (opened) => {
+      if (own.strayRefused) closeStray(opened);
+    });
     const secret = kit.keys.VERCEL_STAGING_BYPASS_SECRET;
     await context.route('**/*', async (route) => {
       const request = route.request();
@@ -351,9 +368,14 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
         navigation: request.isNavigationRequest(),
         mainFrame: isMainFrame(request),
       };
-      // A refused page fails the journey; a refused asset or frame, such as a wallet button, is left out.
-      const refuse = (hop: BrowserRequest) =>
-        (hop.navigation && hop.mainFrame ? refused : blocked).add(refusedOrigin(hop.url));
+      const owner = pageOf(request);
+      const refuse = (hop: BrowserRequest) => {
+        const refusal = refusalOf(hop, owner !== null && owner === own.page);
+        (refusal === 'fail' ? refused : blocked).add(refusedOrigin(hop.url));
+        if (refusal !== 'close') return;
+        own.strayRefused = true;
+        for (const open of context.pages()) closeStray(open);
+      };
       try {
         await sendThroughBoundary(
           {
@@ -382,12 +404,13 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
       }
     });
     const page = await context.newPage();
+    own.page = page;
     try {
       outcome = { result: await journey(page) };
     } catch (error) {
-      if (blocked.size) kit.log('blocked', { origins: [...blocked].join(',') });
       outcome = { error };
     }
+    if (blocked.size) kit.log('blocked', { origins: [...blocked].join(',') });
   } finally {
     await browser.close();
   }
@@ -410,6 +433,15 @@ function isMainFrame(request: Request): boolean {
     return request.frame().parentFrame() === null;
   } catch {
     return request.isNavigationRequest();
+  }
+}
+
+/** The page a request belongs to, or null for a popup's first navigation, which has no frame yet. */
+function pageOf(request: Request): Page | null {
+  try {
+    return request.frame().page();
+  } catch {
+    return null;
   }
 }
 

@@ -5,8 +5,13 @@
 /** `20261126-1530-a1b2c3`: UTC start minute and six random hex digits. */
 const RUN_ID = /^20\d{6}-\d{4}-[0-9a-f]{6}$/;
 const ORGANIZATION_PREFIX = 'Agenten-Test ';
-/** A reserved test domain (RFC 2606): no mail to it leaves the internet's edge. */
+/** A reserved test domain (RFC 2606) for every actor that receives no mail: none leaves the internet's edge. */
 const ACTOR_DOMAIN = 'werkflow-agents.test';
+/**
+ * Resend's simulated delivery address, which accepts a label after `+`: an invited member's mail goes
+ * through the shared Resend account, reaches no person and never bounces.
+ */
+const MEMBER_DOMAIN = 'resend.dev';
 /** How long a run's rows stay before any machine's cleanup removes them. */
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
@@ -25,20 +30,47 @@ export function runOrganizationName(runId: string): string {
   return `${ORGANIZATION_PREFIX}${runId}`;
 }
 
+/** The roles a run's member actors join its organization with (`org_role`, an Admin cannot be invited). */
+export const MEMBER_ROLES = ['buero', 'employee'] as const;
+export type MemberRole = (typeof MEMBER_ROLES)[number];
+
+export function isMemberRole(role: string): role is MemberRole {
+  return MEMBER_ROLES.some((known) => known === role);
+}
+
+/** The address of a run's actor that receives no mail, such as an Admin. */
 export function runActorEmail(runId: string): string {
   return `agent+${runId}@${ACTOR_DOMAIN}`;
 }
 
-/** The SQL `like` pattern of every run's organization name and actor address. */
+/**
+ * The address a run's member is invited at and signs in with: Resend's simulated delivery address,
+ * labeled with the role and the run, so each run and role has its own (`delivered+agent-buero-<run id>`).
+ */
+export function runMemberEmail(runId: string, role: MemberRole): string {
+  if (!RUN_ID.test(runId)) throw new StagingFailure('A member address needs a run id.');
+  return `delivered+agent-${role}-${runId}@${MEMBER_DOMAIN}`;
+}
+
+/** The SQL `like` patterns of every run's organization name and actor addresses. */
 export const RUN_PATTERNS = {
   organizationName: `${ORGANIZATION_PREFIX}%`,
   actorEmail: `agent+%@${ACTOR_DOMAIN}`,
+  memberEmail: `delivered+agent-%@${MEMBER_DOMAIN}`,
 } as const;
 
 function runIdOf(value: string, prefix: string, suffix: string): string | null {
   if (!value.startsWith(prefix) || !value.endsWith(suffix)) return null;
   const runId = value.slice(prefix.length, value.length - suffix.length);
   return RUN_ID.test(runId) ? runId : null;
+}
+
+/** The run an actor's address names, as a run's Admin or as one of its members, or null for any other address. */
+export function actorRunId(email: string): string | null {
+  const asMember = MEMBER_ROLES.map((role) =>
+    runIdOf(email, `delivered+agent-${role}-`, `@${MEMBER_DOMAIN}`),
+  ).find((runId) => runId !== null);
+  return asMember ?? runIdOf(email, 'agent+', `@${ACTOR_DOMAIN}`);
 }
 
 /** `runMarker`: the run id in the user's app metadata, which only the secret key writes. */
@@ -60,7 +92,7 @@ export function selectRuns(
   now: Date,
 ): RunRows[] {
   return actors.flatMap((actor) => {
-    const actorRun = runIdOf(actor.email, 'agent+', `@${ACTOR_DOMAIN}`);
+    const actorRun = actorRunId(actor.email);
     // The address alone proves nothing: the marker only the kit's secret key writes must match it.
     if (actorRun === null || actor.runMarker !== actorRun) return [];
     const created = Date.parse(actor.createdAt);

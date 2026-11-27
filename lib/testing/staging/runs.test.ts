@@ -3,12 +3,15 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  RUN_PATTERNS,
   StagingFailure,
+  actorRunId,
   factLine,
   failureText,
   newRunId,
   redact,
   runActorEmail,
+  runMemberEmail,
   runOrganizationName,
   selectRuns,
   type ActorRow,
@@ -35,6 +38,58 @@ test('a run id names its UTC minute and six hex digits, and refuses less randomn
   expect(() => newRunId(NOW, 'zzzzzz')).toThrow();
   expect(runOrganizationName(RUN)).toBe('Agenten-Test 20261125-1500-a1b2c3');
   expect(runActorEmail(RUN)).toBe('agent+20261125-1500-a1b2c3@werkflow-agents.test');
+});
+
+/** A SQL `like` pattern as a regular expression: `%` any text, `_` one character, the rest literal. */
+const likes = (pattern: string, value: string) =>
+  new RegExp(
+    `^${pattern
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/%/g, '.*')
+      .replace(/_/g, '.')}$`,
+  ).test(value);
+
+describe('actor addresses', () => {
+  test('an actor that receives no mail keeps the reserved .test domain', () => {
+    expect(runActorEmail(RUN).endsWith('.test')).toBe(true);
+    expect(actorRunId(runActorEmail(RUN))).toBe(RUN);
+  });
+
+  test("an invited member gets Resend's simulated delivery address, one per run and role", () => {
+    expect(runMemberEmail(RUN, 'buero')).toBe('delivered+agent-buero-20261125-1500-a1b2c3@resend.dev');
+    expect(runMemberEmail(RUN, 'employee')).toBe('delivered+agent-employee-20261125-1500-a1b2c3@resend.dev');
+    expect(runMemberEmail(OTHER_RUN, 'buero')).not.toBe(runMemberEmail(RUN, 'buero'));
+    expect(() => runMemberEmail('not-a-run', 'buero')).toThrow(StagingFailure);
+    for (const role of ['buero', 'employee'] as const)
+      expect(actorRunId(runMemberEmail(RUN, role))).toBe(RUN);
+  });
+
+  test('no other address names a run: plain simulated addresses, other labels, other roles or domains', () => {
+    for (const email of [
+      'delivered@resend.dev',
+      `delivered+gg-${RUN}@resend.dev`,
+      `delivered+agent-admin-${RUN}@resend.dev`,
+      `delivered+agent-buero-${RUN}@resend.dev.example`,
+      `bounced+agent-buero-${RUN}@resend.dev`,
+      `delivered+agent-buero-${RUN}@werkflow-agents.test`,
+      `agent+${RUN}@resend.dev`,
+      'delivered+agent-buero-20261125-1500-a1b2c@resend.dev',
+    ])
+      expect(actorRunId(email), email).toBeNull();
+  });
+
+  test("the cleanup's patterns find every run address and only the run domains", () => {
+    const found = (email: string) =>
+      likes(RUN_PATTERNS.actorEmail, email) || likes(RUN_PATTERNS.memberEmail, email);
+    for (const email of [runActorEmail(RUN), runMemberEmail(RUN, 'buero'), runMemberEmail(RUN, 'employee')])
+      expect(found(email), email).toBe(true);
+    for (const email of [
+      'delivered@resend.dev',
+      `delivered+gg-${RUN}@resend.dev`,
+      `agent+${RUN}@partner.example`,
+    ])
+      expect(found(email), email).toBe(false);
+  });
 });
 
 describe('cleanup selection', () => {
@@ -69,6 +124,19 @@ describe('cleanup selection', () => {
       { runId: OTHER_RUN, actorId: 'actor-fresh', organizationIds: ['org-fresh'] },
     ]);
     expect(selectRuns(actors, organizations, '20261126-1200-000000', NOW)).toEqual([]);
+  });
+
+  test("a run's member is selected by its simulated address and marker, never without the marker", () => {
+    const member = {
+      id: 'member',
+      email: runMemberEmail(OTHER_RUN, 'buero'),
+      createdAt: FRESH,
+      runMarker: OTHER_RUN,
+    };
+    const unmarked = { ...member, id: 'unmarked', runMarker: null };
+    expect(selectRuns([member, unmarked], organizations, OTHER_RUN, NOW)).toEqual([
+      { runId: OTHER_RUN, actorId: 'member', organizationIds: [] },
+    ]);
   });
 
   test('an actor with an unreadable creation time stays', () => {
