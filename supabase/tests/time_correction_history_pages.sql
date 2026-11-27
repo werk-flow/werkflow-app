@@ -157,6 +157,17 @@ insert into public.time_correction_requests(id,organization_id,subject_employee_
   '77000000-0000-4000-8000-000000000004','77000000-0000-4000-8000-000000000003','add','withdrawn',md5('tc-filed-a')||md5('tc-filed-b'),'2025-06-01'),
 ('77000000-0000-4000-8000-000000000097','77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-0000000000a7','77000000-0000-4000-8000-000000000002','77000000-0000-4000-8000-000000000002','add','withdrawn',md5('tc-own-old-a')||md5('tc-own-old-b'),'2025-06-01');
 set local session_replication_role = origin;
+-- The colleague's access is suspended; they still hold the record, so the
+-- history and the Data API both keep the caller's request about them.
+insert into public.personnel_access_lifecycles (organization_id, employee_record_id, state, state_effective_at)
+select record.organization_id, record.id, 'suspended', now() from public.employee_records record
+where record.organization_id='77000000-0000-4000-8000-000000000010' and record.user_id='77000000-0000-4000-8000-000000000004'
+on conflict (employee_record_id) do update set state = 'suspended', state_effective_at = now();
+set local role service_role;
+do $$ begin
+  if not public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000003','own')->'ids' ? '77000000-0000-4000-8000-000000000096' then raise exception 'own history lost a request filed about a suspended colleague who holds its record'; end if;
+end $$;
+reset role;
 set local role authenticated;
 -- The caller reads their request on the record they hold and the one they filed
 -- about the colleague, never their request on the record they no longer hold.

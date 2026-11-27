@@ -25,11 +25,8 @@ create or replace function public.list_time_correction_history_page(
     select request.id, request.created_at
     from public.time_correction_requests request
     cross join lateral (
-      select exists (
-        select 1 from public.employee_records subject_record
-        where subject_record.id = request.subject_employee_record_id
-          and subject_record.organization_id = request.organization_id
-          and subject_record.user_id = request.subject_user_id
+      select app_private.is_p1_23_employee_record_actor(
+        request.organization_id, request.subject_employee_record_id, request.subject_user_id
       ) as held
     ) subject
     where request.organization_id = p_organization_id
@@ -64,12 +61,14 @@ $$;
 revoke all on function public.list_time_correction_history_page(uuid, uuid, text, integer, integer) from public, anon, authenticated;
 grant execute on function public.list_time_correction_history_page(uuid, uuid, text, integer, integer) to service_role;
 
--- The Data API applies the same rule. A login reads a request, and with it
+-- The Data API applies the same rule, with the same link check
+-- (`is_p1_23_employee_record_actor`). A login reads a request, and with it
 -- its revisions, sources, events and applications, as its subject or its
--- requester only while the subject holds the request's record
--- (`get_user_employee_record_ids` of the subject). Admin, Büro and
--- time-approval holders read every request about someone else. `alter
--- policy` keeps the policy in place, so no reader is ever without one.
+-- requester only while the subject holds the request's record. Admin, Büro
+-- and time-approval holders read every request about someone else. `alter
+-- policy` keeps the policy in place, so no reader is ever without one. On a
+-- rolled-back build, an open „Vorgemerkte Zeit“ that still counts an
+-- old-record request no longer hears its decision; its next read is correct.
 -- @destructive: after release 8a73d1d0aa07: that build reads correction requests through the service role only and hears them over Realtime, so a login losing the Data API read of a record it no longer holds breaks none of its reads.
 alter policy time_correction_requests_select_permitted
 on public.time_correction_requests
@@ -78,7 +77,7 @@ using (
   and (
     (
       (requested_by = (select auth.uid()) or subject_user_id = (select auth.uid()))
-      and subject_employee_record_id in (select app_private.get_user_employee_record_ids(subject_user_id))
+      and app_private.is_p1_23_employee_record_actor(organization_id, subject_employee_record_id, subject_user_id)
     )
     or (
       subject_user_id <> (select auth.uid())
