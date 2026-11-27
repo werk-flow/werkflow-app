@@ -163,6 +163,8 @@ const proofOf = (
   entry: { kind: 'article' | 'leistung'; id: string },
   kind: 'listenpreis' | 'kundenkondition',
   unitPriceCents: number,
+  /** The unit the read answered; a Position saved in another one loses the source. */
+  unit = 'meter',
 ) =>
   signPriceSource({
     organizationId: ORGANIZATION_A,
@@ -170,6 +172,7 @@ const proofOf = (
     entry,
     kind,
     conditionId: kind === 'kundenkondition' ? conditionId : null,
+    unit,
     unitPriceCents,
     priceQuantity: 1,
   });
@@ -330,7 +333,7 @@ assert.deepEqual(await readOfferLeistungLine({ offerId: plainOfferId, leistungId
     cost: { amountCents: 4180, priceQuantity: 1 },
     priceSource: {
       kind: 'listenpreis',
-      proof: proofOf(plainOfferId, { kind: 'leistung', id: leistungIds.own }, 'listenpreis', 7250),
+      proof: proofOf(plainOfferId, { kind: 'leistung', id: leistungIds.own }, 'listenpreis', 7250, 'hour'),
     },
   },
 });
@@ -338,15 +341,19 @@ assert.deepEqual(await readOfferLeistungLine({ offerId: plainOfferId, leistungId
 // The customer's conditions of today price the same entries: the Leistung's own price, the
 // article's list price less 10 % on material (1234 × 0,9 = 1110,6 → 1111), both naming the version
 // with the server's proof for this offer.
-const fromCondition = (entry: { kind: 'article' | 'leistung'; id: string }, unitPriceCents: number) => ({
+const fromCondition = (
+  entry: { kind: 'article' | 'leistung'; id: string },
+  unitPriceCents: number,
+  unit: string,
+) => ({
   kind: 'kundenkondition',
   condition: { id: conditionId, version: 2, validFrom: '2026-01-01' },
-  proof: proofOf(offerId, entry, 'kundenkondition', unitPriceCents),
+  proof: proofOf(offerId, entry, 'kundenkondition', unitPriceCents, unit),
 });
 const ownLeistung = await readOfferLeistungLine({ offerId, leistungId: leistungIds.own });
 assert.deepEqual(ownLeistung.success && [ownLeistung.line.unitPriceCents, ownLeistung.line.priceSource], [
   6800,
-  fromCondition({ kind: 'leistung', id: leistungIds.own }, 6800),
+  fromCondition({ kind: 'leistung', id: leistungIds.own }, 6800, 'hour'),
 ]);
 const ownArticle = await readOfferArticleLine({ offerId, articleId: articleIds.own });
 assert.deepEqual(
@@ -355,7 +362,7 @@ assert.deepEqual(
     ownArticle.line.priceQuantity,
     ownArticle.line.priceSource,
   ],
-  [1111, 1, fromCondition({ kind: 'article', id: articleIds.own }, 1111)],
+  [1111, 1, fromCondition({ kind: 'article', id: articleIds.own }, 1111, 'meter')],
 );
 const legacy = await readOfferArticleLine({ offerId: plainOfferId, articleId: articleIds.legacyUnit });
 assert.equal(legacy.success && legacy.line.unit, null, 'an article with a unit outside the list kept a unit');
@@ -392,6 +399,15 @@ assert.deepEqual(
       // The answered price per 100 instead of per one, and a forged proof on a real entry.
       { ...position(hour, null, claimOf(hour, 6800)), unitPriceCents: 6800, priceQuantity: 100 },
       position(pipe, null, { kind: 'listenpreis', proof: 'A'.repeat(43) }),
+      // The answered price per hour on a Position the office switched to meters.
+      {
+        ...position(hour, null, {
+          kind: 'kundenkondition',
+          conditionId,
+          proof: proofOf(offerId, hour, 'kundenkondition', 6800, 'hour'),
+        }),
+        unitPriceCents: 6800,
+      },
     ]),
   ),
   { success: true, offerId, ...SAVED },
@@ -417,6 +433,7 @@ assert.deepEqual(
     [null, { amountCents: 0, priceQuantity: 1 }, false, { kind: 'manuell', conditionId: null }],
     [hour, null, false, { kind: 'manuell', conditionId: null }],
     [pipe, null, false, { kind: 'manuell', conditionId: null }],
+    [hour, null, false, { kind: 'manuell', conditionId: null }],
   ],
 );
 

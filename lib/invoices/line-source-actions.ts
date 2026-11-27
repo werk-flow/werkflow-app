@@ -221,6 +221,7 @@ async function readOfferCatalogLine(
     entry: { kind: ref.kind, id: ref.id },
     kind: line.priceSource.kind,
     conditionId: line.priceSource.kind === 'kundenkondition' ? line.priceSource.condition.id : null,
+    unit: line.unit,
     unitPriceCents: line.unitPriceCents,
     priceQuantity: line.priceQuantity,
   });

@@ -55,6 +55,7 @@ function storedPriceSource(
     entry: position.source,
     kind: claim.kind,
     conditionId,
+    unit: position.unit,
     unitPriceCents: position.unitPriceCents,
     priceQuantity: position.priceQuantity,
   });

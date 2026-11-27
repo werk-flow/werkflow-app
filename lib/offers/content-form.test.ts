@@ -165,6 +165,8 @@ describe('catalogPositionForm', () => {
     expect(withCostOrMarkup(position, { cost: '8,00' }).priceSource).toEqual(position.priceSource);
     const marked = withCostOrMarkup(withCostOrMarkup(position, { cost: '8,00' }), { markup: '50' });
     expect([marked.price, marked.priceSource]).toEqual(['12,00', { kind: 'manuell' }]);
+    // A price per hour is no price per meter: a new unit is the office's own price too.
+    expect(withUnit(position, 'piece').priceSource).toEqual({ kind: 'manuell' });
   });
 
   test('a Leistung is named as the source, and one without a cost rate leaves the cost to the office', () => {

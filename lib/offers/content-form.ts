@@ -195,9 +195,14 @@ export function markupSentence(position: PositionForm): string | null {
     : null;
 }
 
-/** The position in another unit: a cost and a markup stated in the old unit no longer apply. */
+/**
+ * The position in another unit: a cost and a markup stated in the old unit no
+ * longer apply, and the price is the office's own for the new one („manuell“).
+ */
 export function withUnit(position: PositionForm, unit: string): PositionForm {
-  return unit === position.unit ? position : { ...position, unit, cost: '', markup: '' };
+  return unit === position.unit
+    ? position
+    : { ...position, unit, cost: '', markup: '', priceSource: { kind: 'manuell' } };
 }
 
 /** A typed cost per price quantity: any article price may stand in the cost store, up to a line's bound. */

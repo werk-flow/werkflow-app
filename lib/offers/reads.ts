@@ -154,7 +154,7 @@ const offerWithCostsSchema = z.object({
  */
 function priceSourceOf(
   stored: z.infer<typeof priceSourceSchema> | null,
-  position: Pick<OfferFreePosition, 'source' | 'unitPriceCents' | 'priceQuantity'>,
+  position: Pick<OfferFreePosition, 'source' | 'unit' | 'unitPriceCents' | 'priceQuantity'>,
   scope: { organizationId: string; offerId: string },
 ): OfferPriceSource {
   if (!stored || stored.kind === 'manuell' || !position.source) return { kind: 'manuell' };
@@ -163,6 +163,7 @@ function priceSourceOf(
     entry: { kind: position.source.kind, id: position.source.id },
     kind: stored.kind,
     conditionId: stored.condition?.id ?? null,
+    unit: position.unit,
     unitPriceCents: position.unitPriceCents,
     priceQuantity: position.priceQuantity,
   });

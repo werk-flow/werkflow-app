@@ -8,7 +8,7 @@ import type { PriceSourceKind } from './customer-conditions';
 // The server's proof of where an offer Position's price came from. The
 // catalog read signs the price it resolved, and the offer read signs each
 // stored source again, so a save keeps a source only for the offer, catalog
-// entry, version, price and price quantity the server answered. Any other
+// entry, version, unit, price and price quantity the server answered. Any other
 // price, typed or sent by any caller, is stored as „manuell“
 // (lib/offers/content-writes.ts).
 
@@ -18,6 +18,8 @@ type ProvenSource = {
   entry: { kind: 'article' | 'leistung'; id: string };
   kind: Exclude<PriceSourceKind, 'manuell'>;
   conditionId: string | null;
+  /** The entry's unit code as the server answered it; null for one outside the list. */
+  unit: string | null;
   unitPriceCents: number;
   priceQuantity: PriceQuantity;
 };
@@ -35,6 +37,7 @@ function signature(source: ProvenSource): Buffer {
     source.entry.id,
     source.kind,
     source.conditionId ?? '',
+    source.unit ?? '',
     String(source.unitPriceCents),
     String(source.priceQuantity),
   ];

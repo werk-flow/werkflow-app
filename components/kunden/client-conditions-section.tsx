@@ -147,7 +147,10 @@ export function ClientConditionsSection({
   const settle = useSettleOnChange(conditions);
   // The render the save carries in its answer can land before the wait starts: wait from before the call.
   const since = useRef(0);
-  const save = useServerAction(recordCustomerCondition, { settle: () => settle(since.current) });
+  // Only a stored version changes the page; a refusal waits for nothing.
+  const save = useServerAction(recordCustomerCondition, {
+    settle: (result) => (result.success ? settle(since.current) : Promise.resolve()),
+  });
   const today = berlinToday();
 
   const record = async (
