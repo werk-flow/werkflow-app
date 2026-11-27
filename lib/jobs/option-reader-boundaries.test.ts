@@ -98,7 +98,6 @@ type Caller = {
   isManagerOrAbove: boolean;
 };
 let caller: Caller = { userId: managerId, orgId: organizationId, role: 'admin', isManagerOrAbove: true };
-mock.module('server-only', () => ({}));
 mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: recordingClient }));
 mock.module('@/lib/supabase/server', () => ({ createSupabaseServerClient: async () => recordingClient() }));
 mock.module('@/lib/jobs/auth', () => ({

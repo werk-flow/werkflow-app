@@ -190,6 +190,7 @@ function ViewHarness({
     approvalHolder: {
       employeeRecordId: 'manager-record',
       userId: 'manager',
+      isLastingHolder: true,
       source: { kind: 'role_default', configurationId: null, role: 'admin' },
     },
   };

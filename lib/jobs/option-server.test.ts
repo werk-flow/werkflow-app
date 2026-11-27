@@ -9,7 +9,6 @@ const untouchedDatabase = {
     throw new Error('no read expected');
   },
 };
-mock.module('server-only', () => ({}));
 let adminDatabase: object = untouchedDatabase;
 mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => adminDatabase }));
 mock.module('@/lib/supabase/server', () => ({ createSupabaseServerClient: async () => untouchedDatabase }));

@@ -6,7 +6,6 @@ import { ID_BATCH_SIZE, ROW_PAGE_SIZE } from '@/lib/supabase/query-batches';
 // The board asks for the dispatch states of every occurrence in its window.
 // The former reads put all revision ids into one query string and refused
 // more than 5,000 recipient or acknowledgement rows; a failed read was silent.
-mock.module('server-only', () => ({}));
 
 const { loadOccurrenceDispatchStates } = await import('./server');
 

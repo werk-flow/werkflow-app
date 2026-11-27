@@ -36,11 +36,14 @@ export type DocumentPosition = {
   kind: 'standard' | 'bedarf' | 'alternative';
 };
 
+/** A text line between the positions: its text and description, without number, quantity or amount. */
+export type DocumentTextLine = { kind: 'text'; text: string; description: string };
+
 export type DocumentSection = {
   /** Empty for a document whose lines are not numbered by section, such as an invoice. */
   number: string;
   title: string;
-  positions: DocumentPosition[];
+  positions: Array<DocumentPosition | DocumentTextLine>;
   subtotalCents: number;
 };
 

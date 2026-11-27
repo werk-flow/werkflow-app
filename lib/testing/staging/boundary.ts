@@ -62,6 +62,46 @@ export function bypassHeaders(request: BrowserRequest, secret: string): Record<s
   return URL.parse(request.url)?.origin === STAGING_ORIGIN ? { 'x-vercel-protection-bypass': secret } : {};
 }
 
+/**
+ * What a refused request does besides being aborted. `fail`: a page in the journey's own page fails the
+ * journey. `close`: a page in any other page, such as a popup Stripe opens during the Checkout, closes
+ * that page and is printed as blocked. `block`: an asset, a frame or a socket is printed as blocked.
+ */
+export type Refusal = 'fail' | 'close' | 'block';
+
+export function refusalOf(request: BrowserRequest, inJourneyPage: boolean): Refusal {
+  if (!request.navigation || !request.mainFrame) return 'block';
+  return inJourneyPage ? 'fail' : 'close';
+}
+
+/**
+ * Closes the page a refused request belongs to when `refusalOf` says `close`, and only that page, never
+ * the journey's own. Playwright routes a popup's first page before it reports the popup, so that request
+ * cannot name its page yet: it waits until a page opens and it can.
+ */
+export function strayPageCloser<Request, Page>(ports: {
+  /** The request's page, or null while Playwright has not reported it. */
+  pageOf(request: Request): Page | null;
+  journeyPage(): Page | null;
+  close(page: Page): void;
+}): { refused(request: Request): void; pageOpened(): void } {
+  const waiting = new Set<Request>();
+  const closeOwner = (request: Request): boolean => {
+    const page = ports.pageOf(request);
+    if (page === null) return false;
+    if (page !== ports.journeyPage()) ports.close(page);
+    return true;
+  };
+  return {
+    refused(request) {
+      if (!closeOwner(request)) waiting.add(request);
+    },
+    pageOpened() {
+      for (const request of waiting) if (closeOwner(request)) waiting.delete(request);
+    },
+  };
+}
+
 /** A refused request's origin for the journey's failure line; never its path, which may carry a token. */
 export function refusedOrigin(url: string): string {
   return URL.parse(url)?.origin ?? 'an unreadable URL';

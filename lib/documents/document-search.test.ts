@@ -1,6 +1,5 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 
-mock.module('server-only', () => ({}));
 const { applyDocumentSearch } = await import('./reads');
 
 /** The PostgREST `or` filter applyDocumentSearch builds for one search text. */

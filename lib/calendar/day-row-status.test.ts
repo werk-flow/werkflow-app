@@ -95,6 +95,7 @@ describe('canManageBlock: the time_approval holder decides, as submitTimeCorrect
   const holder = (role: 'admin' | 'buero', userId = `${role}-user`): EffectiveResponsibilityHolder => ({
     employeeRecordId: `${role}-record`,
     userId,
+    isLastingHolder: true,
     source: { kind: 'role_default', configurationId: null, role },
   });
   type Case = Partial<Parameters<typeof canManageBlock>[2]> & {

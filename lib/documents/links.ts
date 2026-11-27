@@ -18,8 +18,10 @@ import { documentWriteFailure, revalidateDocuments } from './write-support';
 /**
  * A target the link dialogs attach a document to. Requests receive documents
  * only at upload, offers only from the request they were converted from
- * (convert_client_request_to_offer): an offer's document stays with the office
- * and never reaches a job or project through a dialog of its own.
+ * (convert_client_request_to_offer) and the PDF of each sent revision
+ * (send_offer): an offer's document stays with the office and never reaches
+ * a job or project through a dialog of its own. A sent revision's PDF takes no
+ * further link at all (`document_is_offer_original`).
  */
 export type DocumentLinkTarget =
   | { kind: 'job'; jobId: string }
@@ -144,7 +146,13 @@ export async function writeDocumentLinks(
     return documentWriteFailure(
       'Failed to update document links',
       error,
-      ['document_not_found', 'document_is_invoice_original', 'link_not_found', 'not_authorized'],
+      [
+        'document_not_found',
+        'document_is_invoice_original',
+        'document_is_offer_original',
+        'link_not_found',
+        'not_authorized',
+      ],
       change.fallback,
     );
   }

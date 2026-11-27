@@ -1,34 +1,18 @@
 'use client';
 
-import { useEffect } from 'react';
 import { Download, ExternalLink, FileCode, FileText } from 'lucide-react';
 
 import { DocumentSampleRowSkeleton } from '@/components/loading-states/einstellungen-page-skeleton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { SectionError } from '@/components/ui/section-error';
-import { useClientRead } from '@/hooks/use-client-read';
-import type { ActionFailure } from '@/lib/action-result';
+import { PdfFrame, usePdfRead } from '@/components/shared/pdf-frame';
 
 /** The route handler that renders the Musterangebot for Admin and Büro. */
 const SAMPLE_OFFER_PATH = '/api/musterangebot';
 
 /** The route handler that builds the checked Muster-E-Rechnung (ZUGFeRD PDF with EN 16931 XML) for Admin and Büro. */
 const SAMPLE_INVOICE_PATH = '/api/musterrechnung';
-
-type SampleOfferRead = { success: true; url: string } | ActionFailure<'load_failed'>;
-
-/** Renders the Musterangebot once and keeps its bytes, so opening and downloading show the same file. */
-async function readSampleOffer(signal: AbortSignal): Promise<SampleOfferRead> {
-  try {
-    const response = await fetch(SAMPLE_OFFER_PATH, { signal, cache: 'no-store' });
-    if (!response.ok) return { success: false, error: 'load_failed' };
-    return { success: true, url: URL.createObjectURL(await response.blob()) };
-  } catch {
-    // A lost connection is the same failure as a refused render: the retry asks again.
-    return { success: false, error: 'load_failed' };
-  }
-}
 
 type PreviewProps = {
   /** The organization whose profile the sample shows. */
@@ -37,7 +21,7 @@ type PreviewProps = {
 };
 
 /**
- * The Musterangebot as the PDF a customer receives, to open or download. A
+ * The Musterangebot as the PDF a customer receives, shown inline, to open or download. A
  * saved change of the company profile renders it anew; another organization
  * mounts a new preview, so no sample of the one before stays on screen.
  */
@@ -46,13 +30,11 @@ export function DocumentSamplePreview(props: PreviewProps) {
 }
 
 function SamplePreview({ profileUpdatedAt }: Pick<PreviewProps, 'profileUpdatedAt'>) {
-  const sample = useClientRead({
-    read: readSampleOffer,
+  const sample = usePdfRead({
+    path: SAMPLE_OFFER_PATH,
     deps: [profileUpdatedAt],
     failureMessage: 'Das Musterangebot konnte nicht erstellt werden.',
   });
-  const url = sample.data?.url;
-  useEffect(() => (url ? () => URL.revokeObjectURL(url) : undefined), [url]);
 
   return (
     <Card>
@@ -91,10 +73,14 @@ function SamplePreview({ profileUpdatedAt }: Pick<PreviewProps, 'profileUpdatedA
             </div>
           </div>
         ) : (
-          <div role="status" aria-busy="true">
-            <span className="sr-only">Musterangebot wird erstellt.</span>
-            <DocumentSampleRowSkeleton />
-          </div>
+          <DocumentSampleRowSkeleton />
+        )}
+        {!sample.failure && (
+          <PdfFrame
+            url={sample.data?.url}
+            title="Musterangebot"
+            loadingLabel="Musterangebot wird erstellt."
+          />
         )}
         <div>
           <Button variant="link" className="h-auto px-0" asChild>

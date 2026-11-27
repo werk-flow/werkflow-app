@@ -1,9 +1,8 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { getDocumentProxy } from 'unpdf';
 
 import type { ServiceReport } from '@/lib/service-reports/model';
 
-mock.module('server-only', () => ({}));
 const { renderBusinessDocument } = await import('./render');
 const { serviceReportDocument } = await import('./service-report-layout');
 const { offerLetterhead } = await import('@/lib/company-profile/letterhead');

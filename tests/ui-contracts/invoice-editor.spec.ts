@@ -48,3 +48,28 @@ test('a settings read in a new Berlin year replaces the text read in the old one
   await expect(visibleText(page, 'Es gibt keine Änderungen zu speichern.')).toBeVisible();
   expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
 });
+
+// „Versand“ on the invoice page ("Sending invoices"): a cancelled invoice keeps the history of how
+// it went out, read-only, since the database refuses every further send of it.
+test('a cancelled invoice lists its earlier sends and offers no send, retry or manual record', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'invoice-deliveries-cancelled');
+  await expect(page.getByRole('heading', { name: 'Versand' })).toBeVisible();
+  await expect(visibleText(page, 'E-Mail an erika.musterfrau@lindenhof.example')).toBeVisible();
+  await expect(visibleText(page, 'E-Mail an buchhaltung@lindenhof.example')).toBeVisible();
+  await expect(visibleText(page, 'Die E-Mail ist nicht rausgegangen.')).toBeVisible();
+  // An unanswered first attempt may have reached the customer, though the retry failed.
+  await expect(
+    visibleText(page, 'Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: Die E-Mail'),
+  ).toBeVisible();
+  await expect(page.getByRole('button')).toHaveCount(0);
+});
+
+test('an issued invoice offers sending, a manual record and the retry of a failed send', async ({ page }) => {
+  await openContractFixture(page, 'invoice-deliveries-issued');
+  await expect(visibleText(page, 'E-Mail an erika.musterfrau@lindenhof.example')).toBeVisible();
+  for (const name of ['Per E-Mail senden', 'Als manuell versendet markieren', 'Erneut senden']) {
+    await expect(page.getByRole('button', { name })).toBeVisible();
+  }
+});

@@ -11,6 +11,8 @@ export type ResponsibilityMember = {
   userId: string;
   role: OrgRole;
   active: boolean;
+  /** An exit date is set, past or planned. */
+  hasExitDate: boolean;
   /** Operational personnel access now; a suspended, ended or prestart holder delegates nothing. */
   hasEffectiveAccess: boolean;
 };
@@ -74,6 +76,11 @@ type EffectiveResponsibilitySource =
 export type EffectiveResponsibilityHolder = {
   employeeRecordId: string;
   userId: string;
+  /**
+   * Effective access now and no exit date set, past or planned: the only
+   * co-holder the database's last-holder checks count.
+   */
+  isLastingHolder: boolean;
   source: EffectiveResponsibilitySource;
 };
 
@@ -134,6 +141,16 @@ function compareDelegationPrecedence(
   return left.id.localeCompare(right.id);
 }
 
+/**
+ * The rule of the last-holder checks in
+ * `app_private.protect_last_selected_responsibility_holder` and
+ * `public.set_personnel_employment_transition`: no exit date and
+ * `app_private.p1_24_has_effective_access`.
+ */
+function isLastingHolder(member: ResponsibilityMember): boolean {
+  return !member.hasExitDate && member.hasEffectiveAccess;
+}
+
 /** The holders the configuration names, or every active Admin and Büro member when none is effective. */
 function resolveBaseHolders(
   configuration: ResponsibilityConfiguration | null,
@@ -153,6 +170,7 @@ function resolveBaseHolders(
             {
               employeeRecordId: member.employeeRecordId,
               userId: member.userId,
+              isLastingHolder: isLastingHolder(member),
               source: {
                 kind: 'role_default' as const,
                 configurationId: configuration.id,
@@ -167,6 +185,7 @@ function resolveBaseHolders(
             {
               employeeRecordId: member.employeeRecordId,
               userId: member.userId,
+              isLastingHolder: isLastingHolder(member),
               source: {
                 kind: 'direct_assignment' as const,
                 configurationId: configuration.id,
@@ -187,6 +206,7 @@ function resolveBaseHolders(
           {
             employeeRecordId: member.employeeRecordId,
             userId: member.userId,
+            isLastingHolder: isLastingHolder(member),
             source: {
               kind: 'role_default' as const,
               configurationId: null,
@@ -222,6 +242,7 @@ function addDelegatedHolders(
     holders.set(substitute.employeeRecordId, {
       employeeRecordId: substitute.employeeRecordId,
       userId: substitute.userId,
+      isLastingHolder: isLastingHolder(substitute),
       source: {
         kind: 'delegation',
         configurationId,
@@ -295,18 +316,22 @@ export function canHolderApproveTarget(
   return targetRole === 'employee';
 }
 
+/**
+ * The selected groups the person holds where no other base holder is lasting
+ * (`isLastingHolder`): the database refuses their removal or exit with
+ * `last_responsibility_holder`.
+ */
 export function getResponsibilitiesStrandedByEmployeeRemoval(
   effective: Partial<Record<OrganizationResponsibility, EffectiveResponsibility>>,
   employeeRecordId: string,
 ): OrganizationResponsibility[] {
   return ORGANIZATION_RESPONSIBILITIES.filter((responsibility) => {
     const resolved = effective[responsibility];
-    if (!resolved) return false;
+    if (!resolved || resolved.mode !== 'selected') return false;
     const baseHolders = resolved.holders.filter((holder) => holder.source.kind !== 'delegation');
     return (
-      resolved.mode === 'selected' &&
-      baseHolders.length === 1 &&
-      baseHolders[0]?.employeeRecordId === employeeRecordId
+      baseHolders.some((holder) => holder.employeeRecordId === employeeRecordId) &&
+      !baseHolders.some((holder) => holder.employeeRecordId !== employeeRecordId && holder.isLastingHolder)
     );
   });
 }

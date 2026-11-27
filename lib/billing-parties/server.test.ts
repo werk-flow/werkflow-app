@@ -1,7 +1,5 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 
-// The mapper is pure; its module is server-only.
-mock.module('server-only', () => ({}));
 const { jobBillingPartiesFrom } = await import('./server');
 
 const row = (version: number, recipientName: string) => ({

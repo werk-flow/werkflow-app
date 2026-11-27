@@ -74,11 +74,11 @@ Merge with `gh pr merge <n> --squash --auto`, after a fresh `git fetch` and a la
 
 ### The CodeRabbit queue
 
-`ops/coderabbit-queue.py` in `werk-flow/werkflow-planning` runs every 10 minutes on [the PC and the Mac](machine-setup.md#background-jobs), so no thread has to stay alive to hand out reviews. Each pass on the machine that holds its lease:
+`ops/coderabbit-queue.py` in `werk-flow/werkflow-planning` runs every 10 minutes on [the netcup VM, with the PC as backup](machine-setup.md#background-jobs), so no thread has to stay alive to hand out reviews. Each pass on the machine that holds its lease:
 
 1. Lists the open PRs labelled `needs-coderabbit`. It skips a level 0 or 1 PR, and a PR that already got a CodeRabbit review or a request that is still good. A request is asked again when CodeRabbit answered it with a rate limit, "Review limit reached" or "Head commit changed", or with nothing for three hours, so a PR never waits for a review that will not come. A PR whose body states no review level, or two different ones, is refused, never guessed, and told so once in a comment.
 2. Waits, because CodeRabbit Essentials has no paid overage and its hourly review limit falls as the rolling 7-day review count rises ([rate limits](https://docs.coderabbit.ai/management/rate-limits)). It counts CodeRabbit's "Review finished" notes of the last 7 days. Below 50, it does nothing within 20 minutes of a CodeRabbit review, "Review finished" note or request on any PR; from 50, within 65 minutes. A rate-limit notice pauses it 65 minutes, or until the notice's "available in N minutes" ends.
-3. Selects the PR labelled longest ago, one per pass. Comments `@coderabbitai review` on it, swaps its label for `coderabbit-requested`, and sends one sentence to the PR's T3 thread on that machine: the one on its head branch, else the newest that links the PR, such as an epic's lead. A thread on the other machine hears of the review through its own watch.
+3. Selects the PR labelled longest ago, one per pass. Comments `@coderabbitai review` on it, swaps its label for `coderabbit-requested`, and sends one sentence to the PR's T3 thread on that machine: the one on its head branch, else the newest that links the PR, such as an epic's lead. A thread on another machine hears of the review through its own watch.
 
 In [trial mode](#trial-mode-until-2026-11-27), before `TRIAL_ENDS`, the queue instead requests up to ten labelled PRs above level 0 per pass, without waiting, once per label: a PR labelled again after its fix round gets the next review. Drafts are served, because the review comes before `gh pr ready`. A level 0 PR is skipped, and its label left alone.
 

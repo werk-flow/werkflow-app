@@ -1,8 +1,7 @@
-import { afterAll, beforeAll, describe, expect, mock, setSystemTime, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, setSystemTime, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import Stripe from 'stripe';
 
-mock.module('server-only', () => ({}));
 // Signing and Stripe's verification both read the clock; a fixed instant keeps them in step.
 beforeAll(() => setSystemTime(new Date('2026-03-02T08:00:00Z')));
 afterAll(() => setSystemTime());

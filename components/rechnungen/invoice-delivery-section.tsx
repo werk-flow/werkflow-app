@@ -8,8 +8,9 @@ import type { ActionContext } from '@/lib/org/action-context';
 import { InvoiceDeliveries } from './invoice-delivery';
 
 /**
- * „Versand“ of an issued invoice whose original is filed: its deliveries and
- * what the email form proposes. A failed read fails this section alone.
+ * „Versand“ of an issued invoice whose original is filed, or of a cancelled
+ * invoice: its deliveries, and for an issued one what the email form
+ * proposes. A failed read fails this section alone.
  */
 export async function InvoiceDeliverySection({
   caller,
@@ -20,7 +21,7 @@ export async function InvoiceDeliverySection({
 }) {
   const loaded = await Promise.all([
     readDocumentDeliveries(caller.orgId, { kind: 'invoice', id: invoice.id }),
-    readInvoiceMailDefaults(caller, invoice),
+    invoice.status === 'storniert' ? null : readInvoiceMailDefaults(caller, invoice),
   ]).catch((error: unknown) => {
     logError('rechnung.versand_read_failed', error);
     return null;
