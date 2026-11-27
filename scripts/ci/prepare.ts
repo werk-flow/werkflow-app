@@ -166,9 +166,10 @@ function siblings(): void {
  * list against its parent belongs to a PR with the labels its growth needs. A commit grows a list
  * as the gate counts growth, except that a list its parent lacks counts each entry as added, and a
  * list it removes counts as growth too: a rename is a delete plus an add, so moving a list aside or
- * back is growth. A commit that only shrinks a list, or edits its file elsewhere, needs no
- * approval. GitHub's records name each growing commit's PR (lib/testing/ci/list-growth-approval.ts);
- * a growing commit they do not bind keeps the gate strict, and an unreadable answer fails the step.
+ * back is growth. A list that merge base lacks is new, as the gate counts it, so no commit grows it.
+ * A commit that only shrinks a list, or edits its file elsewhere, needs no approval. GitHub's
+ * records name each growing commit's PR (lib/testing/ci/list-growth-approval.ts); a growing commit
+ * they do not bind keeps the gate strict, and an unreadable answer fails the step.
  */
 async function approval(): Promise<void> {
   const event = process.env.CI_EVENT;
@@ -177,8 +178,14 @@ async function approval(): Promise<void> {
   if (!repository || !/^[^/\s]+\/[^/\s]+$/.test(repository))
     fail('The approval needs GITHUB_REPOSITORY as owner/name.');
   // After `install`: the parser needs the dependencies.
-  const { approvalLabel, committedFileText, GROWTH_APPROVAL_LABELS, SHRINK_ONLY_LISTS, shrinkOnlyProblems } =
-    await import('../../lib/testing/publication/shrink-only-lists');
+  const {
+    approvalLabel,
+    committedFileText,
+    GROWTH_APPROVAL_LABELS,
+    listEntries,
+    SHRINK_ONLY_LISTS,
+    shrinkOnlyProblems,
+  } = await import('../../lib/testing/publication/shrink-only-lists');
   /** The labels the change from `base` to `head` needs: one per list it grows. */
   const neededLabels = (
     base: string,
@@ -244,6 +251,11 @@ async function approval(): Promise<void> {
       base,
     );
     if ('unreadable' in line) fail(line.unreadable);
+    // A list main lacks is new to the gate, which starts its baseline at the run's tip: no commit
+    // grows it. A list main holds is measured per commit, so one moved aside and restored is growth.
+    const held = SHRINK_ONLY_LISTS.filter(
+      (list) => listEntries(list, committedFileText(checkout, base, list.file)) !== null,
+    );
     // Without rename detection a moved file lists its old and its new path: both touch the list.
     const growing = line.flatMap((commit) => {
       const changed = new Set(
@@ -252,8 +264,8 @@ async function approval(): Promise<void> {
           fail(`The files ${commit} changed cannot be read.`)
         ).split('\n'),
       );
-      const touched = SHRINK_ONLY_LISTS.filter((list) => changed.has(list.file));
-      if (!touched.length) return [];
+      if (!SHRINK_ONLY_LISTS.some((list) => changed.has(list.file))) return [];
+      const touched = held.filter((list) => changed.has(list.file));
       const needed = neededLabels(`${commit}^`, commit, touched, true);
       if (!needed.size) console.info(`${commit.slice(0, 9)} touches a shrink-only list and grows none`);
       return needed.size ? [{ commit, needed }] : [];

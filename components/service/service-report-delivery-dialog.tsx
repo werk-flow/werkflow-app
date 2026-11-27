@@ -52,7 +52,7 @@ const REPORT_DELIVERY_FAILURES: Readonly<Record<string, string>> = {
   document_not_found:
     'Die abgelegte Datei des Serviceberichts lässt sich nicht versenden. Erstelle ihn neu, dann kannst du ihn senden.',
   delivery_retry_expired:
-    'Der Versand ist älter als einen Tag und lässt sich nicht mehr wiederholen. Sende den Servicebericht bei Bedarf neu per E-Mail.',
+    'Der Versand ist älter als 23 Stunden und lässt sich nicht mehr wiederholen. Sende den Servicebericht bei Bedarf neu per E-Mail.',
 };
 
 type Step = 'overview' | 'email' | 'manual';

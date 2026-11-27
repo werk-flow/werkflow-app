@@ -6,6 +6,7 @@ import {
   retryDocumentDelivery,
   sendDocument,
   type DeliveryOutcome,
+  type RetryOutcome,
 } from '@/lib/delivery/document-delivery';
 import { recordManualDeliverySchema, sendDocumentEmailSchema } from '@/lib/delivery/delivery-types';
 import { logError } from '@/lib/logging';
@@ -67,7 +68,7 @@ export async function sendServiceReportEmail(
 /** „Erneut senden“: a failed delivery of a report once more, with what it carried. */
 export async function retryServiceReportDelivery(
   rawInput: z.input<typeof retryServiceReportDeliverySchema>,
-): Promise<DeliveryOutcome> {
+): Promise<RetryOutcome> {
   const parsed = retryServiceReportDeliverySchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   try {
