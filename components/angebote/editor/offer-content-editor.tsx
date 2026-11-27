@@ -25,6 +25,7 @@ import type { OfferCalculation } from '@/lib/offers/calculation';
 import type { OfferWithCosts } from '@/lib/offers/types';
 import { ownWrites } from '@/lib/realtime/own-writes';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { useReportOfferUnsaved } from '../offer-unsaved';
 import { OfferCalculationPanel } from './offer-calculation-panel';
 import { OfferSectionFields } from './offer-section-fields';
 
@@ -127,6 +128,7 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
   const settle = useSettleOnChange(offer.contentVersion);
   const { run, isPending: pending } = usePendingTask();
   const { draft, newerElsewhere, edit, saved, reload } = useContentDraft(offer, pending);
+  useReportOfferUnsaved(draft.edited);
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { sections } = draft;

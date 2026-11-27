@@ -30,6 +30,8 @@ export function FileInput({ buttonLabel, fileName, onSelect, accept, disabled }:
       <Button
         type="button"
         variant="outline"
+        // A field worker picks files on the phone: 44 px there, as every field target.
+        className="h-11 sm:h-9"
         id={field?.controlId}
         aria-describedby={field?.describedBy}
         aria-invalid={field?.invalid || undefined}

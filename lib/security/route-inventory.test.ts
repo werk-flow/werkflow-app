@@ -25,6 +25,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'verified cookie identity and the active organization from the current memberships; Admin or Büro only, an employee and a signed-out caller get no bytes; renders a fixed sample with the organization name and no stored record; private no-store responses',
     mustCall: ['resolveActionContext', 'getCachedMemberships', 'renderBusinessDocument'],
   },
+  'app/api/angebote/vorschau/route.ts': {
+    authorization:
+      "verified cookie identity and the active organization; Admin or Büro only, an employee and a signed-out caller get no PDF; reads only a draft offer of the caller's organization, renders it as sending would and stores nothing; private no-store responses",
+    mustCall: ['withReadRequest', 'resolveManagerContext', 'readOffer', 'renderOfferPdf'],
+  },
   'app/api/rechnungen/vorschau/route.ts': {
     authorization:
       "verified cookie identity and the active organization; Admin or Büro only, an employee and a signed-out caller get no PDF; reads only a draft of the caller's organization, renders it marked „Entwurf“ without e-invoice XML and stores nothing; private no-store responses",

@@ -4,8 +4,13 @@ import { readFile } from 'node:fs/promises';
 import { expect, type Page } from '@playwright/test';
 
 import { readOriginal } from '../../lib/testing/staging/original';
-import { MEMBER_ROLES, type MemberRole } from '../../lib/testing/staging/readers';
-import { StagingFailure, newRunId, runOrganizationName } from '../../lib/testing/staging/runs';
+import {
+  MEMBER_ROLES,
+  StagingFailure,
+  newRunId,
+  runOrganizationName,
+  type MemberRole,
+} from '../../lib/testing/staging/runs';
 import { SEND_INVITE_MESSAGES } from '../../components/mitarbeiter/invite-messages';
 import { ROLE_LABELS } from '../../lib/roles';
 import { DEFAULT_SETTINGS_SECTION_SLUG, getSettingsHref } from '../../lib/settings/sections';
@@ -53,10 +58,11 @@ function begin(name: string, logs: string): void {
 const SIGNAL_WAIT_MS = 4 * 60_000;
 const BILLING_PATH = '/einstellungen/abonnement-abrechnung';
 
-async function newActor(): Promise<Actor> {
+/** A new actor in a run of its own; a member the Admin invites as `invitedAs`. */
+async function newActor(invitedAs?: MemberRole): Promise<Actor> {
   const runId = newRunId(new Date(), randomBytes(3).toString('hex'));
   runIds.push(runId);
-  const actor = await createActor(kit, runId);
+  const actor = await createActor(kit, runId, invitedAs);
   kit.log('actor created', { run: runId, actor: actor.id });
   return actor;
 }
@@ -314,7 +320,7 @@ async function invoiceJourney(method: CheckoutMethod): Promise<void> {
 async function membersRefused(admin: Actor, organization: RunOrganization): Promise<void> {
   begin('members: actors', 'checkout');
   const members = new Map<MemberRole, Actor>();
-  for (const role of MEMBER_ROLES) members.set(role, await newActor());
+  for (const role of MEMBER_ROLES) members.set(role, await newActor(role));
   begin('members: invited', 'createAndMailOrganizationInvite');
   await withStagingBrowser(kit, async (page) => {
     await signIn(page, admin);

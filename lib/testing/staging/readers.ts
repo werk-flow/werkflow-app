@@ -3,7 +3,7 @@
 // only, so nothing it hands a journey can print personal data (Tier 1).
 
 import { isUuid } from '../../validation/uuid';
-import { StagingFailure } from './runs';
+import { StagingFailure, isMemberRole } from './runs';
 import { z } from '../../zod';
 
 /**
@@ -77,14 +77,6 @@ export function scopedReadQuery(read: {
     query: `select ${read.columns.join(', ')} from public.${read.table} where ${scope} = $1::uuid`,
     parameters: [read.organizationId],
   };
-}
-
-/** The roles a run's member actors join its organization with (`org_role`, an Admin cannot be invited). */
-export const MEMBER_ROLES = ['buero', 'employee'] as const;
-export type MemberRole = (typeof MEMBER_ROLES)[number];
-
-function isMemberRole(role: string): role is MemberRole {
-  return MEMBER_ROLES.some((known) => known === role);
 }
 
 /**

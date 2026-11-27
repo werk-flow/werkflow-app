@@ -1,9 +1,7 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 import { berlinInstantMsArbitrary } from '@/lib/testing/berlin-arbitraries';
 
-// The module is server-only; its recovery rule is a pure function.
-mock.module('server-only', () => ({}));
 const { sessionNeedsRecovery } = await import('./canonical-clock-state');
 
 // Property tests (docs/technical/testing.md, "Property tests"). The rule comes from

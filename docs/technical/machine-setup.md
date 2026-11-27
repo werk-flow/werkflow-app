@@ -59,34 +59,42 @@ Agents hold four keys per machine (`pc`, `mac`, `netcup`) for DEV, staging and t
 
 - `bun run agent-access:check` proves the file's modes and the keys' shapes, that the access token reaches DEV's project and is refused PROD's and a write, that the secret key reads DEV's Auth, that the Stripe key answers `livemode: false`, and that staging refuses a request without the bypass and passes one with it. Both project probes are reads a project-scoped token can make (`GET /v1/projects/<ref>`); PROD's ref comes from [the cloud-backend table](environments.md#the-two-cloud-backends). A write passes as refused on `403`, or on a read-only transaction (SQLSTATE `25006`) only while the same token reads DEV's [read-only mode](https://supabase.com/docs/guides/platform/database-size#read-only-mode) as off before and after the write (`GET /v1/projects/<ref>/readonly` answers `200` with `enabled` and `override_enabled` both `false`), because that mode refuses any token's write the same way. The same probes run on any `SUPABASE_ACCESS_TOKEN` assignment in the checkout's env files, so an account-wide token fails. It also fails on an env file whose mode is not 600, or that it cannot read. It prints names and `ok`, `failed` or `missing`, never a value.
 - Rotate a machine's keys when the machine is lost, reinstalled or handed on, or when a value may have reached a log or a model's context. The owner creates the successor with the same name, the thread installs it through a secret card, `agent-access:check` passes, then the owner revokes the old key. A Stripe key rotates with "Rotate key".
-- `.claude/hooks/refuse-boat-key-reads.ts` refuses an agent's read, print, copy or search of a workstation secret file and names who reads it instead: the key file, the Boat key, the hand-out file, `prod-watch.env`, the Supabase CLI's login, `~/.werkflow-stripe-sandbox/`, and `.env.live-backup` in any checkout.
+- `.claude/hooks/refuse-boat-key-reads.ts` refuses an agent's read, print, copy or search of a workstation secret file and names who reads it instead: the key file, the Boat key, the hand-out file, the Supabase CLI's login, `~/.werkflow-stripe-sandbox/`, and `.env.live-backup` in any checkout.
 - Agents get no Resend, R2 or Vercel API key: none can be limited to staging. They check mail through the app's records on DEV, files through the app's downloads, and Vercel through the Vercel MCP connector.
 
 ## Background jobs
 
-The three agent machines (`pc`, `mac`, `netcup`) share one setup. Apart from OS and hardware, they differ only in the jobs below. The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-planning`, as systemd user timers on Linux and launchd agents on the Mac (`ops/install-mac.py`). `werkflow-uptime` is a system timer (`ops/uptime-install.sh`). The [production watcher](recovery-and-incidents.md#monitoring) runs on GitHub; its PC copy below is the last agent job that holds a PROD-reaching token.
+The three agent machines (`pc`, `mac`, `netcup`) share one setup. Apart from OS and hardware, they differ only in the jobs below. The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-planning`, as systemd user timers on Linux and launchd agents on the Mac (`ops/install-mac.py`). `werkflow-uptime` is a system timer (`ops/uptime-install.sh`). The [production watcher](recovery-and-incidents.md#monitoring) runs on GitHub, and no machine holds its token.
 
 | Job | Runs on |
 | --- | --- |
 | `worktree-cleanup`: removes finished worktrees and their branches, and fast-forwards each root checkout's `main` | Each machine, for itself |
-| Load watch (`workstation-load`), [notifier](#keep-the-agents-moving) | Each machine, for itself |
-| `boat-starts`: counts Boat's machine starts per day and raises an alert before the plan's limit | Each machine; only the lease holder counts |
-| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert` | The PC and the Mac; only the lease holder acts |
-| The production watcher's PC copy (`ops/prod_watch.py` in `ci-alert`), with the Vercel token `werkflow app prod-watch` | The PC, until werk-flow/werkflow-planning#573 removes the job and its token file after the first green scheduled run of `prod-watch.yml`. Then the owner revokes the token; revoked earlier, the PC copy fails and opens `Production alert: watcher` |
-| [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The PC, beside the stack |
+| Load watch (`workstation-load`), [notifier](#keep-the-agents-moving) | Each machine, for itself; the notifier's GitHub read on the netcup VM |
+| `boat-starts`: counts Boat's machine starts per day and raises an alert before the plan's limit | The netcup VM; the PC only while the VM is gone (a shared lease) |
+| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert`, which also starts a late [production watcher](recovery-and-incidents.md#monitoring) run | The netcup VM; the PC only while the VM is gone (a shared lease) |
+| [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The netcup VM, beside its stack; no other copy |
 | `report-dispatch`: starts one report thread per waiting [problem report](../features/problem-reports.md#current-product-baseline), blockers first; does nothing while the hand-out is off | The netcup VM, the one machine with the hand-out [file](environments.md#credentials). The Mac's installer and the Linux unit skip a machine without it |
 | `werkflow-uptime`: every 5 minutes, checks that PROD's and DEV's login pages and Supabase health endpoints answer | The netcup VM |
 | `dev-deploy-alert`: opens a `CI alert` issue when `werkflow-uptime` misses twice in a row, and closes it on the next green pass | The netcup VM, beside `werkflow-uptime` |
 
 A root checkout (`~/code/<repository>` of each workspace repository) on another branch, with changes, or with commits that `origin/main` lacks keeps its state, and `~/.local/state/worktree-cleanup.log` names it. A thread started at a project's root runs that checkout's hooks and skills, so leave each root on a clean `main`.
 
-A lease is the ref `refs/leases/<job>` (`ops/lease.py`): its holder renews it every pass; another machine takes over once it lapses. A lease is read with `git fetch` and swapped with `git push --force-with-lease`, so it costs no GitHub API call.
+A lease is the ref `refs/leases/<job>` (`ops/lease.py`): its holder renews it every pass; another machine takes over once it lapses. A lease is read with `git fetch` and swapped with `git push --force-with-lease`, so it costs no GitHub API call. A shared lease carries its job's state. The PC takes one only 15 minutes after it lapsed and keeps it while it runs.
 
 ## Keep the agents moving
 
 T3 Code wakes a thread when something it watches changes: a check or comment on a pull request it watches, an answered question, a finished child. It fails in known ways. A merge ends the watch without a wake. A watch stops after 10 comment-only wakes. A child's hand-back after its own review round never reaches its lead.
 
 The notifier, `ops/notifier.py`, closes those gaps. It runs every 2 minutes on every machine and uses no AI. It reads the T3 state of its own machine read-only, and one GitHub snapshot that one machine reads for all of them every 10 minutes. Every message it sends starts with `[notifier]`.
+
+A thread with a run active or queued gets no message until its runs end. Then its notices arrive as one message, without those whose reason passed meanwhile:
+
+- a merge or close, once a turn that started after it has ended;
+- a hand-back, once T3 delivered it;
+- an Owner queue nudge, once a question is open in T3;
+- a stall, once the work moved or got a reason.
+
+A thread busy for 30 minutes gets its notices anyway, but never while a `[notifier]` message already waits in its queue. The notifier never edits or cancels a queued message.
 
 1. **It repairs what T3 dropped.** A thread hears once that a pull request it links merged, or that an issue or pull request it left a `Waiting: <threadId>` comment on closed. A child's hand-back that T3 never delivered reaches the lead with the child's final message.
 2. **Every 10 minutes it checks the outcome.** Every open pull request and every lead that is not settled must be moving or have a reason to wait that T3 or GitHub shows. Moving means a thread of the lead's tree ran in the last 20 minutes, not started by the notifier. A reason is a question to the owner still open, the thread snoozed, a `Waiting:` comment on an open item, an Actions run in progress, the pull request in the merge queue, or an unanswered CodeRabbit request. A snooze, a `Waiting:` comment, the merge queue or a CodeRabbit request stops counting once its item has not moved for 4 hours; an open owner question and a running Actions job count as long as they last. If nothing holds, the lead gets one message with the facts and "Nothing is moving this. Act now, or record a real reason." The same item wakes at most once an hour. At the third stall in a row, the lead asks the owner through the question tool.

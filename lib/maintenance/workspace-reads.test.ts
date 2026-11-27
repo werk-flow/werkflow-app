@@ -87,7 +87,6 @@ const admin = {
 const QUERY = { search: 'wp', overdueOnly: true, duePage: 3, planPage: 2, coveragePage: 1 };
 
 async function loadMaintenanceWorkspace(): Promise<(typeof import('./actions'))['getMaintenanceWorkspace']> {
-  mock.module('server-only', () => ({}));
   mock.module('next/cache', () => ({
     updateTag: () => undefined,
     revalidatePath: () => undefined,

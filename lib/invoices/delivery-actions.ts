@@ -78,6 +78,7 @@ export async function retryInvoiceDelivery(
     return await retryDocumentDelivery(caller.context, {
       id: parsed.data.deliveryId,
       expectedAttempt: parsed.data.expectedAttempt,
+      subjectKind: 'invoice',
     });
   } catch (error) {
     logError('retryInvoiceDelivery: unexpected error', error);

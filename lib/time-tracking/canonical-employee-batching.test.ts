@@ -43,7 +43,6 @@ const admin = {
   },
 };
 
-mock.module('server-only', () => ({}));
 mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => admin }));
 
 const { getCanonicalTimeEntries } = await import('./canonical-entries');

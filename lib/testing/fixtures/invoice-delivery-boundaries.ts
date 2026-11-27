@@ -5,7 +5,8 @@
 // in the outbox; a provider failure leaves the delivery failed, and the retry
 // sends it once; a sent delivery is never sent again; the rate limit comes
 // before any write; a changed original is never attached; logs carry no
-// address or text. The world stands in for the database functions, which
+// address or text; another subject kind's delivery is never retried. The
+// world stands in for the database functions, which
 // supabase/tests/document_deliveries.sql proves.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -509,6 +510,23 @@ assert.deepEqual(await retryInvoiceDelivery({ deliveryId: takenOverDelivery.id, 
   outcomeUnknown: true,
 });
 assert.equal(mailsOf(takenOverDelivery.id).length, 0, 'a retry of an older attempt sent a mail');
+// A Servicebericht's delivery is no invoice's: refused before any claim.
+const reportDeliveryId = '98200000-0000-4000-8000-000000000601';
+world.tables.document_deliveries = [
+  ...tableRows(world, 'document_deliveries'),
+  {
+    id: reportDeliveryId,
+    organization_id: ORGANIZATION_A,
+    recipient_email: recipient,
+    subject_kind: 'service_report',
+  },
+];
+world.rpcCalls.length = 0;
+assert.deepEqual(await retryInvoiceDelivery({ deliveryId: reportDeliveryId, expectedAttempt: 1 }), {
+  success: false,
+  error: 'delivery_not_found',
+});
+assert.equal(callsNamed('retry_document_delivery').length, 0, 'a report delivery was claimed as an invoice');
 
 // Manual sending names the invoice's own original too.
 world.rpcCalls.length = 0;

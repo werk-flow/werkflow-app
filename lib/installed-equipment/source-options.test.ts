@@ -112,7 +112,6 @@ const admin = {
   },
 };
 
-mock.module('server-only', () => ({}));
 mock.module('@/lib/jobs/auth', () => ({
   authenticateAndAuthorize: async () => ({
     success: true,

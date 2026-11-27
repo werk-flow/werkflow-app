@@ -31,7 +31,6 @@ const callerClient = {
   from: () => ({ select: () => ({ eq: async () => ({ data: [{ organization_id: 'org' }], error: null }) }) }),
 };
 
-mock.module('server-only', () => ({}));
 mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => admin }));
 mock.module('@/lib/supabase/server', () => ({ createSupabaseServerClient: async () => callerClient }));
 
