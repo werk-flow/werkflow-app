@@ -109,6 +109,32 @@ test('a failed retry of a send that may have gone out stays unclear and gives wa
   await expect(textInDom(page, unclear)).toHaveCount(1);
 });
 
+// A retry past its window is refused. While the send is unclear, the refusal asks the office to
+// check with the customer before a new email, and it names the 23 hours the window lasts.
+test('a retry refused past its window asks about an unclear send before a new email', async ({ page }) => {
+  await openContractFixture(page, 'invoice-deliveries-retry');
+  await page.getByRole('button', { name: 'Erneut senden' }).click();
+  await expectHeldWrite(page, 'retryInvoiceDelivery');
+  await answerHeldWrite(page, 'delivery_retry_expired');
+  await expect(
+    visibleText(page, 'Der Versand ist älter als 23 Stunden und lässt sich nicht mehr wiederholen.'),
+  ).toBeVisible();
+  await expect(visibleText(page, 'Frag beim Kunden nach, ob sie ankam')).toBeVisible();
+  await expect(textInDom(page, 'Sende die Rechnung bei Bedarf neu per E-Mail.')).toHaveCount(0);
+});
+
+// A page that predates another session's unanswered attempt shows a known failure. The server's
+// answer to its retry says the outcome is unknown, and the message keeps that, not the row's view.
+test('a retry from a page older than an unanswered attempt keeps the send unclear', async ({ page }) => {
+  await openContractFixture(page, 'invoice-deliveries-stale-retry');
+  const unclear = 'Ob die E-Mail rausging, ist unklar';
+  await expect(textInDom(page, unclear)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Erneut senden' }).click();
+  await expectHeldWrite(page, 'retryInvoiceDelivery');
+  await answerHeldWrite(page, null);
+  await expect(visibleText(page, `${unclear}: Ein früherer Versuch blieb ohne klare Antwort.`)).toBeVisible();
+});
+
 // The server renders „Versand“ by its clock, the browser hydrates it by its own. An attempt that
 // turns unanswered in between must not make the two renders differ.
 test("an issued invoice's send row renders without a clock on the server and turns unanswered after hydration", async ({

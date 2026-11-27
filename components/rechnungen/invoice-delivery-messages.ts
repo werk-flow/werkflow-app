@@ -11,7 +11,11 @@ export const DELIVERY_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   delivery_not_found: 'Diesen Versand gibt es nicht mehr.',
   delivery_not_retryable: 'Dieser Versand lässt sich nicht erneut senden.',
   delivery_retry_expired:
-    'Der Versand ist älter als einen Tag und lässt sich nicht mehr wiederholen. Sende die Rechnung bei Bedarf neu per E-Mail.',
+    'Der Versand ist älter als 23 Stunden und lässt sich nicht mehr wiederholen. Sende die Rechnung bei Bedarf neu per E-Mail.',
   rate_limited: 'Gerade wurden sehr viele E-Mails versendet. Versuche es in einer Stunde erneut.',
   send_unavailable: 'Der Versand ist gerade nicht möglich. Versuche es in einem Moment erneut.',
 };
+
+/** The retry's refusal past its window when an earlier attempt may have reached the customer. */
+export const RETRY_EXPIRED_UNCLEAR =
+  'Der Versand ist älter als 23 Stunden und lässt sich nicht mehr wiederholen. Ob die E-Mail rausging, ist unklar: Frag beim Kunden nach, ob sie ankam, bevor du die Rechnung neu per E-Mail sendest.';

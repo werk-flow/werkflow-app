@@ -239,9 +239,19 @@ const UNCLEAR_FAILED: DeliveryEntry = {
   retryUntil: new Date(Date.now() + HOUR).toISOString(),
 };
 
-/** „Versand“ of an issued invoice with that email; a refresh brings one more attempt, which the provider refused. */
-export function InvoiceDeliveryRetryContractFixture(): React.JSX.Element {
-  const [entry, setEntry] = useState(UNCLEAR_FAILED);
+/**
+ * „Versand“ of an issued invoice with that email; a refresh brings one more
+ * attempt, which the provider refused. A `stale` page predates the unanswered
+ * attempt, so its row shows only the first attempt's failure.
+ */
+export function InvoiceDeliveryRetryContractFixture({
+  stale = false,
+}: {
+  stale?: boolean;
+}): React.JSX.Element {
+  const [entry, setEntry] = useState<DeliveryEntry>(
+    stale ? { ...UNCLEAR_FAILED, attempts: 1, outcomeUnknown: false } : UNCLEAR_FAILED,
+  );
   useEffect(() => {
     window.uiContractDeliveryRefresh = () =>
       setEntry((current) => ({

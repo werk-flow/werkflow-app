@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 
-import type { ActionResult } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { readCompanyProfile } from '@/lib/company-profile/reads';
 import { getCachedMemberships } from '@/lib/data/cached';
 import { loggedRead } from '@/lib/data/read-request-cache';
@@ -41,6 +41,15 @@ const SEND_DEADLINE_MS = (23 * 60 + 30) * 60_000;
 type DeliveryCaller = Pick<ActionContext, 'userId' | 'orgId' | 'isManagerOrAbove'>;
 
 export type DeliveryOutcome = ActionResult<{ state: DeliveryState; failureCode: string | null }>;
+/**
+ * A retry's outcome, and whether the delivery's record holds an attempt without
+ * the provider's answer: the office's row may predate one from another session.
+ */
+export type RetryOutcome = ActionResult<{
+  state: DeliveryState;
+  failureCode: string | null;
+  outcomeUnknown: boolean;
+}>;
 
 const RATE_LIMITED = { success: false, error: 'rate_limited' } as const;
 const SEND_UNAVAILABLE = { success: false, error: 'send_unavailable' } as const;
@@ -97,7 +106,7 @@ export async function readDeliverySender(
 async function passRateLimit(
   caller: DeliveryCaller,
   recipient: string | null,
-): Promise<DeliveryOutcome | null> {
+): Promise<ActionFailure | null> {
   const verdict = await consumeRateLimit(
     { action: 'document_send_per_organization', subject: caller.orgId },
     ...(recipient === null
@@ -276,10 +285,10 @@ export async function sendDocument(
 export async function retryDocumentDelivery(
   caller: DeliveryCaller,
   delivery: { id: string; expectedAttempt: number },
-): Promise<DeliveryOutcome> {
+): Promise<RetryOutcome> {
   const stored = await createSupabaseAdminClient()
     .from('document_deliveries')
-    .select('recipient_email')
+    .select('recipient_email, state, outcome_unknown_at')
     .eq('organization_id', caller.orgId)
     .eq('id', delivery.id)
     .maybeSingle();
@@ -293,7 +302,11 @@ export async function retryDocumentDelivery(
     p_delivery_id: delivery.id,
     p_expected_attempt: delivery.expectedAttempt,
   });
-  return sendClaimed(caller, answer, 'retryDocumentDelivery: retry_document_delivery failed');
+  const outcome = await sendClaimed(caller, answer, 'retryDocumentDelivery: retry_document_delivery failed');
+  if (!outcome.success) return outcome;
+  // Taking over a sending attempt marks the outcome unknown (retry_document_delivery).
+  const outcomeUnknown = stored.data?.outcome_unknown_at != null || stored.data?.state === 'sending';
+  return { ...outcome, outcomeUnknown };
 }
 
 /** Records that the office sent the subject's document itself, by post or by hand, once per attempt key. */

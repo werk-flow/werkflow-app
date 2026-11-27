@@ -26,7 +26,7 @@ import { retryWindowAt, retryWindowEnd } from '@/lib/delivery/retry-window';
 import { retryInvoiceDelivery } from '@/lib/invoices/delivery-actions';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { ManualDeliveryDialog, SendInvoiceEmailDialog } from './invoice-delivery-dialogs';
-import { DELIVERY_FAILURE_MESSAGES } from './invoice-delivery-messages';
+import { DELIVERY_FAILURE_MESSAGES, RETRY_EXPIRED_UNCLEAR } from './invoice-delivery-messages';
 
 const RETRY_FAILED = 'Die E-Mail konnte nicht erneut gesendet werden. Bitte versuche es erneut.';
 
@@ -96,13 +96,19 @@ function DeliveryRow({
     const fail = (message: string, outcome = false) => setError({ attempt, message, outcome });
     setError(null);
     const result = await run({ deliveryId: entry.id, expectedAttempt: attempt }).catch(() => null);
+    // Unclear when this row or the server's record says so: the row may predate another session's attempt.
+    const unclear = entry.outcomeUnknown || unanswered;
     if (!result) return fail(RETRY_FAILED);
-    if (!result.success) return fail(describeFailure(result.error, DELIVERY_FAILURE_MESSAGES, RETRY_FAILED));
+    if (!result.success)
+      return fail(
+        result.error === 'delivery_retry_expired' && unclear
+          ? RETRY_EXPIRED_UNCLEAR
+          : describeFailure(result.error, DELIVERY_FAILURE_MESSAGES, RETRY_FAILED),
+      );
     if (result.state === 'failed')
       fail(
         deliveryOutcome(
-          // Taking over an unanswered attempt leaves the outcome unknown.
-          { failureCode: result.failureCode, outcomeUnknown: entry.outcomeUnknown || unanswered },
+          { failureCode: result.failureCode, outcomeUnknown: unclear || result.outcomeUnknown },
           'Versuche es später erneut.',
         ),
         true,

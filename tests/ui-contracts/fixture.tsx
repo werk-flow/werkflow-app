@@ -676,6 +676,8 @@ createRoot(root).render(
     <InvoiceDeliveriesContractFixture cancelled />
   ) : window.uiContractFixture === 'invoice-deliveries-retry' ? (
     <InvoiceDeliveryRetryContractFixture />
+  ) : window.uiContractFixture === 'invoice-deliveries-stale-retry' ? (
+    <InvoiceDeliveryRetryContractFixture stale />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>

@@ -28,11 +28,20 @@ export async function saveInvoiceSettings(input: SaveInvoiceSettingsInput) {
   return refusal ? { success: false as const, error: refusal } : { success: true as const, version: 2 };
 }
 
-/** A retry the spec accepts fails: the provider refuses the mail. */
+/**
+ * A retry the spec accepts fails: the provider refuses the mail, and the
+ * server's record holds an attempt without an answer, which a row that
+ * predates it does not show.
+ */
 export async function retryInvoiceDelivery(input: { deliveryId: string; expectedAttempt: number }) {
   const refusal = await holdWrite('retryInvoiceDelivery', input);
   if (refusal) return { success: false as const, error: refusal };
-  return { success: true as const, state: 'failed' as const, failureCode: 'email_provider_422' };
+  return {
+    success: true as const,
+    state: 'failed' as const,
+    failureCode: 'email_provider_422',
+    outcomeUnknown: true,
+  };
 }
 
 export const issueInvoice = unexpectedWrite;
