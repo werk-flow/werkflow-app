@@ -9,7 +9,7 @@ import { acceptanceSet, type OpenSet } from '../acceptance-sets';
 async function chosenFile(scope: Locator): Promise<void> {
   const page = scope.page();
   const chooser = page.waitForEvent('filechooser');
-  await scope.getByRole('button', { name: 'Datei', exact: true }).click();
+  await scope.getByRole('button', { name: /^Datei (?:Datei|Nachweis) auswählen$/ }).click();
   await (
     await chooser
   ).setFiles({
