@@ -177,9 +177,10 @@ async function lockStack(
 }
 
 /**
- * Runs a command as its own process group until it exits; `signal` ends the group. `onSpawn` runs
- * once the command's process exists, never before; when it throws, the group is killed at once and
- * the command gives no exit code.
+ * Runs a command as its own process group until it exits; `signal` ends the group. With `onSpawn`, the
+ * command's process exists but the command waits at a gate until `onSpawn` returned: it never runs
+ * before. When `onSpawn` throws, the gate never opens, the group is killed at once and the command
+ * gives no exit code.
  */
 function runGroup(
   command: string,
@@ -190,13 +191,23 @@ function runGroup(
   if (signal.aborted) return Promise.resolve(null);
   return new Promise((resolve, reject) => {
     const output = openSync(options.log, 'a');
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      env: options.env,
-      stdio: ['ignore', output, output],
-      detached: true,
-    });
+    // The gate: a shell that execs the command only once it reads the go line, which is written
+    // after onSpawn returned. A closed stdin ends it without the command; the command itself reads
+    // no stdin, as without a gate.
+    const gated = options.onSpawn !== undefined;
+    const child = spawn(
+      gated ? '/bin/sh' : command,
+      gated ? ['-c', 'read -r go && exec "$@" </dev/null', 'sh', command, ...args] : args,
+      {
+        cwd: options.cwd,
+        env: options.env,
+        stdio: [gated ? 'pipe' : 'ignore', output, output],
+        detached: true,
+      },
+    );
     closeSync(output);
+    // A gate that already ended (the stop's signal) cannot take the go line: its exit code says so.
+    child.stdin?.on('error', () => undefined);
     // The whole group: a job's own children outlive it otherwise. A group that is gone already is
     // no failure; a process the signal ended keeps a null exit code, so the code cannot tell. Any
     // other refusal (EPERM) fails the command once it closed, never this process.
@@ -214,8 +225,11 @@ function runGroup(
         options.onSpawn?.();
       } catch {
         refused = true;
+        child.stdin?.destroy();
         signalGroup('SIGKILL');
+        return;
       }
+      child.stdin?.end('go\n');
     });
     let escalation: ReturnType<typeof setTimeout> | undefined;
     const stop = (): void => {
@@ -463,7 +477,8 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
         delete variables.CI_STACK_STARTED;
         delete variables.GITHUB_ENV;
         // The task learns of the launch once the body's process exists: a body that never launched
-        // is never reported launched. A launch that cannot be recorded ends the body at once.
+        // is never reported launched. The body runs only once its launch is recorded; a launch that
+        // cannot be recorded ends it before it starts.
         let unrecorded: string | undefined;
         const code = await run(process.execPath, ['scripts/ci/job.ts', task.unit.job], variables, () => {
           try {
