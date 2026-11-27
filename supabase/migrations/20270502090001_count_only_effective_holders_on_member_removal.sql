@@ -9,9 +9,9 @@
 -- with no one who can approve. The check now counts another holder only with
 -- effective access, as the last-holder check of an employment step does since
 -- 20270311090000_restore_record_dates_when_a_planned_employment_step_is_withdrawn.sql.
--- It reads access at clock_timestamp(), the time it reads the selected groups
--- at, so a removal that waited for the organization lock judges both by the
--- same moment.
+-- It reads the selected groups and access at one clock_timestamp() taken
+-- after the organization lock, so a removal that waited for the lock judges
+-- both by the same moment.
 --
 -- The signature, the trigger, the skip for a deleted organization, the lock,
 -- the owner and the grants stay as in
@@ -23,6 +23,7 @@ as $$
 declare
   removed_employee_record_id uuid;
   stranded_responsibility public.organization_responsibility;
+  checked_at timestamptz;
 begin
   if tg_op = 'UPDATE'
      and new.user_id is not distinct from old.user_id
@@ -48,11 +49,12 @@ begin
   perform pg_advisory_xact_lock(
     hashtextextended(old.organization_id::text || ':responsibility-holders', 0)
   );
+  checked_at := clock_timestamp();
 
   with latest as (
     select distinct on (c.responsibility) c.id, c.responsibility, c.mode
     from public.organization_responsibility_configurations c
-    where c.organization_id = old.organization_id and c.effective_from <= clock_timestamp()
+    where c.organization_id = old.organization_id and c.effective_from <= checked_at
     order by c.responsibility, c.effective_from desc, c.created_at desc, c.id desc
   )
   select l.responsibility into stranded_responsibility
@@ -76,7 +78,7 @@ begin
         and other_record.exit_date is null
         -- Only a holder who can approve counts, as in the approval checks.
         and app_private.p1_24_has_effective_access(
-          other_record.organization_id, other_record.user_id, clock_timestamp())
+          other_record.organization_id, other_record.user_id, checked_at)
     )
   limit 1;
 
