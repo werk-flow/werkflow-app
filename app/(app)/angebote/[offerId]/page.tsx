@@ -5,6 +5,9 @@ import { redirect } from 'next/navigation';
 import { OfferContentEditor } from '@/components/angebote/editor/offer-content-editor';
 import { EditOfferHeaderButton } from '@/components/angebote/offer-header-dialog';
 import { OfferHeaderFacts } from '@/components/angebote/offer-header-facts';
+import { OfferRevisions } from '@/components/angebote/offer-revisions';
+import { OfferSendActions } from '@/components/angebote/offer-sending';
+import { OfferUnsavedProvider } from '@/components/angebote/offer-unsaved';
 import { OfferStatusBadge } from '@/components/angebote/offers-list';
 import { OfferDetailSkeleton } from '@/components/angebote/offers-skeleton';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -12,7 +15,7 @@ import { RouteRedirect } from '@/components/shared/route-redirect';
 import { SubpageHeader } from '@/components/shared/subpage-header';
 import { logError } from '@/lib/logging';
 import { getManagerAssigneeOptions } from '@/lib/members/profile-name';
-import { readOfferWithCosts } from '@/lib/offers/reads';
+import { readOfferRevisions, readOfferWithCosts } from '@/lib/offers/reads';
 import { resolvePageMembership } from '@/lib/org/page-context';
 import { isManagerRole } from '@/lib/roles';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -34,6 +37,13 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
     offer && offer !== 'failed' && offer.status === 'entwurf'
       ? await getManagerAssigneeOptions(createSupabaseAdminClient(), membership.orgId)
       : null;
+  const revisions =
+    offer && offer !== 'failed'
+      ? await readOfferRevisions(membership.orgId, offer.id).catch((error: unknown) => {
+          logError('angebot.revisions_read_failed', error);
+          return 'failed' as const;
+        })
+      : [];
   if (offer === 'failed') {
     return (
       <RegionLoadError title="Das Angebot konnte nicht geladen werden">
@@ -51,38 +61,48 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
   }
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <Link
-          href="/angebote"
-          className="inline-flex items-center gap-1 rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        >
-          <ArrowLeft className="size-4" />
-          Alle Angebote
-        </Link>
-        <SubpageHeader
-          // A title or customer name can hold a word wider than a phone.
-          title={<span className="wrap-anywhere">{offer.title}</span>}
-          description={
-            <span className="wrap-anywhere">{`${offer.offerNumber} · für ${offer.client.name}`}</span>
-          }
-          actions={
-            <div className="flex items-center gap-2">
-              <OfferStatusBadge status={offer.status} />
-              {owners?.success && <EditOfferHeaderButton offer={offer} owners={owners.options} />}
-            </div>
-          }
-        />
+    <OfferUnsavedProvider>
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Link
+            href="/angebote"
+            className="inline-flex items-center gap-1 rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            <ArrowLeft className="size-4" />
+            Alle Angebote
+          </Link>
+          <SubpageHeader
+            // A title or customer name can hold a word wider than a phone.
+            title={<span className="wrap-anywhere">{offer.title}</span>}
+            description={
+              <span className="wrap-anywhere">{`${offer.offerNumber} · für ${offer.client.name}`}</span>
+            }
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <OfferStatusBadge status={offer.status} validUntil={offer.validUntil} />
+                {owners?.success && <EditOfferHeaderButton offer={offer} owners={owners.options} />}
+                {offer.status === 'entwurf' && <OfferSendActions offer={offer} />}
+              </div>
+            }
+          />
+        </div>
+        {owners && !owners.success && (
+          // The offer stays on screen; only its editing waits for the office's members.
+          <RegionLoadError title="Bearbeiten ist gerade nicht möglich">
+            Die Personen des Büros konnten nicht geladen werden. Versuche es in einem Moment erneut.
+          </RegionLoadError>
+        )}
+        <OfferHeaderFacts offer={offer} />
+        {revisions === 'failed' ? (
+          <RegionLoadError title="Die gesendeten Revisionen konnten nicht geladen werden">
+            Versuche es in einem Moment erneut.
+          </RegionLoadError>
+        ) : (
+          <OfferRevisions revisions={revisions} />
+        )}
+        {/* Only a draft's content changes; a sent offer keeps its revisions. */}
+        {offer.status === 'entwurf' && <OfferContentEditor key={offer.id} offer={offer} />}
       </div>
-      {owners && !owners.success && (
-        // The offer stays on screen; only its editing waits for the office's members.
-        <RegionLoadError title="Bearbeiten ist gerade nicht möglich">
-          Die Personen des Büros konnten nicht geladen werden. Versuche es in einem Moment erneut.
-        </RegionLoadError>
-      )}
-      <OfferHeaderFacts offer={offer} />
-      {/* Only a draft's content changes; this release writes no other state. */}
-      {offer.status === 'entwurf' && <OfferContentEditor key={offer.id} offer={offer} />}
-    </div>
+    </OfferUnsavedProvider>
   );
 }

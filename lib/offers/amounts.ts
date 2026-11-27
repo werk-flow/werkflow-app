@@ -1,5 +1,6 @@
 import { INVENTORY_UNITS } from '@/lib/inventory/units';
 import { draftAmounts, type DraftAmounts } from '@/lib/invoices/amounts';
+import type { InvoiceLineValues } from '@/lib/invoices/types';
 import { lineCostCents } from './calculation';
 import type { OfferFreePosition, OfferPosition, OfferSection } from './types';
 
@@ -15,8 +16,15 @@ export type OfferAmounts = DraftAmounts & {
   sections: Array<{ netCents: number; positionCents: Array<number | null> }>;
 };
 
+/**
+ * Titel as their amounts read them: each Position's kind and line values. A
+ * Position's source and cost play no part, so a document's content, which
+ * carries no cost, computes by the same rule as the editor's.
+ */
+type PricedSection = { positions: ReadonlyArray<{ kind: 'text' } | ({ kind: 'free' } & InvoiceLineValues)> };
+
 /** Every amount of an offer's content. Throws a RangeError on a position the line rule refuses. */
-export function offerAmounts(sections: readonly OfferSection[]): OfferAmounts {
+export function offerAmounts<Section extends PricedSection>(sections: readonly Section[]): OfferAmounts {
   const priced = sections.flatMap((section) =>
     section.positions.flatMap((position) => (position.kind === 'free' ? [position] : [])),
   );

@@ -131,6 +131,13 @@ function getUpdateMessage(result: UpdateDocumentLinksResult): {
         'Eine ausgestellte Rechnung bleibt nur mit ihrem Kunden verknüpft. Weitere Verknüpfungen sind nicht möglich.',
     };
   }
+  if (result.error === 'document_is_offer_original') {
+    return {
+      variant: 'error',
+      message:
+        'Ein gesendetes Angebot bleibt nur mit seinem Angebot und seinem Kunden verknüpft. Weitere Verknüpfungen sind nicht möglich.',
+    };
+  }
   return {
     variant: 'error',
     message: 'Die Verknüpfungen konnten nicht aktualisiert werden.',
