@@ -80,7 +80,11 @@ import {
 } from './inventory-movements-boundaries';
 import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
 import { OffersContractFixture } from './offers-boundaries';
-import { InvoiceEditorContractFixture, InvoiceSettingsContractFixture } from './invoice-editor-boundaries';
+import {
+  InvoiceDeliveriesContractFixture,
+  InvoiceEditorContractFixture,
+  InvoiceSettingsContractFixture,
+} from './invoice-editor-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -662,6 +666,10 @@ createRoot(root).render(
     <InvoiceEditorContractFixture />
   ) : window.uiContractFixture === 'invoice-settings' ? (
     <InvoiceSettingsContractFixture />
+  ) : window.uiContractFixture === 'invoice-deliveries-issued' ? (
+    <InvoiceDeliveriesContractFixture cancelled={false} />
+  ) : window.uiContractFixture === 'invoice-deliveries-cancelled' ? (
+    <InvoiceDeliveriesContractFixture cancelled />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>

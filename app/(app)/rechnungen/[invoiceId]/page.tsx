@@ -64,7 +64,9 @@ export default async function InvoicePage({ params }: { params: Promise<{ invoic
           <PageBody>
             <div className="space-y-8">
               {invoice.status !== 'entwurf' && <IssuedInvoiceOriginal invoice={invoice} />}
-              {invoice.status === 'ausgestellt' && invoice.original?.filed && (
+              {/* A cancelled invoice shows its history, also when its original was never filed and so never sent. */}
+              {(invoice.status === 'storniert' ||
+                (invoice.status === 'ausgestellt' && invoice.original?.filed)) && (
                 <Suspense fallback={<InvoiceDeliverySkeleton />}>
                   <InvoiceDeliverySection
                     caller={{ userId: user.id, orgId: membership.orgId, isManagerOrAbove: true }}
