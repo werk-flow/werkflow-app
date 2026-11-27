@@ -133,14 +133,32 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
   seedToolTables(world);
 }
 
-// A job description at its 20,000-character maximum reaches the model shortened and marked, and the
-// turn's next step stays under its input cap instead of ending the turn (B13).
+// A job description at its 20,000-character maximum and a team of 200 long names reach the model
+// shortened and marked, and the turn's next step stays under its input cap instead of ending the turn (B13).
 {
   resetAiTables(world);
   seedToolTables(world);
   const [job] = tableRows(world, 'jobs');
   if (!job) throw new Error('the seed holds the assigned job');
   Object.assign(job, { description: '€'.repeat(20_000) });
+  // A team of 200 people with long names: no column bounds a name.
+  for (let index = 0; index < 200; index += 1) {
+    const userId = `38000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+    tableRows(world, 'profiles').push({
+      id: userId,
+      first_name: '€'.repeat(300),
+      last_name: null,
+      email: null,
+    });
+    tableRows(world, 'job_assignments').push({
+      id: `38100000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+      organization_id: ORGANIZATION_A,
+      job_id: job.id,
+      user_id: userId,
+      assigned_by: userId,
+      assigned_at: '2026-11-02T08:00:00.000Z',
+    });
+  }
   signInAs(world, 'buero');
   const request = JSON.stringify({ name: 'auftrag_lesen', input: { nummer: 'A-1' } });
   const events = await readTurn(world, await postTurn(`[replay:werkzeug] ${request}`));
@@ -157,6 +175,11 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
     'the model must learn the description was cut',
   );
   assert.equal(text.includes('€'.repeat(2_001)), false, 'the description must reach the model shortened');
+  assert.equal(
+    text.includes('"teamGesamt":202'),
+    true,
+    'the model must learn the size of a team it reads in part',
+  );
   seedToolTables(world);
 }
 

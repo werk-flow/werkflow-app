@@ -114,7 +114,13 @@ const CASES = {
       signInAs(world, 'admin');
       const foreign = await call('auftrag_lesen', { nummer: 'A-3' });
       assert.deepEqual(foreign.output, { type: 'json', value: { auftrag: null } });
+      // A parked job keeps the status its page shows: the work's execution state.
+      const [job] = tableRows(world, 'jobs');
+      if (!job) throw new Error('the seed holds the assigned job');
+      Object.assign(job, { status: 'geparkt', execution_state: 'interrupted' });
       const own = await call('auftrag_lesen', { nummer: 'A-1' });
+      Object.assign(job, { status: 'nicht_bearbeitet', execution_state: null });
+      assert.equal(shows(own.output, '"status":"Unterbrochen","geparkt":true'), true, "the page's status");
       assert.equal(shows(own.output, 'Heizung Müller warten'), true, 'the office reads its job');
       assert.equal(shows(own.output, 'Lindenstraße 1'), true, "the office reads the customer's address");
       assert.equal(shows(own.output, 'Max Kollege'), true, 'the team is named');
