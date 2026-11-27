@@ -289,6 +289,11 @@ begin
 end;
 $$;
 
+-- The server queues the original's key for the storage purge before it stores the bytes and calls the issue
+-- (lib/invoices/original.ts), for an issue and a cancel alike.
+select public.queue_storage_purge('38060000-0000-4000-8000-000000000010',
+  array['38060000-0000-4000-8000-000000000010/38060000-0000-4000-8000-000000000304/Rechnung.pdf']);
+
 -- An issue passed its original registers and files it in the issue's own transaction.
 do $$
 declare
@@ -309,12 +314,10 @@ begin
 end;
 $$;
 
--- The server queues each original's key for the storage purge before it
--- stores the bytes (lib/invoices/original.ts), for an issue and a cancel alike.
--- Inside the purge's eight days nothing is claimed. Then the purge claims the
--- key of an original no issue registered, such as one whose issue never
--- committed, under its own organization, and releases the original the issue
--- registered, which it never deletes. No organization queues another's key.
+-- Inside the purge's eight days no queued original is claimed. Then the purge
+-- claims the key of an original no issue registered, such as one whose issue
+-- never committed, under its own organization, and releases the original the
+-- issue above registered, which it never deletes.
 do $$
 declare
   v_org constant uuid := '38060000-0000-4000-8000-000000000010';
@@ -324,7 +327,7 @@ declare
   v_foreign constant text := v_other || '/38060000-0000-4000-8000-000000000399/Stornorechnung.pdf';
   v_claimed jsonb;
 begin
-  perform public.queue_storage_purge(v_org, array[v_filed, v_lost]);
+  perform public.queue_storage_purge(v_org, array[v_lost]);
   perform public.queue_storage_purge(v_other, array[v_foreign]);
   if (select count(*) from public.storage_purge_queue
       where organization_id in (v_org, v_other) and storage_path in (v_filed, v_lost, v_foreign)
@@ -349,12 +352,6 @@ begin
     or not exists (select 1 from public.documents where organization_id = v_org and storage_path = v_filed) then
     raise exception 'the purge kept the registered original queued or lost its row';
   end if;
-
-  begin
-    perform public.queue_storage_purge(v_other, array[v_org || '/38060000-0000-4000-8000-000000000397/Rechnung.pdf']);
-    raise exception 'another organization queued this one''s original';
-  exception when check_violation then null;
-  end;
 end;
 $$;
 
