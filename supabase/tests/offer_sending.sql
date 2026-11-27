@@ -1,5 +1,5 @@
 -- The office records an offer as sent, and every sent revision stays as it was
--- (migration 20270501100000_send_an_offer_and_keep_each_sent_revision.sql).
+-- (migration 20270601090000_send_an_offer_and_keep_each_sent_revision.sql).
 begin;
 
 insert into auth.users (
