@@ -71,7 +71,7 @@ The three agent machines (`pc`, `mac`, `netcup`) share one setup. Apart from OS 
 | `worktree-cleanup`: removes finished worktrees and their branches, and fast-forwards each root checkout's `main` | Each machine, for itself |
 | Load watch (`workstation-load`), [notifier](#keep-the-agents-moving) | Each machine, for itself; the notifier's GitHub read on the netcup VM |
 | `boat-starts`: counts Boat's machine starts per day and raises an alert before the plan's limit | The netcup VM; the PC only while the VM is gone (a shared lease) |
-| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert`, which also starts a late [production watcher](recovery-and-incidents.md#monitoring) run | The netcup VM; the PC only while the VM is gone (a shared lease) |
+| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert`, which also starts a late [production watcher](recovery-and-incidents.md#monitoring) run and the weekday release | The netcup VM; the PC only while the VM is gone (a shared lease) |
 | [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The netcup VM, beside its stack; no other copy |
 | `report-dispatch`: starts one report thread per waiting [problem report](../features/problem-reports.md#current-product-baseline), blockers first; does nothing while the hand-out is off | The netcup VM, the one machine with the hand-out [file](environments.md#credentials). The Mac's installer and the Linux unit skip a machine without it |
 | `werkflow-uptime`: every 5 minutes, checks that PROD's and DEV's login pages and Supabase health endpoints answer | The netcup VM |

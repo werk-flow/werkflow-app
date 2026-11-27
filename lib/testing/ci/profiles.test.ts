@@ -222,9 +222,9 @@ test("the fleet profile is #582's design: the mirror's cap, batches of 4, and ev
   expect(fleet.maxBatch).toBe(MAX_BATCH);
   expect(fleet.jobs.browser.atOnce).toBe('all');
   // On GitHub Actions no conductor's clock fires anything: nightly.yml's cron runs the nightly and
-  // its quarantine list, release.yml's cron the release, and main's full run waits for a dispatch.
+  // its quarantine list, and the release and main's full run wait for a dispatch.
   expect(fleet.schedules.nightly.clock).toBe('workflow');
-  expect(fleet.schedules['release-candidate'].clock).toBe('workflow');
+  expect(fleet.schedules['release-candidate'].clock).toBe('dispatch');
   expect(fleet.schedules['main-full-run'].clock).toBe('dispatch');
   expect(fleet.schedules['nightly-quarantine'].clock).toBe('workflow');
   expect(readWorkflow('date-lookahead.yml').at('jobs', 'leg', 'strategy', 'max-parallel')).toBe(
@@ -232,15 +232,18 @@ test("the fleet profile is #582's design: the mirror's cap, batches of 4, and ev
   );
 });
 
-// scheduleDue dispatches the release only while release.yml has no cron, so a profile that names
-// the conductor beside a cron claims a dispatch nobody makes, and the run waits in the hold instead.
-test("each profile names the release's active dispatcher: release.yml's cron while it has one, the conductor only without", () => {
-  const release = SCHEDULES['release-candidate'].trigger;
+// GitHub starts a scheduled run hours late, so release.yml has no cron, and no runner holds a run
+// until 03:30 (werk-flow/werkflow-planning#503). A dispatch at the release clock starts it instead.
+test('the release waits for a dispatch at 03:30 on weekdays: the ci-alert timer on GitHub Actions, the conductor in the local profile', () => {
   const onCron = releaseOnCron(
     Bun.YAML.parse(readFileSync(join(repositoryRoot, workflowsFolder(), 'release.yml'), 'utf8')),
   );
-  if (typeof onCron !== 'boolean') throw new Error(onCron.unreadable);
-  // Monday 03:30 Berlin, the release's slot: the conductor dispatches it now or never.
+  expect(onCron).toBe(false);
+  expect(CLOCK_WORK.release).toMatchObject({ time: '03:30', weekdays: [0, 1, 2, 3, 4] });
+  const fleet = CI_PROFILES.fleet.schedules['release-candidate'];
+  if (!('dispatchedBy' in fleet)) throw new Error("The fleet's release is not dispatched.");
+  expect(fleet.dispatchedBy).toContain('Weekdays at 03:30 Berlin, ci-alert.timer');
+  // Monday 03:30 Berlin, the release's slot: without a cron the conductor names it.
   const answer = scheduleDue({
     now: new Date('2026-11-23T02:30:00Z'),
     state: {},
@@ -251,18 +254,8 @@ test("each profile names the release's active dispatcher: release.yml's cron whi
     prRuns: [],
     remoteHead: () => undefined,
   });
-  const conductorDispatches = answer.start.some((start) => start.work === 'release');
-  expect(conductorDispatches).toBe(!onCron);
-  const active = conductorDispatches ? 'conductor' : 'workflow';
-  for (const profile of Object.values(CI_PROFILES))
-    expect(profile.schedules['release-candidate'].clock, profile.name).toBe(active);
-  if (active === 'workflow') {
-    // The cron dispatches at its own time; the hold, not the dispatch, waits for the decision.
-    expect<string>(release.workflow.cron).toBe(
-      z.string().parse(readWorkflow('release.yml').at('on', 'schedule', 0, 'cron')),
-    );
-    expect<string>(release.hold.until).toBe(CLOCK_WORK.release.time);
-  }
+  expect(answer.start.some((start) => start.work === 'release')).toBe(true);
+  expect(CI_PROFILES.local.schedules['release-candidate'].clock).toBe('conductor');
 });
 
 /** The schedules whose placement in `profile` carries a gap, as `schedule:<name>`. */
