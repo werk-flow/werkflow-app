@@ -25,7 +25,7 @@ const ok = (data: unknown): Outcome => ({ data, error: null });
 const raise = (message: string): Outcome => ({ data: null, error: { message } });
 
 export type AiTurnWorld = ActionWorld & {
-  /** Runs after each recorded attempt: the change that lands between two model steps. */
+  /** Runs after each recorded provider attempt: the change that lands between two model steps. */
   afterAttempt: ((world: AiTurnWorld) => void) | null;
   /** The runs `after()` keeps alive; `settle` awaits them. */
   pending: Promise<unknown>[];
@@ -124,8 +124,23 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
           run_id: args.p_run_id,
           idempotency_key: args.p_idempotency_key,
         });
-      world.afterAttempt?.(world);
+      if (!isToolCallRow(args)) world.afterAttempt?.(world);
       return ok('attempt');
+    }
+    case 'append_ai_thread_item': {
+      const thread = rows('ai_threads').find(
+        (row) => row.id === args.p_thread_id && row.organization_id === organizationId,
+      );
+      if (thread?.user_id !== args.p_user_id) return raise('ai_thread_not_found');
+      const item = appendItem(
+        world,
+        args,
+        String(args.p_kind),
+        String(args.p_status),
+        z.record(z.string(), z.unknown()).parse(args.p_body),
+        String(args.p_idempotency_key),
+      );
+      return ok([{ item_id: item.id, item_sequence: item.sequence }]);
     }
     case 'settle_ai_run': {
       const run = rows('ai_runs').find((row) => row.id === args.p_run_id);
@@ -136,6 +151,17 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
       throw new Error(`${name} is outside this fixture`);
   }
 }
+
+/** A tool call's ledger row: an attempt row with the tool's outcome and nil cost (lib/ai/turn.ts). */
+const isToolCallRow = (row: Row): boolean => String(row.p_outcome).startsWith('tool_call_');
+
+/** The ledger's provider attempts, without the tool calls' rows. */
+export const providerAttempts = (world: AiTurnWorld): Row[] =>
+  tableRows(world, 'ai_run_attempts').filter((row) => !isToolCallRow(row));
+
+/** The outcome of each tool call's ledger row, in order. */
+export const toolCallOutcomes = (world: AiTurnWorld): string[] =>
+  tableRows(world, 'ai_run_attempts').flatMap((row) => (isToolCallRow(row) ? [String(row.p_outcome)] : []));
 
 function attemptCost(world: AiTurnWorld, runId: string): number {
   return tableRows(world, 'ai_run_attempts')

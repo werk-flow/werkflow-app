@@ -1,8 +1,8 @@
-import { type ModelMessage, type ToolResultPart, type ToolSet, asSchema } from 'ai';
+import { type JSONValue, type ModelMessage, type ToolResultPart, asSchema } from 'ai';
 
 import { inputTokenCeiling } from '@/lib/ai/limits';
 import { AI_SYSTEM_PROMPT } from '@/lib/ai/prompt/system-prompt';
-import type { OrgRole } from '@/lib/roles';
+import type { AiTool } from '@/lib/ai/tools/define-tool';
 
 // The one context builder of WerkFlow KI (B8 and B18 of
 // werk-flow/werkflow-planning#20). It decides what the model reads, in the
@@ -52,39 +52,66 @@ export function untrustedText(source: UntrustedSource, text: string): UntrustedT
 }
 
 /**
- * A tool's output that carries untrusted text: JSON with the source label
- * beside the text. Typed as the SDK's tool-result output, so its text has no
- * typed path into the system prompt or a message.
+ * A tool's result: values the tool itself controls (ids, numbers, codes,
+ * dates, links) as plain values, and every text a person typed into a record
+ * as `UntrustedText`.
  */
-export function untrustedToolOutput(text: UntrustedText): ToolResultPart['output'] {
-  return { type: 'json', value: { source: text.source, text: text[TEXT] } };
+export type ToolValue =
+  | string
+  | number
+  | boolean
+  | null
+  | UntrustedText
+  | readonly ToolValue[]
+  | { readonly [key: string]: ToolValue };
+
+function isUntrustedText(value: ToolValue): value is UntrustedText {
+  return typeof value === 'object' && value !== null && TEXT in value;
+}
+
+function serializedToolValue(value: ToolValue): JSONValue {
+  if (value === null || typeof value !== 'object') return value;
+  if (isUntrustedText(value)) return { source: value.source, text: value[TEXT] };
+  if (Array.isArray(value)) return value.map(serializedToolValue);
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, serializedToolValue(entry)]));
+}
+
+/** Whether a tool's result carries untrusted text: reading it taints the turn (B10). */
+export function carriesUntrustedText(value: ToolValue): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  if (isUntrustedText(value)) return true;
+  return (Array.isArray(value) ? value : Object.values(value)).some(carriesUntrustedText);
+}
+
+/**
+ * A tool's output: JSON in which each untrusted text sits beside its source
+ * label. Typed as the SDK's tool-result output, so its text has no typed path
+ * into the system prompt or a message.
+ */
+export function untrustedToolOutput(value: ToolValue): ToolResultPart['output'] {
+  return { type: 'json', value: serializedToolValue(value) };
 }
 
 /** One saved message of the thread: the person's own words or an earlier answer. */
 export type AiThreadMessage = { role: 'user' | 'assistant'; text: string };
 
-/**
- * The tools each role's model sees (B6). The tool registry of
- * werk-flow/werkflow-planning#531 fills them; until then no role has a tool.
- */
-const AI_TOOLS: Readonly<Record<OrgRole, ToolSet>> = { admin: {}, buero: {}, employee: {} };
-
 export type AiContext = {
   instructions: string;
-  tools: ToolSet;
+  /** The caller's role's tools (lib/ai/tools/registry.ts); each step offers them or fewer. */
+  tools: readonly AiTool[];
   /** The tool definitions as the model reads them: their share of the input. */
   toolDefinitions: string;
   messages: ModelMessage[];
 };
 
 /** A tool set's definitions as the provider sends them, sorted by name so equal sets measure equal. */
-async function serializedToolDefinitions(tools: ToolSet): Promise<string> {
+async function serializedToolDefinitions(tools: readonly AiTool[]): Promise<string> {
   const definitions = await Promise.all(
-    Object.entries(tools)
-      .toSorted(([left], [right]) => left.localeCompare(right))
-      .map(async ([name, tool]) => ({
-        name,
-        description: 'description' in tool && typeof tool.description === 'string' ? tool.description : null,
+    tools
+      .toSorted((left, right) => left.name.localeCompare(right.name))
+      .map(async (tool) => ({
+        name: tool.name,
+        description: tool.description,
         inputSchema: await asSchema(tool.inputSchema).jsonSchema,
       })),
   );
@@ -100,16 +127,16 @@ export function serializedInput(
 }
 
 /**
- * The context of one turn for a person of `role`. The thread is oldest first
- * and ends with the new message; its oldest messages drop first until the
- * input fits `inputTokenCap`, and the new message always stays.
+ * The context of one turn with the caller's role's `tools`. The thread is
+ * oldest first and ends with the new message; its oldest messages drop first
+ * until the input fits `inputTokenCap`, and the new message always stays.
  */
 export async function buildAiContext(input: {
-  role: OrgRole;
+  tools: readonly AiTool[];
   thread: readonly AiThreadMessage[];
   inputTokenCap: number;
 }): Promise<AiContext> {
-  const tools = AI_TOOLS[input.role];
+  const { tools } = input;
   const context = {
     instructions: AI_SYSTEM_PROMPT,
     tools,

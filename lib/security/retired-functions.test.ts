@@ -66,7 +66,6 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   withdraw_work_handover_p1_17_inner: 'withdraw_work_handover',
   // A WerkFlow KI turn writes its thread, message, reservation and answer in one call.
   create_ai_thread: 'start_ai_turn',
-  append_ai_thread_item: 'start_ai_turn',
   reserve_ai_run: 'start_ai_turn',
   // The weekly numbers, one function per rule so a later start page reuses them.
   berlin_day_end_or_now: 'count_overdue_items_at',

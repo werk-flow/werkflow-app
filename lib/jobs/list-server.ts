@@ -9,6 +9,7 @@ import {
   type JobListSection,
 } from './list-page';
 import { toJob, toProject, type Job, type ProjectRow, type ProjectWithDetails } from './types';
+import type { ActionContext } from '@/lib/org/action-context';
 import type { AdminClient } from '@/lib/supabase/admin';
 import { readInBatches, readCompleteRows, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 
@@ -47,8 +48,7 @@ async function readJobListRows(admin: AdminClient, orgId: string, entries: JobLi
       ),
     ),
   ]);
-  if (jobResult.error || projectResult.error || assignments.error)
-    throw new Error('Aufträge konnten nicht geladen werden.');
+  if (jobResult.error || projectResult.error || assignments.error) return 'load_failed';
   return { jobRows: jobResult.data, projectRows: projectResult.data, assignments: assignments.data };
 }
 
@@ -69,16 +69,33 @@ function listProjects(projectRows: ProjectRow[], entries: JobListEntry[]): Proje
   });
 }
 
-export async function loadJobListPage(queries: JobListQueries): Promise<{
+type JobListPage = {
   jobs: Job[];
   projects: ProjectWithDetails[];
   jobAssignmentMap: Record<string, string[]>;
   clientMap: Record<string, string>;
   pagination: { queries: JobListQueries; pages: JobListPages };
-}> {
+};
+
+/** The page of `/auftraege` for the signed-in caller; a failed read throws German page text. */
+export async function loadJobListPage(queries: JobListQueries): Promise<JobListPage> {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) throw new Error('Aufträge konnten nicht geladen werden.');
-  const { orgId, userId, isManagerOrAbove } = auth.context;
+  const page = await readJobListPage(auth.context, queries);
+  if (page === 'load_failed') throw new Error('Aufträge konnten nicht geladen werden.');
+  return page;
+}
+
+/**
+ * The job list for a resolved caller: an employee reads only assigned work,
+ * the office everything (`list_job_entries_page`). WerkFlow KI's
+ * `auftraege_finden` calls it with the harness's context.
+ */
+export async function readJobListPage(
+  context: ActionContext,
+  queries: JobListQueries,
+): Promise<JobListPage | 'load_failed'> {
+  const { orgId, userId, isManagerOrAbove } = context;
   const admin = createSupabaseAdminClient();
   const result = await admin.rpc('list_job_entries_page', {
     p_organization_id: orgId,
@@ -86,10 +103,12 @@ export async function loadJobListPage(queries: JobListQueries): Promise<{
     p_is_manager: isManagerOrAbove,
     p_queries: queries,
   });
-  if (result.error) throw new Error('Aufträge konnten nicht geladen werden.');
+  if (result.error) return 'load_failed';
   const pages = jobListPagesSchema.parse(result.data);
   const entries = JOB_LIST_SECTIONS.flatMap((section) => pages[section].entries);
-  const { jobRows, projectRows, assignments } = await readJobListRows(admin, orgId, entries);
+  const rows = await readJobListRows(admin, orgId, entries);
+  if (rows === 'load_failed') return 'load_failed';
+  const { jobRows, projectRows, assignments } = rows;
   const clientIds = [
     ...new Set([...jobRows, ...projectRows].flatMap((row) => (row.client_id ? [row.client_id] : []))),
   ];
@@ -100,7 +119,7 @@ export async function loadJobListPage(queries: JobListQueries): Promise<{
       .eq('organization_id', orgId)
       .in('id', [...ids]),
   );
-  if (clientResult.error) throw new Error('Kunden konnten nicht geladen werden.');
+  if (clientResult.error) return 'load_failed';
   const jobs: Job[] = jobRows.map(toJob);
   const projects = listProjects(projectRows, entries);
   const jobAssignmentMap: Record<string, string[]> = {};
