@@ -235,6 +235,30 @@ begin
     format($sql$select public.open_time_accounts(%L, %L, pg_temp.openings(array[%L]::uuid[], array[0]), '2026-08-31', 'Einführung', repeat('d', 64))$sql$,
       v_admin, v_org, v_third),
     'opening_date_locked');
+  -- The single opening follows the same rule (migration
+  -- 20270302090000_refuse_a_single_opening_under_a_closed_month.sql): July
+  -- has no period of its own, yet it lies under the closed August.
+  perform pg_temp.expect_refusal('a single opening reached under a closed month',
+    format($sql$select public.open_time_account(%L, %L, 0, '2026-07-01', 'Einführung', %L, gen_random_uuid(), repeat('f', 64))$sql$,
+      v_org, v_third, v_admin),
+    'opening_date_locked');
+  perform pg_temp.expect_refusal('a single opening on the last day of a closed month was accepted',
+    format($sql$select public.open_time_account(%L, %L, 0, '2026-08-31', 'Einführung', %L, gen_random_uuid(), repeat('f', 64))$sql$,
+      v_org, v_third, v_admin),
+    'opening_date_locked');
+  perform pg_temp.expect_refusal('a single opening older than ten years reached its month locks',
+    format($sql$select public.open_time_account(%L, %L, 0, ((clock_timestamp() at time zone 'Europe/Berlin')::date - interval '10 years')::date - 1, 'Einführung', %L, gen_random_uuid(), repeat('f', 64))$sql$,
+      v_org, v_third, v_admin),
+    'opening_date_too_old');
+  perform pg_temp.expect_refusal('a single opening without a date was accepted',
+    format($sql$select public.open_time_account(%L, %L, 0, null, 'Einführung', %L, gen_random_uuid(), repeat('f', 64))$sql$,
+      v_org, v_third, v_admin),
+    'invalid_input');
+  if exists (select 1 from public.time_accounts where employee_record_id = v_third) then
+    raise exception 'a refused single opening opened the third person';
+  end if;
+  -- The bulk opening calls the single one per person under the locks it
+  -- already holds: the same locks again, so the call below still succeeds.
   v_opened := public.open_time_accounts(
     v_admin, v_org, pg_temp.openings(array[v_third], array[0]),
     '2026-09-01', 'Eintritt nach dem August', repeat('e', 64));

@@ -10,6 +10,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { Input } from '@/components/ui/input';
+import { useSuggestedDate } from '@/components/zeiterfassung/time-account-date-field';
 import { OpeningDateCorrections } from '@/components/zeiterfassung/time-account-opening-corrections';
 import {
   focusFirstVisibleInvalid,
@@ -180,9 +181,7 @@ function checkOpening(input: {
  */
 function useOpenTimeAccounts(missingAccounts: readonly MissingAccount[], suggestedStartDate: string) {
   const { showBanner } = useBanner();
-  const [openedOn, setOpenedOn] = useState<Date | undefined>(
-    () => new Date(`${suggestedStartDate}T12:00:00`),
-  );
+  const [openedOn, pickOpenedOn] = useSuggestedDate(suggestedStartDate);
   const [reason, setReason] = useState('Einführung des Zeitkontos');
   const [balances, setBalances] = useState<Readonly<Record<string, string>>>({});
   const [errors, setErrors] = useState<OpeningErrors>({ balances: [] });
@@ -192,7 +191,7 @@ function useOpenTimeAccounts(missingAccounts: readonly MissingAccount[], suggest
   const balanceOf = (employeeRecordId: string): string => balances[employeeRecordId] ?? ZERO_BALANCE_INPUT;
 
   const changeOpenedOn = (date: Date | undefined): void => {
-    setOpenedOn(date);
+    pickOpenedOn(date);
     setErrors((previous) => ({ ...previous, openedOn: undefined }));
   };
   const changeReason = (text: string): void => {

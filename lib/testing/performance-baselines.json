@@ -879,7 +879,7 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "be5c7af57f12159503e84f7449705b758fbde4c54f357b3228bf593470b7e722",
+        "workloadDigest": "4b991a43538a80dbbf8d8a0abdbefa86aaa04a351eeb801058ae44b742fdb0a9",
         "measurementDigest": "f6f54d8502d30f30515d83e4c27e6901ed5f5b56e761e18616966d01d357b987",
         "protocol": "independent-fixed-month-three-distinct-overlap-confirmations-browser-raf-v3",
         "role": "buero",
@@ -922,7 +922,14 @@
       "review": {
         "reason": "Recalibrated on the Linux PC on mains power: werk-flow/werkflow-app#285 backdated the benchmark people's entry date, which moved the seeded workload and the three planning digests. Three fresh rounds on one build at 30af13f2, each within budget, on a quiet machine (werk-flow/werkflow-planning#96).",
         "reviewedAt": "2026-11-08T18:34:15.523Z"
-      }
+      },
+      "workloadCarryOvers": [
+        {
+          "fromDigest": "be5c7af57f12159503e84f7449705b758fbde4c54f357b3228bf593470b7e722",
+          "toDigest": "4b991a43538a80dbbf8d8a0abdbefa86aaa04a351eeb801058ae44b742fdb0a9",
+          "reason": "tests/golden/support/seed.ts only exports createTestUser and createOrganizationWithSettings for the KI journey's own organization (werk-flow/werkflow-planning#530); their bodies and every row the world seeds stay the same"
+        }
+      ]
     },
     {
       "scenarioId": "calendar.month.employee-open-to-event",
@@ -930,7 +937,7 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "be5c7af57f12159503e84f7449705b758fbde4c54f357b3228bf593470b7e722",
+        "workloadDigest": "4b991a43538a80dbbf8d8a0abdbefa86aaa04a351eeb801058ae44b742fdb0a9",
         "measurementDigest": "a3560b533ebac440e63ba505830dfa3cf8db99f004190b1611dff489d6166a8a",
         "protocol": "independent-fixed-month-jobs-warmed-settled-closed-server-fresh-employee-after-three-saves-browser-raf-v5",
         "role": "employee",
@@ -973,7 +980,14 @@
       "review": {
         "reason": "Recalibrated on the Linux PC on mains power: werk-flow/werkflow-app#285 backdated the benchmark people's entry date, which moved the seeded workload and the three planning digests. Three fresh rounds on one build at 30af13f2, each within budget, on a quiet machine (werk-flow/werkflow-planning#96).",
         "reviewedAt": "2026-11-08T18:34:15.523Z"
-      }
+      },
+      "workloadCarryOvers": [
+        {
+          "fromDigest": "be5c7af57f12159503e84f7449705b758fbde4c54f357b3228bf593470b7e722",
+          "toDigest": "4b991a43538a80dbbf8d8a0abdbefa86aaa04a351eeb801058ae44b742fdb0a9",
+          "reason": "tests/golden/support/seed.ts only exports createTestUser and createOrganizationWithSettings for the KI journey's own organization (werk-flow/werkflow-planning#530); their bodies and every row the world seeds stay the same"
+        }
+      ]
     },
     {
       "scenarioId": "calendar.month.admin-open-to-legacy-event",
@@ -981,7 +995,7 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "be5c7af57f12159503e84f7449705b758fbde4c54f357b3228bf593470b7e722",
+        "workloadDigest": "4b991a43538a80dbbf8d8a0abdbefa86aaa04a351eeb801058ae44b742fdb0a9",
         "measurementDigest": "2a9e334a010f41c94c953eabed3009c0ca41d03d8b29d11b71fd19c4c7e75c29",
         "protocol": "independent-fixed-month-fresh-admin-after-legacy-save-browser-raf-v3",
         "role": "admin",
@@ -1024,7 +1038,14 @@
       "review": {
         "reason": "Recalibrated on the Linux PC on mains power: werk-flow/werkflow-app#285 backdated the benchmark people's entry date, which moved the seeded workload and the three planning digests. Three fresh rounds on one build at 30af13f2, each within budget, on a quiet machine (werk-flow/werkflow-planning#96).",
         "reviewedAt": "2026-11-08T18:34:15.523Z"
-      }
+      },
+      "workloadCarryOvers": [
+        {
+          "fromDigest": "be5c7af57f12159503e84f7449705b758fbde4c54f357b3228bf593470b7e722",
+          "toDigest": "4b991a43538a80dbbf8d8a0abdbefa86aaa04a351eeb801058ae44b742fdb0a9",
+          "reason": "tests/golden/support/seed.ts only exports createTestUser and createOrganizationWithSettings for the KI journey's own organization (werk-flow/werkflow-planning#530); their bodies and every row the world seeds stay the same"
+        }
+      ]
     },
     {
       "scenarioId": "time.clock-in.visible",

@@ -1,5 +1,5 @@
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
-import { formatBerlin } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 
 // Where a delegation window stands on a business date, and the date from
 // which the owner's „Heute beenden“ or „Entfernen“ revokes it. The list and
@@ -44,11 +44,11 @@ export function delegationRevocationDate(delegation: DelegationWindow, businessD
   return state === 'active' ? businessDate : null;
 }
 
-/** „vom 2.11.2026 bis einschließlich 6.11.2026“, or „am 2.11.2026“ for one day. */
+/** „vom 02.11.2026 bis einschließlich 06.11.2026“, or „am 02.11.2026“ for one day. */
 export function delegationPeriodText(validFrom: string, validUntil: string): string {
-  const from = formatBerlin(validFrom, 'numericDate');
+  const from = formatGermanDate(validFrom);
   if (validFrom === validUntil) return `am ${from}`;
-  return `vom ${from} bis einschließlich ${formatBerlin(validUntil, 'numericDate')}`;
+  return `vom ${from} bis einschließlich ${formatGermanDate(validUntil)}`;
 }
 
 /**

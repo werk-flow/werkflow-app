@@ -1,4 +1,4 @@
-import type { OfferArticleLine } from '@/lib/invoices/line-sources';
+import type { OfferCatalogLine } from '@/lib/invoices/line-sources';
 import { holdWrite } from './held-write-boundary';
 
 // The offer actions and router in the contract fixture: every create the
@@ -77,7 +77,7 @@ export async function saveOfferContent(
  * The article picker's price read: one Position from an article whose stored
  * unit is outside the list, so a contract can show the unit question.
  */
-export async function readOfferArticleLine(): Promise<{ success: true; line: OfferArticleLine }> {
+export async function readOfferArticleLine(): Promise<{ success: true; line: OfferCatalogLine }> {
   if (window.uiContractHoldArticleRead) {
     await new Promise<void>((resolve) => {
       window.uiContractArticleRead = resolve;
@@ -99,6 +99,30 @@ export async function readOfferArticleLine(): Promise<{ success: true; line: Off
         name: 'Kupferbogen 15 mm',
         archived: false,
       },
+      cost: { amountCents: 310, priceQuantity: 1 },
+    },
+  };
+}
+
+/** The Leistung picker's price read: one hour with its cost rate. */
+export async function readOfferLeistungLine(): Promise<{ success: true; line: OfferCatalogLine }> {
+  return {
+    success: true,
+    line: {
+      name: 'Monteurstunde',
+      description: '',
+      unit: 'hour',
+      unitPriceCents: 7250,
+      priceQuantity: 1,
+      taxRateBasisPoints: 1900,
+      source: {
+        kind: 'leistung',
+        id: 'contract-leistung',
+        number: 'L-7',
+        name: 'Monteurstunde',
+        archived: false,
+      },
+      cost: { amountCents: 4180, priceQuantity: 1 },
     },
   };
 }

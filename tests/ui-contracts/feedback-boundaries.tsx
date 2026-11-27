@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { PendingApprovals } from '@/components/zeiterfassung/pending-approvals';
 import { OpeningDateCorrections } from '@/components/zeiterfassung/time-account-opening-corrections';
 import { MissingTimeAccountsCard } from '@/components/zeiterfassung/time-account-opening-form';
+import { AdjustmentRequestForms } from '@/components/zeiterfassung/time-account-settings-forms';
 import { TimeCorrectionRequests } from '@/components/zeiterfassung/time-correction-requests';
 import { CorrectionTimelineFields } from '@/components/zeiterfassung/time-correction-dialog-timeline';
 import { useCorrectionTimeline } from '@/components/zeiterfassung/time-correction-dialog-timeline-state';
@@ -48,6 +49,7 @@ const FEEDBACK_FIXTURES = [
   'service-evidence-link',
   'time-account-opening',
   'time-account-bulk-opening',
+  'time-account-adjustment',
   'work-artifact-report',
   'correction-timeline',
   'work-artifact-customer-decision',
@@ -93,10 +95,18 @@ function TimeAccountOpeningHost(): React.JSX.Element {
   return <OpeningDateCorrections accounts={accounts} suggestedStartDate="2026-09-01" />;
 }
 
-const readMissingAccounts = () => structuredClone(window.uiContractMissingAccounts);
+function TimeAccountAdjustmentHost(): React.JSX.Element {
+  const accounts = useRouteProps(readTimeAccounts);
+  return <AdjustmentRequestForms accounts={accounts} today="2026-11-02" />;
+}
+
+const readOpeningSettings = () => ({
+  missingAccounts: structuredClone(window.uiContractMissingAccounts),
+  suggestedStartDate: window.uiContractSuggestedStart,
+});
 
 function TimeAccountBulkOpeningHost(): React.JSX.Element {
-  const missingAccounts = useRouteProps(readMissingAccounts);
+  const { missingAccounts, suggestedStartDate } = useRouteProps(readOpeningSettings);
   return (
     <MissingTimeAccountsCard
       settings={{
@@ -104,7 +114,7 @@ function TimeAccountBulkOpeningHost(): React.JSX.Element {
         employeeCount: 2,
         missingAccounts,
         accounts: [],
-        suggestedStartDate: '2026-09-01',
+        suggestedStartDate,
       }}
     />
   );
@@ -392,6 +402,8 @@ function FeedbackSurface({ name }: { name: FeedbackFixtureName }): React.JSX.Ele
       return <TimeAccountOpeningHost />;
     case 'time-account-bulk-opening':
       return <TimeAccountBulkOpeningHost />;
+    case 'time-account-adjustment':
+      return <TimeAccountAdjustmentHost />;
     case 'correction-timeline':
       return <CorrectionTimelineHost />;
     case 'work-artifact-report':

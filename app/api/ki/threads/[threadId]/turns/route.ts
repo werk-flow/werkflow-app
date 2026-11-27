@@ -10,7 +10,7 @@ import { verifySameOriginJsonRequest } from '@/lib/security/same-origin';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
-// The turn's total timeout plus room to save the answer and settle its cost.
+// The turn's total timeout plus the limits of its last cost write, its saves and its settlement (lib/ai/limits.test.ts).
 export const maxDuration = 150;
 
 const privateHeaders = { 'Cache-Control': 'private, no-store' };

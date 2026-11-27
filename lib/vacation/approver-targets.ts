@@ -4,7 +4,7 @@ import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/qu
 import type { Database } from '@/lib/supabase/database.types';
 import { authorizeResponsibilityForTarget } from '@/lib/responsibilities/server';
 import type { OrgRole } from '@/lib/roles';
-import { loadPlannedAssignedJobs } from './server';
+import { loadPlannedAssignedJobs, type VacationCountingRecord } from './server';
 import type { VacationRequestRow } from './types';
 import { logError } from '@/lib/logging';
 
@@ -20,6 +20,8 @@ type RequestTargetMaps = {
       user_id: string | null;
       first_name: string | null;
       last_name: string | null;
+      entry_date: string | null;
+      exit_date: string | null;
     }
   >;
   roleByUserId: Map<string, OrgRole>;
@@ -36,7 +38,7 @@ export async function loadRequestTargetMaps(
   const { data: records, error: recordsError } = await readInBatches(recordIds, (batch) =>
     admin
       .from('employee_records')
-      .select('id, user_id, first_name, last_name')
+      .select('id, user_id, first_name, last_name, entry_date, exit_date')
       .eq('organization_id', orgId)
       .in('id', [...batch]),
   );
@@ -111,7 +113,13 @@ export function createDecisionAuthorization(orgId: string, userId: string): Deci
   };
 }
 
-export type DecidableTarget = { recordId: string; targetUserId: string; personName: string };
+export type DecidableTarget = {
+  recordId: string;
+  /** The record's entry and exit dates, which bound the days a request costs. */
+  countingRecord: VacationCountingRecord;
+  targetUserId: string;
+  personName: string;
+};
 
 // The request's target when it is a member the actor may decide for; null skips the request.
 export async function resolveDecidableTarget(
@@ -126,6 +134,7 @@ export async function resolveDecidableTarget(
   if (!(await isAuthorized(record.id, record.user_id, targetRole))) return null;
   return {
     recordId: record.id,
+    countingRecord: { id: record.id, entry_date: record.entry_date, exit_date: record.exit_date },
     targetUserId: record.user_id,
     personName: formatTargetName(record, maps.profileByUserId.get(record.user_id)),
   };

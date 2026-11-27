@@ -17,6 +17,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { endSessionAfterCheck } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
+import { clearKiDrafts } from '@/lib/ai/chat-draft-clear';
 import {
   type PasswordWithConfirmationValues,
   translateSupabasePasswordError,
@@ -233,6 +234,7 @@ async function redirectToPasswordReset(
 
       // Global on purpose: a password change ends every existing session.
       clearManualEntryBridge();
+      clearKiDrafts();
       await clearServiceWorkerCaches();
       await clearTodayOnDevice();
       const { error } = await supabase.auth.signOut({ scope: 'global' });

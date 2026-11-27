@@ -74,6 +74,26 @@ const MANUAL_ENTRY_PLAN_WRAPPER: ExportReference = {
   exportName: 'planManualEntrySubmission',
 };
 
+const LIFECYCLE_ACTIONS = 'lib/personnel/lifecycle-actions.ts';
+const LIFECYCLE_STEPS = 'lib/personnel/lifecycle-steps.ts';
+const LIFECYCLE_STEP_READS = 'lib/personnel/lifecycle-step-reads.ts';
+const ACCESS_TRANSITION: ExportReference = {
+  module: LIFECYCLE_ACTIONS,
+  exportName: 'setPersonnelAccessTransition',
+};
+const EMPLOYMENT_TRANSITION: ExportReference = {
+  module: LIFECYCLE_ACTIONS,
+  exportName: 'setPersonnelEmploymentTransition',
+};
+/** The lifecycle view's loader computes the steps that fit with it; the dialogs offer only those. */
+const LIFECYCLE_STEPS_WRAPPER: ExportReference = {
+  module: LIFECYCLE_STEP_READS,
+  exportName: 'lifecycleSteps',
+};
+const LIFECYCLE_TRANSITIONS_HOOK = 'components/mitarbeiter/use-personnel-lifecycle-transitions.ts';
+const LIFECYCLE_STEPS_EXEMPTION =
+  "Offers only the steps in the view's data.steps, which getPersonnelLifecycle computes with lifecycleSteps on the server, and drops a chosen step that no longer fits after a refresh.";
+
 export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
   {
     kind: 'planning-occurrence-change',
@@ -266,5 +286,45 @@ export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
       'components/kalender/mutations/use-calendar-visit-writes.ts':
         'Moves a job through updateJob only while it has no planning occurrence; a job with visits moves each visit through the planning actions.',
     },
+  },
+  {
+    kind: 'personnel-access-transition',
+    serverCodes: ['transition_not_allowed'],
+    predicate: { module: LIFECYCLE_STEPS, exportName: 'allowedAccessSteps' },
+    wrappers: [LIFECYCLE_STEPS_WRAPPER],
+    actions: [ACCESS_TRANSITION],
+    screenedReads: ['personnel-lifecycle'],
+    props: [],
+    server: {
+      kind: 'typescript',
+      guards: [{ module: LIFECYCLE_STEP_READS, exportName: 'refuseUnfitAccessStep' }],
+    },
+    exempt: { [LIFECYCLE_TRANSITIONS_HOOK]: LIFECYCLE_STEPS_EXEMPTION },
+  },
+  {
+    kind: 'personnel-employment-transition',
+    serverCodes: ['transition_not_allowed'],
+    predicate: { module: LIFECYCLE_STEPS, exportName: 'allowedEmploymentSteps' },
+    wrappers: [LIFECYCLE_STEPS_WRAPPER],
+    actions: [EMPLOYMENT_TRANSITION],
+    screenedReads: ['personnel-lifecycle'],
+    props: [],
+    server: {
+      kind: 'typescript',
+      guards: [{ module: LIFECYCLE_STEP_READS, exportName: 'refuseUnfitEmploymentStep' }],
+    },
+    exempt: { [LIFECYCLE_TRANSITIONS_HOOK]: LIFECYCLE_STEPS_EXEMPTION },
+  },
+  {
+    // The dialog marks the date before the save: a step that acts at once takes no later date, a planned step only a later one.
+    kind: 'personnel-employment-date',
+    serverCodes: ['immediate_effective_date_required', 'future_effective_date_required'],
+    predicate: { module: LIFECYCLE_STEPS, exportName: 'employmentDateRefusal' },
+    wrappers: [],
+    actions: [EMPLOYMENT_TRANSITION],
+    screenedReads: [],
+    props: [],
+    server: { kind: 'sql', test: 'supabase/tests/p1_24_people_lifecycle.sql' },
+    exempt: {},
   },
 ];

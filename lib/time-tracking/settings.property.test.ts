@@ -5,7 +5,7 @@ import {
   type BreakPolicy,
   type BreakPolicyHistoryEntry,
   type BreakPolicyValues,
-  computeBreakdownForSettings,
+  computeDayBreakdown,
   getAutomaticBreakRanges,
   resolveBreakPolicyAtTimestamp,
 } from './settings';
@@ -19,12 +19,29 @@ import { automaticBreakRuleArbitrary as automaticPolicyArbitrary } from '@/lib/t
 
 const MINUTE_MS = 60_000;
 
+/** The split of a day without standby, with the stamped break, and no target unless one is given. */
+function breakdownOf(presence: number, stamped: number, policy: BreakPolicyValues, target?: number) {
+  return computeDayBreakdown(
+    { presenceMinutes: presence, standbyMinutes: 0, trackedBreakMinutes: stamped },
+    policy,
+    target,
+  );
+}
+
 /** The break of the last step a day reached, read off the rule without the module. */
 function oracleBreak(presenceMinutes: number, policy: BreakPolicyValues): number {
   const second = policy.secondStep;
   if (second && presenceMinutes >= second.thresholdMinutes) return second.durationMinutes;
   return presenceMinutes >= policy.autoBreakThresholdMinutes ? policy.autoBreakDurationMinutes : 0;
 }
+
+/** Manual breaks: the day's break is the one the person stamped. */
+const MANUAL_RULE: BreakPolicyValues = {
+  breakMode: 'manual',
+  autoBreakThresholdMinutes: 360,
+  autoBreakDurationMinutes: 30,
+  secondStep: null,
+};
 
 const presenceArbitrary = fc.integer({ min: 0, max: 16 * 60 });
 
@@ -44,7 +61,7 @@ describe('The automatic break', () => {
   test('is the break of the last step the day’s presence reached, never more than the presence', () => {
     fc.assert(
       fc.property(policyAndPresenceArbitrary, ([policy, presence]) => {
-        const { breakMinutes } = computeBreakdownForSettings(presence, 0, policy);
+        const { breakMinutes } = breakdownOf(presence, 0, policy);
         expect(breakMinutes).toBe(Math.min(oracleBreak(presence, policy), presence));
       }),
     );
@@ -57,8 +74,8 @@ describe('The automatic break', () => {
         fc.nat({ max: 600 }),
         automaticPolicyArbitrary,
         (presence, more, policy) => {
-          const shorter = computeBreakdownForSettings(presence, 0, policy).breakMinutes;
-          const longer = computeBreakdownForSettings(presence + more, 0, policy).breakMinutes;
+          const shorter = breakdownOf(presence, 0, policy).breakMinutes;
+          const longer = breakdownOf(presence + more, 0, policy).breakMinutes;
           expect(longer).toBeGreaterThanOrEqual(shorter);
         },
       ),
@@ -72,10 +89,8 @@ describe('The automatic break', () => {
         fc.nat({ max: 600 }),
         automaticPolicyArbitrary,
         (presence, stamped, policy) => {
-          expect(computeBreakdownForSettings(presence, stamped, policy)).toEqual(
-            computeBreakdownForSettings(presence, 0, policy),
-          );
-          const manual = computeBreakdownForSettings(presence, stamped, { ...policy, breakMode: 'manual' });
+          expect(breakdownOf(presence, stamped, policy)).toEqual(breakdownOf(presence, 0, policy));
+          const manual = breakdownOf(presence, stamped, { ...policy, breakMode: 'manual' });
           expect(manual.breakMinutes).toBe(Math.min(stamped, presence));
         },
       ),
@@ -109,7 +124,7 @@ describe('The automatic break', () => {
             }
             before += minutes;
           }
-          expect(shownMinutes).toBeCloseTo(computeBreakdownForSettings(presence, 0, policy).breakMinutes, 6);
+          expect(shownMinutes).toBeCloseTo(breakdownOf(presence, 0, policy).breakMinutes, 6);
         },
       ),
     );
@@ -125,6 +140,66 @@ describe('The automatic break', () => {
         expect(getAutomaticBreakRanges(start, end, { ...policy, breakMode: 'manual' })).toEqual([]);
         expect(getAutomaticBreakRanges(end, start, policy)).toEqual([]);
       }),
+    );
+  });
+});
+
+const minutesArbitrary = fc.integer({ min: 0, max: 24 * 60 });
+
+describe('A day’s breakdown', () => {
+  test('splits presence into work, break and overtime that add up to it', () => {
+    fc.assert(
+      fc.property(
+        minutesArbitrary,
+        fc.nat({ max: 24 * 60 }),
+        minutesArbitrary,
+        (presence, tracked, target) => {
+          const { workMinutes, breakMinutes, overtimeMinutes } = breakdownOf(
+            presence,
+            tracked,
+            MANUAL_RULE,
+            target,
+          );
+          expect(workMinutes + breakMinutes + overtimeMinutes).toBe(presence);
+          expect(breakMinutes).toBe(Math.min(tracked, presence));
+          expect(overtimeMinutes).toBe(Math.max(0, presence - breakMinutes - target));
+          expect(workMinutes).toBeLessThanOrEqual(target);
+        },
+      ),
+    );
+  });
+
+  test('never counts overtime before the target is reached, nor for an unknown target', () => {
+    fc.assert(
+      fc.property(minutesArbitrary, minutesArbitrary, automaticPolicyArbitrary, (work, target, policy) => {
+        fc.pre(work <= target);
+        const manual = { ...policy, breakMode: 'manual' as const };
+        expect(breakdownOf(work, 0, manual, target).overtimeMinutes).toBe(0);
+        const unknown = breakdownOf(work + target, 0, policy);
+        expect(unknown.overtimeMinutes).toBe(0);
+        expect(unknown.workMinutes).toBe(work + target - unknown.breakMinutes);
+      }),
+    );
+  });
+
+  test('keeps standby out of the break steps and counts it as working time', () => {
+    fc.assert(
+      fc.property(
+        policyAndPresenceArbitrary,
+        minutesArbitrary,
+        fc.option(minutesArbitrary, { nil: undefined }),
+        ([policy, presence], standby, target) => {
+          const withStandby = computeDayBreakdown(
+            { presenceMinutes: presence + standby, standbyMinutes: standby, trackedBreakMinutes: 0 },
+            policy,
+            target,
+          );
+          expect(withStandby.breakMinutes).toBe(breakdownOf(presence, 0, policy).breakMinutes);
+          expect(withStandby.workMinutes + withStandby.overtimeMinutes).toBe(
+            presence + standby - withStandby.breakMinutes,
+          );
+        },
+      ),
     );
   });
 });

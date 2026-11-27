@@ -7,9 +7,15 @@ import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
-import { storedSectionSchema } from './action-schemas';
+import { positionCostSchema, storedSectionSchema } from './action-schemas';
 import type { OfferListQuery, OfferPage } from './list-page';
-import { OFFER_STATUSES, offerWorkKindSchema, type OfferDetail, type OfferWorkKind } from './types';
+import {
+  OFFER_STATUSES,
+  offerWorkKindSchema,
+  type OfferDetail,
+  type OfferWithCosts,
+  type OfferWorkKind,
+} from './types';
 
 // Internal readers: the page authorizes the current manager and resolves the
 // organization before it calls one. A failed or malformed read throws; it
@@ -94,13 +100,9 @@ const offerSchema = z.object({
 
 const WORK_LABELS: Record<OfferWorkKind, string> = { job: 'Auftrag', project: 'Projekt', request: 'Anfrage' };
 
-/** One offer of the organization with the names its header shows; `null` when there is none. */
-export async function readOffer(organizationId: string, offerId: string): Promise<OfferDetail | null> {
-  const admin = createSupabaseAdminClient();
-  const selected = await admin.rpc('get_offer', { p_organization_id: organizationId, p_offer_id: offerId });
-  if (selected.error) throw new Error('offer_read_failed');
-  if (selected.data === null) return null;
-  const parsed = offerSchema.safeParse(selected.data);
+/** The offer `get_offer` answered, with the names its header shows and no cost. Throws on a malformed answer. */
+function offerDetailOf(data: unknown): OfferDetail {
+  const parsed = offerSchema.safeParse(data);
   if (!parsed.success) throw new Error('offer_read_failed');
   const { site, owner, work, ...offer } = parsed.data;
   return {
@@ -124,5 +126,46 @@ export async function readOffer(organizationId: string, offerId: string): Promis
           label: `${WORK_LABELS[work.kind]} ${[work.number, work.title].filter(Boolean).join(' · ')}`,
         }
       : null,
+  };
+}
+
+const offerWithCostsSchema = z.object({
+  offer: z.unknown(),
+  costs: z.array(z.array(positionCostSchema.nullable())),
+});
+
+/**
+ * One offer of the organization as the office's page reads it: its header
+ * with the names it shows, its content, and each priced Position's cost,
+ * read in one statement with the content. The caller has established Admin
+ * or Büro; `null` when there is no such offer.
+ */
+export async function readOfferWithCosts(
+  organizationId: string,
+  offerId: string,
+): Promise<OfferWithCosts | null> {
+  const admin = createSupabaseAdminClient();
+  const selected = await admin.rpc('get_offer_with_costs', {
+    p_organization_id: organizationId,
+    p_offer_id: offerId,
+  });
+  if (selected.error) throw new Error('offer_read_failed');
+  if (selected.data === null) return null;
+  const parsed = offerWithCostsSchema.safeParse(selected.data);
+  if (!parsed.success) throw new Error('offer_read_failed');
+  const offer = offerDetailOf(parsed.data.offer);
+  const { costs } = parsed.data;
+  return {
+    ...offer,
+    sections: offer.sections.map((section, sectionIndex) => ({
+      ...section,
+      positions: section.positions.map((position, positionIndex) => {
+        if (position.kind === 'text') return position;
+        const cost = costs[sectionIndex]?.[positionIndex];
+        // Both answers come from one statement: a missing entry is a broken read, never a cost of zero.
+        if (cost === undefined) throw new Error('offer_read_failed');
+        return { ...position, cost };
+      }),
+    })),
   };
 }

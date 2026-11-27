@@ -3,7 +3,8 @@
 // write gate until the spec answers it. An accepted correction moves the date
 // and adds its history line, then re-renders the route as revalidatePath does.
 // An opening of missing accounts waits in the same gate; an accepted one takes
-// its people off the list of missing accounts.
+// its people off the list of missing accounts. An adjustment request waits in
+// the gate with its fields as the form sent them.
 import type { TimeAccountActionResult } from '@/lib/time-accounts/messages';
 import type { TimeAccountSettingsData } from '@/lib/time-accounts/queries';
 import { holdWrite } from './held-write-boundary';
@@ -13,6 +14,8 @@ declare global {
   interface Window {
     uiContractTimeAccounts: TimeAccountSettingsData['accounts'];
     uiContractMissingAccounts: TimeAccountSettingsData['missingAccounts'];
+    /** The suggested start date the settings read returns; a spec moves it to model a month closed elsewhere. */
+    uiContractSuggestedStart: string;
   }
 }
 
@@ -30,6 +33,8 @@ window.uiContractMissingAccounts = [
     exitDate: '2026-12-31',
   },
 ];
+
+window.uiContractSuggestedStart = '2026-09-01';
 
 window.uiContractTimeAccounts = [
   {
@@ -88,4 +93,17 @@ export async function openTimeAccounts(input: {
   );
   window.dispatchEvent(new Event(ROUTE_REFRESH_EVENT));
   return { success: true };
+}
+
+export async function submitTimeAccountAdjustment(
+  formData: FormData,
+): Promise<TimeAccountActionResult<'submitAdjustment'>> {
+  const refusal = await holdWrite('submit-adjustment', Object.fromEntries(formData));
+  if (refusal === 'invalid_hours' || refusal === 'stale_version') return { success: false, error: refusal };
+  return refusal === null ? { success: true } : { success: false, error: 'adjustment_failed' };
+}
+
+/** The rules form shares the adjustment module; no contract submits it. */
+export async function createStarterTimePolicy(): Promise<TimeAccountActionResult<'createPolicy'>> {
+  throw new Error('createStarterTimePolicy is outside the time-account contracts');
 }

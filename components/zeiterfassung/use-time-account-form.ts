@@ -30,7 +30,8 @@ export function useTimeAccountForm<Action extends TimeAccountAction>({
   fallback: TimeAccountFailureCode<Action>;
   successMessage: (formData: FormData) => string;
 }): {
-  handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  /** Resolves true only when the server accepted the submission. */
+  handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<boolean>;
   handleKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
   isPending: boolean;
   pendingValue: string | null;
@@ -41,7 +42,7 @@ export function useTimeAccountForm<Action extends TimeAccountAction>({
   const [pendingValue, setPendingValue] = useState<string | null>(null);
   const { run, isPending } = useServerAction(serverAction);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<boolean> => {
     event.preventDefault();
     setError(null);
     const form = event.currentTarget;
@@ -56,12 +57,14 @@ export function useTimeAccountForm<Action extends TimeAccountAction>({
       const result = await run(formData);
       if (!result.success) {
         setError(getTimeAccountFailureMessage(action, result.error));
-        return;
+        return false;
       }
       form.reset();
       showBanner({ variant: 'success', message: successMessage(formData) });
+      return true;
     } catch {
       setError(getTimeAccountFailureMessage(action, fallback));
+      return false;
     }
   };
 

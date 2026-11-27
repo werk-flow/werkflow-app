@@ -8,6 +8,7 @@ import { AreaPageSkeleton } from '@/components/loading-states/area-page-skeleton
 import { PageHeader } from '@/components/shared/page-header';
 import { PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 
 /** Renders a skeleton; the overlay calls it, and the skeleton it returns renders as its own component. */
 type Shape = () => ReactElement;
@@ -180,6 +181,11 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<
     titled('Inventar'),
     () =>
       import('@/components/loading-states/inventar-page-skeleton').then((m) => page(m.InventarPageSkeleton)),
+  ],
+  [
+    '/ki',
+    titled(AI_PRODUCT_NAME),
+    () => import('@/components/loading-states/ki-page-skeleton').then((m) => page(m.KiPageSkeleton)),
   ],
   [
     '/kennzahlen',

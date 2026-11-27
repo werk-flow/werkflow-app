@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import type { Locator } from '@playwright/test';
-import type { TestWorld } from '../../golden/support/world';
+import type { TestUser, TestWorld } from '../../golden/support/world';
 import type { AcceptanceSet, CaptureSpec } from './acceptance-rounds';
 import type { SurfaceDestination } from './surface-routes';
 
@@ -36,6 +36,8 @@ export type SetCapture = CaptureSpec & {
    * organization's deletion meets no retained record.
    */
   session?: 'outsider';
+  /** Captured as a person of an organization the set seeds itself, such as the KI organization. */
+  account?: (world: TestWorld) => Promise<{ user: TestUser; organizationId: string }>;
 };
 
 export type OpenSet = AcceptanceSet<SetCapture>;

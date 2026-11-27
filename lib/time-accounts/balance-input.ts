@@ -1,5 +1,5 @@
 /**
- * A balance as the office writes it: hours and minutes with an optional
+ * A balance or an adjustment as the office writes it: hours and minutes with an optional
  * sign, „+12:30“, „-3:15“ or „0:00“, the form `formatMinutes` shows. The
  * typographic minus „−“ and a trailing „Std.“ are accepted, so a value
  * copied from a balance reads back. Plain minutes are refused: „750“ could
@@ -21,3 +21,13 @@ export function parseSignedHoursMinutes(input: string): number | null {
 export const ZERO_BALANCE_INPUT = '0:00';
 
 export const BALANCE_INPUT_ERROR = 'Gib den Saldo als Std:Min an, etwa +12:30 oder -3:15.';
+
+/** The same rule for the hours of a correction, expiry or payout. */
+export const HOURS_INPUT_ERROR = 'Gib die Stunden als Std:Min an, etwa +12:30 oder -3:15.';
+
+/** Why typed adjustment hours cannot be sent, or null: no „±HH:MM“, or zero. */
+export function adjustmentHoursError(input: string): string | null {
+  const minutes = parseSignedHoursMinutes(input);
+  if (minutes === null) return HOURS_INPUT_ERROR;
+  return minutes === 0 ? 'Eine Korrektur von 0:00 ändert den Saldo nicht.' : null;
+}

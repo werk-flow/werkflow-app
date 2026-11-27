@@ -7,6 +7,8 @@ import { WeeklyHoursChart } from '@/components/zeiterfassung/weekly-hours-chart'
 import { MitarbeiterDetailTimeCards } from '@/components/mitarbeiter/mitarbeiter-detail-time-cards';
 import { useMitarbeiterDetailLiveTime } from '@/components/mitarbeiter/use-mitarbeiter-detail-live-time';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
+import { EMPTY_HOLIDAY_CALENDAR, resolveDailyTargets, type DailyTarget } from '@/lib/personnel/targets';
+import { addLocalDays } from '@/lib/date-time/berlin';
 import type { BreakPolicy } from '@/lib/time-tracking/settings';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 
@@ -72,6 +74,25 @@ export function readBreakRuleWeekEntries(input: unknown): { success: true; entri
     entries: WEEK_ENTRIES.filter((row) => {
       const at = new Date(row.timestamp).getTime();
       return at >= from && at <= to;
+    }),
+  };
+}
+
+/**
+ * The `weekly-targets` read: the week of Monday, 7 September 2026, as the
+ * resolver gives it to a person without Wochenplan or conditions, eight hours
+ * Monday to Friday. The real page always reads these targets; a week without
+ * them owes no overtime, so the overtime split here needs them.
+ */
+export function readBreakRuleWeekTargets(): { success: true; targets: DailyTarget[] } {
+  const dates = Array.from({ length: 7 }, (_, index) => addLocalDays('2026-09-07', index));
+  return {
+    success: true,
+    targets: resolveDailyTargets(dates, {
+      schedules: [],
+      conditions: [],
+      calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: { entryDate: null, exitDate: null },
     }),
   };
 }
@@ -156,7 +177,7 @@ function MitarbeiterDetailWeek() {
   });
   return (
     <section aria-label="Mitarbeiter">
-      <MitarbeiterDetailTimeCards liveTime={liveTime} breakPolicy={RULE_CHANGED_ON_TUESDAY} />
+      <MitarbeiterDetailTimeCards liveTime={liveTime} />
     </section>
   );
 }

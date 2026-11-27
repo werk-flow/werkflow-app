@@ -67,17 +67,7 @@ function renderCard(
   target: DailyTarget | undefined,
   overrides: Partial<MitarbeiterDetailLiveTime> = {},
 ): string {
-  return renderToStaticMarkup(
-    <MitarbeiterDetailTimeCards
-      liveTime={liveTimeWith(target, overrides)}
-      breakPolicy={{
-        breakMode: 'automatic',
-        autoBreakThresholdMinutes: 360,
-        autoBreakDurationMinutes: 30,
-        secondStep: null,
-      }}
-    />,
-  );
+  return renderToStaticMarkup(<MitarbeiterDetailTimeCards liveTime={liveTimeWith(target, overrides)} />);
 }
 
 describe('the personnel detail status card', () => {

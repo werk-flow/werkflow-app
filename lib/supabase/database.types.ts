@@ -6717,6 +6717,7 @@ export type Database = {
           id: string;
           item_id: string | null;
           kind: string;
+          leistung_id: string | null;
           name: string;
           offer_id: string;
           organization_id: string;
@@ -6737,6 +6738,7 @@ export type Database = {
           id?: string;
           item_id?: string | null;
           kind: string;
+          leistung_id?: string | null;
           name: string;
           offer_id: string;
           organization_id: string;
@@ -6757,6 +6759,7 @@ export type Database = {
           id?: string;
           item_id?: string | null;
           kind?: string;
+          leistung_id?: string | null;
           name?: string;
           offer_id?: string;
           organization_id?: string;
@@ -6777,6 +6780,13 @@ export type Database = {
             columns: ["item_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_positions_leistung_fk";
+            columns: ["leistung_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "leistungen";
             referencedColumns: ["id", "organization_id"];
           },
           {
@@ -8671,6 +8681,8 @@ export type Database = {
           employee_record_id: string;
           id: string;
           organization_id: string;
+          replaced_entry_date: string | null;
+          replaced_exit_date: string | null;
           scheduled_for: string | null;
           scheduled_state:
             | Database["public"]["Enums"]["personnel_employment_state"]
@@ -8687,6 +8699,8 @@ export type Database = {
           employee_record_id: string;
           id?: string;
           organization_id: string;
+          replaced_entry_date?: string | null;
+          replaced_exit_date?: string | null;
           scheduled_for?: string | null;
           scheduled_state?:
             | Database["public"]["Enums"]["personnel_employment_state"]
@@ -8703,6 +8717,8 @@ export type Database = {
           employee_record_id?: string;
           id?: string;
           organization_id?: string;
+          replaced_entry_date?: string | null;
+          replaced_exit_date?: string | null;
           scheduled_for?: string | null;
           scheduled_state?:
             | Database["public"]["Enums"]["personnel_employment_state"]
@@ -19662,6 +19678,10 @@ export type Database = {
         Args: { p_offer_id: string; p_organization_id: string };
         Returns: Json;
       };
+      get_offer_with_costs: {
+        Args: { p_offer_id: string; p_organization_id: string };
+        Returns: Json;
+      };
       get_org_members_for_user: {
         Args: { p_org_id: string; p_user_id: string };
         Returns: {
@@ -22863,6 +22883,25 @@ export type Database = {
           p_organization_id: string;
         };
         Returns: number;
+      };
+      start_ai_turn: {
+        Args: {
+          p_command_id: string;
+          p_organization_id: string;
+          p_reserve_micro_usd: number;
+          p_text: string;
+          p_thread_id: string;
+          p_title: string;
+          p_user_id: string;
+        };
+        Returns: {
+          answer_item_id: string;
+          answer_item_sequence: number;
+          run_id: string;
+          user_item_id: string;
+          user_item_sequence: number;
+          verdict: string;
+        }[];
       };
       start_organization_export: {
         Args: {

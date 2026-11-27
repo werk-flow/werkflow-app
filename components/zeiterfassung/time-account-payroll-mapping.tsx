@@ -18,10 +18,13 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { savePayrollMapping } from '@/lib/time-accounts/actions';
 import { getTimeAccountFailureMessage } from '@/lib/time-accounts/messages';
 import {
+  followMappingVersion,
   invalidPayrollCodeKeys,
   PAYROLL_CODE_MAX_LENGTH,
   PAYROLL_CODE_ROWS,
+  recordMappingSave,
   type PayrollCodeRow,
+  type PayrollMappingDraft,
 } from '@/lib/time-accounts/payroll-mapping';
 import type { TimeAccountSettingsData } from '@/lib/time-accounts/queries';
 import { formatBerlin } from '@/lib/utils';
@@ -83,11 +86,21 @@ function PayrollCodeRowView({
  */
 function PayrollMappingForm({ settings }: { settings: TimeAccountSettingsData }) {
   const { showBanner } = useBanner();
-  const [codes, setCodes] = useState(settings.payrollCodes);
+  const current = settings.payrollMapping;
+  const read = { version: current?.version ?? null, codes: settings.payrollCodes };
+  const [draft, setDraft] = useState<PayrollMappingDraft>(() => ({
+    basedOnVersion: read.version,
+    readCodes: read.codes,
+    codes: read.codes,
+    saving: false,
+  }));
+  // A refresh that brings a newer version replaces the table unless it holds unsaved edits or a save runs.
+  const followed = followMappingVersion(draft, read);
+  if (followed !== draft) setDraft(followed);
+  const { codes } = followed;
   const [invalidKeys, setInvalidKeys] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const { run, isPending } = useServerAction(savePayrollMapping);
-  const current = settings.payrollMapping;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -98,20 +111,28 @@ function PayrollMappingForm({ settings }: { settings: TimeAccountSettingsData })
       focusFirstVisibleInvalid(invalid.flatMap((key) => [codeInputId('row', key), codeInputId('card', key)]));
       return;
     }
+    const endSave = () => setDraft((previous) => ({ ...previous, saving: false }));
+    // The table stays editable while the save runs; only these codes become saved.
+    const submitted = codes;
+    setDraft((previous) => ({ ...previous, saving: true }));
     try {
-      const result = await run({ codes, basedOnVersion: current?.version ?? null });
+      const result = await run({ codes: submitted, basedOnVersion: followed.basedOnVersion });
       if (!result.success) {
+        endSave();
         setError(getTimeAccountFailureMessage('createMapping', result.error));
         return;
       }
+      // The saved codes are no edits; codes typed meanwhile stay, based on the version this save made.
+      setDraft((previous) => recordMappingSave(previous, { version: result.version, codes: submitted }));
       showBanner({ variant: 'success', message: 'Die Lohnarten-Zuordnung ist gespeichert.' });
     } catch {
+      endSave();
       setError(getTimeAccountFailureMessage('createMapping', 'mapping_failed'));
     }
   };
 
   const changeCode = (key: string, code: string) => {
-    setCodes((previous) => ({ ...previous, [key]: code }));
+    setDraft((previous) => ({ ...previous, codes: { ...previous.codes, [key]: code } }));
     setInvalidKeys((previous) => previous.filter((invalidKey) => invalidKey !== key));
   };
 
@@ -158,8 +179,7 @@ export function PayrollMappingCard({ settings }: { settings: TimeAccountSettings
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {/* A new version from any session remounts the form with its codes. */}
-        <PayrollMappingForm key={current?.version ?? 0} settings={settings} />
+        <PayrollMappingForm settings={settings} />
       </CardContent>
     </Card>
   );

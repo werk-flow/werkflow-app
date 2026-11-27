@@ -2,7 +2,7 @@ import { describeFailure } from '@/lib/action-messages';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import { formatResponsibilityPersonName, type ResponsibilityPerson } from '@/lib/responsibilities/types';
 import { ROLE_LABELS } from '@/lib/roles';
-import { formatBerlin } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 
 export const ERROR_MESSAGES = {
   not_authorized: 'Nur der Admin kann Verantwortlichkeiten ändern.',
@@ -36,14 +36,10 @@ export function personName(people: ResponsibilityPerson[], employeeRecordId: str
   return person ? formatResponsibilityPersonName(person) : 'Unbekannte Person';
 }
 
-export function formatDelegationDate(value: string): string {
-  return formatBerlin(value, 'numericDate');
-}
-
 export function holderSourceLabel(holder: EffectiveResponsibilityHolder): string {
   if (holder.source.kind === 'direct_assignment') return 'Direkt zugewiesen';
   if (holder.source.kind === 'delegation') {
-    return `Vertretung bis ${formatDelegationDate(holder.source.validUntil)}`;
+    return `Vertretung bis ${formatGermanDate(holder.source.validUntil)}`;
   }
   return `Standard: ${ROLE_LABELS[holder.source.role]}`;
 }

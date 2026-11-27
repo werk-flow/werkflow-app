@@ -1,7 +1,7 @@
-// Isolated stand-ins for what the invoice editor and the invoice settings form
-// reach on the server: the catalog read and the settings save wait for the
-// spec's answer (held-write-boundary.ts); issuing, the router, realtime and
-// links stay inert.
+// Isolated stand-ins for what the invoice editor, the invoice settings form
+// and „Versand“ reach on the server: the catalog read and the settings save
+// wait for the spec's answer (held-write-boundary.ts); issuing, sending, the
+// router, realtime and links stay inert.
 import type { InvoiceLineSourceRef } from '@/lib/invoices/line-sources';
 import type { SaveInvoiceSettingsInput } from '@/lib/invoices/settings';
 import { holdWrite, unexpectedWrite } from './held-write-boundary';
@@ -30,6 +30,9 @@ export async function saveInvoiceSettings(input: SaveInvoiceSettingsInput) {
 
 export const issueInvoice = unexpectedWrite;
 export const fileInvoiceOriginal = unexpectedWrite;
+export const sendInvoiceEmail = unexpectedWrite;
+export const retryInvoiceDelivery = unexpectedWrite;
+export const markInvoiceSentManually = unexpectedWrite;
 
 export function useRouter() {
   return { refresh() {}, push() {}, replace() {}, back() {}, forward() {}, prefetch() {} };

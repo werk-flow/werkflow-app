@@ -226,10 +226,12 @@ function OverviewStep({
               title: 'Noch kein Versand.',
               description: 'Sende den Servicebericht per E-Mail oder vermerke, dass er per Post rausging.',
             }}
-            retry={retry}
-            stale={!current}
-            failureMessages={REPORT_DELIVERY_FAILURES}
-            onChange={read.reload}
+            host={{
+              retry,
+              stale: !current,
+              failureMessages: REPORT_DELIVERY_FAILURES,
+              onChange: read.reload,
+            }}
           />
         ) : (
           !read.failure && <Skeleton className="h-16 w-full" />

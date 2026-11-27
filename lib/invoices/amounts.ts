@@ -28,7 +28,7 @@ const NO_DATE = '2000-01-01';
  * lines every sum the core forms stays an exact integer, so no cent is lost
  * between lines that cancel out.
  */
-const MAX_LINE_NET_CENTS = 1_000_000_000_000;
+export const MAX_LINE_NET_CENTS = 1_000_000_000_000;
 
 /**
  * Every amount of a draft's lines. A draft without lines totals zero. Throws

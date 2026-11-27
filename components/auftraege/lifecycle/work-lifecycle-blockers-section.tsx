@@ -6,17 +6,13 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { InlinePending } from '@/components/ui/inline-pending';
-import { formatBerlin } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 import {
   WORK_BLOCKER_REASON_LABELS,
   type WorkBlocker,
   type WorkLifecycleSnapshot,
 } from '@/lib/work-lifecycle/types';
 import type { WorkLifecycleDialogOpener } from './work-lifecycle-dialog-state';
-
-function formatReviewDate(value: string | null): string {
-  return value ? formatBerlin(value, 'numericDate') : 'Ohne Datum';
-}
 
 type WorkLifecycleBlockersSectionProps = {
   snapshot: WorkLifecycleSnapshot;
@@ -119,7 +115,7 @@ export function WorkLifecycleBlockersSection({
                   {blocker.responsible_employee_record_id
                     ? (ownerNames.get(blocker.responsible_employee_record_id) ?? 'Unbekannt')
                     : 'nicht hinterlegt'}{' '}
-                  · Wiedervorlage: {formatReviewDate(blocker.next_review_date)}
+                  · Wiedervorlage: {formatGermanDate(blocker.next_review_date, { empty: 'Ohne Datum' })}
                 </p>
               </div>
               {!readOnly &&

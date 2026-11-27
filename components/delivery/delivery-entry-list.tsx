@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorText } from '@/components/ui/error-text';
 import { usePendingTask } from '@/hooks/use-server-action';
-import { useWallClockTick } from '@/hooks/use-wall-clock-tick';
+import { useMountedWallClockTick, useWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionResult } from '@/lib/action-result';
 import {
@@ -18,14 +18,15 @@ import {
   type DeliveryList,
   type DeliveryState,
 } from '@/lib/delivery/delivery-types';
-import { deliveryFailureAdvice } from '@/lib/delivery/failure-advice';
+import { deliveryFailureAdvice, pastDeliveryOutcome } from '@/lib/delivery/failure-advice';
 import { retryWindowAt, retryWindowEnd } from '@/lib/delivery/retry-window';
 import { formatBerlinDateTime } from '@/lib/utils';
 
 // The sends of one filed document (lib/delivery/): each with its state, a
 // failed or unanswered email with „Erneut senden“. Its host binds its retry
 // action with useServerAction and names its refusal sentences and how its
-// view reads again.
+// view reads again; a document that takes no further send, such as a
+// cancelled invoice, passes no host and lists its sends read-only.
 
 const RETRY_FAILED = 'Die E-Mail konnte nicht erneut gesendet werden. Bitte versuche es erneut.';
 
@@ -58,6 +59,46 @@ function deliveryMeta(entry: DeliveryEntry): string {
 function useRetryWindow(entry: DeliveryEntry): { retryable: boolean; unanswered: boolean } {
   const end = retryWindowEnd(entry);
   return retryWindowAt(entry, useWallClockTick(60_000, end !== null, end));
+}
+
+/** A delivery's state, what went out how, and when by whom; `children` adds the row's advice. */
+function DeliveryFacts({ entry, children }: { entry: DeliveryEntry; children: React.ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5 sm:flex-row sm:gap-3">
+      <Badge variant={STATE_BADGE[entry.state]}>{DELIVERY_STATE_LABELS[entry.state]}</Badge>
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <p className="text-sm font-medium wrap-anywhere">{deliveryTitle(entry)}</p>
+        <p className="text-xs text-muted-foreground wrap-anywhere">{deliveryMeta(entry)}</p>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A delivery of a document that takes no further send: what happened to it,
+ * with no step to take. Only a sending row changes by the clock, when its
+ * attempt goes unanswered; an attempt without the provider's answer may have
+ * reached the customer, also when a later one failed.
+ */
+function PastDeliveryRow({ entry }: { entry: DeliveryEntry }) {
+  const unansweredFrom = entry.state === 'sending' && entry.retryFrom ? Date.parse(entry.retryFrom) : null;
+  // The server and the hydrating render show no clock-driven text, so both render the same.
+  const now = useMountedWallClockTick(60_000, unansweredFrom !== null, unansweredFrom);
+  const unanswered = now !== null && retryWindowAt(entry, now).unanswered;
+  return (
+    <li className="py-3">
+      <DeliveryFacts entry={entry}>
+        {(entry.state === 'failed' || unanswered) && (
+          <p className="text-sm text-destructive">
+            {unanswered
+              ? pastDeliveryOutcome({ failureCode: 'email_provider_unreachable', outcomeUnknown: true })
+              : pastDeliveryOutcome(entry)}
+          </p>
+        )}
+      </DeliveryFacts>
+    </li>
+  );
 }
 
 type RowHost = {
@@ -94,20 +135,15 @@ function DeliveryRow({ entry, host }: { entry: DeliveryEntry; host: RowHost }) {
       className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:gap-3"
       aria-busy={isPending || undefined}
     >
-      <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5 sm:flex-row sm:gap-3">
-        <Badge variant={STATE_BADGE[entry.state]}>{DELIVERY_STATE_LABELS[entry.state]}</Badge>
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <p className="text-sm font-medium wrap-anywhere">{deliveryTitle(entry)}</p>
-          <p className="text-xs text-muted-foreground wrap-anywhere">{deliveryMeta(entry)}</p>
-          {(entry.state === 'failed' || unanswered) && (
-            <p className="text-sm text-destructive">
-              {deliveryFailureAdvice(unanswered ? 'email_provider_unreachable' : entry.failureCode)}
-            </p>
-          )}
-          {/* A later send, here or in another session, makes an earlier retry's error stale. */}
-          <ErrorText>{entry.state === 'sent' ? null : error}</ErrorText>
-        </div>
-      </div>
+      <DeliveryFacts entry={entry}>
+        {(entry.state === 'failed' || unanswered) && (
+          <p className="text-sm text-destructive">
+            {deliveryFailureAdvice(unanswered ? 'email_provider_unreachable' : entry.failureCode)}
+          </p>
+        )}
+        {/* A later send, here or in another session, makes an earlier retry's error stale. */}
+        <ErrorText>{entry.state === 'sent' ? null : error}</ErrorText>
+      </DeliveryFacts>
       {retryable && (
         <Button
           type="button"
@@ -125,12 +161,19 @@ function DeliveryRow({ entry, host }: { entry: DeliveryEntry; host: RowHost }) {
   );
 }
 
-/** The newest sends, or the empty state, and how many the list leaves out. */
+/**
+ * The newest sends, or the empty state, and how many the list leaves out.
+ * Without a `host` the list is read-only: no row offers a retry.
+ */
 export function DeliveryEntryList({
   list,
   empty,
-  ...host
-}: RowHost & { list: DeliveryList; empty: { title: string; description: string } }) {
+  host,
+}: {
+  list: DeliveryList;
+  empty: { title: string; description: string };
+  host: RowHost | null;
+}) {
   const hidden = list.total - list.entries.length;
   return (
     <>
@@ -138,9 +181,13 @@ export function DeliveryEntryList({
         <EmptyState size="compact" title={empty.title} description={empty.description} />
       ) : (
         <ul className="divide-y rounded-lg border bg-card px-4 shadow-xs">
-          {list.entries.map((entry) => (
-            <DeliveryRow key={entry.id} entry={entry} host={host} />
-          ))}
+          {list.entries.map((entry) =>
+            host ? (
+              <DeliveryRow key={entry.id} entry={entry} host={host} />
+            ) : (
+              <PastDeliveryRow key={entry.id} entry={entry} />
+            ),
+          )}
         </ul>
       )}
       {hidden > 0 && (

@@ -38,6 +38,7 @@ export const MANAGER_PHONE_ROUTES = [
   '/einstellungen/mitarbeiter',
   '/einstellungen/auftraege-projekte',
   '/kennzahlen',
+  '/ki',
 ] as const;
 
 export const DYNAMIC_PHONE_ROUTES = [

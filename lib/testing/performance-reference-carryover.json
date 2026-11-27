@@ -1,120 +1,135 @@
 {
-  "reason": "A carry-over entry re-keys a reviewed reference from the measurement digest it was recorded under (fileDigest) to the current one (measuredTestDigest) when a support-file edit cannot change what the scenario measures; each entry is proven in the change that adds it. Current entries: tests/golden/support/scenario-measurement.ts replaced two type casts on performance.getEntriesByType in readAttribution with instanceof narrowing. The change touches only attribution, which is read after the measured interval has ended and is never compared, and every entry that call returns is an instance of the narrowed class, so measuredMs and every recorded attribution value stay as they were. tests/audit/performance/lists.spec.ts follows the Aufträge search field's new placeholder in its untimed global-search assertion, which runs after the measured interval has ended, so no measured value of a scenario in that file changes.",
+  "reason": "A carry-over entry re-keys a reviewed reference from the measurement digest it was recorded under (fileDigest) to the current one (measuredTestDigest) when a support-file edit cannot change what the scenario measures; each entry is proven in the change that adds it. Current entries: tests/golden/support/scenario-measurement.ts replaced two type casts on performance.getEntriesByType in readAttribution with instanceof narrowing. The change touches only attribution, which is read after the measured interval has ended and is never compared, and every entry that call returns is an instance of the narrowed class, so measuredMs and every recorded attribution value stay as they were. tests/audit/performance/lists.spec.ts follows the Aufträge search field's new placeholder in its untimed global-search assertion, which runs after the measured interval has ended, so no measured value of a scenario in that file changes. tests/golden/support/sessions.ts takes an optional account, a person of an organization a spec seeds itself (werk-flow/werkflow-planning#530); no scenario passes one, so every scenario signs in as before, and tests/golden/support/seed.ts only exports two of its seed functions unchanged.",
   "entries": [
     {
-      "scenarioId": "customers.list.open",
-      "fileDigest": "05598191ea2c43349993f569fb4fb510637be9089456766d4ce6d7e28bfc4fe7",
-      "measuredTestDigest": "18b43bb95d77e37e02ef99f2a74acaf69dceac06a16c0b1e90c2ba242c906580"
+      "scenarioId": "planning.occurrence.cross-session",
+      "fileDigest": "f6f54d8502d30f30515d83e4c27e6901ed5f5b56e761e18616966d01d357b987",
+      "measuredTestDigest": "a7df063604f107ea4b6d21b39d8faf4cf1847eec8c77bcbc0ab85d0fc605c4fa"
     },
     {
-      "scenarioId": "jobs.list.open",
-      "fileDigest": "83f533102717ce2600c974d8f635ab3339405821d53d8ac5b524ff018fc440f9",
-      "measuredTestDigest": "a3f6daeec33544a596ccc6ee0f41ee419ed9bf630b7c7dd8ee45ac8dcb1c97cc"
+      "scenarioId": "calendar.month.employee-open-to-event",
+      "fileDigest": "a3560b533ebac440e63ba505830dfa3cf8db99f004190b1611dff489d6166a8a",
+      "measuredTestDigest": "4b0a45691651d04e8c8cc2f4505d713dda86d4ac9b3654b7ea2159a33cbe9429"
     },
     {
-      "scenarioId": "jobs.detail.open",
-      "fileDigest": "a873965288a3635aae8a112de429232397dca0da35fc77b8333ed60700a0ff2e",
-      "measuredTestDigest": "c56275937c507a9712dd9adf1c4c89d6aeac2c9615f2a485a8f336f4062c7ce5"
-    },
-    {
-      "scenarioId": "equipment.list.open",
-      "fileDigest": "52ac1b2e1fe805aebeb0b88131be2917803d8cb5bb0deaa94944bb25b422696e",
-      "measuredTestDigest": "cd7fd9db152e5f3de10531a35269997e863a7488623e4d68bb7127035bf1b9f3"
-    },
-    {
-      "scenarioId": "tasks.list.open",
-      "fileDigest": "6341573f15e500159d70f8f01f85e68746af6664a09c272e6bcef15c83ec11b4",
-      "measuredTestDigest": "2046483f57b5515d31f58e252ce62f7678fb5c3e96e66314598372da449a1b3a"
+      "scenarioId": "calendar.month.admin-open-to-legacy-event",
+      "fileDigest": "2a9e334a010f41c94c953eabed3009c0ca41d03d8b29d11b71fd19c4c7e75c29",
+      "measuredTestDigest": "24f7086c39a93863bb0b9a2371b4045e0abc7dd2db95c388f4dab447a1e4a0a8"
     },
     {
       "scenarioId": "calendar.board.cold-open",
       "fileDigest": "4bb343c5da235475950de6c831677754c8a1455fee30696c6427a1be32e14325",
-      "measuredTestDigest": "7143166d7b9a5c0108b2a238ed3dcb86b104fac4b873396b0a162d9e71834cbd"
+      "measuredTestDigest": "472bd0feea9cc7fe6441402c3ccad065bb8eb41c96e2e2e069e8a8547702f390"
     },
     {
       "scenarioId": "calendar.board.reassign.visible",
       "fileDigest": "b4331101020f8e2bf3e916f75e607c5a5dca3765338fc561290018b8c38b5046",
-      "measuredTestDigest": "aac4853e60e805372e9e838b6e79efd4600ca66db49ddd156080409cb1885a9a"
+      "measuredTestDigest": "cf04a7215640d7edd544f9d6d8cf4c7a120e6bbfda8e974baed96bbae3ad65f8"
     },
     {
       "scenarioId": "calendar.board.reassign.settled",
       "fileDigest": "6bd087a37b39bbdefdf075c13b2acdd4d8f2bfeaff16b15f17bbf11fdfee138b",
-      "measuredTestDigest": "d068b1d830095238ef6ae543641def6ad57d6d28ce999ff3c5e2bebc4f34ea08"
+      "measuredTestDigest": "4584bb53ea1ad1bc32bc56ecc12c98d383a68d30d86508fbe791f25a2607d8cc"
     },
     {
       "scenarioId": "calendar.board-to-day.covered",
       "fileDigest": "adff044f6e470e78b946c09d7f96fb683d620a4f0e4b45a6830338fa42a59f7a",
-      "measuredTestDigest": "37fd78299cb00b1acc86bdc2b792bbaf7cf9e5865c172dc04660054d97c731c3"
+      "measuredTestDigest": "9e133bd436bdfeaf779109cc69e9fe21616fa6e554105ed59bca35fdce22601c"
     },
     {
       "scenarioId": "calendar.day.resize.settled",
       "fileDigest": "7878116154778397f646126b0a84cd1c97fc683f0dca00acc52f7169a45fff6c",
-      "measuredTestDigest": "6af0e553aab95cfbf48de408e2e39d2f272ec0de9e114d843f2fa4ade366ca41"
+      "measuredTestDigest": "431aede4b808f991088730cc5205826451f3f19f822106268df433df8593b787"
     },
     {
       "scenarioId": "calendar.day-to-board.covered",
       "fileDigest": "5cbf169cc1d63a5d7a1ae2c8432853a810a57dafd99482dd28bfecc6ade85e96",
-      "measuredTestDigest": "2c639ee93e510f90e9fcf1f949788e8a28ec2d099df8a182221d3c5faf7a9d3e"
+      "measuredTestDigest": "c3cc29b12e459b5cce92567995e37e0d309a488543338749fd900e6ff5067b36"
     },
     {
       "scenarioId": "calendar.board.six-weeks",
       "fileDigest": "0b8ac2741de02953f5534a6e82c395c82f668d5308545ce9670b4f872c56059c",
-      "measuredTestDigest": "e7a40001501c65d1ad42e5f9ea9f689c4c0b05f709bc6b6d0267d4ef78ac225f"
+      "measuredTestDigest": "ba5b527a9c53a726c92c6a8c1388059fb869bfd9b7a6aef306aa454dba410756"
     },
     {
       "scenarioId": "calendar.board-to-month.uncovered",
       "fileDigest": "7bc6306e46c28f5b7b78bc716410f1a4ac33b43aae398cbca0e31553cb4e7533",
-      "measuredTestDigest": "42065dac442e874512c5f59c228eed0fdbc05d69704b95888371de363d93f9d0"
+      "measuredTestDigest": "18b9abb1c550e5c6ee9fe515196deb713867a8ec50d3373ea7021f620df63a42"
     },
     {
       "scenarioId": "calendar.month.move.visible",
       "fileDigest": "70441f0c809d269ce7ba72fc8450f9bf527d9b1eed60b188a747682a8f5f6196",
-      "measuredTestDigest": "82047af89ec331836531986d7e5f09c294e3ca3505ce10ce968c974e1263a78e"
+      "measuredTestDigest": "771447aa2f036f0571058a4237bf3d157e45bbf460d9a06c150386f815a3e551"
     },
     {
       "scenarioId": "calendar.month.move.settled",
       "fileDigest": "02e66b907a66456c5b4ab79e904fc0c6b700ba9dc104da3907728d3c8ee2c9fe",
-      "measuredTestDigest": "a8bfbd8b19df05ce913a311cf3f21dfd11ff81749a3cb682dee20923ff390453"
+      "measuredTestDigest": "2f427323fd6ba00090d753ef74ac8ac83b1dfd2ef3865cd27f13bf0466d1cd91"
     },
     {
       "scenarioId": "calendar.month-next.uncovered",
       "fileDigest": "c2d4093fed2fe039882e0021288f1e0ce2e74c6878261222a3c1fdecbbf8a790",
-      "measuredTestDigest": "7bb975911e5143b052233d9def04a5819814a9c03bef4a08f0e518dfad84a5ba"
+      "measuredTestDigest": "33f0ca2195e917d632bc2f776980ba50cf9b834501be38f09a02da5eb7ea62ed"
     },
     {
       "scenarioId": "calendar.month-to-board.covered",
       "fileDigest": "73f947a69043c49743e01c857f41a32f687d38712edc5a4e4777f9a90076df9e",
-      "measuredTestDigest": "be12b3d8a1d0dcd30613ca13ef8885875512b9482a9a8d531de406fa1a7837ce"
+      "measuredTestDigest": "b78da9eefcd6f82e5a869f44b87b1f9e93b571c3944e141a1ec31a93f3387a4b"
     },
     {
-      "scenarioId": "time.clock-in.visible",
-      "fileDigest": "f612d5a05290575deb006ebb70a4bf397436385a70fe8d4a8b2c89a40ccaf303",
-      "measuredTestDigest": "f8bbd770a04f1b5ca9ef392b0ba11264c9ed3814188938e09cc9c481684461f7"
+      "scenarioId": "customers.list.open",
+      "fileDigest": "05598191ea2c43349993f569fb4fb510637be9089456766d4ce6d7e28bfc4fe7",
+      "measuredTestDigest": "3593f1237e9f869099e13d4182179055145a9b57b931b7c5119afb553804de40"
     },
     {
-      "scenarioId": "time.clock-out.visible",
-      "fileDigest": "b60aad81d7b68c3d9a99b8ef0910928c7ded576a147649a6fde411a243815f97",
-      "measuredTestDigest": "6aa9eab86a51ab13402e84369f086cc0af321fc5cda8fbb012b9ed2a0a58d2f1"
+      "scenarioId": "jobs.list.open",
+      "fileDigest": "83f533102717ce2600c974d8f635ab3339405821d53d8ac5b524ff018fc440f9",
+      "measuredTestDigest": "3ee62de9b624d01197e8cef89687636e7f1ed9c16f08bddbcdf3d92e117d9c20"
     },
     {
-      "scenarioId": "time.clock-in.settled",
-      "fileDigest": "24bdf2f40428d55dfd61e19d8416ae61aa7bd6b6243eddea18a87d0fe5c3b0f9",
-      "measuredTestDigest": "923abca5adb9081deeb373f4d943a5014bd5bb60766043ed53e65198140fa0a6"
+      "scenarioId": "jobs.detail.open",
+      "fileDigest": "a873965288a3635aae8a112de429232397dca0da35fc77b8333ed60700a0ff2e",
+      "measuredTestDigest": "6e0607ae5d6b078c8de10748c45c9a60269290b0bac2354ac2a2dd5f5272b45b"
     },
     {
-      "scenarioId": "time.clock-out.settled",
-      "fileDigest": "cf4402065a992c8bf33400ea3c1f3ad43b10a024a2ed1880994fd472b9f3be19",
-      "measuredTestDigest": "544a57a343846581b0e9e6078f7c73274c3dbad92a7b978170f53ed7db782e1a"
+      "scenarioId": "equipment.list.open",
+      "fileDigest": "52ac1b2e1fe805aebeb0b88131be2917803d8cb5bb0deaa94944bb25b422696e",
+      "measuredTestDigest": "62d0f8b2ce977edf337681f67d48c863d9128b09d299e32448bd55d901d805aa"
     },
     {
-      "scenarioId": "time.approval.cross-session",
-      "fileDigest": "6a8f7c231dfc3a12154a8dd3109738094609704b795c90bd7bac82a75b252447",
-      "measuredTestDigest": "221d35e5418d7fbfe07786658d350c3fc8470423f07fef5f9ba0e61f41a80741"
+      "scenarioId": "tasks.list.open",
+      "fileDigest": "6341573f15e500159d70f8f01f85e68746af6664a09c272e6bcef15c83ec11b4",
+      "measuredTestDigest": "f265004a4e49157580d3245e529da7c124af5587fc8f5d94e3a9649f84c13277"
     },
     {
       "scenarioId": "jobs.list.assignment.cross-session",
       "fileDigest": "b03c80816efba57da1ddff3f9359a7fc262d8d3d2a130d7c013907683c8ee18f",
-      "measuredTestDigest": "0ae0882b93716ca6fcaf0d9ef8291e0cb5cf8b918bf693f17a0a88d486a6891a"
+      "measuredTestDigest": "9b5c5f4f47a5cc09bab50daf89b1e43fbdc79a121286a0ab610cdf6a757eeffd"
+    },
+    {
+      "scenarioId": "time.clock-in.visible",
+      "fileDigest": "f612d5a05290575deb006ebb70a4bf397436385a70fe8d4a8b2c89a40ccaf303",
+      "measuredTestDigest": "1fe19093afc99b4b29873da149041b1f282a5fbcf69a4d8c98f020e05b7589bb"
+    },
+    {
+      "scenarioId": "time.clock-out.visible",
+      "fileDigest": "b60aad81d7b68c3d9a99b8ef0910928c7ded576a147649a6fde411a243815f97",
+      "measuredTestDigest": "98d9fb2b17521e47ec0837f39b9ff44b46d89d45dd90b4dcb3488ef36e8fbaf0"
+    },
+    {
+      "scenarioId": "time.clock-in.settled",
+      "fileDigest": "24bdf2f40428d55dfd61e19d8416ae61aa7bd6b6243eddea18a87d0fe5c3b0f9",
+      "measuredTestDigest": "f19c197474306c9a06a8dd2e0635d8d485e2af97261e78e3776dd22df7f9d5ef"
+    },
+    {
+      "scenarioId": "time.clock-out.settled",
+      "fileDigest": "cf4402065a992c8bf33400ea3c1f3ad43b10a024a2ed1880994fd472b9f3be19",
+      "measuredTestDigest": "aec76c9f55a2da1975544b2a2a8d22636e8d2484b9b2257aee60412591006af6"
+    },
+    {
+      "scenarioId": "time.approval.cross-session",
+      "fileDigest": "6a8f7c231dfc3a12154a8dd3109738094609704b795c90bd7bac82a75b252447",
+      "measuredTestDigest": "9d9a455289394f9f83fb6f8e0b3644f6d1a62239ae3531982d38295ecb036ea1"
     }
   ]
 }

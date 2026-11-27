@@ -8,7 +8,8 @@ import type { TestWorld } from '../../golden/support/world';
 // Issued invoices with a filed stand-in original for the audit world, written
 // through the office's database functions as the issue action writes them;
 // `delivered` also sends it three times as the delivery module records it:
-// an email that went out, one the provider refused, and one by post.
+// an email that went out, one the provider refused, and one by post. The
+// `cancelled` states then cancel it as „Stornieren“ does.
 
 const CUSTOMER = 'Hausverwaltung Lindenhof GmbH';
 
@@ -158,20 +159,43 @@ async function emailed(
     .throwOnError();
 }
 
+/** Cancels the invoice without a correction; its Stornorechnung stays without an original. */
+async function cancel(world: TestWorld, invoiceId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { data: series } = await admin
+    .rpc('get_invoice_settings', { p_organization_id: world.orgId })
+    .throwOnError();
+  await admin
+    .rpc('cancel_invoice', {
+      p_actor_id: world.users.buero.id,
+      p_organization_id: world.orgId,
+      p_invoice_id: invoiceId,
+      p_attempt_key: randomUUID(),
+      p_reason: 'Falscher Rechnungsempfänger',
+      p_correct: false,
+      p_expected_number: field(series, 'nextInvoiceNumber'),
+      p_expected_issue_date: getBusinessTodayIso(),
+    })
+    .throwOnError();
+}
+
+type DeliverySeedState = 'fresh' | 'delivered' | 'cancelled' | 'cancelled-delivered';
+
 /**
  * The seed of an issued invoice with its filed original for `surfaceFixture`:
  * `fresh` was never sent, `delivered` went out by email, failed once and went
- * by post. `parseDeliverySeed` reads back what `create` stored.
+ * by post; the `cancelled` states are the same invoice cancelled afterwards.
+ * `parseDeliverySeed` reads back what `create` stored.
  */
 export function invoiceDeliverySeed(
   world: TestWorld,
-  state: 'fresh' | 'delivered',
-): { name: `commercial.invoice-delivery-${typeof state}`; create: () => Promise<string> } {
+  state: DeliverySeedState,
+): { name: `commercial.invoice-delivery-${DeliverySeedState}`; create: () => Promise<string> } {
   return {
     name: `commercial.invoice-delivery-${state}`,
     create: async () => {
       const invoice = await issueFiled(world, state);
-      if (state === 'delivered') {
+      if (state === 'delivered' || state === 'cancelled-delivered') {
         await emailed(world, invoice, 'buchhaltung@lindenhof.example', { messageId: randomUUID() });
         await emailed(world, invoice, 'verwaltung@lindenhof.example', { failureCode: 'email_provider_503' });
         await createAdminClient()
@@ -186,6 +210,7 @@ export function invoiceDeliverySeed(
           })
           .throwOnError();
       }
+      if (state === 'cancelled' || state === 'cancelled-delivered') await cancel(world, invoice.id);
       return JSON.stringify({ id: invoice.id, heading: `Rechnung ${invoice.number}` });
     },
   };

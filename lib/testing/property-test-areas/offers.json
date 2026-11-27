@@ -1,0 +1,7 @@
+{
+  "area": "Offer calculation",
+  "rule": "a Position's cost and margin, a Titel's and the offer's sums, the margin in percent rounded once, the price a markup on the cost sets",
+  "roots": ["lib/offers/calculation.ts"],
+  "covered": ["lib/offers/calculation.ts"],
+  "exempt": {}
+}

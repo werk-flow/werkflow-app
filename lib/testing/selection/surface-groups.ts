@@ -50,6 +50,7 @@ const MANAGER_GROUPS: Readonly<Record<InventoriedRoute, Exclude<SurfaceGroup, Fi
   '/dashboard': 'settings',
   '/aufgaben': 'settings',
   '/kennzahlen': 'settings',
+  '/ki': 'settings',
   '/kalender': 'planning',
   '/zeiterfassung': 'time',
   '/zeiterfassung/zeitkonto': 'time',

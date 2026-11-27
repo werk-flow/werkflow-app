@@ -32,6 +32,8 @@ import {
 import {
   createVacationCountingCache,
   loadVacationCountingContext,
+  VACATION_COUNTING_RECORD_COLUMNS,
+  type VacationCountingRecord,
   loadVacationRequestsForRecord,
   readOpenAbsences,
   type RecordVacationCounting,
@@ -150,7 +152,7 @@ export async function getOwnVacationOverview(): Promise<OwnVacationOverviewResul
     const admin = createSupabaseAdminClient();
     const { data: record, error: recordError } = await admin
       .from('employee_records')
-      .select('id')
+      .select(VACATION_COUNTING_RECORD_COLUMNS)
       .eq('organization_id', orgId)
       .eq('user_id', userId)
       .maybeSingle();
@@ -177,7 +179,7 @@ export async function getOwnVacationOverview(): Promise<OwnVacationOverviewResul
     }
 
     const [context, requests] = await Promise.all([
-      loadVacationCountingContext(orgId, record.id),
+      loadVacationCountingContext(orgId, record),
       loadVacationRequestsForRecord(orgId, record.id),
     ]);
     if (!context || !requests) {
@@ -232,7 +234,7 @@ export async function previewVacationRequest(
     const admin = createSupabaseAdminClient();
     const { data: record, error } = await admin
       .from('employee_records')
-      .select('id')
+      .select(VACATION_COUNTING_RECORD_COLUMNS)
       .eq('organization_id', auth.context.orgId)
       .eq('user_id', auth.context.userId)
       .maybeSingle();
@@ -242,7 +244,7 @@ export async function previewVacationRequest(
     }
     if (!record) return { success: false, error: 'no_employee_record' };
 
-    const context = await loadVacationCountingContext(auth.context.orgId, record.id);
+    const context = await loadVacationCountingContext(auth.context.orgId, record);
     if (!context) return { success: false, error: 'load_failed' };
     return { success: true, totalDays: countVacationDays(input, context) };
   } catch (error) {
@@ -268,7 +270,7 @@ export async function createVacationRequest(
     const admin = createSupabaseAdminClient();
     const { data: record, error: recordError } = await admin
       .from('employee_records')
-      .select('id')
+      .select(VACATION_COUNTING_RECORD_COLUMNS)
       .eq('organization_id', orgId)
       .eq('user_id', userId)
       .maybeSingle();
@@ -281,7 +283,7 @@ export async function createVacationRequest(
 
     // The preview days go into the 'requested' history row; a missing
     // counting context records them as null, as before.
-    const context = await loadVacationCountingContext(orgId, record.id);
+    const context = await loadVacationCountingContext(orgId, record);
     // One call stores the pending request and its 'requested' history row, or
     // refuses with one of VACATION_WRITE_REFUSALS and changes nothing.
     const outcome = await admin.rpc(
@@ -376,6 +378,7 @@ async function loadRequestWithTarget(
   | {
       success: true;
       request: VacationRequestRow;
+      countingRecord: VacationCountingRecord;
       targetUserId: string;
       targetRole: OrgRole;
     }
@@ -396,7 +399,7 @@ async function loadRequestWithTarget(
 
   const { data: record, error: recordError } = await admin
     .from('employee_records')
-    .select('user_id')
+    .select('user_id, entry_date, exit_date')
     .eq('organization_id', orgId)
     .eq('id', request.employee_record_id)
     .maybeSingle();
@@ -423,6 +426,11 @@ async function loadRequestWithTarget(
   return {
     success: true,
     request,
+    countingRecord: {
+      id: request.employee_record_id,
+      entry_date: record.entry_date,
+      exit_date: record.exit_date,
+    },
     targetUserId: record.user_id,
     targetRole: membership.role,
   };
@@ -453,7 +461,7 @@ export async function decideVacationRequest(rawInput: {
 
     const loaded = await loadRequestWithTarget(orgId, input.requestId);
     if (!loaded.success) return loaded;
-    const { request, targetUserId, targetRole } = loaded;
+    const { request, countingRecord, targetUserId, targetRole } = loaded;
 
     if (request.status !== 'pending') {
       return { success: false, error: 'request_not_pending' };
@@ -472,7 +480,7 @@ export async function decideVacationRequest(rawInput: {
 
     let approvedDaysByYear: Record<string, number> | null = null;
     if (input.decision === 'approve') {
-      const context = await loadVacationCountingContext(orgId, request.employee_record_id);
+      const context = await loadVacationCountingContext(orgId, countingRecord);
       if (!context) return { success: false, error: 'load_failed' };
       approvedDaysByYear = countVacationDaysByYear(
         {
@@ -650,7 +658,7 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
       const target = await resolveDecidableTarget(row.employee_record_id, maps, isAuthorized);
       if (!target) continue;
 
-      const counting = await countingFor(target.recordId);
+      const counting = await countingFor(target.countingRecord);
       if (!counting) continue;
 
       results.push(toPendingApproverRequest(row, target, counting, activeAbsenceRows, planned));

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactElement, type ReactNode } from 'react';
 
+import { contactCustomerLine } from '@/components/auftraege/work-pack/contact-customer-line';
 import { StandaloneTitle } from '@/components/shared/standalone-screen';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -117,6 +118,7 @@ function OfflineFact({
 
 function PackFacts({ assignment }: { assignment: FieldSyncTodayAssignment }): ReactElement {
   const phone = assignment.contactPhone ?? assignment.customerPhone;
+  const customerLine = contactCustomerLine(assignment.contactName, assignment.customerName);
   return (
     <section
       className="rounded-lg border bg-card p-4 shadow-xs wrap-anywhere sm:p-5"
@@ -143,9 +145,7 @@ function PackFacts({ assignment }: { assignment: FieldSyncTodayAssignment }): Re
           {assignment.contactRole && (
             <p className="text-xs text-muted-foreground">{assignment.contactRole}</p>
           )}
-          {assignment.contactName && assignment.customerName && (
-            <p className="text-xs text-muted-foreground">{assignment.customerName}</p>
-          )}
+          {customerLine && <p className="text-xs text-muted-foreground">{customerLine}</p>}
         </OfflineFact>
         <OfflineFact icon={MapPin} label="Einsatzort">
           <p className="mt-0.5 text-sm font-medium">{assignment.siteName ?? 'Einsatzort'}</p>

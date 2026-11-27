@@ -18,7 +18,8 @@ import { DELIVERY_FAILURE_MESSAGES } from './invoice-delivery-messages';
 /**
  * „Versand“ of an issued invoice: send it by email, mark it as sent by post
  * or by hand, and every delivery with its state, a failed one with „Erneut
- * senden“. Other sessions' sends arrive through Realtime.
+ * senden“. A cancelled invoice is never sent again: it lists its deliveries
+ * only. Other sessions' sends arrive through Realtime.
  */
 export function InvoiceDeliveries({
   invoiceId,
@@ -29,7 +30,8 @@ export function InvoiceDeliveries({
   invoiceId: string;
   invoiceNumber: string;
   list: DeliveryList;
-  defaults: DeliveryMailDefaults;
+  /** What the email form proposes; null for a cancelled invoice, which takes no further send. */
+  defaults: DeliveryMailDefaults | null;
 }) {
   useRealtimeRouterRefresh({ tables: ['document_deliveries'] });
   const router = useRouter();
@@ -41,26 +43,41 @@ export function InvoiceDeliveries({
         <SectionTitle as="h2" id="invoice-delivery-title" className="mr-auto">
           Versand
         </SectionTitle>
-        <Button type="button" variant="outline" onClick={() => setOpen('manual')}>
-          <Stamp className="size-4" />
-          Als manuell versendet markieren
-        </Button>
-        <Button type="button" onClick={() => setOpen('email')}>
-          <Mail className="size-4" />
-          Per E-Mail senden
-        </Button>
+        {defaults && (
+          <>
+            <Button type="button" variant="outline" onClick={() => setOpen('manual')}>
+              <Stamp className="size-4" />
+              Als manuell versendet markieren
+            </Button>
+            <Button type="button" onClick={() => setOpen('email')}>
+              <Mail className="size-4" />
+              Per E-Mail senden
+            </Button>
+          </>
+        )}
       </div>
       <DeliveryEntryList
         list={list}
-        empty={{
-          title: 'Noch kein Versand.',
-          description: 'Sende die Rechnung per E-Mail oder vermerke, dass sie per Post rausging.',
-        }}
-        retry={retry.run}
-        failureMessages={DELIVERY_FAILURE_MESSAGES}
-        onChange={() => router.refresh()}
+        empty={
+          defaults
+            ? {
+                title: 'Noch kein Versand.',
+                description: 'Sende die Rechnung per E-Mail oder vermerke, dass sie per Post rausging.',
+              }
+            : {
+                title: 'Nicht versendet.',
+                description: 'Die Rechnung ist storniert und wird nicht mehr versendet.',
+              }
+        }
+        host={
+          defaults && {
+            retry: retry.run,
+            failureMessages: DELIVERY_FAILURE_MESSAGES,
+            onChange: () => router.refresh(),
+          }
+        }
       />
-      {open === 'email' && (
+      {defaults && open === 'email' && (
         <SendInvoiceEmailDialog
           invoiceId={invoiceId}
           invoiceNumber={invoiceNumber}
@@ -69,7 +86,9 @@ export function InvoiceDeliveries({
           onClose={() => setOpen(null)}
         />
       )}
-      {open === 'manual' && <ManualDeliveryDialog invoiceId={invoiceId} onClose={() => setOpen(null)} />}
+      {defaults && open === 'manual' && (
+        <ManualDeliveryDialog invoiceId={invoiceId} onClose={() => setOpen(null)} />
+      )}
     </section>
   );
 }

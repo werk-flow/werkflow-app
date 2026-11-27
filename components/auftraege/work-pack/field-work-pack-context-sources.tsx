@@ -9,7 +9,7 @@ import {
 } from '@/lib/installed-equipment/types';
 import type { JobWithDetails } from '@/lib/jobs/types';
 import { SERVICE_CASE_URGENCY_LABELS } from '@/lib/service-cases/types';
-import { formatBerlin } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 import type { FieldWorkPackData } from './field-work-pack-data';
 
 type FieldWorkPackContextProps = {
@@ -96,7 +96,7 @@ function FieldWorkPackMaintenanceContext({ job, data }: FieldWorkPackContextProp
                     {context.templateName} · Version {context.templateVersionNumber}
                   </p>
                   <span className="text-xs text-muted-foreground">
-                    {context.planNumber} · fällig {formatBerlin(context.dueDate, 'numericDate')}
+                    {context.planNumber} · fällig {formatGermanDate(context.dueDate)}
                   </span>
                 </div>
                 {context.operationalInstructions && (

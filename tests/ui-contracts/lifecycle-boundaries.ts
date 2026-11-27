@@ -52,6 +52,7 @@ declare global {
       | 'offline-today'
       | 'offline-retry'
       | 'worker-start'
+      | 'ki-chat'
       | 'offline-clock'
       | 'unsent-time-landing'
       | 'work-handover'
@@ -84,6 +85,8 @@ declare global {
       | 'offers'
       | 'invoice-editor'
       | 'invoice-settings'
+      | 'invoice-deliveries-issued'
+      | 'invoice-deliveries-cancelled'
       | 'site-access-review'
       | 'site-access-proposal'
       | AuthUrlFixtureName

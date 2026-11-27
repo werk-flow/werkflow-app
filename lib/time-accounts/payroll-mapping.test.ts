@@ -2,10 +2,12 @@ import { describe, expect, test } from 'bun:test';
 
 import { Constants } from '@/lib/supabase/database.types';
 import {
+  followMappingVersion,
   invalidPayrollCodeKeys,
   PAYROLL_CODE_MAX_LENGTH,
   PAYROLL_CODE_ROWS,
   payrollCodesByKey,
+  recordMappingSave,
   toPayrollCodeMappings,
 } from './payroll-mapping';
 
@@ -74,5 +76,69 @@ describe('toPayrollCodeMappings: a confirmed mapping is complete', () => {
       'vacation',
       'overtime',
     ]);
+  });
+});
+
+describe('followMappingVersion: a live refresh never erases unsaved codes', () => {
+  const v1 = payrollCodesByKey(null);
+  const v2 = { ...v1, overtime: 'UEB2' };
+  const draft = { basedOnVersion: 1, readCodes: v1, codes: v1, saving: false };
+
+  test('an untouched table shows the newer version', () => {
+    expect(followMappingVersion(draft, { version: 2, codes: v2 })).toEqual({
+      basedOnVersion: 2,
+      readCodes: v2,
+      codes: v2,
+      saving: false,
+    });
+  });
+
+  test('a table with edits keeps them and the version they were read from, so its save is refused as stale', () => {
+    const edited = { ...draft, codes: { ...v1, vacation: 'URL9' } };
+    expect(followMappingVersion(edited, { version: 2, codes: v2 })).toBe(edited);
+  });
+
+  test('a newer version with the very codes typed does not rebase the edits onto it', () => {
+    const edited = { ...draft, codes: v2 };
+    expect(followMappingVersion(edited, { version: 2, codes: v2 })).toBe(edited);
+  });
+
+  test('the same or an older version changes nothing', () => {
+    expect(followMappingVersion(draft, { version: 1, codes: v1 })).toBe(draft);
+    const later = { ...draft, basedOnVersion: 2, readCodes: v2, codes: v2 };
+    expect(followMappingVersion(later, { version: 1, codes: v1 })).toBe(later);
+  });
+});
+
+describe('recordMappingSave: the own save, in either order with its refresh', () => {
+  const v1 = payrollCodesByKey(null);
+  const submitted = { ...v1, overtime: 'UEB2' };
+  const saving = { basedOnVersion: 1, readCodes: v1, codes: submitted, saving: true };
+
+  test('codes typed during the save stay, based on the version this save committed', () => {
+    const typed = { ...saving, codes: { ...submitted, vacation: 'URL9' } };
+    const recorded = recordMappingSave(typed, { version: 2, codes: submitted });
+    expect(recorded).toEqual({ basedOnVersion: 2, readCodes: submitted, codes: typed.codes, saving: false });
+    expect(followMappingVersion(recorded, { version: 2, codes: submitted })).toBe(recorded);
+  });
+
+  test('a refresh that lands before the result leaves the table, a restored old code included', () => {
+    const restored = { ...saving, codes: v1 };
+    expect(followMappingVersion(restored, { version: 2, codes: submitted })).toBe(restored);
+    const recorded = recordMappingSave(restored, { version: 2, codes: submitted });
+    expect(recorded.codes).toEqual(v1);
+    expect(followMappingVersion(recorded, { version: 2, codes: submitted })).toBe(recorded);
+  });
+
+  test('a read of the old version that lands after the result moves nothing back', () => {
+    const recorded = recordMappingSave(saving, { version: 2, codes: submitted });
+    expect(followMappingVersion(recorded, { version: 1, codes: v1 })).toBe(recorded);
+  });
+
+  test('a version another session committed after the own save still leaves an edit stale', () => {
+    const typed = { ...saving, codes: { ...submitted, vacation: 'URL9' } };
+    const recorded = recordMappingSave(typed, { version: 2, codes: submitted });
+    const other = { ...submitted, sickness: 'KRANK2' };
+    expect(followMappingVersion(recorded, { version: 3, codes: other }).basedOnVersion).toBe(2);
   });
 });

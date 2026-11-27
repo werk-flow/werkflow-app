@@ -2,17 +2,13 @@
 
 import { useMemo } from 'react';
 
-import { useMemberStatus, type MemberStatus } from '@/hooks/use-member-status';
+import { useMemberStatus } from '@/hooks/use-member-status';
 import { useWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
-import { liveMinutes } from '@/lib/time-tracking/helpers';
-import {
-  computeBreakdownForSettings,
-  type BreakPolicy,
-  type BreakPolicyValues,
-} from '@/lib/time-tracking/settings';
+import type { BreakPolicy } from '@/lib/time-tracking/settings';
 import { getTargetSourceHint, type DailyTarget } from '@/lib/personnel/targets';
 import type { WeeklyTimeDataPoint, WeeklyTimeLabel } from '@/lib/time-tracking/types';
+import { memberLiveDay } from '@/lib/time-tracking/member-day';
 
 /** The member's week as the server read it, with the resolved daily targets. */
 export type MemberInitialWeek = {
@@ -21,20 +17,6 @@ export type MemberInitialWeek = {
   weekLabel: WeeklyTimeLabel;
   weekTargets: DailyTarget[];
 };
-
-function computeLiveBreakMinutesForMember(
-  status: MemberStatus | undefined,
-  liveTotalMinutes: number,
-  breakPolicy: BreakPolicyValues,
-  targetMinutes?: number,
-) {
-  const trackedLiveBreakMinutes =
-    breakPolicy.breakMode === 'manual'
-      ? liveMinutes(status?.breakMinutes ?? 0, status?.status === 'on_break' ? status.statusStartedAt : null)
-      : (status?.breakMinutes ?? 0);
-
-  return computeBreakdownForSettings(liveTotalMinutes, trackedLiveBreakMinutes, breakPolicy, targetMinutes);
-}
 
 /** Worked minutes as a share of the target, capped at 100; 0 without a target. */
 function progressPercent(workMinutes: number, targetMinutes: number): number {
@@ -100,28 +82,21 @@ export function useMitarbeiterDetailLiveTime({
     ...initialWeekOptions(initialWeek),
   });
 
-  // Today's minutes with the running ones, from the first render that knows
-  // the status, refreshed every minute. The status is a client read, so the
-  // server and the hydrating render have none and show no clock-dependent value.
-  const nowMs = useWallClockTick(60_000);
-  const liveTotalMinutes = liveMinutes(
-    status?.todayMinutes ?? 0,
-    status?.isClockedIn ? (status.statusStartedAt ?? null) : null,
-    nowMs,
-  );
-
   // This member's resolved target for today (P1-04). Until it is known the
   // card shows the worked minutes only, never a progress against 8h.
   const todayTarget: DailyTarget | undefined = weekTargets?.[todayIndex];
   const todayTargetMinutes = todayTarget?.targetMinutes ?? 0;
   const todayTargetHint = todayTarget ? getTargetSourceHint(todayTarget) : null;
 
-  const memberBreakdown = computeLiveBreakMinutesForMember(
+  // Today's minutes with the running ones, from the first render that knows
+  // the status, refreshed every minute. The status is a client read, so the
+  // server and the hydrating render have none and show no clock-dependent value.
+  const nowMs = useWallClockTick(60_000);
+  const { presenceMinutes: liveTotalMinutes, breakdown: memberBreakdown } = memberLiveDay(
     status,
-    liveTotalMinutes,
     breakPolicy,
-    // An unknown target owes no overtime: every worked minute stays work, never capped at 8 h.
-    todayTarget?.targetMinutes ?? Number.POSITIVE_INFINITY,
+    todayTarget?.targetMinutes,
+    nowMs,
   );
   const dailyPercentage = progressPercent(memberBreakdown.workMinutes, todayTargetMinutes);
 

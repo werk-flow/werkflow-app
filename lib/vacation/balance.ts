@@ -5,9 +5,10 @@
 //
 // Vacation-day consumption is DERIVED from the P1-04 target truth: a day only
 // costs entitlement if it has a positive resolved target. Weekends, holidays,
-// closure days, and schedule-free days therefore cost nothing with zero new
-// date logic; the labeled `default` source owes Montag–Freitag only, so an
-// unconfigured person never pays seven days per week.
+// closure days, schedule-free days and days outside employment therefore cost
+// nothing with zero new date logic; the labeled `default` source owes
+// Montag–Freitag only, so an unconfigured person never pays seven days per
+// week.
 
 import type { EmploymentCondition } from '@/lib/personnel/types';
 import { isValidIsoDate } from '@/lib/calendar/date-range';
@@ -43,6 +44,8 @@ export type VacationCountingContext = {
   schedules: WorkSchedule[];
   conditions: EmploymentCondition[];
   calendar: OrganizationHolidayCalendar;
+  /** The record's entry and exit dates: a day outside them carries no target and costs nothing. */
+  employment: EmploymentInterval;
 };
 
 /**
@@ -106,18 +109,13 @@ export function listIsoDatesInRange(startDate: string, endDate: string): string[
   return dates;
 }
 
-// Counting does not read the record's entry and exit dates yet
-// (werk-flow/werkflow-planning#200): every requested date counts
-// as employed.
-const COUNTING_EMPLOYMENT: EmploymentInterval = { entryDate: null, exitDate: null };
-
 /**
  * Whether a single date consumes entitlement, before applying the portion.
  * Derived from the resolved target (no absence input — consumption asks what
  * the day would have required, not what it requires after the vacation).
  */
 export function doesDateConsumeVacation(dateIso: string, context: VacationCountingContext): boolean {
-  return resolveDailyTarget({ dateIso, ...context, employment: COUNTING_EMPLOYMENT }).targetMinutes > 0;
+  return resolveDailyTarget({ dateIso, ...context }).targetMinutes > 0;
 }
 
 /**

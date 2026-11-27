@@ -420,6 +420,87 @@ from (values
     'update public.invoices set original_document_id = %L where id = %L',
     '38060000-0000-4000-8000-000000000308', pg_temp.id('first')), 'invoice_issued')
 ) as cases(label, statement, refusal);
+
+-- Only an issue moves the series and issues a draft. The guards check the rows issue_invoice leaves, not a
+-- session setting, so the series' former flag moves no number, and a complete draft written as issued,
+-- under the series' next number and today's day, stays a draft without the issue's history entry or under
+-- a number the series has not reached. Every insert is a draft.
+insert into ids values ('direct', public.create_invoice('38060000-0000-4000-8000-000000000002',
+  '38060000-0000-4000-8000-000000000010', gen_random_uuid(), '38060000-0000-4000-8000-000000000020', null, null));
+select pg_temp.fill('direct');
+create function pg_temp.issue_directly(p_number text) returns text language sql as $$
+  select format($sql$update public.invoices invoice set status = 'ausgestellt', invoice_number = %L,
+      issue_date = (clock_timestamp() at time zone 'Europe/Berlin')::date, issued_at = now(), issued_by = %L,
+      updated_by = %L, version = invoice.version + 1, issue_snapshot = first.issue_snapshot,
+      logo_storage_path = first.logo_storage_path
+    from public.invoices first where invoice.id = %L and first.id = %L$sql$,
+    p_number, '38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000002',
+    pg_temp.id('direct'), pg_temp.id('first'))
+$$;
+create function pg_temp.issued_event(p_number text) returns text language sql as $$
+  select format($sql$insert into public.invoice_events (organization_id, invoice_id, event_type, status, version,
+      payload, actor_id, attempt_key)
+    select %L, %L, 'issued', 'ausgestellt', 3, jsonb_build_object('invoiceNumber', %L,
+      'issueDate', (clock_timestamp() at time zone 'Europe/Berlin')::date, 'grossCents', 12852), %L,
+      gen_random_uuid()$sql$,
+    '38060000-0000-4000-8000-000000000010', pg_temp.id('direct'), p_number, '38060000-0000-4000-8000-000000000002')
+$$;
+select pg_temp.expect_refusal(label, statement, refusal)
+from (values
+  ('step the series under its former flag', $sql$with flag as (select set_config('app.invoice_number_write', 'on', true))
+    update public.invoice_settings set next_number = next_number + 1
+    where organization_id = '38060000-0000-4000-8000-000000000010' and exists (select 1 from flag)$sql$,
+    'invoice_numbers_fixed'),
+  ('start a new year under its former flag', $sql$with flag as (select set_config('app.invoice_number_write', 'on', true))
+    update public.invoice_settings set number_year = number_year + 1, next_number = 2
+    where organization_id = '38060000-0000-4000-8000-000000000010' and exists (select 1 from flag)$sql$,
+    'invoice_numbers_fixed'),
+  ('move the series to another organization', $sql$update public.invoice_settings
+    set organization_id = '38060000-0000-4000-8000-000000000011'
+    where organization_id = '38060000-0000-4000-8000-000000000010'$sql$, 'invoice_numbers_fixed'),
+  ('issue a draft directly under the series'' next number', pg_temp.issue_directly('RG10236'), 'invoice_issued'),
+  ('issue a draft directly with its history entry under a number the series has not reached',
+    format('do $x$ begin %s; %s; end $x$', pg_temp.issued_event('RG10237'), pg_temp.issue_directly('RG10237')),
+    'invoice_number_moved'),
+  -- The history entry stands only beside its issue, checked at commit (here at once).
+  ('an issue''s history entry without its issue', format(
+    'do $x$ begin %s; set constraints invoice_history_kept immediate; end $x$', pg_temp.issued_event('RG10236')),
+    'invoice_history_unkept'),
+  ('a second history entry of an issue', format($sql$do $x$ begin
+      insert into public.invoice_events (organization_id, invoice_id, event_type, status, version, payload, actor_id,
+        attempt_key)
+      select organization_id, invoice_id, event_type, status, version, payload, actor_id, gen_random_uuid()
+      from public.invoice_events where invoice_id = %L and event_type = 'issued';
+      set constraints invoice_history_kept immediate;
+    end $x$$sql$, pg_temp.id('first')), 'invoice_history_unkept'),
+  ('insert an issued invoice', format($sql$insert into public.invoices (organization_id, client_id,
+      recipient_client_id, status, invoice_number, issue_date, issued_at, issue_snapshot)
+    values (%L, %L, %L, 'ausgestellt', 'RG10236', (now() at time zone 'Europe/Berlin')::date, now(), '{}')$sql$,
+    '38060000-0000-4000-8000-000000000010', '38060000-0000-4000-8000-000000000020',
+    '38060000-0000-4000-8000-000000000020'), 'invoice_issued')
+) as cases(label, statement, refusal);
+set constraints invoice_history_kept deferred;
+-- The refused writes left the series, the draft and the history as they were, and an issue retried under its
+-- first key answers the first issue even with the empty number the server sends for a used-up series.
+do $$
+begin
+  if (select (next_number, number_year) from public.invoice_settings
+      where organization_id = '38060000-0000-4000-8000-000000000010')
+      is distinct from (10236, extract(year from now() at time zone 'Europe/Berlin')::integer)
+    or (select status from public.invoices where id = pg_temp.id('direct')) is distinct from 'entwurf'
+    or exists (select 1 from public.invoice_events where invoice_id = pg_temp.id('direct') and event_type = 'issued')
+    or exists (select 1 from public.invoices where organization_id = '38060000-0000-4000-8000-000000000010'
+      and invoice_number in ('RG10236', 'RG10237')) then
+    raise exception 'a refused direct write moved the series or issued a draft';
+  end if;
+  if pg_temp.issue('38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010', 'first', 2,
+      '38060000-0000-4000-8000-000000000201', '') ->> 'invoiceNumber' is distinct from 'RG10234' then
+    raise exception 'an issue retried with the empty number did not answer the first issue';
+  end if;
+  perform public.delete_invoice_draft('38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
+    pg_temp.id('direct'), 2, gen_random_uuid());
+end;
+$$;
 -- A deleted work clears its reference only.
 reset role;
 do $$
@@ -652,6 +733,9 @@ begin
   end if;
 end;
 $$;
+
+-- Every issue's history entry stands beside its issue.
+set constraints invoice_history_kept immediate;
 
 -- Deleting an organization removes its issued invoices, series and originals with it.
 delete from public.organizations where id = '38060000-0000-4000-8000-000000000010';

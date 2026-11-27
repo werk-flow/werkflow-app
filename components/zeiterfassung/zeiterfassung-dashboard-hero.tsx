@@ -8,57 +8,40 @@ import {
   todayWorkingTime,
   type ClockActivityTone,
 } from '@/lib/time-tracking/clock-day-summary';
-import { DEFAULT_DAILY_TARGET_MINUTES, type DailyTarget } from '@/lib/personnel/targets';
+import { describeNoTargetToday, type DailyTarget } from '@/lib/personnel/targets';
 import type { LiveClockState } from '@/lib/time-tracking/types';
-import type { ZeiterfassungLiveTotals } from './zeiterfassung-dashboard-live-totals';
+import type { ZeiterfassungLiveTotals } from '@/lib/time-tracking/live-totals';
 
 type ZeiterfassungTodayTargetNoteProps = {
   todayTarget: DailyTarget | undefined;
-  todayTargetMinutes: number | undefined;
   todayTargetHint: string | null;
   workPercentage: number | null;
 };
 
+/** Today's target, or why today has none. While the target is unknown it says nothing, never 8 h. */
 function ZeiterfassungTodayTargetNote({
   todayTarget,
-  todayTargetMinutes,
   todayTargetHint,
   workPercentage,
 }: ZeiterfassungTodayTargetNoteProps) {
+  const noTarget = todayTarget ? describeNoTargetToday(todayTarget) : null;
   return (
     <>
-      {todayTarget?.isHoliday ? (
-        <p className="mt-1 text-sm text-muted-foreground">
-          Feiertag: {todayTarget.holidayName} – heute keine Sollarbeitszeit.
-        </p>
-      ) : todayTarget?.isClosureDay ? (
-        <p className="mt-1 text-sm text-muted-foreground">
-          Betriebsruhe
-          {todayTarget.closureLabel ? ` (${todayTarget.closureLabel})` : ''} – heute keine Sollarbeitszeit.
-        </p>
-      ) : todayTarget?.absence?.portion === 'full' ? (
-        <p className="mt-1 text-sm text-muted-foreground">
-          {todayTarget.absence.type === 'sickness'
-            ? 'Krankmeldung – heute keine Sollarbeitszeit.'
-            : todayTarget.absence.type === 'school'
-              ? 'Berufsschule – dein Tagesziel gilt heute als erfüllt.'
-              : 'Urlaub genehmigt – heute keine Sollarbeitszeit.'}
-        </p>
+      {noTarget ? (
+        <p className="mt-1 text-center text-sm text-muted-foreground">{noTarget}</p>
       ) : todayTarget?.absence?.portion === 'half_day' ? (
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-center text-sm text-muted-foreground">
           {todayTarget.absence.type === 'sickness'
             ? 'Halber Tag Krankmeldung – Tagesziel: '
             : 'Halber Urlaubstag – Tagesziel: '}
-          {formatDuration(todayTargetMinutes ?? 0)} Arbeitszeit
+          {formatDuration(todayTarget.targetMinutes)} Arbeitszeit
         </p>
-      ) : todayTarget && todayTarget.targetMinutes === 0 ? (
-        <p className="mt-1 text-sm text-muted-foreground">Laut Arbeitszeitmodell heute kein Arbeitstag.</p>
-      ) : (
-        <p className="mt-1 text-sm text-muted-foreground">
-          Tagesziel: {formatDuration(todayTargetMinutes ?? DEFAULT_DAILY_TARGET_MINUTES)} Arbeitszeit
+      ) : todayTarget ? (
+        <p className="mt-1 text-center text-sm text-muted-foreground">
+          Tagesziel: {formatDuration(todayTarget.targetMinutes)} Arbeitszeit
           {workPercentage !== null ? ` (${workPercentage}% erreicht)` : ''}
         </p>
-      )}
+      ) : null}
       {todayTargetHint && (
         <p className="mt-1 max-w-sm text-center text-xs text-muted-foreground">{todayTargetHint}</p>
       )}
@@ -141,16 +124,17 @@ export function ZeiterfassungDashboardHero({
   todayTargetHint,
   totals,
 }: ZeiterfassungDashboardHeroProps) {
-  const { liveBreakMinutes, ringTimelineSegments, workPercentage } = totals;
+  const { breakdown, ringTimelineSegments, workPercentage } = totals;
   const activity = describeClockActivity(effectiveState);
 
   return (
     <div className="flex flex-col items-center py-8">
       <TimeProgressRing
         totalMinutes={liveTotalMinutes}
-        breakMinutes={liveBreakMinutes}
+        breakMinutes={breakdown.breakMinutes}
         timelineSegments={ringTimelineSegments}
-        targetMinutes={todayTargetMinutes}
+        // An unknown target draws no overtime ring, never one past 8 h.
+        targetMinutes={todayTargetMinutes ?? Number.POSITIVE_INFINITY}
         size={260}
         strokeWidth={14}
       >
@@ -168,7 +152,6 @@ export function ZeiterfassungDashboardHero({
 
       <ZeiterfassungTodayTargetNote
         todayTarget={todayTarget}
-        todayTargetMinutes={todayTargetMinutes}
         todayTargetHint={todayTargetHint}
         workPercentage={workPercentage}
       />

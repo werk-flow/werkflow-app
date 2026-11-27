@@ -151,6 +151,10 @@ mock.module('@/lib/service-cases/actions', () => ({
   getServiceCaseDetailByNumber: seam('service-case-detail'),
   getServiceClientOption: seam('service-client-option'),
 }));
+mock.module('@/lib/ai/thread-reads', () => ({
+  getAiThreadPage: seam('ki-thread-page'),
+  getAiThreadWindow: seam('ki-thread-window'),
+}));
 mock.module('@/lib/attention/actions', () => ({ getAttentionOverview: seam('attention-overview') }));
 mock.module('@/lib/calendar/actions', () => ({ getAbsenceAffectedVisits: seam('absence-affected-visits') }));
 mock.module('@/lib/personnel/lifecycle-actions', () => ({
@@ -528,6 +532,8 @@ const inputs: Record<string, unknown> = {
   'instruction-items': { targetType: 'project', targetId: jobId },
   'work-predecessor-search': { organizationId, type: 'job', query: '  Heiz ' },
   'global-search': { organizationId, query: ' 0711 / 123 45 ' },
+  'ki-thread-page': { organizationId },
+  'ki-thread-window': { organizationId, threadId: jobId },
 };
 // What each reader receives: some take the bare identifier, the rest the validated object.
 const readerArguments: Record<string, unknown> = {

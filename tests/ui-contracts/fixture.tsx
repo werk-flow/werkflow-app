@@ -80,7 +80,11 @@ import {
 } from './inventory-movements-boundaries';
 import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
 import { OffersContractFixture } from './offers-boundaries';
-import { InvoiceEditorContractFixture, InvoiceSettingsContractFixture } from './invoice-editor-boundaries';
+import {
+  InvoiceDeliveriesContractFixture,
+  InvoiceEditorContractFixture,
+  InvoiceSettingsContractFixture,
+} from './invoice-editor-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -130,6 +134,7 @@ import { initializePersonnelBoundary } from './personnel-boundaries';
 import { TaskSectionsAnchorContractFixture, TaskSectionsContractFixture } from './task-section-boundaries';
 import { OfficeStartContractFixture } from './office-start-boundaries';
 import { OwnerStartContractFixture } from './owner-start-boundaries';
+import { KiChatContractFixture } from './ki-chat-boundaries';
 
 initializeServiceBoundaries();
 initializeLifecycleBoundary();
@@ -661,6 +666,10 @@ createRoot(root).render(
     <InvoiceEditorContractFixture />
   ) : window.uiContractFixture === 'invoice-settings' ? (
     <InvoiceSettingsContractFixture />
+  ) : window.uiContractFixture === 'invoice-deliveries-issued' ? (
+    <InvoiceDeliveriesContractFixture cancelled={false} />
+  ) : window.uiContractFixture === 'invoice-deliveries-cancelled' ? (
+    <InvoiceDeliveriesContractFixture cancelled />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>
@@ -781,6 +790,8 @@ createRoot(root).render(
       <h1>Komponentenverträge</h1>
       <OfficeStartContractFixture />
     </main>
+  ) : window.uiContractFixture === 'ki-chat' ? (
+    <KiChatContractFixture />
   ) : window.uiContractFixture === 'owner-start' ? (
     <main>
       <h1>Komponentenverträge</h1>

