@@ -25,14 +25,7 @@ import { fastTierPlan } from '../selection/fast-tier';
 import type { GroupDurations } from '../selection/group-durations';
 import { getTestGroups, type TestGroup } from '../selection/test-groups';
 import { CI_DAG, CI_EVENTS, CI_JOBS, type CiEvent } from './dag';
-import {
-  GROUP_KIND_JOBS,
-  INVENTORY_KEYS,
-  type InventoryKey,
-  SCHEDULE_NAMES,
-  type ScheduleTrigger,
-  SCHEDULES,
-} from './inventory';
+import { GROUP_KIND_JOBS, INVENTORY_KEYS, type InventoryKey, SCHEDULE_NAMES, SCHEDULES } from './inventory';
 import { CI_PROFILES, type CiProfile, placementOf, type Timing } from './profiles';
 import type { RunPlan } from './results';
 import { isStep, planRun } from './run-plan';
@@ -242,16 +235,12 @@ for (const profile of Object.values(CI_PROFILES))
     expect([...placed(profile)].toSorted()).toEqual([...INVENTORY_KEYS].sort());
   });
 
-// A cron run that holds only waits until its hold ends (inventory.ts), so its work starts then.
 test("the local profile's timed schedules start their work inside its night window", () => {
   const { window } = CI_PROFILES.local;
   if (!window) throw new Error('The local profile has no window.');
   const outside = SCHEDULE_NAMES.flatMap((name) => {
     const placement = CI_PROFILES.local.schedules[name];
     if (!('timing' in placement)) return [];
-    const trigger: ScheduleTrigger = SCHEDULES[name].trigger;
-    if (trigger.on === 'time' && trigger.hold && placement.clock === 'workflow')
-      return inWindow(trigger.hold.until, window) ? [] : [`${name} holds until ${trigger.hold.until}`];
     return firings(placement.timing)
       .map((at) => formatBerlinLocalDateTime(at).slice(11))
       .filter((clock) => !inWindow(clock, window))

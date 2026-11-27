@@ -6,8 +6,7 @@ name: Nightly
 # surfaces the next morning (lib/testing/selection/ci-plan.ts). GitHub starts this repository's scheduled runs up
 # to 10 hours late, least so in the evening: this cron line starts a run between about
 # 19:45 and 00:30 Berlin. One that meets the midnight window waits it out in ci.yml's
-# `midnight` job. It shares the release's cron line, so both usually see one commit,
-# and the release at 03:30 reuses this run on it.
+# `midnight` job. The release at 03:30 reuses this run when it ended green on the commit it ships.
 # A scheduled run skips a head whose newest full run, by the release gate's own reader, is green
 # (owner decision 2026-11-21, docs/decisions/0009-pull-requests-and-ci.md): the same tree runs the
 # same groups again, and the date look-ahead covers the dates. Only a decision that succeeded and

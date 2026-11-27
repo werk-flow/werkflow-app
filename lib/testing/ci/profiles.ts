@@ -96,10 +96,7 @@ export type CiProfile = {
   jobsAtOnce: number;
   /** The most pull requests in one queue batch: scripts/ci/queue.ts --max-batch's default. */
   maxBatch: number;
-  /**
-   * The Berlin hours its scheduled work starts in, or undefined for any hour. A cron that only
-   * dispatches a hold (release.yml at 17:00) starts its work when the hold ends, which is what counts.
-   */
+  /** The Berlin hours its scheduled work starts in, or undefined for any hour. */
   window: { from: string; to: string } | undefined;
   jobs: Readonly<Record<CiJob, Placement>>;
   /** Who starts each kind of run. */
@@ -113,12 +110,12 @@ const nightly: Timing = {
   zone: BERLIN_TIME_ZONE,
   weekdays: CLOCK_WORK.nightly.weekdays,
 };
-/** release.yml's cron, Sunday to Thursday 17:00 Berlin: the evening before each weekday's release. */
-const releaseDispatch: Timing = {
+/** The conductor's release clock: weekdays at 03:30 Berlin. */
+const release: Timing = {
   kind: 'clock',
-  at: '17:00',
+  at: CLOCK_WORK.release.time,
   zone: BERLIN_TIME_ZONE,
-  weekdays: [0, 1, 2, 3, 6],
+  weekdays: CLOCK_WORK.release.weekdays,
 };
 /** nightly.yml's cron, every day 17:00 Berlin: its full run and the quarantine list. */
 const nightlyCron: Timing = { kind: 'clock', at: '17:00', zone: BERLIN_TIME_ZONE, weekdays: EVERY_DAY };
@@ -169,7 +166,6 @@ const FLEET: CiProfile = {
     full: {
       startedBy: 'fleet',
       on: [
-        'release.yml#schedule',
         'release.yml#workflow_dispatch',
         'nightly.yml#schedule',
         'nightly.yml#workflow_dispatch',
@@ -204,10 +200,13 @@ const FLEET: CiProfile = {
       gaps: { mirror: QUEUE_WAIT_GAPS.mirror, boat: QUEUE_WAIT_GAPS.boat },
     },
     'health-pr-asset-branches': { executor: 'fleet', atOnce: 1, clock: 'workflow', timing: healthWeekly },
-    // release.yml's cron dispatches it while it has one; its hold waits for 03:30 (inventory.ts).
-    // The workflow is disabled until the owner releases again: after the PDF hold, and with a new
-    // deploy key the owner approves.
-    'release-candidate': { executor: 'fleet', atOnce: 'all', clock: 'workflow', timing: releaseDispatch },
+    'release-candidate': {
+      executor: 'fleet',
+      atOnce: 'all',
+      clock: 'dispatch',
+      dispatchedBy:
+        "Weekdays at 03:30 Berlin, ci-alert.timer (werkflow-planning's ops/ci-alert.py) with `-f scheduled=true`; or a person, with `gh workflow run release.yml`.",
+    },
     'list-growth': { executor: 'fleet', atOnce: 1 },
     'pr-screenshots': { executor: 'fleet', atOnce: 1 },
     'main-green-notice': { executor: 'fleet', atOnce: 1 },
@@ -261,7 +260,7 @@ const LOCAL: CiProfile = {
       clock: 'planned',
       timing: { kind: 'clock', at: '01:30', zone: BERLIN_TIME_ZONE, weekdays: EVERY_DAY },
     },
-    'release-candidate': { executor: 'local', atOnce: 1, clock: 'workflow', timing: releaseDispatch },
+    'release-candidate': { executor: 'local', atOnce: 1, clock: 'conductor', timing: release },
     'health-ci-queue': {
       executor: 'local',
       atOnce: 1,
