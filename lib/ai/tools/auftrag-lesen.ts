@@ -38,7 +38,7 @@ function bounded(text: string | null, maxBytes: number): { text: string | null; 
 }
 
 /** A short field as record text; a cut one ends in „…“. */
-function shortText(text: string | null): ToolValue {
+function cappedRecordText(text: string | null): ToolValue {
   const { text: kept, cut } = bounded(text, LIMITS.shortTextBytes);
   return recordText(cut ? `${kept}…` : kept);
 }
@@ -51,9 +51,9 @@ function jobValue(job: JobWithDetails): ToolValue {
   // A job with several visits is planned on the Plantafel; its own date names only one, so the page shows none.
   const severalVisits = (job.scheduledVisitCount ?? 0) > 1;
   return {
-    nummer: shortText(job.jobNumber),
-    altnummer: shortText(job.sourceNumber ?? null),
-    titel: shortText(job.title),
+    nummer: cappedRecordText(job.jobNumber),
+    altnummer: cappedRecordText(job.sourceNumber ?? null),
+    titel: cappedRecordText(job.title),
     beschreibung: recordText(description.text),
     beschreibungGekuerzt: description.cut,
     // The status the job page shows: the work's execution state, else the old status.
@@ -67,23 +67,31 @@ function jobValue(job: JobWithDetails): ToolValue {
     geplanteEinsaetze: job.scheduledVisitCount ?? 0,
     kunde: client
       ? {
-          name: shortText(client.name),
-          kundennummer: shortText(client.customerNumber),
-          adresse: shortText(client.address),
-          telefon: shortText(client.phone),
+          name: cappedRecordText(client.name),
+          kundennummer: cappedRecordText(client.customerNumber),
+          adresse: cappedRecordText(client.address),
+          telefon: cappedRecordText(client.phone),
         }
       : null,
     einsatzort: {
-      name: shortText(site?.name ?? null),
-      adresse: shortText((site && formatSiteAddress(site)) || job.location),
+      name: cappedRecordText(site?.name ?? null),
+      adresse: cappedRecordText((site && formatSiteAddress(site)) || job.location),
       zugang: recordText(access.text),
       zugangGekuerzt: access.cut,
     },
     ansprechpartner: contact
-      ? { name: shortText(contact.name), rolle: shortText(contact.role), telefon: shortText(contact.phone) }
+      ? {
+          name: cappedRecordText(contact.name),
+          rolle: cappedRecordText(contact.role),
+          telefon: cappedRecordText(contact.phone),
+        }
       : null,
-    projekt: project ? { nummer: shortText(project.projectNumber), name: shortText(project.name) } : null,
-    team: job.assignments.slice(0, LIMITS.team).map((person) => shortText(formatEmployeeRecordName(person))),
+    projekt: project
+      ? { nummer: cappedRecordText(project.projectNumber), name: cappedRecordText(project.name) }
+      : null,
+    team: job.assignments
+      .slice(0, LIMITS.team)
+      .map((person) => cappedRecordText(formatEmployeeRecordName(person))),
     teamGesamt: job.assignments.length,
     // The link holds the editable numbers, so it is record text too; both are at most 100 characters.
     link: recordText(jobDetailHref(job, project)),
