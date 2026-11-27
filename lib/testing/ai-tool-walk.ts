@@ -8,7 +8,7 @@ type WalkedTool = {
   name: string;
   label: string;
   roles: readonly string[];
-  /** The input schema as the provider receives it. */
+  /** The input schema as it parses (`io: 'input'`), so an object that strips unknown keys shows open. */
   inputJsonSchema: unknown;
 };
 
@@ -24,6 +24,7 @@ const TOOL_NAME = /^[a-z][a-z_]{2,44}$/;
 const schemaNode = z.object({
   type: z.string().optional(),
   properties: z.record(z.string(), z.unknown()).optional(),
+  additionalProperties: z.unknown().optional(),
   items: z.unknown().optional(),
   anyOf: z.array(z.unknown()).optional(),
   enum: z.array(z.unknown()).optional(),
@@ -32,13 +33,14 @@ const schemaNode = z.object({
   maxItems: z.number().optional(),
 });
 
-/** The breaches of one JSON schema node: identity keys and uncapped strings or lists. */
+/** The breaches of one JSON schema node: identity keys, open objects and uncapped strings or lists. */
 function schemaProblems(tool: string, value: unknown, path: string): string[] {
   const node = schemaNode.safeParse(value);
   if (!node.success) return [`${tool}: ${path} is no schema`];
-  const { type, properties, items, anyOf, maxLength, maxItems } = node.data;
+  const { type, properties, additionalProperties, items, anyOf, maxLength, maxItems } = node.data;
   const problems = (anyOf ?? []).flatMap((option, index) => schemaProblems(tool, option, `${path}|${index}`));
   if (type === 'object') {
+    if (additionalProperties !== false) problems.push(`${tool}: ${path} takes keys it does not name`);
     for (const [key, property] of Object.entries(properties ?? {})) {
       if (IDENTITY_KEY.test(key)) problems.push(`${tool}: ${path}.${key} names an identity`);
       problems.push(...schemaProblems(tool, property, `${path}.${key}`));
@@ -56,8 +58,8 @@ function schemaProblems(tool: string, value: unknown, path: string): string[] {
 
 /**
  * The breaches of the registry's rules (B3): a unique name the ledger can
- * hold, a label, at least one role, and an input schema with a cap on every
- * string and list and no identity key.
+ * hold, a label, at least one role, and a closed input schema with a cap on
+ * every string and list and no identity key.
  */
 export function aiToolSchemaProblems(tools: readonly WalkedTool[]): string[] {
   const names = tools.map((tool) => tool.name);

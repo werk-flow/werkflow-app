@@ -5,7 +5,7 @@ import { defineTool } from '@/lib/ai/tools/define-tool';
 import type { JobListQuery, JobListSection } from '@/lib/jobs/list-page';
 import { readJobListPage } from '@/lib/jobs/list-server';
 import { jobDetailHref, projectDetailHref } from '@/lib/jobs/routes';
-import { JOB_STATUS_LABELS } from '@/lib/jobs/types';
+import { UNIFIED_STATUS_LABELS, getEntryUnifiedStatus } from '@/lib/jobs/unified-list';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
@@ -73,10 +73,13 @@ export const auftraegeFinden = defineTool({
         return [
           {
             art: 'Projekt',
-            nummer: project.projectNumber,
+            nummer: record(project.projectNumber),
             titel: record(project.name),
+            status: UNIFIED_STATUS_LABELS[getEntryUnifiedStatus({ type: 'project', project, childJobs: [] })],
             auftraege: entry.jobCount,
             kunde: customer(project.clientId),
+            beginn: project.plannedStartDate,
+            ende: project.plannedEndDate,
             link: projectDetailHref(project),
           },
         ];
@@ -86,9 +89,9 @@ export const auftraegeFinden = defineTool({
       return [
         {
           art: 'Auftrag',
-          nummer: job.jobNumber,
+          nummer: record(job.jobNumber),
           titel: record(job.title),
-          status: JOB_STATUS_LABELS[job.status],
+          status: UNIFIED_STATUS_LABELS[getEntryUnifiedStatus({ type: 'standalone-job', job })],
           kunde: customer(job.clientId),
           termin: job.plannedDate,
           link: jobDetailHref(job),

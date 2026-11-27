@@ -1,15 +1,8 @@
 import 'server-only';
 
-import { type ModelMessage, type ToolResultPart, type ToolSet, streamText } from 'ai';
+import { type ModelMessage, type ToolSet, streamText } from 'ai';
 
-import {
-  type AiContext,
-  type AiThreadMessage,
-  buildAiContext,
-  carriesUntrustedText,
-  serializedInput,
-  untrustedToolOutput,
-} from '@/lib/ai/context';
+import { type AiContext, type AiThreadMessage, buildAiContext, serializedInput } from '@/lib/ai/context';
 import { AI_MODEL_PRICE, type AiTokenUsage, costMicroUsd } from '@/lib/ai/cost';
 import { AI_TURN_LIMITS, type AiEntryPoint, inputTokenCeiling, maxTurnCostMicroUsd } from '@/lib/ai/limits';
 import { type AiModel, isAllowedModel, resolveAiModel } from '@/lib/ai/model';
@@ -23,12 +16,13 @@ import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import { AI_PROMPT_VERSION } from '@/lib/ai/prompt/system-prompt';
 import { isAiReleasedFor } from '@/lib/ai/release-gate';
 import { readAiOrganizationSwitch } from '@/lib/ai/settings';
-import { type AiTool, type AiToolResult, toToolSet } from '@/lib/ai/tools/define-tool';
-import { AI_TOOLS, aiToolsFor } from '@/lib/ai/tools/registry';
+import { toToolSet } from '@/lib/ai/tools/define-tool';
+import { aiToolsFor } from '@/lib/ai/tools/registry';
+import { type ToolCalls, recordUnrunCalls, runTool } from '@/lib/ai/tools/tool-calls';
+import { boundedWrite } from '@/lib/ai/bounded-write';
 import { AI_TURN_FAILURE_MESSAGES } from '@/lib/ai/turn-messages';
 import { logError } from '@/lib/logging';
-import type { ActionContext } from '@/lib/org/action-context';
-import { type OrgRole, isManagerRole } from '@/lib/roles';
+import type { OrgRole } from '@/lib/roles';
 import { consumeRateLimit } from '@/lib/security/rate-limit';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { z } from '@/lib/zod';
@@ -233,33 +227,6 @@ async function readHistory(
     });
 }
 
-type DatabaseWrite = PromiseLike<{ error: { message: string } | null }>;
-
-/**
- * Runs an idempotent database write under its time limit, at most `tries`
- * times while time is left. A write past its limit counts as failed, though
- * it may still land: the caller then keeps the run's provisional charge,
- * which only ever overstates. `landed` names a refusal that means an earlier
- * try already wrote.
- */
-async function boundedWrite(
-  label: string,
-  limitMs: number,
-  tries: number,
-  write: (signal: AbortSignal) => DatabaseWrite,
-  landed: (message: string) => boolean = () => false,
-): Promise<boolean> {
-  const signal = AbortSignal.timeout(limitMs);
-  let failure: unknown = 'timeout';
-  for (let attempt = 0; attempt < tries && !signal.aborted; attempt += 1) {
-    const { error } = await write(signal);
-    if (!error || landed(error.message)) return true;
-    failure = error;
-  }
-  logError(label, failure);
-  return false;
-}
-
 /**
  * Ends the run's reservation at the cost the ledger recorded. When it cannot,
  * the reservation stays as the run's provisional charge, and the database job
@@ -300,18 +267,6 @@ type RunContext = TurnContext & {
   /** Aborts when the turn's total time is up, counted from the request's arrival. */
   turnSignal: AbortSignal;
   toolCalls: ToolCalls;
-};
-
-/** What the turn's tool calls did so far. */
-type ToolCalls = {
-  /** A tool result carried untrusted text: memory writes are gone for the rest of the turn (B10). */
-  tainted: boolean;
-  /** A call's ledger row failed: the turn takes no further step. */
-  unrecorded: boolean;
-  /** The calls recorded so far, which number each call's ledger key. */
-  count: number;
-  /** The provider's ids of the calls a tool ran for. */
-  ran: Set<string>;
 };
 
 /** The run's answer so far, with what is left of its one retry allowance. */
@@ -355,7 +310,13 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
         thread: [...history, { role: 'user', text: command.text }],
         inputTokenCap: limits.maxInputTokens,
       });
-      const toolCalls: ToolCalls = { tainted: false, unrecorded: false, count: 0, ran: new Set() };
+      const toolCalls: ToolCalls = {
+        tainted: false,
+        unrecorded: false,
+        count: 0,
+        seen: new Map(),
+        ran: new Set(),
+      };
       end = await runSteps({ ...context, modelContext, turnSignal, toolCalls }, answer);
     }
   } catch (error) {
@@ -446,6 +407,9 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
       prompt,
       turnSignal: context.turnSignal,
     });
+    // Every call the model emitted is recorded before the step's outcome counts (B19).
+    await recordUnrunCalls(context);
+    if (context.toolCalls.unrecorded) return failedEnd('failed', 'interrupted');
     if (outcome.kind === 'failed') {
       const stopped = outcome.failure === 'timeout' || outcome.failure === 'answer_too_long';
       return failedEnd(stopped ? 'cancelled' : 'failed', outcome.failure);
@@ -454,8 +418,6 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
     if (outcome.finishReason === 'content-filter') return failedEnd('failed', 'model_refused');
     // A step that ends in tool calls continues with their results.
     if (outcome.finishReason !== 'tool-calls') return { status: 'complete' };
-    await recordUnrunCalls(context, outcome.responseMessages);
-    if (context.toolCalls.unrecorded) return failedEnd('failed', 'interrupted');
     messages = [...messages, ...outcome.responseMessages];
   }
 }
@@ -556,6 +518,8 @@ async function runAttempt(
         answer.text += part.text;
         context.sink.text(part.text);
         savePartial(context, answer);
+      } else if (part.type === 'tool-call') {
+        context.toolCalls.seen.set(part.toolCallId, part.toolName);
       } else if (part.type === 'start-step') {
         // The provider accepted the request: from here on it bills the prompt.
         started = true;
@@ -679,108 +643,4 @@ function prepareStep(context: RunContext): ToolSet {
   const { tools } = context.modelContext;
   const offered = context.toolCalls.tainted ? tools.filter((tool) => !tool.writesMemory) : tools;
   return toToolSet(offered, (tool, input, toolCallId) => runTool(context, tool, input, toolCallId));
-}
-
-/** The caller as the route resolved it (`resolveActionContextFor`): identity never comes from the model (B3). */
-function callerContext(command: AiTurnCommand): ActionContext {
-  return {
-    userId: command.userId,
-    orgId: command.organizationId,
-    role: command.role,
-    isManagerOrAbove: isManagerRole(command.role),
-  };
-}
-
-/**
- * Runs one offered tool with the caller's context. Record text in its result
- * taints the turn, and its ledger row is written before the result reaches
- * the model. The thread keeps a row of the call for the person.
- */
-async function runTool(
-  context: RunContext,
-  tool: AiTool,
-  input: unknown,
-  toolCallId: string,
-): Promise<ToolResultPart['output']> {
-  context.toolCalls.ran.add(toolCallId);
-  const result = await tool.execute(input, callerContext(context.command));
-  if (result.status === 'ok' && carriesUntrustedText(result.value)) context.toolCalls.tainted = true;
-  const key = await recordToolCall(context, `tool_call_${tool.name}_${result.status}`);
-  if (!key) return { type: 'json', value: { status: 'failed' } };
-  await appendToolRow(context, tool, result, key);
-  return result.status === 'ok'
-    ? untrustedToolOutput(result.value)
-    : { type: 'json', value: { status: result.status } };
-}
-
-/**
- * Records the calls of a step no tool ran for: one the turn did not offer,
- * or one whose input its schema refused. A name outside the registry is
- * model text and is recorded as `unknown`.
- */
-async function recordUnrunCalls(context: RunContext, messages: readonly ModelMessage[]): Promise<void> {
-  const known = new Set<string>(AI_TOOLS.map((tool) => tool.name));
-  for (const message of messages) {
-    if (message.role !== 'assistant' || typeof message.content === 'string') continue;
-    for (const part of message.content) {
-      if (part.type !== 'tool-call' || context.toolCalls.ran.has(part.toolCallId)) continue;
-      const name = known.has(part.toolName) ? part.toolName : 'unknown';
-      await recordToolCall(context, `tool_call_${name}_not_run`);
-    }
-  }
-}
-
-/**
- * A tool call's ledger row (B19): the run names user, organization and
- * thread; the row names the tool, its outcome, the prompt version and the
- * model, with nil cost. Ids and codes, never text. Returns the row's key, or
- * null when the row could not be written.
- */
-async function recordToolCall(context: RunContext, outcome: string): Promise<string | null> {
-  context.toolCalls.count += 1;
-  const key = `${context.runKey}:tool:${context.toolCalls.count}`;
-  const recorded = await boundedWrite(
-    'aiTurn: tool call record failed',
-    AI_TURN_LIMITS[context.command.entryPoint].costWriteTimeoutMs,
-    2,
-    (signal) =>
-      context.admin
-        .rpc('record_ai_run_attempt', {
-          p_organization_id: context.command.organizationId,
-          p_run_id: context.runId,
-          p_idempotency_key: key,
-          p_model_id: context.model.modelId,
-          p_prompt_version: AI_PROMPT_VERSION,
-          p_input_tokens: 0,
-          p_output_tokens: 0,
-          p_cache_read_tokens: 0,
-          p_cache_write_tokens: 0,
-          p_cost_micro_usd: 0,
-          p_outcome: outcome,
-        })
-        .abortSignal(signal),
-  );
-  if (!recorded) context.toolCalls.unrecorded = true;
-  return recorded ? key : null;
-}
-
-/** The call's row in the person's thread: the tool's label and outcome. A missed row costs only the display. */
-async function appendToolRow(
-  context: RunContext,
-  tool: AiTool,
-  result: AiToolResult,
-  key: string,
-): Promise<void> {
-  const { error } = await context.admin
-    .rpc('append_ai_thread_item', {
-      p_organization_id: context.command.organizationId,
-      p_user_id: context.command.userId,
-      p_thread_id: context.command.threadId,
-      p_kind: 'tool_call',
-      p_status: result.status === 'ok' ? 'complete' : 'failed',
-      p_body: { tool: tool.name, label: tool.label, status: result.status },
-      p_idempotency_key: key,
-    })
-    .abortSignal(AbortSignal.timeout(AI_TURN_LIMITS[context.command.entryPoint].answerSaveTimeoutMs));
-  if (error) logError('aiTurn: tool row save failed', error);
 }

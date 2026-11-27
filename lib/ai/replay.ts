@@ -40,17 +40,17 @@ function textParts(...deltas: string[]): StreamPart[] {
   ];
 }
 
-function toolCall(toolName: string, input: object): StreamPart {
-  return { type: 'tool-call', toolCallId: `call-${toolName}`, toolName, input: JSON.stringify(input) };
+function toolCall(toolName: string, input: object, callId = `call-${toolName}`): StreamPart {
+  return { type: 'tool-call', toolCallId: callId, toolName, input: JSON.stringify(input) };
 }
 
 const toolRequestSchema = z.object({ name: z.string(), input: z.record(z.string(), z.unknown()) });
 
 /** The tool call a `[replay:werkzeug]` message names as JSON, or null. */
-function requestedToolCall(userText: string): StreamPart | null {
+function requestedToolCall(userText: string, callId?: string): StreamPart | null {
   try {
     const request = toolRequestSchema.safeParse(JSON.parse(userText));
-    return request.success ? toolCall(request.data.name, request.data.input) : null;
+    return request.success ? toolCall(request.data.name, request.data.input, callId) : null;
   } catch {
     return null;
   }
@@ -137,6 +137,16 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
     },
     () => [...textParts('Erledigt.'), finish('stop', 1300, 20)],
   ],
+  // Calls the named tool in two steps, so a change between them reaches the second call.
+  zweimal: [1, 2]
+    .map(
+      (step): ReplayAttempt =>
+        (userText) => {
+          const call = requestedToolCall(userText, `call-${step}`);
+          return call ? [call, finish('tool-calls', 1100, 30)] : [finish('stop', 900, 0)];
+        },
+    )
+    .concat(() => [...textParts('Erledigt.'), finish('stop', 1300, 20)]),
   // Injection case (B10, B21): a job title tells the model to file an Anfrage and to remember a
   // rule. The model falls for it and calls a write tool and a memory write the turn does not have.
   vergiftet: [

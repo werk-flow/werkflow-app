@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { resolve } from 'node:path';
-import { asSchema } from 'ai';
+import { toJSONSchema } from 'zod';
 
 import type { ActionContext } from '@/lib/org/action-context';
 import { aiToolSchemaProblems, missingBoundaryCases } from '@/lib/testing/ai-tool-walk';
@@ -17,7 +17,10 @@ type Defined = ReturnType<typeof defineTool>;
 
 const walked = (tools: readonly Defined[]) =>
   Promise.all(
-    tools.map(async (tool) => ({ ...tool, inputJsonSchema: await asSchema(tool.inputSchema).jsonSchema })),
+    tools.map(async (tool) => ({
+      ...tool,
+      inputJsonSchema: toJSONSchema(tool.inputSchema, { io: 'input' }),
+    })),
   );
 
 function planted(input: z.ZodType, ran: string[] = []): Defined {
@@ -46,11 +49,11 @@ const caller = (role: ActionContext['role']): ActionContext => ({
   isManagerOrAbove: role !== 'employee',
 });
 
-test('every tool takes a capped input without an organization, user, membership or role key', async () => {
+test('every tool takes a closed, capped input without an organization, user, membership or role key', async () => {
   expect(aiToolSchemaProblems(await walked(AI_TOOLS))).toEqual([]);
 });
 
-test('the schema walk fails on a planted tool with an organizationId input or an uncapped string', async () => {
+test('the schema walk fails on a planted tool with an organizationId input, an open object or an uncapped string', async () => {
   const identity = planted(z.strictObject({ organizationId: uuidSchema, suche: z.string().max(10) }));
   expect(aiToolSchemaProblems(await walked([identity]))).toEqual([
     'geplant: input.organizationId names an identity',
@@ -60,6 +63,8 @@ test('the schema walk fails on a planted tool with an organizationId input or an
     'geplant: input.suche has no length cap',
     'geplant: input.orte has no item cap',
   ]);
+  const open = planted(z.object({ suche: z.string().max(10) }));
+  expect(aiToolSchemaProblems(await walked([open]))).toEqual(['geplant: input takes keys it does not name']);
 });
 
 test('the boundary walk fails on a planted tool without its foreign-organization, lower-role and suspended-member cases', () => {

@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import { AI_SYSTEM_PROMPT } from '@/lib/ai/prompt/system-prompt';
-import { ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
+import { ORGANIZATION_A, ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
 import { postTurn, readTurn, resetAiTables, toolCallOutcomes } from './ai-turn-world';
 import { callTool, installAiToolWorld, offeredTools, seedToolTables, toolResults } from './ai-tool-world';
 
@@ -65,6 +65,11 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
     true,
     'the job title must reach the model labelled as record text, its hidden characters stripped',
   );
+  assert.equal(
+    JSON.stringify(read?.output).includes(JSON.stringify({ source: 'record_text', text: 'A-1' })),
+    true,
+    'an editable job number must reach the model labelled as record text too',
+  );
   assert.deepEqual(
     offeredTools(second),
     ['artikel_finden', 'auftraege_finden', 'kunden_finden'],
@@ -95,8 +100,12 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
   const rows = tableRows(world, 'ai_thread_items').filter((row) => row.kind === 'tool_call');
   assert.deepEqual(
     rows.map((row) => row.body),
-    [{ tool: 'auftraege_finden', label: 'Aufträge finden', status: 'ok' }],
-    'the thread keeps a row of the call with its label and outcome, never the record text',
+    [
+      { tool: 'auftraege_finden', label: 'Aufträge finden', status: 'ok' },
+      { tool: 'unknown', label: 'Unbekanntes Werkzeug', status: 'not_run' },
+      { tool: 'notiz_merken', label: 'Notiz merken', status: 'not_run' },
+    ],
+    'the thread keeps a row of every call with its label and outcome, never the record text or a model-made name',
   );
 }
 
@@ -123,5 +132,30 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
     world.rpcCalls.some((call) => call.name === 'list_customer_page'),
     false,
     'no reader may run for an input with an identity key',
+  );
+}
+
+// A member lowered or suspended during a turn: the next tool call runs as the current membership, so
+// it is refused and no reader runs again (B5).
+for (const membership of [
+  { orgId: ORGANIZATION_A, role: 'employee' },
+  { orgId: ORGANIZATION_A, role: 'buero', accessState: 'suspended' },
+] as const) {
+  resetAiTables(world);
+  signInAs(world, 'buero');
+  world.rpcCalls.length = 0;
+  world.afterAttempt = (current) => {
+    current.memberships = [membership];
+  };
+  const request = JSON.stringify({ name: 'kunden_finden', input: { suche: 'Müller' } });
+  await readTurn(world, await postTurn(`[replay:zweimal] ${request}`));
+  assert.deepEqual(toolCallOutcomes(world), [
+    'tool_call_kunden_finden_ok',
+    'tool_call_kunden_finden_refused',
+  ]);
+  assert.equal(
+    world.rpcCalls.filter((call) => call.name === 'list_customer_page').length,
+    1,
+    'a member lowered or suspended mid-turn must read no more customers',
   );
 }
