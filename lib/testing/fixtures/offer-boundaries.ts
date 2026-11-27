@@ -163,6 +163,7 @@ const servicePosition = {
   unitPriceCents: 7250,
   priceQuantity: 1 as const,
   taxRateBasisPoints: 1900 as const,
+  cost: null,
 };
 const content = {
   offerId: ownOfferId,
@@ -258,36 +259,96 @@ assert.deepEqual(
   world.rpcCalls.map((call) => [call.name, call.args.p_organization_id]),
   [
     ['list_offer_page', ORGANIZATION_A],
-    ['get_offer', ORGANIZATION_A],
+    ['get_offer_with_costs', ORGANIZATION_A],
   ],
 );
 
 // A site may lack address parts (client_sites.street, postal_code and city allow null):
 // its offer still reads, and the header names what the site has.
-const { readOffer } = await import('@/lib/offers/reads');
+const { readOfferWithCosts } = await import('@/lib/offers/reads');
 world.rpc = ({ name }) =>
-  name === 'get_offer'
+  name === 'get_offer_with_costs'
     ? {
         data: {
-          id: ownOfferId,
-          offerNumber: 'ANG-2026-1',
-          title: 'Heizungstausch',
-          status: 'entwurf',
-          version: 1,
-          contentVersion: 1,
-          validUntil: '2026-12-14',
-          openingText: '',
-          closingText: '',
-          client: { id: ownClientId, name: 'Haustechnik Sonnenberg GmbH' },
-          site: { id: ownClientId, name: 'Lindenhof 3', street: null, postalCode: '12345', city: null },
-          contact: null,
-          recipient: { id: ownClientId, name: 'Haustechnik Sonnenberg GmbH', address: null, isDefault: true },
-          owner: null,
-          work: null,
-          sections: [],
+          costs: [],
+          offer: {
+            id: ownOfferId,
+            offerNumber: 'ANG-2026-1',
+            title: 'Heizungstausch',
+            status: 'entwurf',
+            version: 1,
+            contentVersion: 1,
+            validUntil: '2026-12-14',
+            openingText: '',
+            closingText: '',
+            client: { id: ownClientId, name: 'Haustechnik Sonnenberg GmbH' },
+            site: { id: ownClientId, name: 'Lindenhof 3', street: null, postalCode: '12345', city: null },
+            contact: null,
+            recipient: {
+              id: ownClientId,
+              name: 'Haustechnik Sonnenberg GmbH',
+              address: null,
+              isDefault: true,
+            },
+            owner: null,
+            work: null,
+            sections: [],
+          },
         },
         error: null,
       }
     : { data: null, error: null };
-const sparse = await readOffer(ORGANIZATION_A, ownOfferId);
+const sparse = await readOfferWithCosts(ORGANIZATION_A, ownOfferId);
 assert.equal(sparse?.site?.address, '12345');
+
+// A stored cost above what the editor takes (any article price may stand there) still loads.
+world.rpc = ({ name }) =>
+  name === 'get_offer_with_costs'
+    ? {
+        data: {
+          costs: [[{ amountCents: 250_000_000, priceQuantity: 1000 }]],
+          offer: {
+            ...sparse,
+            site: null,
+            owner: null,
+            work: null,
+            sections: [
+              {
+                title: 'Material',
+                positions: [
+                  {
+                    kind: 'free',
+                    name: 'Pressfitting 15 mm',
+                    description: '',
+                    quantity: '1000',
+                    unit: 'piece',
+                    unitPriceCents: 99_000_000,
+                    priceQuantity: 1000,
+                    taxRateBasisPoints: 1900,
+                    source: null,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        error: null,
+      }
+    : { data: null, error: null };
+const costly = await readOfferWithCosts(ORGANIZATION_A, ownOfferId);
+assert.deepEqual(
+  costly?.sections[0]?.positions[0],
+  {
+    kind: 'free',
+    name: 'Pressfitting 15 mm',
+    description: '',
+    quantity: '1000',
+    unit: 'piece',
+    unitPriceCents: 99_000_000,
+    priceQuantity: 1000,
+    taxRateBasisPoints: 1900,
+    source: null,
+    cost: { amountCents: 250_000_000, priceQuantity: 1000 },
+  },
+  'a stored cost above the editor limit did not load',
+);

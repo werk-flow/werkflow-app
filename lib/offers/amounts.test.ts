@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { offerAmounts } from './amounts';
+import { offerAmounts, offerContentArgument } from './amounts';
 import type { OfferFreePosition, OfferSection } from './types';
 
 function free(
@@ -18,6 +18,7 @@ function free(
     priceQuantity: options.priceQuantity ?? 1,
     taxRateBasisPoints: options.taxRateBasisPoints ?? 1900,
     source: null,
+    cost: null,
   };
 }
 
@@ -86,4 +87,14 @@ describe('offerAmounts', () => {
     expect(textOnly.sections).toEqual([{ netCents: 0, positionCents: [null] }]);
     expect(textOnly.totals.grossCents).toBe(0);
   });
+});
+
+// The save stores only content the office's calculation can show again.
+test('a content whose line cost exceeds ten billion euros has no save argument', () => {
+  const costly = {
+    ...free('Pumpe', '100000', 100),
+    cost: { amountCents: 100_000_001, priceQuantity: 1 as const },
+  };
+  expect(offerContentArgument([{ title: 'Heizung', positions: [costly] }])).toBeNull();
+  expect(offerContentArgument([{ title: 'Heizung', positions: [{ ...costly, cost: null }] }])).not.toBeNull();
 });

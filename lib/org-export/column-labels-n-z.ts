@@ -142,7 +142,7 @@ export const COLUMN_LABELS_N_TO_Z = {
   public_holiday_minutes: 'Feiertag (Minuten)',
   published_at: 'Veröffentlicht am',
   published_by: 'Veröffentlicht von (ID)',
-  purchase_cost_cents: 'Einkaufspreis am Speichertag (Cent)',
+  purchase_cost_cents: 'Kosten netto je Preismenge (Cent)',
   purchase_price_cents: 'Einkaufspreis (Cent)',
   purchase_price_quantity: 'Preismenge des Einkaufspreises (Basiseinheiten)',
   purchase_unit: 'Bestelleinheit',
