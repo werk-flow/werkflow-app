@@ -47,10 +47,11 @@ export function questionAnswer(
   question: AiThreadRow,
 ): { answered: string } | 'open' | 'closed' {
   const after = entries.filter((entry) => entry.sequence > question.sequence);
-  const reply = after.find((entry) => entry.role === 'user');
-  if (reply?.role === 'user' && answerOf(entries, reply.key)) return { answered: reply.text };
+  const reply = after.find((entry) => entry.role === 'user' && answerOf(entries, entry.key));
+  if (reply?.role === 'user') return { answered: reply.text };
+  // An answer on an older page than the question has ended: only the latest turn can still run.
   const asking = answerOf(entries, question.key);
-  const settled = asking !== undefined && asking.status !== 'streaming';
+  const settled = asking === undefined || asking.status !== 'streaming';
   return settled && !after.some((entry) => entry.role === 'question') ? 'open' : 'closed';
 }
 

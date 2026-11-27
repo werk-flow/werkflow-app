@@ -23,7 +23,9 @@ alter table public.ai_thread_items add constraint ai_thread_items_detail_check
 -- thread. A new key takes the thread's next sequence; a known key keeps its
 -- place and changes only to a higher revision. With a ledger key, the tool
 -- call's ledger row (ids and its outcome, nil cost) is written in the same
--- transaction; a ledger key already recorded writes nothing and returns null.
+-- transaction. A ledger key already recorded writes nothing: it returns the
+-- row's sequence when that earlier call saved this very row (a retry whose
+-- first answer was lost), and null when another write claimed the call.
 -- Returns the row's sequence.
 create function public.record_ai_tool_item(
   p_organization_id uuid,
@@ -68,7 +70,11 @@ begin
   ) then
     perform public.record_ai_run_attempt(p_organization_id, p_run_id, p_ledger_key, p_model_id,
       p_prompt_version, 0, 0, 0, 0, 0, p_outcome);
-    return null;
+    return (
+      select item.sequence from public.ai_thread_items item
+      where item.thread_id = v_thread_id and item.idempotency_key = p_item_key
+        and item.kind = p_kind and item.body = p_body
+    );
   end if;
 
   select * into v_item from public.ai_thread_items item

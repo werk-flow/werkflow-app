@@ -16,9 +16,10 @@ async function threadWithRows(world: TestWorld): Promise<{ route: string }> {
   return { route: `/ki?chat=${threadId}` };
 }
 
-/** Opens the customer search row, which reads its result only now. */
+/** Opens the customer search row, which reads its result only now; it runs once per width on the same page. */
 async function openedToolRow(scope: Locator): Promise<void> {
-  await scope.getByRole('button', { name: 'Kunden und Einsatzorte finden', exact: true }).click();
+  const row = scope.getByRole('button', { name: 'Kunden und Einsatzorte finden', exact: true });
+  if ((await row.getAttribute('aria-expanded')) !== 'true') await row.click();
   // Postgres orders a result's keys, so the customer's number follows its address.
   await expect(scope.getByText(new RegExp(`^${KI_SEEDED_CUSTOMER} · .* · K-1001$`))).toBeVisible();
 }

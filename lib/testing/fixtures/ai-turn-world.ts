@@ -213,8 +213,17 @@ async function recordToolItem(world: AiTurnWorld, args: Row): Promise<Outcome> {
       },
     });
     if (ledger.error) return { data: null, error: ledger.error };
-    // The first write under a ledger key claims the call's outcome; a later one writes no row.
-    if (claimed) return ok(null);
+    // The first write under a ledger key claims the call's outcome; a later one writes no row and
+    // finds the row only when the first one saved this very row.
+    if (claimed) {
+      const saved = tableRows(world, 'ai_thread_items').find(
+        (row) =>
+          row.thread_id === run.thread_id &&
+          row.idempotency_key === args.p_item_key &&
+          JSON.stringify(row.body) === JSON.stringify(args.p_body),
+      );
+      return ok(saved?.sequence ?? null);
+    }
   }
   const all = tableRows(world, 'ai_thread_items');
   const items = all.filter((row) => row.thread_id === run.thread_id);

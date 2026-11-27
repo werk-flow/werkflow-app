@@ -272,3 +272,22 @@ test("an end carries the turn's rows, so a row whose send the page missed lands 
     [`${command}:tool:2`, 'complete'],
   ]);
 });
+
+test('an end that arrives after the page already ended the answer still places its rows', () => {
+  const window: AiThreadWindow = {
+    hasOlder: false,
+    messages: [message(`${command}:assistant`, 2, { text: 'Fertig.' }), toolRow(`${command}:tool:1`, 3, 1)],
+  };
+  const ended: KiLiveEvent = {
+    v,
+    type: 'end',
+    command,
+    status: 'complete',
+    failure: null,
+    length: 7,
+    rows: [toolRow(`${command}:tool:1`, 3, 2)],
+  };
+  expect(applyKiLiveEvents(window, [ended]).window.messages.at(-1)).toEqual(
+    toolRow(`${command}:tool:1`, 3, 2),
+  );
+});

@@ -67,6 +67,13 @@ test('a question waits for an answer once its turn ended, until a message follow
   });
   // A reply refused before its turn started leaves the question open, so a tap sends it again.
   expect(questionAnswer([...thread, reply], asked)).toBe('open');
+  // A later reply that got its turn answers it, past a refused one.
+  const later = message('c3:user', 5, { text: 'Müller Haustechnik' });
+  expect(questionAnswer([...thread, reply, later, message('c3:assistant', 6)], asked)).toEqual({
+    answered: 'Müller Haustechnik',
+  });
+  // A question whose asking answer is on an older page has ended its turn.
+  expect(questionAnswer([asked], asked)).toBe('open');
   expect(questionAnswer([...thread, question('c1:tool:2', 4)], asked)).toBe('closed');
 });
 

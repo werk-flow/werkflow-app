@@ -111,6 +111,13 @@ begin
     raise exception 'A second outcome of one tool call wrote a row';
   end if;
 
+  -- A retry of a write that landed, its first answer lost, returns the saved row's place again.
+  if public.record_ai_tool_item(v_org, v_author, v_run, 'tool_call', 'complete', 'turn-1:tool:1',
+      '{"revision":2,"tool":"auftraege_finden","outcome":"ok"}', '{"input":{"suche":"Heizung"}}',
+      'turn-1:tool:1', 'claude-haiku-5-5', 'v1', 'tool_call_auftraege_finden_ok') is distinct from v_first then
+    raise exception 'A retried tool call write did not return its saved row';
+  end if;
+
   -- A key of another kind is a conflict.
   begin
     perform public.record_ai_tool_item(v_org, v_author, v_run, 'question', 'complete', 'turn-1:plan',

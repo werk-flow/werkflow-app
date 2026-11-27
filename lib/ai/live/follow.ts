@@ -165,7 +165,11 @@ function applyKiLiveEvent(
     (message): message is AiChatMessage => message.key === answerKey(event.command) && isChatMessage(message),
   );
   if (!answer) return { window, applied: false };
-  if (answer.status !== 'streaming') return unchanged;
+  // An answer this page already shows as ended still takes the rows its end carries.
+  if (answer.status !== 'streaming')
+    return event.type === 'end'
+      ? { window: (event.rows ?? []).reduce(placeRow, window), applied: true }
+      : unchanged;
   let next: AiThreadEntry;
   if (event.type === 'text') {
     if (event.at > answer.text.length) return { window, applied: false };
