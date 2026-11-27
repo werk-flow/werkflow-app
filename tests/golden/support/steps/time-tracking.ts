@@ -174,7 +174,7 @@ export const TIME_ACCOUNT_COPY = {
   allAccountsOpen: 'Alle Zeitkonten sind eröffnet.',
   confirmDefaultMapping: 'Zuordnung bestätigen',
   bueroMayRequest: 'Büro-Nutzer können Korrekturen',
-  adjustmentMinutes: 'Minuten',
+  adjustmentHours: 'Stunden der Korrektur',
   adjustmentReason: SHARED_COPY.field.reason,
   adjustmentKind: 'Korrektur',
   reject: 'Ablehnen',
@@ -988,13 +988,15 @@ export async function assignTimePolicy(
 export async function requestTimeAccountAdjustment(
   settings: Locator,
   employeeName: string,
-  input: { minutes: number; reason: string; effectiveDate: string },
+  input: { hours: string; reason: string; effectiveDate: string },
 ): Promise<void> {
   const dateName = `Wirksamkeitsdatum für ${employeeName}`;
   const row = confirmed(settings.getByRole('row')).filter({
     has: settings.page().getByRole('group', { name: dateName }),
   });
-  await row.getByLabel(TIME_ACCOUNT_COPY.adjustmentMinutes).fill(String(input.minutes));
+  await row
+    .getByRole('textbox', { name: `${TIME_ACCOUNT_COPY.adjustmentHours} für ${employeeName}`, exact: true })
+    .fill(input.hours);
   await row.getByLabel(TIME_ACCOUNT_COPY.adjustmentReason).fill(input.reason);
   await typeIntoDatePicker(row, dateName, datePickerDigits(input.effectiveDate));
   await row.getByRole('button', { name: TIME_ACCOUNT_COPY.adjustmentKind }).click();

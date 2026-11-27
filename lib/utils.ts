@@ -12,8 +12,6 @@ export function cn(...inputs: ClassValue[]): string {
  * the text it renders for 3 September 2026, 10:15 Berlin time.
  */
 const BERLIN_LABEL_STYLES = {
-  /** 3.9.2026 */
-  numericDate: {},
   /** 03.09.2026 */
   date: { day: '2-digit', month: '2-digit', year: 'numeric' },
   /** 03.09.26 */

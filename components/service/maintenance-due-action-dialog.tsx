@@ -38,7 +38,7 @@ import { useJobEntityOptions, type JobEntityOptionsState } from '@/hooks/use-job
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { MaintenanceDueActionKind } from '@/lib/maintenance/due-action-fields';
 import { useMaintenanceDueAction, type MaintenanceDueActionController } from './use-maintenance-due-action';
-import { formatBerlin, parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
+import { formatGermanDate, parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 
 const EVIDENCE_LIST_CLASS = 'max-h-40 space-y-2 overflow-y-auto rounded-md border p-3';
 const EVIDENCE_ROW_CLASS = 'flex items-center gap-2 text-sm';
@@ -428,7 +428,7 @@ export function MaintenanceDueActionDialog({
         <DialogHeader>
           <DialogTitle>Fälligkeit bearbeiten</DialogTitle>
           <DialogDescription>
-            {due.planNumber} · fällig am {formatBerlin(due.dueDate, 'numericDate')}
+            {due.planNumber} · fällig am {formatGermanDate(due.dueDate)}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-4 py-2">

@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { FINDING_LABELS, formatMinutes, formatPeriod } from '@/lib/time-accounts/presentation';
 import type { TimeAccountOverview } from '@/lib/time-accounts/overview-queries';
 import type { PeriodResultValues } from '@/lib/time-accounts/period-results';
-import { formatBerlin } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 import { TimePeriodStateBadge } from './time-period-list';
 
 type AccountPeriod = TimeAccountOverview['periods'][number];
@@ -139,9 +139,7 @@ export function TimeAccountEventList({ events }: { events: AccountEvent[] }): Re
           <ListRow key={event.id} className="justify-between gap-4">
             <div className="min-w-0">
               <p className="font-medium">{event.reason}</p>
-              <p className="text-sm text-muted-foreground">
-                {formatBerlin(event.effectiveDate, 'numericDate')}
-              </p>
+              <p className="text-sm text-muted-foreground">{formatGermanDate(event.effectiveDate)}</p>
             </div>
             <span className="shrink-0 font-medium tabular-nums">{formatMinutes(event.minutes)}</span>
           </ListRow>
@@ -154,7 +152,7 @@ export function TimeAccountEventList({ events }: { events: AccountEvent[] }): Re
             {events.map((event) => (
               <TableRow key={event.id}>
                 <TableCell className="font-medium">{event.reason}</TableCell>
-                <TableCell>{formatBerlin(event.effectiveDate, 'numericDate')}</TableCell>
+                <TableCell>{formatGermanDate(event.effectiveDate)}</TableCell>
                 <TableCell className="font-medium tabular-nums">{formatMinutes(event.minutes)}</TableCell>
               </TableRow>
             ))}

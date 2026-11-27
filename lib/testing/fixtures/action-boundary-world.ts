@@ -36,7 +36,8 @@ export type ActionWorld = {
   /** Bearer access tokens Auth accepts, each naming its user; any other token is rejected. */
   accessTokens: Record<string, string>;
   tables: InMemoryTables;
-  rpc: (call: RpcCall) => RpcOutcome;
+  /** A database function's answer; a promise that never settles is a call that hangs. */
+  rpc: (call: RpcCall) => RpcOutcome | Promise<RpcOutcome>;
   rpcCalls: RpcCall[];
   invokeFunction: (call: FunctionCall) => { error: FixtureError | null };
   functionCalls: FunctionCall[];
@@ -93,6 +94,16 @@ function createAdminStandIn(world: ActionWorld, database: () => { from: (table: 
             ? { ...result, data: row }
             : { data: null, error: { code: 'PGRST116', message: 'not exactly one row' } };
         },
+        // An aborted request answers as PostgREST's client does: with the fetch's AbortError, never a throw.
+        abortSignal: (signal: AbortSignal): Promise<RpcOutcome> =>
+          Promise.race([
+            outcome,
+            new Promise<RpcOutcome>((resolve) => {
+              const aborted = () => resolve({ data: null, error: { message: 'AbortError: aborted' } });
+              if (signal.aborted) aborted();
+              else signal.addEventListener('abort', aborted, { once: true });
+            }),
+          ]),
       });
     },
     functions: {

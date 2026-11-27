@@ -163,6 +163,17 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
   ],
   // A provider failure whose body quotes the user's message: it must never reach a log (B17).
   'echo-fehler': [(userText) => providerError(500, JSON.stringify({ error: { message: userText } }))],
+  // The connection drops after the request left, before any answer: the provider may have taken it.
+  'verbindung-vor-antwort': [
+    () =>
+      new APICallError({
+        message: 'replayed lost connection',
+        url: 'replay://messages',
+        requestBodyValues: {},
+        isRetryable: true,
+      }),
+    answer,
+  ],
 };
 
 function latestUserText(options: StreamOptions): string {

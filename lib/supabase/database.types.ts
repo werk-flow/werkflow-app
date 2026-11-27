@@ -23013,6 +23013,25 @@ export type Database = {
         };
         Returns: number;
       };
+      start_ai_turn: {
+        Args: {
+          p_command_id: string;
+          p_organization_id: string;
+          p_reserve_micro_usd: number;
+          p_text: string;
+          p_thread_id: string;
+          p_title: string;
+          p_user_id: string;
+        };
+        Returns: {
+          answer_item_id: string;
+          answer_item_sequence: number;
+          run_id: string;
+          user_item_id: string;
+          user_item_sequence: number;
+          verdict: string;
+        }[];
+      };
       start_organization_export: {
         Args: {
           p_actor_id: string;

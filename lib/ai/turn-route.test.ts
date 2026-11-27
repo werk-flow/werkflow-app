@@ -21,6 +21,10 @@ test('a WerkFlow KI turn runs under its step limit, switches, budget, retry rule
   await runFixture('ai-turn-route');
 });
 
+test('a cost write, final save or settlement past its limit ends the turn and keeps the provisional charge', async () => {
+  await runFixture('ai-turn-bounded-writes');
+});
+
 test('no chat text of a turn, its answer or a provider failure reaches a log', async () => {
   await runFixture('ai-turn-log-sentinel');
 });
