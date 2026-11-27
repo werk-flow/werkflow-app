@@ -91,6 +91,9 @@ describe('correction request events of the people a view shows', () => {
 
   test('read a deletion notice that names nobody, and pass every other table', () => {
     expect(isCorrectionEventFor(request(null), [viewer])).toBe(true);
+    // A partial payload that lacks either person can't rule the event out.
+    expect(isCorrectionEventFor(request({ subject_user_id: colleague }), [viewer])).toBe(true);
+    expect(isCorrectionEventFor(request({ requested_by: colleague }), [viewer])).toBe(true);
     expect(
       isCorrectionEventFor({ table: 'time_entries', new: { user_id: colleague }, old: null }, [viewer]),
     ).toBe(true);
