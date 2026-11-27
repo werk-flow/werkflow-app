@@ -361,7 +361,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['p1_22_time_corrections.sql', 'open_session_past_day_addition.sql', 'late_chain_replacement.sql'],
     ['time', 'personnel', 'work'],
   ],
-  ['a1-time-history', ['a1_time_history.sql'], ['time', 'personnel']],
+  ['a1-time-history', ['a1_time_history.sql', 'correction_signal_lock_order.sql'], ['time', 'personnel']],
   [
     'p1-23',
     [

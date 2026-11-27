@@ -64,14 +64,20 @@ beforeEach(() => {
 
 test('205 users and their employee records are read in gateway-safe batches', async () => {
   const userIds = Array.from({ length: 205 }, (_, index) => `user-${index}`);
-  expect(await getCanonicalTimeEntries({ ...window, userIds })).toEqual({ success: true, entries: [] });
+  expect(await getCanonicalTimeEntries({ ...window, userIds })).toEqual({
+    success: true,
+    entries: [],
+    recordByUser: new Map(userIds.map((userId) => [userId, `record-${userId}`])),
+  });
   expectGatewaySafeBatches('employee_records', 205);
   expectGatewaySafeBatches('time_segments', 205);
 });
 
 test('2,500 employee records are read across pages and all of them reach the segment read', async () => {
   organizationEmployees = 2_500;
-  expect(await getCanonicalTimeEntries(window)).toEqual({ success: true, entries: [] });
+  const result = await getCanonicalTimeEntries(window);
+  expect(result).toMatchObject({ success: true, entries: [] });
+  expect(result.success && result.recordByUser.size).toBe(2_500);
   expect(employeePages).toEqual([0, ROW_PAGE_SIZE, 2 * ROW_PAGE_SIZE]);
   expectGatewaySafeBatches('time_segments', 2_500);
 });

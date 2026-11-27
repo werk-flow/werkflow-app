@@ -59,14 +59,29 @@ mock.module(resolve(root, 'lib/supabase/admin.ts'), () => ({
 const { getCanonicalTimeEntries } = await import('../../time-tracking/canonical-entries');
 const input = { organizationId: 'owned', from: '2026-09-30T00:00:00Z', to: '2026-10-01T00:00:00Z' };
 expectedEmployeeIds = ['employee-one', 'employee-two'];
+// Each read names the record its people hold in the organization, never a foreign one.
+const recordsOf = (...users: string[]) => new Map(users.map((user) => [user, `employee-${user}`]));
 expect(await getCanonicalTimeEntries({ ...input, userIds: ['one', 'two'] })).toEqual({
   success: true,
   entries: [],
+  recordByUser: recordsOf('one', 'two'),
 });
 expectedEmployeeIds = ['employee-one'];
-expect(await getCanonicalTimeEntries({ ...input, userId: 'one' })).toEqual({ success: true, entries: [] });
+expect(await getCanonicalTimeEntries({ ...input, userId: 'one' })).toEqual({
+  success: true,
+  entries: [],
+  recordByUser: recordsOf('one'),
+});
 expectedEmployeeIds = ['employee-one', 'employee-two', 'employee-other'];
-expect(await getCanonicalTimeEntries(input)).toEqual({ success: true, entries: [] });
+expect(await getCanonicalTimeEntries(input)).toEqual({
+  success: true,
+  entries: [],
+  recordByUser: recordsOf('one', 'two', 'other'),
+});
 const beforeEmpty = reads;
-expect(await getCanonicalTimeEntries({ ...input, userIds: [] })).toEqual({ success: true, entries: [] });
+expect(await getCanonicalTimeEntries({ ...input, userIds: [] })).toEqual({
+  success: true,
+  entries: [],
+  recordByUser: new Map(),
+});
 expect(reads).toBe(beforeEmpty);

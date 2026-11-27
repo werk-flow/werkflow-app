@@ -10,7 +10,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { readOrganizationSettings } from './organization-settings-read';
 import { type LiveClockState, type TimeActivitySelection, toTimeEntries } from './types';
 import { deriveCurrentClockState } from './helpers';
-import { loadApprovedCorrectionProjection } from '@/lib/time-corrections/approved-projection';
+import { loadPersonCorrections } from '@/lib/time-corrections/person-corrections';
 import { correctedEntriesInWindow } from '@/lib/time-corrections/projection';
 import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
 import {
@@ -176,35 +176,22 @@ async function buildLegacyClockState(
 }
 
 /**
- * The approved corrections of the caller's day, as the week reads them; null
- * when a read fails. Each keeps every source it replaces, and only the facts
- * of the caller's effective employee record: a fact that names the caller's
- * user on a record they no longer hold is retained data of a removed
- * employee (docs/technical/security.md, "Calendar correction input boundary").
+ * The approved corrections of the caller's day, as the week reads them, with
+ * only the facts of the caller's effective employee record
+ * (`loadPersonCorrections`); null when a read fails.
  */
 async function readTodaysCorrections(
   admin: AdminClient,
   input: { organizationId: string; userId: string; dayStart: Date; dayEnd: Date },
 ): Promise<TimeCorrectionApplicationProjection[] | null> {
   try {
-    const [employeeRecordId, applications] = await Promise.all([
-      getOwnEmployeeRecordId(input.userId, input.organizationId),
-      loadApprovedCorrectionProjection(admin, {
-        organizationId: input.organizationId,
-        userIds: [input.userId],
-        from: input.dayStart.toISOString(),
-        to: input.dayEnd.toISOString(),
-      }),
-    ]);
-    return applications.map((application) => ({
-      ...application,
-      snapshot: {
-        ...application.snapshot,
-        facts: application.snapshot.facts.filter(
-          (fact) => fact.employeeRecordId === employeeRecordId && fact.userId === input.userId,
-        ),
-      },
-    }));
+    return await loadPersonCorrections(admin, {
+      organizationId: input.organizationId,
+      userId: input.userId,
+      employeeRecordId: getOwnEmployeeRecordId(input.userId, input.organizationId),
+      from: input.dayStart.toISOString(),
+      to: input.dayEnd.toISOString(),
+    });
   } catch (error) {
     logReadFailure('getCurrentClockState: approved corrections read failed', error);
     return null;
