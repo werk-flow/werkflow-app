@@ -89,16 +89,16 @@ Check the path without an outage:
 2. Open `/auth/callback?code=check` once on [the staging URL](environments.md#vercel). The made-up code fails its exchange, which `logError` handles. Under Observability, Custom Metrics, the staging deployment then shows `werkflow.failure` with a label that starts with `auth.callback_code_exchange`.
 3. `bun test lib/production-watch` proves the rule's thresholds and that staging raises nothing; a green run of `prod-watch.yml` proves the query's shape, not the metric name.
 
-`.github/workflows/date-lookahead.yml` runs the suite nightly on dates still to come, so a test that fails only on a date surfaces weeks before it. It reports the same way, on `CI alert: date look-ahead`, and a failed job's name is its date. Each job steps its runner's kernel clock (`.github/scripts/shift-clock.sh`). Containers share that clock, so Bun, Chromium, the app, Postgres and the Supabase services all show the date, and SQL tests read it too. A job fails if the shell, Bun or Postgres shows another date or the clock leaves the shift.
+`.github/workflows/date-lookahead.yml` checks future dates nightly, reporting failures by date on `CI alert: date look-ahead`. Each job steps its runner's kernel clock (`.github/scripts/shift-clock.sh`). Containers share that clock, so Bun, Chromium, the app, Postgres and the Supabase services all show the date, and SQL tests read it too. A job fails if the shell, Bun or Postgres shows another date or the clock leaves the shift.
 
 | Dates | Groups |
 | --- | --- |
-| The next 14 days, the first month end and year end past them, and the year turn (00:30 in Berlin, still December 31 in UTC) | Unit, SQL and component |
+| Days 1, 2, 3, 7 and 14 ahead, retained failed suite dates, the first month end and year end past day 14, and the year turn (00:30 in Berlin, still December 31 in UTC) | Unit, SQL and component |
 | Day 14, on Sundays also that month end and year end, and every date the open issue names for a browser job, each only if it is at least a day before the runner's certificate expires | Every browser group |
 
 The runner's agent reaches GitHub over TLS. On a clock past that certificate's expiry it loses GitHub, which shuts the runner down 13 to 20 minutes later: after a suite job ends, but before a browser job does. So the plan, from the agent's hosts in the runner's journal, gives browser jobs only to dates whose midday is a day or more before the earliest certificate expiry. Its log names each held date. GitHub renews the certificate, so a held date gets its browser jobs back. A runner shut down mid-job ("The runner has received a shutdown signal") went past that horizon.
 
-A date keeps its browser jobs while the issue names it, so a green run cannot close the issue on a date it skipped, except a date past the horizon, whose browser jobs could not have run. Started by hand, `gh workflow run date-lookahead.yml -f date=<YYYY-MM-DD>` reruns one date and reports nothing.
+Failed suite dates stay until passing or arrival. A date keeps its browser jobs while the issue names it, so a green run cannot close the issue on a date it skipped, except a date past the horizon, whose browser jobs could not have run. Started by hand, `gh workflow run date-lookahead.yml -f date=<YYYY-MM-DD>` reruns one date and reports nothing.
 
 The look-ahead does not cover:
 

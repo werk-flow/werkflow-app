@@ -57,13 +57,15 @@ function nextYearEndAfter(day: string): string {
 }
 
 /**
- * The dates whose browser legs the open alert names, from the job list of
+ * The dates whose suite or browser legs the open alert names, from the job list of
  * .github/scripts/alert-issue.sh: `- <date> <label> / Browser <shard>: <steps>`.
  */
-export function failedBrowserDates(alertBody: string): string[] {
-  return [...alertBody.matchAll(/^- (\d{4}-\d{2}-\d{2}) .+ \/ Browser \d+:/gm)].flatMap(
-    (match) => match[1] ?? [],
+export function failedLookaheadDates(alertBody: string, leg: 'Suite' | 'Browser'): string[] {
+  const pattern = new RegExp(
+    `^- (\\d{4}-\\d{2}-\\d{2}) .+ / ${leg}${leg === 'Browser' ? ' \\d+' : ''}:`,
+    'gm',
   );
+  return [...alertBody.matchAll(pattern)].flatMap((match) => match[1] ?? []);
 }
 
 /**
@@ -73,14 +75,19 @@ export function failedBrowserDates(alertBody: string): string[] {
  * Browser groups run on day 14, which every date reaches once, and on Sundays also on the two ends.
  * A date whose browser leg failed keeps it: the next run would otherwise pass without that date, and
  * the green run would close the alert with the failure still ahead. Such a date stays in the plan
- * until it arrives, including between the window checkpoints.
+ * until it arrives, including between the window checkpoints. Failed suite dates also stay,
+ * without adding browser work.
  */
-export function lookaheadDays(runDay: string, failedDates: readonly string[] = []): LookaheadDay[] {
+export function lookaheadDays(
+  runDay: string,
+  failedDates: readonly string[] = [],
+  failedSuiteDates: readonly string[] = [],
+): LookaheadDay[] {
   const lastDay = addLocalDays(runDay, 14);
   const window = [
     ...new Set([
       ...WINDOW_OFFSETS.map((offset) => addLocalDays(runDay, offset)),
-      ...failedDates.filter((date) => date > runDay && date <= lastDay),
+      ...[...failedDates, ...failedSuiteDates].filter((date) => date > runDay && date <= lastDay),
     ]),
   ].toSorted();
   const monthEnd = nextMonthEndAfter(lastDay);

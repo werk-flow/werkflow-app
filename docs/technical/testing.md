@@ -102,7 +102,7 @@ After a failed release run, pass every failed group with `--group` before the ne
 - **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules against the run's base. Every group runs on an unreadable diff, a full run or an every-group input (`toolingClass`); tooling changes run a sample.
 - **Reuse and Check.** A push of an integration-tested landing skips jobs; a CI runner's pass stands for its job on an identical tree and base (`lib/testing/ci/reuse.ts`). `Check` fails closed (`lib/testing/ci/check.ts`).
 - **Full run and release gate.** A full run (`ci.yml` with `full`) runs nightly, in the release, and on `main` when `bun scripts/ci/full-run.ts due` says so. `release.yml` ships a commit only after its newest `Full run / Check` passed, or runs one.
-- **Date look-ahead.** Window suites check 1, 2, 3, 7 and 14 days ahead. Other legs keep their cadence.
+- **Date look-ahead.** The [monitoring cadence](recovery-and-incidents.md#monitoring) keeps each date's first and last window check with fewer repeats.
 - **Caps.** Target 9,000 job-minutes daily; `lib/testing/ci-caps.test.ts` checks PR cancelling, `max-parallel`, nightly skips, timeouts.
 - **Stand-in.** `scripts/ci/run-commit.ts` runs a commit (mirror: `CI_EXECUTOR=mirror`), `scripts/ci/queue.ts` the queue.
 - **Queue.** `health.yml`'s weekly `CI queue` job fails on a p90 runner wait over its ceiling (`.github/scripts/ci-queue.sh`).

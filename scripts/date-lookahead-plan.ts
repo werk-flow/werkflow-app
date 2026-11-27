@@ -5,7 +5,7 @@ import {
   agentHosts,
   askedDay,
   browserLegFits,
-  failedBrowserDates,
+  failedLookaheadDates,
   lookaheadDays,
   lookaheadLegs,
 } from '../lib/testing/date-lookahead';
@@ -63,7 +63,11 @@ console.info(`The runner agent's certificates (${hosts.join(', ')}) expire ${exp
 
 const days = input.ASKED_DATE
   ? [askedDay(input.ASKED_DATE)]
-  : lookaheadDays(getBusinessTodayIso(), failedBrowserDates(input.OPEN_ALERT));
+  : lookaheadDays(
+      getBusinessTodayIso(),
+      failedLookaheadDates(input.OPEN_ALERT, 'Browser'),
+      failedLookaheadDates(input.OPEN_ALERT, 'Suite'),
+    );
 const legs = lookaheadLegs(days, { sql: input.SQL, shards, certificateExpiry: expiry });
 for (const leg of legs) console.info(`  ${leg.name} at ${leg.instant}`);
 for (const day of days.filter((day) => day.browser && !browserLegFits(day, expiry)))

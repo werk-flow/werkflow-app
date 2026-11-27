@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { addLocalDays } from '../date-time/berlin';
 import { readWorkflow } from './ci-workflow';
-import { agentHosts, askedDay, failedBrowserDates, lookaheadDays, lookaheadLegs } from './date-lookahead';
+import { agentHosts, askedDay, failedLookaheadDates, lookaheadDays, lookaheadLegs } from './date-lookahead';
 
 const input = {
   sql: 'sql:planning,sql:security',
@@ -80,7 +80,26 @@ test('a date whose browser leg failed keeps it until it arrives, so a green run 
   expect(browserDates('2026-11-09', ['2026-12-31'])).toEqual(['2026-11-23 day 14', '2026-12-31 year end']);
 });
 
-test('the open alert names a date only for a failed browser leg', () => {
+test('a failed suite date stays between checkpoints without adding browser work until it passes or arrives', () => {
+  const alert = '- 2026-11-13 window / Suite: Run the groups on the shifted clock';
+  const failed = failedLookaheadDates(alert, 'Suite');
+  const retained = lookaheadDays('2026-11-07', [], failed);
+  expect(retained.find((day) => day.date === '2026-11-13')).toEqual({
+    date: '2026-11-13',
+    label: 'window',
+    instant: '2026-11-13T11:00:00Z',
+    browser: false,
+  });
+  expect(
+    lookaheadLegs(retained, input)
+      .filter((leg) => leg.name.startsWith('2026-11-13 '))
+      .map((leg) => leg.name),
+  ).toEqual(['2026-11-13 window / Suite']);
+  expect(lookaheadDays('2026-11-07').some((day) => day.date === '2026-11-13')).toBe(false);
+  expect(lookaheadDays('2026-11-13', [], failed).some((day) => day.date === '2026-11-13')).toBe(false);
+});
+
+test('the open alert separates failed suite dates from failed browser dates', () => {
   const body = [
     'The run failed. Failed jobs:',
     '',
@@ -92,8 +111,10 @@ test('the open alert names a date only for a failed browser leg', () => {
     'Run: https://github.test/owner/repo/actions/runs/7',
   ].join('\n');
 
-  expect(failedBrowserDates(body)).toEqual(['2026-11-30', '2026-12-31']);
-  expect(failedBrowserDates('')).toEqual([]);
+  expect(failedLookaheadDates(body, 'Browser')).toEqual(['2026-11-30', '2026-12-31']);
+  expect(failedLookaheadDates('', 'Browser')).toEqual([]);
+  expect(failedLookaheadDates(body, 'Suite')).toEqual(['2026-11-12']);
+  expect(failedLookaheadDates('', 'Suite')).toEqual([]);
 });
 
 test('every run day through 2037 keeps the plan whole', () => {
