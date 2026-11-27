@@ -31,7 +31,7 @@ export function timelineOrder<Entry extends AiThreadEntry>(entries: readonly Ent
   });
 }
 
-const answerOf = (entries: readonly AiThreadEntry[], key: string): AiThreadEntry | undefined =>
+const turnAnswerOf = (entries: readonly AiThreadEntry[], key: string): AiThreadEntry | undefined =>
   entries.find((entry) => entry.role === 'assistant' && commandOf(entry.key) === commandOf(key));
 
 /**
@@ -50,11 +50,11 @@ export function questionAnswer(
   // A reply answers only the latest question before it.
   const next = after.find((entry) => entry.role === 'question')?.sequence ?? Number.POSITIVE_INFINITY;
   const reply = after.find(
-    (entry) => entry.role === 'user' && entry.sequence < next && answerOf(entries, entry.key),
+    (entry) => entry.role === 'user' && entry.sequence < next && turnAnswerOf(entries, entry.key),
   );
   if (reply?.role === 'user') return { answered: reply.text };
   // An answer on an older page than the question has ended: only the latest turn can still run.
-  const asking = answerOf(entries, question.key);
+  const asking = turnAnswerOf(entries, question.key);
   const settled = asking === undefined || asking.status !== 'streaming';
   return settled && !after.some((entry) => entry.role === 'question') ? 'open' : 'closed';
 }
@@ -74,7 +74,7 @@ export function rowRunning(entries: readonly AiThreadEntry[], row: AiThreadRow):
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json | undefined };
 
 /** A tool result's text: plain, or record text with its source label. */
-function textOf(value: Json | undefined): string | null {
+function resultText(value: Json | undefined): string | null {
   if (typeof value === 'string') return value || null;
   if (typeof value === 'number') return String(value);
   if (value && typeof value === 'object' && !Array.isArray(value) && typeof value.text === 'string')
@@ -105,7 +105,7 @@ export type ToolDetailLines = {
 
 type JsonRecord = { [key: string]: Json | undefined };
 
-const isRecord = (value: Json | undefined): value is JsonRecord =>
+const isResultRecord = (value: Json | undefined): value is JsonRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value) && typeof value.text !== 'string';
 
 /** A record's visible fields on one line, without ids and links. */
@@ -114,7 +114,7 @@ function fieldsOf(record: JsonRecord): string {
     .flatMap(([key, value]) => {
       if (key === 'link' || ID_KEY.test(key)) return [];
       if (typeof value === 'number') return [`${NUMBER_LABELS[key] ?? key}: ${value}`];
-      return [textOf(value) ?? []].flat();
+      return [resultText(value) ?? []].flat();
     })
     .join(' · ');
 }
@@ -122,9 +122,9 @@ function fieldsOf(record: JsonRecord): string {
 /** One record of a result: its fields, a line per record of a nested list (an Einsatzort, a supplier's terms), its link. */
 function entryLine(record: JsonRecord): ToolDetailLines['entries'][number] {
   const details = Object.values(record).flatMap((value) =>
-    Array.isArray(value) ? value.filter(isRecord).map(fieldsOf).filter(Boolean) : [],
+    Array.isArray(value) ? value.filter(isResultRecord).map(fieldsOf).filter(Boolean) : [],
   );
-  const link = textOf(record.link);
+  const link = resultText(record.link);
   return { text: fieldsOf(record), details, href: link ? sameOriginTarget(link) : null };
 }
 
@@ -136,14 +136,16 @@ export function toolDetailLines(detail: {
   const input =
     detail.input && typeof detail.input === 'object' && !Array.isArray(detail.input)
       ? Object.entries(detail.input).flatMap(([key, value]) => {
-          const shown = Array.isArray(value) ? value.map(textOf).filter(Boolean).join(', ') : textOf(value);
+          const shown = Array.isArray(value)
+            ? value.map(resultText).filter(Boolean).join(', ')
+            : resultText(value);
           return shown ? [`${key}: ${shown}`] : [];
         })
       : [];
   const result =
     detail.result && typeof detail.result === 'object' && !Array.isArray(detail.result) ? detail.result : {};
   const entries = Object.values(result).flatMap((value) =>
-    Array.isArray(value) ? value.filter(isRecord).map(entryLine) : [],
+    Array.isArray(value) ? value.filter(isResultRecord).map(entryLine) : [],
   );
   return { input, entries, total: typeof result.gesamt === 'number' ? result.gesamt : null };
 }
