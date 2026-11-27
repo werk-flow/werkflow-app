@@ -29,8 +29,9 @@ const RELOADED_FOR = 'werkflow-ki-live-reloaded-for';
 function reloadOnce(protocol: number): void {
   try {
     const storage = tabStorage();
-    if (storage?.getItem(RELOADED_FOR) === String(protocol)) return;
-    storage?.setItem(RELOADED_FOR, String(protocol));
+    // Without storage the tab could not tell its second reload from its first.
+    if (storage === null || storage.getItem(RELOADED_FOR) === String(protocol)) return;
+    storage.setItem(RELOADED_FOR, String(protocol));
   } catch {
     // best-effort: without storage the tab does not reload, and the thread's next read shows the answer.
     return;
