@@ -7,6 +7,7 @@ import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { useHydrated } from '@/hooks/use-hydrated';
+import { useServerAction } from '@/hooks/use-server-action';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { describeFailure } from '@/lib/action-messages';
 import { startOfferRevision } from '@/lib/offers/actions';
@@ -39,6 +40,7 @@ export function StartOfferRevisionButton({
   const [attemptKey] = useState(() => crypto.randomUUID());
   // The action's answer carries the page with the draft; the dialog stays pending until it is on screen.
   const settle = useSettleOnChange(offer.version);
+  const start = useServerAction(startOfferRevision);
   const next = sentRevision + 1;
   return (
     <ConfirmActionDialog
@@ -57,11 +59,13 @@ export function StartOfferRevisionButton({
       confirmLabel={`Revision ${next} bearbeiten`}
       onConfirm={async () => {
         const since = settle.markChange();
-        const result = await startOfferRevision({
-          offerId: offer.id,
-          expectedVersion: offer.version,
-          attemptKey,
-        }).catch(() => null);
+        const result = await start
+          .run({
+            offerId: offer.id,
+            expectedVersion: offer.version,
+            attemptKey,
+          })
+          .catch(() => null);
         if (!result?.success) {
           return result ? describeFailure(result.error, START_FAILURE_MESSAGES, START_FAILED) : START_FAILED;
         }

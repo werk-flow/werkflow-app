@@ -168,10 +168,9 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
   useReportOfferUnsaved(draft.edited);
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { sections } = draft;
-  const parsed = parseContentForm(sections);
+  const parsed = parseContentForm(draft.sections);
   const errors = attempted && !parsed.ok ? parsed.errors : {};
-  const figures = liveContentFigures(sections);
+  const figures = liveContentFigures(draft.sections);
   const newKey = useNewKey();
 
   const submit = (event: React.FormEvent) => {
@@ -223,10 +222,12 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
             reload();
             setError(null);
           }}
-        />
+        >
+          Jemand hat die Positionen inzwischen geändert. Lade sie neu, deine Eingaben gehen dabei verloren.
+        </ReloadNotice>
       )}
       <OfferSectionList
-        sections={sections}
+        sections={draft.sections}
         calculation={figures?.calculation ?? null}
         onChange={(next) => {
           edit(next);
@@ -239,7 +240,7 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
         disabled={pending}
       />
       <InvoiceTotals amounts={figures?.amounts ?? null} />
-      <OfferCalculationPanel sections={sections} calculation={figures?.calculation ?? null} />
+      <OfferCalculationPanel sections={draft.sections} calculation={figures?.calculation ?? null} />
       <SaveRow error={error} pending={pending} />
     </form>
   );
@@ -259,12 +260,10 @@ function SaveRow({ error, pending }: { error: string | null; pending: boolean })
 }
 
 /** A newer version is on the page while own input waits: the sentence names what changed. */
-function ReloadNotice({ onReload }: { onReload: () => void }) {
+function ReloadNotice({ children, onReload }: { children: React.ReactNode; onReload: () => void }) {
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warning bg-warning-soft p-3 text-sm text-warning-soft-foreground">
-      <p className="min-w-0 flex-1">
-        Jemand hat die Positionen inzwischen geändert. Lade sie neu, deine Eingaben gehen dabei verloren.
-      </p>
+      <p className="min-w-0 flex-1">{children}</p>
       <Button type="button" variant="outline" size="sm" onClick={onReload}>
         Neu laden
       </Button>
