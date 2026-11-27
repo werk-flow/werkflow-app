@@ -2,6 +2,7 @@ import { after } from 'next/server';
 
 import { hasVisibleText } from '@/lib/ai/context';
 import { AI_TURN_LIMITS } from '@/lib/ai/limits';
+import { createKiLiveBroadcast } from '@/lib/ai/live/broadcast';
 import { type AiTurnRefusal, startAiTurn } from '@/lib/ai/turn';
 import { createTurnEventStream } from '@/lib/ai/turn-stream';
 import { logError } from '@/lib/logging';
@@ -10,7 +11,8 @@ import { verifySameOriginJsonRequest } from '@/lib/security/same-origin';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
-// The turn's total timeout plus the limits of its last cost write, its saves and its settlement (lib/ai/limits.test.ts).
+// The turn's total timeout plus the limits of its last cost write, its saves, its settlement and its last
+// live sends (lib/ai/limits.test.ts).
 export const maxDuration = 150;
 
 const privateHeaders = { 'Cache-Control': 'private, no-store' };
@@ -39,8 +41,9 @@ function refuse(error: string, status: number): Response {
 
 /**
  * One WerkFlow KI turn in the caller's own thread: saves the message, runs
- * the model and streams the answer as newline-delimited JSON. The run goes on
- * after the client leaves; the saved answer is the record.
+ * the model and streams the answer as newline-delimited JSON to the caller,
+ * and on the thread's live channel to the author's other tabs and devices.
+ * The run goes on after the client leaves; the saved answer is the record.
  */
 export async function POST(
   request: Request,
@@ -73,8 +76,32 @@ export async function POST(
 
     const stream = createTurnEventStream();
     stream.send({ type: 'started', userItem: start.userItem, assistantItem: start.assistantItem });
-    // The invocation stays alive until the run has saved its answer and settled its cost.
-    after(start.run(stream.sink).then(stream.end));
+    const live = createKiLiveBroadcast({
+      threadId: threadId.data,
+      commandId: parsed.data.commandId,
+      entryPoint: 'chat',
+    });
+    live.start({
+      type: 'started',
+      command: parsed.data.commandId,
+      user: { sequence: start.userItem.sequence, text: parsed.data.text },
+      answer: { sequence: start.assistantItem.sequence },
+    });
+    const sink = {
+      text: (delta: string) => {
+        stream.sink.text(delta);
+        live.sink.text(delta);
+      },
+      saved: live.sink.saved,
+      revoked: live.sink.revoked,
+    };
+    // The invocation stays alive until the run has saved its answer, settled its cost and told the other tabs.
+    after(
+      start.run(sink).then(async (end) => {
+        stream.end(end);
+        await live.end(end);
+      }),
+    );
     return new Response(stream.readable, {
       headers: { ...privateHeaders, 'Content-Type': 'application/x-ndjson; charset=utf-8' },
     });
