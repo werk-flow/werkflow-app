@@ -3,7 +3,7 @@
 // customer, offer or recipient is refused by the one database function the
 // action calls, the office's writes carry their own organization and actor,
 // and the pages read only the caller's organization.
-// supabase/tests/offers.sql proves the function's refusals, grants and history.
+// supabase/tests/offers.sql and offer_sending.sql prove the functions' refusals, grants and history.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import { CALLER_ID, ORGANIZATION_A, signInAs } from './action-boundary-world';
@@ -23,7 +23,7 @@ mock.module('next/cache', () => ({
   revalidateTag: () => {},
 }));
 
-const { createOffer, saveOfferContent, updateOffer } = await import('@/lib/offers/actions');
+const { createOffer, saveOfferContent, startOfferRevision, updateOffer } = await import('@/lib/offers/actions');
 const { default: OffersPage } = await import('@/app/(app)/angebote/page');
 const { default: OfferPage } = await import('@/app/(app)/angebote/[offerId]/page');
 
@@ -239,6 +239,61 @@ assert.deepEqual(
     ],
   ],
 );
+
+// „Bearbeiten“ of a sent offer: a field worker is refused before the database,
+// another organization's offer by the one function call, and Büro starts the
+// next revision of its own offer as itself.
+const start = {
+  offerId: ownOfferId,
+  expectedVersion: 2,
+  attemptKey: '96000000-0000-4000-8000-000000000004',
+};
+signInAs(world, 'employee');
+await assertRefused(
+  world,
+  [['startOfferRevision', () => startOfferRevision(start)]],
+  { success: false, error: 'not_authorized' },
+  'none',
+);
+for (const role of ['admin', 'buero'] as const) {
+  signInAs(world, role);
+  refuseForeignIds(world, new Map([[foreignOfferId, 'offer_not_found']]), {
+    revision: 2,
+    version: 3,
+    replay: false,
+  });
+  await assertRefused(
+    world,
+    [['startOfferRevision foreign offer', () => startOfferRevision({ ...start, offerId: foreignOfferId })]],
+    { success: false, error: 'offer_not_found' },
+    'one-call',
+  );
+}
+await assertRefused(
+  world,
+  [['startOfferRevision bad offer id', () => startOfferRevision({ ...start, offerId: 'not-a-uuid' })]],
+  { success: false, error: 'invalid_input' },
+  'none',
+);
+world.rpcCalls.length = 0;
+revalidated.length = 0;
+assert.deepEqual(await startOfferRevision(start), {
+  success: true,
+  offerId: ownOfferId,
+  revision: 2,
+  version: 3,
+});
+assert.deepEqual(
+  world.rpcCalls.map((call) => [
+    call.name,
+    call.args.p_organization_id,
+    call.args.p_actor_id,
+    call.args.p_offer_id,
+    call.args.p_expected_version,
+  ]),
+  [['start_offer_revision', ORGANIZATION_A, CALLER_ID, ownOfferId, 2]],
+);
+assert.deepEqual(revalidated, [`/angebote/${ownOfferId}`]);
 
 // A refusal for another session's newer save renders the offer's page into its
 // answer, so the editor can offer that content at once.

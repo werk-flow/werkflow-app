@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { OfferContentEditor } from '@/components/angebote/editor/offer-content-editor';
 import { EditOfferHeaderButton } from '@/components/angebote/offer-header-dialog';
 import { OfferHeaderFacts } from '@/components/angebote/offer-header-facts';
+import { StartOfferRevisionButton } from '@/components/angebote/offer-revision-start';
 import { OfferRevisions } from '@/components/angebote/offer-revisions';
 import { OfferSendActions } from '@/components/angebote/offer-sending';
 import { OfferUnsavedProvider } from '@/components/angebote/offer-unsaved';
@@ -60,6 +61,10 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
     );
   }
 
+  // The newest sent revision; the draft after one is the next revision. Unknown while its read failed.
+  const sentRevision = revisions === 'failed' ? null : (revisions[0]?.revision ?? 0);
+  const shownRevision =
+    sentRevision === null ? null : offer.status === 'entwurf' ? sentRevision + 1 : sentRevision;
   return (
     <OfferUnsavedProvider>
       <div className="space-y-6">
@@ -75,13 +80,18 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
             // A title or customer name can hold a word wider than a phone.
             title={<span className="wrap-anywhere">{offer.title}</span>}
             description={
-              <span className="wrap-anywhere">{`${offer.offerNumber} · für ${offer.client.name}`}</span>
+              <span className="wrap-anywhere">
+                {`${offer.offerNumber}${shownRevision ? `, Revision ${shownRevision}` : ''} · für ${offer.client.name}`}
+              </span>
             }
             actions={
               <div className="flex flex-wrap items-center gap-2">
                 <OfferStatusBadge status={offer.status} validUntil={offer.validUntil} />
                 {owners?.success && <EditOfferHeaderButton offer={offer} owners={owners.options} />}
                 {offer.status === 'entwurf' && <OfferSendActions offer={offer} />}
+                {offer.status === 'gesendet' && sentRevision ? (
+                  <StartOfferRevisionButton offer={offer} sentRevision={sentRevision} />
+                ) : null}
               </div>
             }
           />
@@ -98,9 +108,9 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
             Versuche es in einem Moment erneut.
           </RegionLoadError>
         ) : (
-          <OfferRevisions revisions={revisions} />
+          <OfferRevisions revisions={revisions} editing={offer.status === 'entwurf'} />
         )}
-        {/* Only a draft's content changes; a sent offer keeps its revisions. */}
+        {/* Only a draft's content changes; a sent offer is edited as the draft of its next revision. */}
         {offer.status === 'entwurf' && <OfferContentEditor key={offer.id} offer={offer} />}
       </div>
     </OfferUnsavedProvider>

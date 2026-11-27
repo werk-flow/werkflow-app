@@ -92,6 +92,7 @@ export function OfferSectionFields({
   onChange,
   onMove,
   onRemove,
+  onPickCatalog,
   onAddCatalog,
   newKey,
   errors,
@@ -105,6 +106,8 @@ export function OfferSectionFields({
   onChange: (section: SectionForm) => void;
   onMove: (direction: -1 | 1) => void;
   onRemove: () => void;
+  /** Holds the editor's text while a picked article's or Leistung's price is read; answers its release. */
+  onPickCatalog: () => () => void;
   /** Appends a Position to this Titel as it is when the article's or Leistung's price arrives. */
   onAddCatalog: (position: PositionForm) => void;
   newKey: () => string;
@@ -156,7 +159,7 @@ export function OfferSectionFields({
         number={number}
         netCents={figures?.saleCents ?? null}
         onAdd={(kind) => setPositions([...section.positions, emptyPosition(newKey(), kind)])}
-        onPickCatalog={() => onChange(section)}
+        onPickCatalog={onPickCatalog}
         onAddCatalog={onAddCatalog}
         disabled={disabled}
       />
@@ -222,7 +225,7 @@ function SectionFooter({
   number: string;
   netCents: number | null;
   onAdd: (kind: OfferPosition['kind']) => void;
-  onPickCatalog: () => void;
+  onPickCatalog: () => () => void;
   onAddCatalog: (position: PositionForm) => void;
   disabled: boolean;
 }) {

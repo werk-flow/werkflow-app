@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { textInDom, visibleText } from '../golden/support/steps/shared';
 import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fixture';
 
@@ -458,4 +458,144 @@ test('an article read that ends after „Neu laden“ adds no Position', async (
 
   await expect(editor.getByText('Summe Titel 2: 0,00 €')).toBeVisible();
   await expect(editor.getByRole('textbox', { name: 'Bezeichnung' })).toHaveCount(0);
+});
+
+// An article without a sale price today adds nothing, so it leaves nothing to
+// save: the untouched text takes another session's content again at once and
+// offers no „Neu laden“, and the preview asks for no save (werk-flow/werkflow-planning#582, S14).
+test('an article pick that finds no price leaves the editor unchanged', async ({ page }) => {
+  await openContractFixture(page, 'offers');
+  const editor = page.getByRole('form', { name: 'Titel und Positionen' });
+  await page.evaluate(() =>
+    window.uiContractOfferContentRender?.(2, [{ title: 'Material', positions: [] }]),
+  );
+  await page.evaluate(() => {
+    window.uiContractHoldArticleRead = true;
+    window.uiContractArticleUnpriced = true;
+  });
+  await editor.getByRole('combobox', { name: 'Artikel zu Titel 1 hinzufügen' }).click();
+  await expect.poll(() => page.evaluate(() => window.optionContract.requests.length)).toBe(1);
+  await page.evaluate(() =>
+    window.optionContract.resolve(0, [{ value: 'contract-article', label: 'KB-15 · Kupferbogen 15 mm' }]),
+  );
+  await page.getByRole('option', { name: 'KB-15 · Kupferbogen 15 mm' }).click();
+  await expect.poll(() => page.evaluate(() => window.uiContractArticleRead !== null)).toBe(true);
+  // While the price is read, the pick holds the text.
+  await page.evaluate(() => window.uiContractOfferContentRender?.(3, [{ title: 'Heizung', positions: [] }]));
+  await expect(editor.getByText(/inzwischen geändert/)).toBeVisible();
+
+  await page.evaluate(() => window.uiContractArticleRead?.());
+  await expect(editor.getByText(/Für diesen Artikel gilt heute kein Verkaufspreis/)).toBeVisible();
+  await expect(editor.getByRole('textbox', { name: 'Titel 1' })).toHaveValue('Heizung');
+  await expect(editor.getByText(/inzwischen geändert/)).toHaveCount(0);
+  await page.evaluate(() => window.uiContractOfferContentRender?.(4, [{ title: 'Wartung', positions: [] }]));
+  await expect(editor.getByRole('textbox', { name: 'Titel 1' })).toHaveValue('Wartung');
+  await expect(editor.getByText(/inzwischen geändert/)).toHaveCount(0);
+});
+
+/**
+ * Before the bundle loads: counts every blob: URL created and revoked, and
+ * holds each SHA-256 digest until the spec releases it.
+ */
+async function watchPdfUrls(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const created: string[] = [];
+    const revoked: string[] = [];
+    const held: Array<() => void> = [];
+    const create = URL.createObjectURL.bind(URL);
+    const revoke = URL.revokeObjectURL.bind(URL);
+    URL.createObjectURL = (object) => {
+      const url = create(object);
+      created.push(url);
+      return url;
+    };
+    URL.revokeObjectURL = (url) => {
+      revoked.push(url);
+      revoke(url);
+    };
+    const digest = crypto.subtle.digest.bind(crypto.subtle);
+    Object.defineProperty(crypto.subtle, 'digest', {
+      value: (algorithm: AlgorithmIdentifier, data: BufferSource) =>
+        new Promise<ArrayBuffer>((resolve, reject) => {
+          held.push(() => digest(algorithm, data).then(resolve, reject));
+        }),
+    });
+    Object.assign(window, { uiContractPdfUrls: { created, revoked, held } });
+  });
+  await page.route('http://localhost/api/angebote/vorschau**', (route) =>
+    route.fulfill({ contentType: 'application/pdf', body: '%PDF-1.4\n' }),
+  );
+}
+
+type PdfUrls = { created: string[]; revoked: string[]; held: Array<() => void> };
+const pdfUrls = (page: Page) =>
+  page.evaluate(() => {
+    const { created, revoked, held } = (window as unknown as { uiContractPdfUrls: PdfUrls }).uiContractPdfUrls;
+    return { created: [...created], revoked: [...revoked], held: held.length };
+  });
+const releaseDigests = (page: Page) =>
+  page.evaluate(() => {
+    const { held } = (window as unknown as { uiContractPdfUrls: PdfUrls }).uiContractPdfUrls;
+    for (const release of held.splice(0)) release();
+  });
+
+// The preview reads the PDF as bytes and shows it through a blob: URL. Closed
+// while the bytes' digest is still computed, it allocates no URL that stays;
+// closed after the PDF showed, it revokes the one it made.
+test('a preview closed during its digest or after it showed leaves no blob URL behind', async ({ page }) => {
+  await watchPdfUrls(page);
+  await openContractFixture(page, 'offers');
+  const preview = page.getByRole('dialog', { name: 'Vorschau ANG-2026-001' });
+
+  await page.getByRole('button', { name: 'Vorschau', exact: true }).click();
+  await expect.poll(async () => (await pdfUrls(page)).held).toBe(1);
+  await page.keyboard.press('Escape');
+  await expect(preview).toHaveCount(0);
+  await releaseDigests(page);
+  // The read ends after the close: whatever it allocated is revoked again.
+  await expect.poll(async () => (await pdfUrls(page)).held).toBe(0);
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  const closedEarly = await pdfUrls(page);
+  expect(closedEarly.revoked).toEqual(expect.arrayContaining(closedEarly.created));
+
+  await page.getByRole('button', { name: 'Vorschau', exact: true }).click();
+  await expect.poll(async () => (await pdfUrls(page)).held).toBe(1);
+  await releaseDigests(page);
+  await expect(preview.locator('iframe')).toHaveAttribute('src', /^blob:/);
+  await page.keyboard.press('Escape');
+  await expect(preview).toHaveCount(0);
+  await expect
+    .poll(async () => {
+      const { created, revoked } = await pdfUrls(page);
+      return created.length > 0 && created.every((url) => revoked.includes(url));
+    })
+    .toBe(true);
+});
+
+// „Bearbeiten“ of a sent offer asks first, shows pending in its first frame,
+// names the version the page showed, and keeps the dialog with the reason when
+// another session changed the offer meanwhile.
+test('starting revision 2 of a sent offer confirms first and keeps the dialog on a refusal', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.uiContractOfferSent = true;
+  });
+  await openContractFixture(page, 'offers');
+  await page.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
+  const dialog = page.getByRole('alertdialog', { name: 'Revision 2 bearbeiten?' });
+  await expect(dialog.getByText(/Revision 1 bleibt so, wie du sie gesendet hast/)).toBeVisible();
+  expect(await page.evaluate(() => window.uiContractWrites.calls)).toEqual([]);
+
+  const confirm = dialog.getByRole('button', { name: 'Revision 2 bearbeiten', exact: true });
+  await confirm.click();
+  await expect(confirm).toHaveAttribute('aria-busy', 'true');
+  await expectHeldWrite(page, 'start-offer-revision');
+  expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
+    offerId: '95000000-0000-4000-8000-000000000001',
+    expectedVersion: 1,
+  });
+  await answerHeldWrite(page, 'offer_changed');
+  await expect(dialog.getByText('Jemand hat das Angebot gerade geändert. Lade die Seite neu.')).toBeVisible();
+  await expect(confirm).toBeEnabled();
 });

@@ -23032,6 +23032,16 @@ export type Database = {
           verdict: string;
         }[];
       };
+      start_offer_revision: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_expected_version: number;
+          p_offer_id: string;
+          p_organization_id: string;
+        };
+        Returns: Json;
+      };
       start_organization_export: {
         Args: {
           p_actor_id: string;

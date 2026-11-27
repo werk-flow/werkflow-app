@@ -1,5 +1,5 @@
 import type { OfferCatalogLine } from '@/lib/invoices/line-sources';
-import { holdWrite } from './held-write-boundary';
+import { holdWrite, unexpectedWrite } from './held-write-boundary';
 
 // The offer actions and router in the contract fixture: every create the
 // dialog sends is counted, so a contract can prove a press sent none; a
@@ -11,12 +11,15 @@ declare global {
     /** While true, the article picker's price read waits until the spec calls `uiContractArticleRead`. */
     uiContractHoldArticleRead: boolean;
     uiContractArticleRead: (() => void) | null;
+    /** While true, the article has no sale price today and the read refuses it. */
+    uiContractArticleUnpriced: boolean;
   }
 }
 
 window.uiContractOfferCreates = 0;
 window.uiContractHoldArticleRead = false;
 window.uiContractArticleRead = null;
+window.uiContractArticleUnpriced = false;
 
 export async function createOffer(): Promise<{ success: false; error: string }> {
   window.uiContractOfferCreates += 1;
@@ -77,12 +80,15 @@ export async function saveOfferContent(
  * The article picker's price read: one Position from an article whose stored
  * unit is outside the list, so a contract can show the unit question.
  */
-export async function readOfferArticleLine(): Promise<{ success: true; line: OfferCatalogLine }> {
+export async function readOfferArticleLine(): Promise<
+  { success: true; line: OfferCatalogLine } | { success: false; error: 'source_unpriced' }
+> {
   if (window.uiContractHoldArticleRead) {
     await new Promise<void>((resolve) => {
       window.uiContractArticleRead = resolve;
     });
   }
+  if (window.uiContractArticleUnpriced) return { success: false, error: 'source_unpriced' };
   return {
     success: true,
     line: {
@@ -103,6 +109,21 @@ export async function readOfferArticleLine(): Promise<{ success: true; line: Off
     },
   };
 }
+
+/** „Bearbeiten“ of the sent offer: the start of revision 2 the spec answers. */
+export async function startOfferRevision(
+  input: unknown,
+): Promise<
+  { success: true; offerId: string; revision: number; version: number } | { success: false; error: string }
+> {
+  const refusal = await holdWrite('start-offer-revision', input);
+  return refusal
+    ? { success: false, error: refusal }
+    : { success: true, offerId: 'contract-offer', revision: 2, version: 2 };
+}
+
+/** „Als gesendet festhalten“ is not part of these contracts. */
+export const sendOffer = unexpectedWrite;
 
 /** The Leistung picker's price read: one hour with its cost rate. */
 export async function readOfferLeistungLine(): Promise<{ success: true; line: OfferCatalogLine }> {

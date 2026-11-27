@@ -57,6 +57,12 @@ type Draft = {
   edited: boolean;
   /** One per change: only a repeat of the same press answers with the first save. */
   attemptKey: string;
+  /**
+   * Untouched text that catalog picks hold while their prices are read: the
+   * attempt key it had and how many picks hold it. When the last of them adds
+   * nothing and nothing changed since, the text is untouched again.
+   */
+  held: { key: string; picks: number } | null;
 };
 
 function contentDraftOf(offer: OfferWithCosts, keyPrefix?: string): Draft {
@@ -66,6 +72,7 @@ function contentDraftOf(offer: OfferWithCosts, keyPrefix?: string): Draft {
     savedVersion: offer.contentVersion,
     edited: false,
     attemptKey: crypto.randomUUID(),
+    held: null,
   };
 }
 
@@ -93,13 +100,43 @@ function useContentDraft(offer: OfferWithCosts, saving: boolean) {
         sections: typeof next === 'function' ? next(current.sections) : next,
         edited: true,
         attemptKey: crypto.randomUUID(),
+        held: null,
       })),
+    /**
+     * A catalog pick counts as an own change while its price is read, so another
+     * session's content cannot move its Titel meanwhile. The answer releases it:
+     * after a read that added nothing, untouched text is untouched again.
+     */
+    hold: () => {
+      const key = draft.attemptKey;
+      // Text typed before the pick stays edited whatever its read answers.
+      if (draft.edited && draft.held?.key !== key) return () => undefined;
+      setDraft((current) =>
+        current.attemptKey === key
+          ? {
+              ...current,
+              edited: true,
+              held: { key, picks: (current.held?.key === key ? current.held.picks : 0) + 1 },
+            }
+          : current,
+      );
+      return () =>
+        setDraft((current) => {
+          const { held } = current;
+          if (!held || held.key !== key || current.attemptKey !== key) return current;
+          return held.picks > 1
+            ? { ...current, held: { key, picks: held.picks - 1 } }
+            : { ...current, edited: false, held: null };
+        });
+    },
     /** The save under `attemptKey` was stored as `contentVersion`; text changed since stays edited. */
     saved: (attemptKey: string, contentVersion: number) =>
       setDraft((current) => ({
         ...current,
         savedVersion: contentVersion,
-        ...(current.attemptKey === attemptKey ? { edited: false, attemptKey: crypto.randomUUID() } : {}),
+        ...(current.attemptKey === attemptKey
+          ? { edited: false, attemptKey: crypto.randomUUID(), held: null }
+          : {}),
       })),
     // New keys: an article pick still pending targets a Titel of the discarded text, which no longer exists.
     reload: () => setDraft(contentDraftOf(offer, `reload-${crypto.randomUUID()}`)),
@@ -127,7 +164,7 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
   // The saved content is on screen once the page renders the content version the save answered.
   const settle = useSettleOnChange(offer.contentVersion);
   const { run, isPending: pending } = usePendingTask();
-  const { draft, newerElsewhere, edit, saved, reload } = useContentDraft(offer, pending);
+  const { draft, newerElsewhere, edit, hold, saved, reload } = useContentDraft(offer, pending);
   useReportOfferUnsaved(draft.edited);
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -198,6 +235,7 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
           // A sentence about the earlier content no longer applies to the changed one.
           setError(null);
         }}
+        onHold={hold}
         newKey={newKey}
         errors={errors}
         disabled={pending}
@@ -239,6 +277,7 @@ function OfferSectionList({
   sections,
   calculation,
   onChange,
+  onHold,
   newKey,
   errors,
   disabled,
@@ -246,6 +285,8 @@ function OfferSectionList({
   sections: SectionForm[];
   calculation: OfferCalculation | null;
   onChange: (sections: SetStateAction<SectionForm[]>) => void;
+  /** Holds the text while a catalog pick reads its price; the answer calls the release. */
+  onHold: () => () => void;
   newKey: () => string;
   errors: Record<string, string | undefined>;
   disabled: boolean;
@@ -270,6 +311,7 @@ function OfferSectionList({
               onChange={(next) => onChange(sections.map((current, at) => (at === index ? next : current)))}
               onMove={(direction) => onChange(move(sections, index, direction))}
               onRemove={() => onChange(sections.filter((_section, at) => at !== index))}
+              onPickCatalog={onHold}
               onAddCatalog={(position) =>
                 onChange((current) =>
                   current.map((entry) =>

@@ -21,6 +21,8 @@ async function readPdf(path: string, signal: AbortSignal): Promise<PdfRead> {
     if (!response.ok) return { success: false, error: 'load_failed' };
     const blob = await response.blob();
     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()));
+    // The digest takes no signal: a preview closed meanwhile allocates no URL that nobody revokes.
+    if (signal.aborted) return { success: false, error: 'load_failed' };
     const contentHash = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
     return { success: true, url: URL.createObjectURL(blob), contentHash };
   } catch {
@@ -31,7 +33,8 @@ async function readPdf(path: string, signal: AbortSignal): Promise<PdfRead> {
 
 /**
  * The PDF at `path` as a blob: URL while `enabled`; a change of `deps`
- * renders it anew. The URL is revoked once it is replaced or unmounted.
+ * renders it anew. The URL is revoked once it is replaced or unmounted, and a
+ * read that ends after its caller closed revokes its own.
  */
 export function usePdfRead({
   path,
@@ -45,7 +48,12 @@ export function usePdfRead({
   failureMessage: string;
 }) {
   const read = useClientRead({
-    read: (signal) => readPdf(path, signal),
+    read: async (signal) => {
+      const pdf = await readPdf(path, signal);
+      // The hook drops the answer of a read aborted since, so its URL goes here.
+      if (pdf.success && signal.aborted) URL.revokeObjectURL(pdf.url);
+      return pdf;
+    },
     deps: [path, ...deps],
     enabled,
     failureMessage,

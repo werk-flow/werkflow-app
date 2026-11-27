@@ -12,9 +12,11 @@ import { z } from '@/lib/zod';
 import {
   createOfferSchema,
   saveOfferContentSchema,
+  startOfferRevisionSchema,
   updateOfferSchema,
   type CreateOfferInput,
   type SaveOfferContentInput,
+  type StartOfferRevisionInput,
   type UpdateOfferInput,
 } from './action-schemas';
 import { writeOfferContent } from './content-writes';
@@ -24,7 +26,8 @@ import { writeOfferContent } from './content-writes';
 // database function checks the actor again, refuses every id outside the
 // organization and writes the history in the same call
 // (supabase/migrations/20261210130000_keep_offers_for_the_right_customer_and_recipient.sql,
-// 20261230110000_change_the_header_of_a_draft_offer.sql).
+// 20261230110000_change_the_header_of_a_draft_offer.sql,
+// 20270601130000_start_the_next_revision_of_a_sent_offer.sql).
 
 const createRefusal = writeRefusalFor(
   new Set(['not_authorized', 'client_not_found', 'client_archived', 'site_not_found', 'contact_not_found']),
@@ -151,6 +154,58 @@ export async function saveOfferContent(
     return result;
   } catch (error) {
     logError('saveOfferContent: unexpected error', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+const startRevisionRefusal = writeRefusalFor(
+  new Set(['not_authorized', 'offer_not_found', 'offer_not_sent', 'offer_changed']),
+);
+
+const startedRevisionSchema = z.object({
+  revision: z.number().int().min(2),
+  version: z.number().int().positive(),
+  replay: z.boolean(),
+});
+
+/**
+ * „Bearbeiten“ of a sent offer that is still at the version the page showed:
+ * the offer becomes the draft of its next revision, with the Positionen as
+ * sent. The sent revisions stay as they were. A press repeated after a lost
+ * answer, or from another tab, answers the first start.
+ */
+export async function startOfferRevision(
+  rawInput: StartOfferRevisionInput,
+): Promise<ActionResult<{ offerId: string; revision: number; version: number }>> {
+  const parsed = startOfferRevisionSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
+  try {
+    const caller = await resolveActionContext();
+    if (!caller.success) return caller;
+    if (!caller.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
+    const { orgId, userId } = caller.context;
+    const { data, error } = await createSupabaseAdminClient().rpc('start_offer_revision', {
+      p_actor_id: userId,
+      p_organization_id: orgId,
+      p_offer_id: input.offerId,
+      p_expected_version: input.expectedVersion,
+      p_attempt_key: input.attemptKey,
+    });
+    const started = startedRevisionSchema.safeParse(data);
+    if (error || !started.success) {
+      return startRevisionRefusal(error, 'save_failed', 'startOfferRevision: start_offer_revision failed');
+    }
+    // The page renders the draft into this answer; another session hears it through Realtime.
+    revalidatePath(`/angebote/${input.offerId}`);
+    return {
+      success: true,
+      offerId: input.offerId,
+      revision: started.data.revision,
+      version: started.data.version,
+    };
+  } catch (error) {
+    logError('startOfferRevision: unexpected error', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
