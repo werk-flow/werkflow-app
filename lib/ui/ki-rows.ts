@@ -47,7 +47,11 @@ export function questionAnswer(
   question: AiThreadRow,
 ): { answered: string } | 'open' | 'closed' {
   const after = entries.filter((entry) => entry.sequence > question.sequence);
-  const reply = after.find((entry) => entry.role === 'user' && answerOf(entries, entry.key));
+  // A reply answers only the latest question before it.
+  const next = after.find((entry) => entry.role === 'question')?.sequence ?? Number.POSITIVE_INFINITY;
+  const reply = after.find(
+    (entry) => entry.role === 'user' && entry.sequence < next && answerOf(entries, entry.key),
+  );
   if (reply?.role === 'user') return { answered: reply.text };
   // An answer on an older page than the question has ended: only the latest turn can still run.
   const asking = answerOf(entries, question.key);
@@ -81,6 +85,15 @@ function textOf(value: Json | undefined): string | null {
 /** A field that names a record by id, which a person does not read. */
 const ID_KEY = /id$/i;
 
+/** The German names of a result's numbers, which a bare figure does not say. */
+const NUMBER_LABELS: Readonly<Record<string, string>> = {
+  bestand: 'Bestand',
+  verfuegbar: 'verfügbar',
+  packungsmenge: 'Packungsmenge',
+  basismenge: 'Basismenge',
+  auftraege: 'Aufträge',
+};
+
 export type ToolDetailLines = {
   /** The input the tool ran with: one line per field. */
   input: string[];
@@ -98,7 +111,11 @@ const isRecord = (value: Json | undefined): value is JsonRecord =>
 /** A record's visible fields on one line, without ids and links. */
 function fieldsOf(record: JsonRecord): string {
   return Object.entries(record)
-    .flatMap(([key, value]) => (key === 'link' || ID_KEY.test(key) ? [] : [textOf(value) ?? []].flat()))
+    .flatMap(([key, value]) => {
+      if (key === 'link' || ID_KEY.test(key)) return [];
+      if (typeof value === 'number') return [`${NUMBER_LABELS[key] ?? key}: ${value}`];
+      return [textOf(value) ?? []].flat();
+    })
     .join(' · ');
 }
 

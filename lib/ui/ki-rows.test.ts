@@ -72,6 +72,11 @@ test('a question waits for an answer once its turn ended, until a message follow
   expect(questionAnswer([...thread, reply, later, message('c3:assistant', 6)], asked)).toEqual({
     answered: 'Müller Haustechnik',
   });
+  // Two questions of one turn: a reply answers only the latest one before it.
+  const second = question('c1:tool:2', 4);
+  const both = [...thread, second, message('c2:user', 5, { text: 'Müller Bau' }), message('c2:assistant', 6)];
+  expect(questionAnswer(both, asked)).toBe('closed');
+  expect(questionAnswer(both, second)).toEqual({ answered: 'Müller Bau' });
   // A question whose asking answer is on an older page has ended its turn.
   expect(questionAnswer([asked], asked)).toBe('open');
   expect(questionAnswer([...thread, question('c1:tool:2', 4)], asked)).toBe('closed');
@@ -114,4 +119,23 @@ test('an opened tool row lists its input and records without ids, and links only
     ],
     total: 12,
   });
+});
+
+test('an opened article row names each of its numbers', () => {
+  const lines = toolDetailLines({
+    result: {
+      artikel: [
+        {
+          name: { source: 'record_text', text: 'Dichtung' },
+          bestand: 12,
+          verfuegbar: 8,
+          lieferanten: [{ artikelnummer: { source: 'record_text', text: 'GC-1' }, packungsmenge: 10 }],
+        },
+      ],
+      gesamt: 1,
+    },
+  });
+  expect(lines.entries).toEqual([
+    { text: 'Dichtung · Bestand: 12 · verfügbar: 8', details: ['GC-1 · Packungsmenge: 10'], href: null },
+  ]);
 });
