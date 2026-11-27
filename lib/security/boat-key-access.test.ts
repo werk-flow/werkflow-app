@@ -241,18 +241,13 @@ test('the helper and the dispatcher, which read the hand-out secret themselves, 
     expect(refused(command), command).toBeUndefined();
 });
 
-// The agents' staging keys, the watcher's token, the Supabase CLI's login and the old sandbox
-// folder: the same shapes are refused, and each refusal names who reads the file instead.
+// The agents' staging keys, the Supabase CLI's login and the old sandbox folder: the same shapes
+// are refused, and each refusal names who reads the file instead.
 const HOME_SECRETS = [
   {
     file: '~/.config/werkflow/staging-agents.env',
     holds: "the agents' staging keys",
     instead: 'bun run agent-access:check',
-  },
-  {
-    file: '~/.config/werkflow/prod-watch.env',
-    holds: "the production watcher's Vercel token",
-    instead: 'ops/prod_watch.py',
   },
   { file: '~/.supabase/access-token', holds: "the Supabase CLI's login token", instead: 'bunx supabase' },
   {
@@ -295,7 +290,7 @@ test('a glob or a recursive read that reaches an agent-machine secret is refused
     { command: 'grep -r sk_test ~/.werkflow-stripe-sandbox', holds: 'a Stripe sandbox key' },
     { command: 'cd ~/.werkflow-stripe-sandbox && grep -r sk_ .', holds: 'a Stripe sandbox key' },
     { command: 'grep -r token ~/.supabase', holds: "the Supabase CLI's login token" },
-    { command: 'rg --hidden VERCEL ~/.config/werkflow', holds: "the production watcher's Vercel token" },
+    { command: 'rg --hidden KEY ~/.config/werkflow', holds: "the agents' staging keys" },
   ])
     expect(refused(command), command).toContain(holds);
   expect(
@@ -509,7 +504,7 @@ test('a search for a secret file name in the repository passes, a read of the fi
   for (const command of [
     'grep -rn "staging-agents.env" docs/',
     "rg -n '.env.live-backup' scripts",
-    'grep -rn -e prod-watch.env -e boat-api-key lib/',
+    'grep -rn -e staging-agents.env -e boat-api-key lib/',
     'git diff | grep .env.live-backup',
     'grep -rn -- .env.live-backup scripts',
   ])
