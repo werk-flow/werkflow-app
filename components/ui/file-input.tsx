@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useFieldContext } from '@/components/ui/field';
@@ -20,10 +20,11 @@ type FileInputProps = {
  * No file chosen“ in the browser's language, so it stays hidden: the button
  * opens it and the chosen file's name shows beside it. Inside a `Field` the
  * button carries the control id, so the label names it and an invalid submit
- * focuses it.
+ * focuses it; its accessible name includes both the field label and button text.
  */
 export function FileInput({ buttonLabel, fileName, onSelect, accept, disabled }: FileInputProps) {
   const field = useFieldContext();
+  const textId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
@@ -33,12 +34,13 @@ export function FileInput({ buttonLabel, fileName, onSelect, accept, disabled }:
         // A field worker picks files on the phone: 44 px there, as every field target.
         className="h-11 sm:h-9"
         id={field?.controlId}
+        aria-labelledby={field ? `${field.labelId} ${textId}` : undefined}
         aria-describedby={field?.describedBy}
         aria-invalid={field?.invalid || undefined}
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
       >
-        {buttonLabel}
+        <span id={textId}>{buttonLabel}</span>
       </Button>
       {fileName && <span className="min-w-0 truncate text-sm text-muted-foreground">{fileName}</span>}
       <input

@@ -103,7 +103,9 @@ test('a refusal with an image signature needs the reason, and the image control 
 }) => {
   const dialog = await openReport(page);
   await openDecisionForm(dialog);
-  const imageChoice = dialog.getByRole('button', { name: 'Oder Unterschrift als Bild auswählen' });
+  const imageChoice = dialog.getByRole('button', {
+    name: 'Oder Unterschrift als Bild auswählen Bild auswählen',
+  });
   await expect(imageChoice).toHaveText('Bild auswählen');
   await dialog.locator('input[type="file"]').setInputFiles({
     name: 'unterschrift-scan.png',
