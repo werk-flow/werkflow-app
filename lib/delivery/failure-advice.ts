@@ -55,7 +55,7 @@ function nextStep(code: string | null, retryStep: string): string {
 export function pastDeliveryOutcome(entry: Pick<DeliveryEntry, 'failureCode' | 'outcomeUnknown'>): string {
   const reason = deliveryFailureSentence(entry.failureCode);
   if (!entry.outcomeUnknown || outcomeUnknown(entry.failureCode)) return reason;
-  return `${reason} Ob die E-Mail bei einem früheren Versuch rausging, ist unklar.`;
+  return `Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: ${reason}`;
 }
 
 /** Why a delivery failed and what helps. */

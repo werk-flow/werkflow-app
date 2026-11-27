@@ -34,7 +34,7 @@ test('a past delivery names no step, since a cancelled invoice is never sent aga
 
 test('a past delivery keeps its last reason and says when an earlier attempt may have reached the customer', () => {
   expect(pastDeliveryOutcome({ failureCode: 'email_provider_503', outcomeUnknown: true })).toBe(
-    'Die E-Mail ist nicht rausgegangen. Ob die E-Mail bei einem früheren Versuch rausging, ist unklar.',
+    'Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: Die E-Mail ist nicht rausgegangen.',
   );
   // The last attempt itself got no usable answer: its reason already says so, once.
   expect(pastDeliveryOutcome({ failureCode: 'email_provider_invalid_response', outcomeUnknown: true })).toBe(
