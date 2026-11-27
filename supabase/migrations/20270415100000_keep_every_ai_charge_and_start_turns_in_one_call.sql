@@ -125,7 +125,7 @@ create function public.start_ai_turn(
   p_user_id uuid,
   p_thread_id uuid,
   p_title text,
-  p_command_id uuid,
+  p_command_id text,
   p_text text,
   p_reserve_micro_usd bigint
 )
@@ -139,14 +139,20 @@ returns table (
 )
 language plpgsql security definer set search_path = '' set lock_timeout = '3s' as $$
 declare
-  v_command text := p_command_id::text;
+  -- Verbatim, as the previous build keyed it: the route passes a validated uuid.
+  v_command text := p_command_id;
   v_user record;
   v_answer_id uuid;
   v_reservation record;
   v_placeholder record;
 begin
+  -- Locks in the order every writer of these rows takes them: the
+  -- organization's settings (reserve_ai_run, also the previous build's), the
+  -- thread (an append, a run's foreign key), then the person.
+  perform 1 from public.ai_organization_settings settings
+  where settings.organization_id = p_organization_id
+  for update;
   perform public.create_ai_thread(p_organization_id, p_user_id, p_thread_id, p_title);
-  -- The thread row lock this takes orders the thread's turn starts.
   select * into v_user from public.append_ai_thread_item(p_organization_id, p_user_id, p_thread_id,
     'user_message', 'complete', jsonb_build_object('text', p_text), v_command || ':user');
   if (select item.body ->> 'text' from public.ai_thread_items item
@@ -198,14 +204,16 @@ begin
     v_placeholder.item_id, v_placeholder.item_sequence;
 end;
 $$;
-revoke all on function public.start_ai_turn(uuid, uuid, uuid, text, uuid, text, bigint)
+revoke all on function public.start_ai_turn(uuid, uuid, uuid, text, text, text, bigint)
   from public, anon, authenticated;
-grant execute on function public.start_ai_turn(uuid, uuid, uuid, text, uuid, text, bigint) to service_role;
+grant execute on function public.start_ai_turn(uuid, uuid, uuid, text, text, text, bigint) to service_role;
 
 -- Settles every run still open 15 minutes after it began at its reserved
--- amount, and finishes the answers such runs left streaming. A run the job
--- settled counts once: an attempt recorded later still counts on top, which
--- only overstates.
+-- amount, and finishes the answers such runs left streaming. The run lock and
+-- its settlement in the same transaction book each run's top-up once. An
+-- attempt recorded later still counts on top, which only overstates. The
+-- top-up is dated when the job books it, so it never lands in a month that
+-- may be closed already.
 create function app_private.settle_stale_ai_runs()
 returns void language plpgsql security definer set search_path = '' as $$
 declare
@@ -226,10 +234,9 @@ begin
         organization_id, run_id, idempotency_key, model_id, prompt_version, input_tokens,
         output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, outcome
       ) values (
-        v_run.organization_id, v_run.id, v_run.idempotency_key || ':provisional', 'unrecorded', 'unrecorded',
+        v_run.organization_id, v_run.id, 'provisional:' || v_run.id::text, 'unrecorded', 'unrecorded',
         0, 0, 0, 0, v_run.reserved_micro_usd - v_recorded, 'provisional_charge'
-      )
-      on conflict (organization_id, idempotency_key) do nothing;
+      );
     end if;
     update public.ai_runs run
     set status = 'failed', settled_at = now()

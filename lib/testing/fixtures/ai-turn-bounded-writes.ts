@@ -1,7 +1,8 @@
-// Replays turns whose ledger, answer or settlement write hangs (B13-B15 of
-// werk-flow/werkflow-planning#20, werk-flow/werkflow-planning#559). The write
-// limits are cut to milliseconds here, so a hanging write ends within the
-// test; every other limit is the product's.
+// Replays turns whose ledger, answer or settlement write, or whose switch
+// read, hangs (B13-B15 of werk-flow/werkflow-planning#20,
+// werk-flow/werkflow-planning#559). The write limits and the turn's total time
+// are cut here, so a hanging call ends within the test; every other limit is
+// the product's.
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
 import { tableRows } from './action-boundary-world';
@@ -9,11 +10,14 @@ import { installAiTurnWorld, postTurn, readTurn, resetAiTables } from './ai-turn
 
 const limits = await import('@/lib/ai/limits');
 const WRITE_LIMIT_MS = 50;
+const TURN_LIMIT_MS = 2_000;
+
 mock.module('@/lib/ai/limits', () => ({
   ...limits,
   AI_TURN_LIMITS: {
     chat: {
       ...limits.AI_TURN_LIMITS.chat,
+      totalTimeoutMs: TURN_LIMIT_MS,
       costWriteTimeoutMs: WRITE_LIMIT_MS,
       answerSaveTimeoutMs: WRITE_LIMIT_MS,
       settleTimeoutMs: WRITE_LIMIT_MS,
@@ -22,6 +26,16 @@ mock.module('@/lib/ai/limits', () => ({
 }));
 
 const world = await installAiTurnWorld();
+// Imported once the world stands in for `server-only` and the database.
+const settings = await import('@/lib/ai/settings');
+const readSwitch = settings.readAiOrganizationSwitch;
+/** Whether the next switch reads hang: a database that stops answering between two steps. */
+let switchHangs = false;
+mock.module('@/lib/ai/settings', () => ({
+  ...settings,
+  readAiOrganizationSwitch: (organizationId: string) =>
+    switchHangs ? new Promise(() => {}) : readSwitch(organizationId),
+}));
 const rows = (table: string) => tableRows(world, table);
 const answerItem = () => rows('ai_thread_items').find((row) => row.kind === 'assistant_message');
 const runStatus = () => rows('ai_runs').map((row) => row.status);
@@ -43,14 +57,14 @@ const hang = (name: string, when: (args: Record<string, unknown>) => boolean = (
   assert.equal(answerItem()?.status, 'failed');
 }
 
-// A final save past its limit ends the turn as interrupted; the charge is settled at its recorded cost.
+// A final save past its limit ends the turn as interrupted; the run settles at its recorded cost.
 {
   resetAiTables(world);
   hang('update_ai_thread_item', (args) => args.p_status !== 'streaming');
   const events = await readTurn(world, await postTurn('Hallo'));
   world.rpc = answerOf;
   assert.equal(events.at(-1)?.failure, 'interrupted', 'a hanging final save must end the turn');
-  assert.deepEqual(runStatus(), ['failed']);
+  assert.deepEqual(runStatus(), ['failed'], 'a final save past its limit settles at the recorded cost');
   assert.equal(rows('ai_run_attempts').length, 1);
   // Left streaming, the answer waits for the database job or a retry; neither starts a provider attempt.
   assert.equal(answerItem()?.status, 'streaming');
@@ -65,4 +79,17 @@ const hang = (name: string, when: (args: Record<string, unknown>) => boolean = (
   assert.deepEqual(events.at(-1), { type: 'end', status: 'complete' });
   assert.equal(answerItem()?.status, 'complete');
   assert.deepEqual(runStatus(), ['reserved'], 'a settlement past its limit must keep the provisional charge');
+}
+
+// A switch read that hangs between two steps ends the turn when its time is up, so it still saves and settles (sol-loop S4).
+{
+  resetAiTables(world);
+  world.afterAttempt = () => {
+    switchHangs = true;
+  };
+  const events = await readTurn(world, await postTurn('[replay:zwei-schritte] Lies den Auftrag.'));
+  switchHangs = false;
+  assert.equal(events.at(-1)?.failure, 'timeout', 'a switch read past the turn time must end the turn');
+  assert.equal(answerItem()?.status, 'cancelled');
+  assert.deepEqual(runStatus(), ['cancelled'], 'a turn stopped at its time must still settle');
 }

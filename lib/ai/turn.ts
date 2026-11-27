@@ -343,6 +343,7 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
   await answer.saving;
   if (!(await saveAnswer(context, end.status, body))) end = failedEnd('failed', 'interrupted');
   // An attempt the ledger could not take leaves the run open: its reservation stays as the provisional charge.
+  // Every other run settles at its recorded cost, a failed final save included, so the person's next turn may start.
   if (!answer.ledgerFailed) await settleRun(context, end.status === 'complete' ? 'succeeded' : end.status);
   return end;
 }
@@ -380,10 +381,22 @@ function failedEnd(status: 'failed' | 'cancelled', failure: AiTurnFailure): AiTu
   return { status, failure, message: AI_TURN_FAILURE_MESSAGES[failure] };
 }
 
-/** Whether the organization may take another model step. A read that cannot decide refuses (B14). */
-async function readStepGate(organizationId: string): Promise<'open' | 'disabled' | 'undecidable'> {
+/**
+ * Whether the organization may take another model step. A read that cannot
+ * decide refuses (B14); one still running when the turn's time is up ends the
+ * turn, so the invocation keeps its time to save and settle.
+ */
+async function readStepGate(
+  organizationId: string,
+  turnSignal: AbortSignal,
+): Promise<'open' | 'disabled' | 'undecidable' | 'timeout'> {
+  const timeUp = new Promise<'timeout'>((resolve) => {
+    if (turnSignal.aborted) resolve('timeout');
+    else turnSignal.addEventListener('abort', () => resolve('timeout'), { once: true });
+  });
   try {
-    const gate = await readAiOrganizationSwitch(organizationId);
+    const gate = await Promise.race([readAiOrganizationSwitch(organizationId), timeUp]);
+    if (gate === 'timeout') return 'timeout';
     if (gate === 'load_failed') return 'undecidable';
     return gate.released && gate.enabled ? 'open' : 'disabled';
   } catch (error) {
@@ -397,9 +410,8 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
   let messages = context.modelContext.messages;
   for (let step = 1; ; step += 1) {
     if (step > limits.maxSteps) return failedEnd('cancelled', 'step_limit');
-    const gate = await readStepGate(context.command.organizationId);
-    if (gate === 'disabled') return failedEnd('cancelled', 'disabled');
-    if (gate === 'undecidable') return failedEnd('cancelled', 'undecidable');
+    const gate = await readStepGate(context.command.organizationId, context.turnSignal);
+    if (gate !== 'open') return failedEnd('cancelled', gate);
     if (!isAllowedModel(context.model)) return failedEnd('failed', 'provider_refused');
     const prompt = serializedInput(context.modelContext, messages);
     if (inputTokenCeiling(prompt) > limits.maxInputTokens) return failedEnd('failed', 'input_too_large');
@@ -467,8 +479,8 @@ async function runStep(
       return { kind: 'failed', failure };
     }
     answer.retriesLeft -= 1;
-    const gate = await readStepGate(context.command.organizationId);
-    if (gate !== 'open') return { kind: 'failed', failure: gate === 'disabled' ? 'disabled' : 'undecidable' };
+    const gate = await readStepGate(context.command.organizationId, step.turnSignal);
+    if (gate !== 'open') return { kind: 'failed', failure: gate };
   }
 }
 
@@ -589,8 +601,8 @@ function tokenUsage(usage: StreamUsage): AiTokenUsage | null {
 }
 
 /**
- * An attempt the provider reported no usage for. One refused before it began
- * is not billed; one that began, or that the provider accepted, is charged at
+ * An attempt the provider reported no usage for. One it refused with an error
+ * status is not billed; any other, which it may have accepted, is charged at
  * its caps: the prompt's upper bound and every output token it may have used,
  * so the ledger never undercounts.
  */

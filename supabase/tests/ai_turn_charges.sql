@@ -11,12 +11,12 @@ declare
   signature text;
 begin
   foreach api_role in array array['anon', 'authenticated'] loop
-    if has_function_privilege(api_role, 'public.start_ai_turn(uuid, uuid, uuid, text, uuid, text, bigint)',
+    if has_function_privilege(api_role, 'public.start_ai_turn(uuid, uuid, uuid, text, text, text, bigint)',
         'execute') then
       raise exception 'A client role may start a WerkFlow KI turn: %', api_role;
     end if;
   end loop;
-  if not has_function_privilege('service_role', 'public.start_ai_turn(uuid, uuid, uuid, text, uuid, text, bigint)',
+  if not has_function_privilege('service_role', 'public.start_ai_turn(uuid, uuid, uuid, text, text, text, bigint)',
       'execute') then
     raise exception 'service_role lost execute on start_ai_turn';
   end if;
@@ -162,6 +162,21 @@ begin
       is distinct from 'failed{"text": "Ich lese", "failure": "interrupted"}' then
     raise exception 'An answer its run left streaming was not finished as interrupted with its text';
   end if;
+  -- A command the previous build keyed with its spelling unchanged finds its answer: nothing runs again.
+  perform public.append_ai_thread_item('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000002',
+    'af000000-0000-4000-8000-000000000020', 'user_message', 'complete', '{"text":"Alt"}',
+    'AF000000-0000-4000-8000-000000000037:user');
+  perform public.append_ai_thread_item('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000002',
+    'af000000-0000-4000-8000-000000000020', 'assistant_message', 'complete', '{"text":"Erledigt"}',
+    'AF000000-0000-4000-8000-000000000037:assistant');
+  verdict := (select started.verdict from public.start_ai_turn('af000000-0000-4000-8000-000000000010',
+    'af000000-0000-4000-8000-000000000002', 'af000000-0000-4000-8000-000000000020', 'Lieferschein',
+    'AF000000-0000-4000-8000-000000000037', 'Alt', 1000000) started);
+  if verdict is distinct from 'answered' or exists (
+    select 1 from public.ai_thread_items where idempotency_key like 'af000000-0000-4000-8000-000000000037%'
+  ) then
+    raise exception 'A command keyed by the previous build was not found under its spelling: %', verdict;
+  end if;
   -- A finished answer stays as it was.
   perform public.start_ai_turn('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000002',
     'af000000-0000-4000-8000-000000000020', 'Lieferschein', 'af000000-0000-4000-8000-000000000031',
@@ -245,7 +260,7 @@ select app_private.settle_stale_ai_runs();
 
 do $$
 begin
-  if (select string_agg(attempt.outcome || '=' || attempt.cost_micro_usd, ',' order by attempt.idempotency_key)
+  if (select string_agg(attempt.outcome || '=' || attempt.cost_micro_usd, ',' order by attempt.outcome)
       from public.ai_run_attempts attempt where attempt.run_id = 'af000000-0000-4000-8000-000000000041')
       is distinct from 'completed=2000000,provisional_charge=28000000' then
     raise exception 'A stale run was not settled at its reserved amount, exactly once';

@@ -176,6 +176,19 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
   assert.ok(Number(attempts()[0]?.p_input_tokens) > 0, 'an accepted attempt must be charged for its prompt');
 }
 
+// A connection lost before any answer is retried, and the attempt is charged at its caps:
+// the provider may have taken the request (sol-loop S6 of werk-flow/werkflow-planning#559).
+{
+  resetAiTables(world);
+  const events = await readTurn(world, await postTurn('[replay:verbindung-vor-antwort] Hallo'));
+  assert.deepEqual(events.at(-1), { type: 'end', status: 'complete' });
+  assert.equal(
+    attempts()[0]?.p_output_tokens,
+    AI_TURN_LIMITS.chat.maxOutputTokens,
+    'an attempt whose connection dropped after it left must be charged at its output cap',
+  );
+}
+
 // A command id sent again with other text is refused, and the saved message stays as it was (sol-loop S17).
 {
   resetAiTables(world, { monthly_budget_micro_eur: 1 });
@@ -323,7 +336,7 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
     3,
     'a failed final save must be tried again within its limit',
   );
-  assert.deepEqual(runStatus(), ['failed']);
+  assert.deepEqual(runStatus(), ['failed'], 'a failed final save settles at the recorded cost');
   // A retry finishes the answer the run could not, with what its last partial save held.
   assert.equal(answerItem()?.status, 'streaming');
   assert.deepEqual(await (await postTurn('Hallo', { commandId })).json(), { status: 'already_done' });
