@@ -89,13 +89,15 @@ begin
 
   -- A to-do list keeps one row that each later call replaces.
   v_plan := public.record_ai_tool_item(v_org, v_author, v_run, 'todo_list', 'complete', 'turn-1:plan',
-    '{"revision":2,"schritte":[{"text":"Suchen","erledigt":false}]}', null, 'turn-1:tool:2',
+    '{"revision":2,"steps":[{"text":"Suchen","done":false}]}', null, 'turn-1:tool:2',
     'claude-haiku-5-5', 'v1', 'tool_call_plan_zeigen_ok');
-  if public.record_ai_tool_item(v_org, v_author, v_run, 'todo_list', 'complete', 'turn-1:plan',
-      '{"revision":3,"schritte":[{"text":"Suchen","erledigt":true}]}', null, 'turn-1:tool:3',
-      'claude-haiku-5-5', 'v1', 'tool_call_plan_zeigen_ok') is distinct from v_plan
-    or (select body -> 'schritte' -> 0 ->> 'erledigt' from public.ai_thread_items
-        where idempotency_key = 'turn-1:plan') is distinct from 'true' then
+  -- The write and the reread are separate statements: one statement's snapshot predates its own call.
+  v_again := public.record_ai_tool_item(v_org, v_author, v_run, 'todo_list', 'complete', 'turn-1:plan',
+    '{"revision":3,"steps":[{"text":"Suchen","done":true}]}', null, 'turn-1:tool:3',
+    'claude-haiku-5-5', 'v1', 'tool_call_plan_zeigen_ok');
+  if v_again is distinct from v_plan
+    or (select body -> 'steps' -> 0 ->> 'done' from public.ai_thread_items
+        where organization_id = v_org and idempotency_key = 'turn-1:plan') is distinct from 'true' then
     raise exception 'A later to-do call did not replace its list in place';
   end if;
 

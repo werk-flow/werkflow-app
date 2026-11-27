@@ -72,13 +72,20 @@ function KiToolDetail({
       {lines.entries.length > 0 && (
         <ul className="space-y-1">
           {lines.entries.map((entry, index) => (
-            <li key={index} className="flex flex-wrap gap-x-2">
-              <AiInlineText text={entry.text} />
-              {entry.href && (
-                <TextLink href={entry.href} prefetch={false}>
-                  Öffnen
-                </TextLink>
-              )}
+            <li key={index}>
+              <span className="flex flex-wrap gap-x-2">
+                <AiInlineText text={entry.text} />
+                {entry.href && (
+                  <TextLink href={entry.href} prefetch={false}>
+                    Öffnen
+                  </TextLink>
+                )}
+              </span>
+              {entry.details.map((detail, line) => (
+                <span key={line} className="block pl-4 text-xs">
+                  <AiInlineText text={detail} />
+                </span>
+              ))}
             </li>
           ))}
         </ul>
@@ -181,7 +188,7 @@ export const KiQuestion = memo(function KiQuestion({
             disabled={!open}
             onClick={() => onAnswer(option)}
           >
-            <AiInlineText text={option} />
+            <AiInlineText text={option} links={false} />
           </Button>
         ))}
       </div>

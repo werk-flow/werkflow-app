@@ -488,8 +488,9 @@ async function runStep(
       };
     }
     const { failure, retryable } = classified ?? { failure: 'interrupted', retryable: false };
-    // What the user already saw is never written twice: a stream that broke after it wrote is not retried.
-    if (!retryable || written || answer.retriesLeft <= 0) {
+    // What the user already saw is never written twice: a stream that broke after it wrote, or after
+    // it asked the person a question, is not retried.
+    if (!retryable || written || context.toolCalls.asked || answer.retriesLeft <= 0) {
       // Only the harness's own classification reaches the log, never a field the provider sent (B17).
       const status = provider?.status;
       logError('aiTurn: provider attempt failed', status === undefined ? outcome : `${outcome}_${status}`);

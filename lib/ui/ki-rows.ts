@@ -34,7 +34,9 @@ export function timelineOrder<Entry extends AiThreadEntry>(entries: readonly Ent
 /**
  * What a question's row shows: the person's answer is their next message, so
  * a question with a message after it is answered with that text. Only the
- * thread's last question without one waits for an answer.
+ * thread's last question without one waits for an answer, and only once the
+ * turn that asked has ended, on every tab: a reply sent before would find
+ * that turn's run still open.
  */
 export function questionAnswer(
   entries: readonly AiThreadEntry[],
@@ -43,7 +45,11 @@ export function questionAnswer(
   const after = entries.filter((entry) => entry.sequence > question.sequence);
   const reply = after.find((entry) => entry.role === 'user');
   if (reply?.role === 'user') return { answered: reply.text };
-  return after.some((entry) => entry.role === 'question') ? 'closed' : 'open';
+  const asking = entries.find(
+    (entry) => entry.role === 'assistant' && commandOf(entry.key) === commandOf(question.key),
+  );
+  const settled = asking !== undefined && asking.status !== 'streaming';
+  return settled && !after.some((entry) => entry.role === 'question') ? 'open' : 'closed';
 }
 
 /**
@@ -75,19 +81,31 @@ const ID_KEY = /id$/i;
 export type ToolDetailLines = {
   /** The input the tool ran with: one line per field. */
   input: string[];
-  /** The records it found: their visible fields, and a link into the app where one leads. */
-  entries: { text: string; href: string | null }[];
+  /** The records it found: their visible fields, a line per nested record, and a link into the app where one leads. */
+  entries: { text: string; details: string[]; href: string | null }[];
   /** How many matched in all, when the tool says so. */
   total: number | null;
 };
 
-/** One record of a result as one line, without ids and nested lists. */
-function entryLine(record: { [key: string]: Json | undefined }): { text: string; href: string | null } {
-  const fields = Object.entries(record).flatMap(([key, value]) =>
-    key === 'link' || ID_KEY.test(key) ? [] : [textOf(value) ?? []].flat(),
+type JsonRecord = { [key: string]: Json | undefined };
+
+const isRecord = (value: Json | undefined): value is JsonRecord =>
+  typeof value === 'object' && value !== null && !Array.isArray(value) && typeof value.text !== 'string';
+
+/** A record's visible fields on one line, without ids and links. */
+function fieldsOf(record: JsonRecord): string {
+  return Object.entries(record)
+    .flatMap(([key, value]) => (key === 'link' || ID_KEY.test(key) ? [] : [textOf(value) ?? []].flat()))
+    .join(' · ');
+}
+
+/** One record of a result: its fields, a line per record of a nested list (an Einsatzort, a supplier's terms), its link. */
+function entryLine(record: JsonRecord): ToolDetailLines['entries'][number] {
+  const details = Object.values(record).flatMap((value) =>
+    Array.isArray(value) ? value.filter(isRecord).map(fieldsOf).filter(Boolean) : [],
   );
   const link = textOf(record.link);
-  return { text: fields.join(' · '), href: link ? sameOriginTarget(link) : null };
+  return { text: fieldsOf(record), details, href: link ? sameOriginTarget(link) : null };
 }
 
 /** What an opened tool row lists from its stored input and result. */
@@ -105,11 +123,7 @@ export function toolDetailLines(detail: {
   const result =
     detail.result && typeof detail.result === 'object' && !Array.isArray(detail.result) ? detail.result : {};
   const entries = Object.values(result).flatMap((value) =>
-    Array.isArray(value)
-      ? value.flatMap((record) =>
-          record && typeof record === 'object' && !Array.isArray(record) ? [entryLine(record)] : [],
-        )
-      : [],
+    Array.isArray(value) ? value.filter(isRecord).map(entryLine) : [],
   );
   return { input, entries, total: typeof result.gesamt === 'number' ? result.gesamt : null };
 }

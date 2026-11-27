@@ -61,6 +61,11 @@ export const kiLiveEventSchema = z.discriminatedUnion('type', [
     failure: z.string().nullable(),
     /** The saved answer's length: a client that holds less reads the thread. */
     length: z.number().int().nonnegative(),
+    /** The turn's rows at their last saved revision: a client that holds an older one reads the thread. */
+    rows: z
+      .array(z.object({ key: z.string().min(1).max(200), revision: z.number().int().positive() }))
+      .max(200)
+      .optional(),
   }),
 ]);
 

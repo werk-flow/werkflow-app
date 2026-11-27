@@ -138,7 +138,7 @@ const toolDetailSchema = z.object({
 });
 
 /** What an opened tool row shows: the call's input and result as the model read them. */
-export type AiToolDetail = z.infer<typeof toolDetailSchema>;
+type AiToolDetail = z.infer<typeof toolDetailSchema>;
 
 /**
  * One tool row's detail, read only when the person opens the row (brief

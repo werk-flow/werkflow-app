@@ -51,9 +51,15 @@ test("a turn's tool rows stand above its answer, and its question below it", () 
   ]);
 });
 
-test('a question waits for an answer until a message follows it, and then shows that message', () => {
+test('a question waits for an answer once its turn ended, until a message follows it, and then shows that message', () => {
   const asked = question('c1:tool:1', 3);
   const thread: AiThreadEntry[] = [message('c1:user', 1), message('c1:assistant', 2), asked];
+  expect(
+    questionAnswer(
+      [message('c1:user', 1), message('c1:assistant', 2, { status: 'streaming' }), asked],
+      asked,
+    ),
+  ).toBe('closed');
   expect(questionAnswer(thread, asked)).toBe('open');
   expect(questionAnswer([...thread, message('c2:user', 4, { text: 'Müller Bau' })], asked)).toEqual({
     answered: 'Müller Bau',
@@ -78,7 +84,7 @@ test('an opened tool row lists its input and records without ids, and links only
           kundeId: '34000000-0000-4000-8000-000000000001',
           name: { source: 'record_text', text: 'Müller Haustechnik' },
           kundennummer: { source: 'record_text', text: 'K-1001' },
-          einsatzorte: [],
+          einsatzorte: [{ name: { source: 'record_text', text: 'Heizraum' }, adresse: null }],
           link: '/kunden/34000000-0000-4000-8000-000000000001',
         },
         { name: { source: 'record_text', text: 'Fremd' }, link: 'https://evil.example/k?d=geheim' },
@@ -89,8 +95,12 @@ test('an opened tool row lists its input and records without ids, and links only
   expect(lines).toEqual({
     input: ['suche: Müller'],
     entries: [
-      { text: 'Müller Haustechnik · K-1001', href: '/kunden/34000000-0000-4000-8000-000000000001' },
-      { text: 'Fremd', href: null },
+      {
+        text: 'Müller Haustechnik · K-1001',
+        details: ['Heizraum'],
+        href: '/kunden/34000000-0000-4000-8000-000000000001',
+      },
+      { text: 'Fremd', details: [], href: null },
     ],
     total: 12,
   });

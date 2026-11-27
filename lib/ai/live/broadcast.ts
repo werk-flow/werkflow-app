@@ -79,13 +79,19 @@ export type KiLiveBroadcast = {
   end: (end: AiTurnEnd) => Promise<void>;
 };
 
-function endMessage(command: string, end: AiTurnEnd, length: number): KiLiveMessage {
+function endMessage(
+  command: string,
+  end: AiTurnEnd,
+  length: number,
+  rows: { key: string; revision: number }[],
+): KiLiveMessage {
   return {
     type: 'end',
     command,
     status: end.status,
     failure: end.status === 'complete' ? null : end.message,
     length,
+    ...(rows.length > 0 ? { rows } : {}),
   };
 }
 
@@ -98,13 +104,17 @@ function createOutbox(command: string) {
   let rows: KiLiveMessage[] = [];
   let sent = 0;
   let saved = 0;
+  const revisions = new Map<string, number>();
   return {
     text(delta: string): void {
       pending += delta;
     },
     row(row: AiThreadRow): void {
       rows.push({ type: 'row', command, row });
+      revisions.set(row.key, Math.max(row.revision, revisions.get(row.key) ?? 0));
     },
+    /** Each row of the turn at its latest saved revision. */
+    rows: () => [...revisions].map(([key, revision]) => ({ key, revision })),
     saved(length: number): void {
       saved = length;
     },
@@ -196,7 +206,7 @@ export function createKiLiveBroadcast(
       await inFlight;
       if (revoked) return;
       const length = outbox.length();
-      await post([...outbox.take(), endMessage(input.commandId, end, length)], 2);
+      await post([...outbox.take(), endMessage(input.commandId, end, length, outbox.rows())], 2);
     },
   };
 }

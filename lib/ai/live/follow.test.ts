@@ -245,3 +245,29 @@ test('a live row lands at its place, and a later save of it replaces it while an
     done.window,
   );
 });
+
+test("an end that lists a row revision the page missed waits until a read from the answer's place fills it", () => {
+  const window: AiThreadWindow = {
+    hasOlder: false,
+    messages: [
+      message(`${command}:user`, 1, { role: 'user' }),
+      message(`${command}:assistant`, 2, { status: 'streaming', text: 'Fertig.' }),
+      toolRow(`${command}:tool:1`, 3, 1),
+    ],
+  };
+  const ended: KiLiveEvent = {
+    v,
+    type: 'end',
+    command,
+    status: 'complete',
+    failure: null,
+    length: 7,
+    rows: [{ key: `${command}:tool:1`, revision: 2 }],
+  };
+  const waiting = applyKiLiveEvents(window, [ended]);
+  expect(waiting.held).toEqual([ended]);
+  expect(kiLiveGapFillable(waiting.held)).toBe(true);
+  expect(kiLiveCursor(waiting.window), 'the read starts at the answer, before every row of its turn').toBe(2);
+  const read = placeRow(waiting.window, toolRow(`${command}:tool:1`, 3, 2));
+  expect(applyKiLiveEvents(read, waiting.held).held).toEqual([]);
+});
