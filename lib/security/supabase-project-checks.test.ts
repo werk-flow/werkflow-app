@@ -80,6 +80,25 @@ describe('Auth configuration posture', () => {
 });
 
 describe('Supabase advisors', () => {
+  test('school days has a reviewed exception without accepting other multiple-policy findings', () => {
+    const schoolDays = lint(
+      'multiple_permissive_policies',
+      'WARN',
+      ['PERFORMANCE'],
+      'multiple_permissive_policies_public_school_days_authenticated_SELECT',
+    );
+    const otherTable = lint(
+      'multiple_permissive_policies',
+      'WARN',
+      ['PERFORMANCE'],
+      'multiple_permissive_policies_public_probe_authenticated_SELECT',
+    );
+    expect(advisorProblems([...reviewedLints, schoolDays])).toEqual([]);
+    expect(advisorProblems([...reviewedLints, schoolDays, otherTable])).toEqual([
+      'WARN multiple_permissive_policies: Table `public.multiple_permissive_policies_public_probe_authenticated_SELECT` probe (multiple_permissive_policies_public_probe_authenticated_SELECT)',
+    ]);
+  });
+
   test('reviewed exceptions and accepted INFO lints pass', () => {
     const lints = [
       ...reviewedLints,

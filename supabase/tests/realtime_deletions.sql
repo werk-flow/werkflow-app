@@ -2,6 +2,31 @@
 -- provider canary; a catalog assertion alone cannot prove transport isolation.
 begin;
 
+-- Tier 2: the invoice and offer constraint indexes also serve Realtime, so
+-- each write maintains just one full (id, organization_id) index per table.
+do $$
+declare
+  target regclass;
+  index_count integer;
+  valid_identity boolean;
+begin
+  foreach target in array array['public.invoices'::regclass, 'public.offers'::regclass] loop
+    select count(*), bool_and(i.indisunique and i.indisreplident and i.indisvalid)
+      into index_count, valid_identity
+    from pg_index i
+    where i.indrelid = target and i.indpred is null
+      and array(
+        select a.attname::text
+        from unnest(i.indkey) with ordinality k(attnum, position)
+        join pg_attribute a on a.attrelid = target and a.attnum = k.attnum
+        order by k.position
+      ) = array['id', 'organization_id'];
+    if index_count is distinct from 1 or valid_identity is distinct from true then
+      raise exception '% must have exactly one full (id, organization_id) index, unique and used as replica identity', target;
+    end if;
+  end loop;
+end $$;
+
 do $$
 begin
   if not exists (select 1 from pg_publication where pubname='supabase_realtime'
