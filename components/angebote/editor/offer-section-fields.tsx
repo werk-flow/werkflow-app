@@ -85,21 +85,7 @@ function OrderButtons({
   );
 }
 
-/** One Titel: its name, its positions in order, its subtotal, and adding a position, an article or a text line. */
-export function OfferSectionFields({
-  offerId,
-  index,
-  count,
-  section,
-  figures,
-  onChange,
-  onMove,
-  onRemove,
-  onAddCatalog,
-  newKey,
-  errors,
-  disabled,
-}: {
+type OfferSectionFieldsProps = {
   /** The offer whose customer's conditions price a Position from an article or a Leistung. */
   offerId: string;
   index: number;
@@ -110,12 +96,31 @@ export function OfferSectionFields({
   onChange: (section: SectionForm) => void;
   onMove: (direction: -1 | 1) => void;
   onRemove: () => void;
+  /** Holds the editor's text while a picked article's or Leistung's price is read; answers its release. */
+  onPickCatalog: () => () => void;
   /** Appends a Position to this Titel as it is when the article's or Leistung's price arrives. */
   onAddCatalog: (position: PositionForm) => void;
   newKey: () => string;
   errors: Errors;
   disabled: boolean;
-}) {
+};
+
+/** One Titel: its name, its positions in order, its subtotal, and adding a position, an article or a text line. */
+export function OfferSectionFields({
+  offerId,
+  index,
+  count,
+  section,
+  figures,
+  onChange,
+  onMove,
+  onRemove,
+  onPickCatalog,
+  onAddCatalog,
+  newKey,
+  errors,
+  disabled,
+}: OfferSectionFieldsProps) {
   const number = String(index + 1);
   const titleId = contentFieldId(index, 'title');
   const setPositions = (positions: PositionForm[]) => onChange({ ...section, positions });
@@ -162,7 +167,7 @@ export function OfferSectionFields({
         number={number}
         netCents={figures?.saleCents ?? null}
         onAdd={(kind) => setPositions([...section.positions, emptyPosition(newKey(), kind)])}
-        onPickCatalog={() => onChange(section)}
+        onPickCatalog={onPickCatalog}
         onAddCatalog={onAddCatalog}
         disabled={disabled}
       />
@@ -230,7 +235,7 @@ function SectionFooter({
   number: string;
   netCents: number | null;
   onAdd: (kind: OfferPosition['kind']) => void;
-  onPickCatalog: () => void;
+  onPickCatalog: () => () => void;
   onAddCatalog: (position: PositionForm) => void;
   disabled: boolean;
 }) {

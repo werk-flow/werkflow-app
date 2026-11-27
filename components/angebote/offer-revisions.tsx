@@ -12,20 +12,30 @@ import { formatGermanDate } from '@/lib/utils';
 /**
  * The sent revisions of an offer, newest first, each with the day, the
  * channel the office named and its filed PDF in the library. An older
- * revision stays readable, marked as replaced by the next. „Versenden“ emails
- * the newest through E2c's delivery; a replaced one lists its sends.
+ * revision stays readable, marked as replaced by the next. While the offer is
+ * the draft of its next revision, the list says so above the newest sent one.
+ * „Versenden“ emails the newest through E2c's delivery; a replaced one lists its sends.
  */
 export function OfferRevisions({
   offerId,
   revisions,
+  editing,
 }: {
   offerId: string;
   revisions: readonly OfferRevision[];
+  /** The offer is a draft again: the draft of the revision after the newest sent one. */
+  editing: boolean;
 }) {
-  if (revisions.length === 0) return null;
+  const [newest] = revisions;
+  if (!newest) return null;
   return (
     <section aria-labelledby="offer-revisions-title" className="space-y-3">
       <SectionTitle id="offer-revisions-title">Gesendete Revisionen</SectionTitle>
+      {editing && (
+        <p className="text-sm text-muted-foreground">
+          {`Du bearbeitest Revision ${newest.revision + 1}. Bis du sie als gesendet festhältst, bleibt Revision ${newest.revision} die zuletzt gesendete.`}
+        </p>
+      )}
       <ul className="divide-y rounded-lg border bg-card shadow-xs">
         {revisions.map((revision, index) => {
           const replacedBy = index > 0 ? revisions[index - 1]?.revision : undefined;
