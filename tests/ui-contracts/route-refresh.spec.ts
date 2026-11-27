@@ -115,3 +115,47 @@ test('the echo of a save that arrives before its response refreshes nothing', as
   await page.clock.runFor(1_000 + 151);
   expect(await navigation()).toEqual(['refresh', 'refresh', 'refresh']);
 });
+
+test('a no-event deadline waits for the dialog to close and catches up exactly once', async ({ page }) => {
+  assertWorkspaceTestLock();
+  const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
+  if (!bundle) throw new Error('Run through the UI contract runner');
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.clock.install({ time: new Date('2026-09-08T10:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-09-08T10:00:01Z'));
+  const url = 'http://localhost/ui-contracts';
+  await page.route(url, (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<html lang="de"><body><div id="root"></div></body></html>',
+    }),
+  );
+  await page.goto(url);
+  await page.evaluate(() => {
+    window.uiContractFixture = 'route-refresh';
+  });
+  await page.addScriptTag({ path: bundle });
+  await expect(page.getByLabel('Serverstand')).toHaveText('vorher');
+  await page.getByRole('button', { name: 'Dialog öffnen' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Aktualisierung zurückhalten' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Frist erreicht' }).click();
+  await dialog.getByRole('button', { name: 'Frist erreicht' }).click();
+  expect(errors).toEqual([]);
+  await page.clock.runFor(1_100);
+  expect(await page.evaluate(() => window.uiContractServices.navigation)).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.getAttribute('data-live-read-held'))).toBe(
+    'true',
+  );
+  await dialog.getByRole('button', { name: 'Dialog schließen' }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.clock.runFor(151);
+  expect(await page.evaluate(() => window.uiContractServices.navigation)).toEqual(['refresh']);
+  await page.evaluate(() => window.routeRefreshContract.complete(0, 'nach der Frist'));
+  await expect(page.getByLabel('Serverstand')).toHaveText('nach der Frist');
+  await page.clock.runFor(1_100);
+  expect(await page.evaluate(() => window.uiContractServices.navigation)).toEqual(['refresh']);
+  expect(await page.evaluate(() => document.documentElement.getAttribute('data-live-read-held'))).toBeNull();
+  expect(errors).toEqual([]);
+});

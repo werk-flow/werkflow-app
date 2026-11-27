@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useDeadlineRefresh } from '@/hooks/use-business-day-refresh';
 
 import { useMemo } from 'react';
@@ -246,11 +245,10 @@ export function MitarbeiterTabs({
     breakPolicy,
   });
 
-  useRealtimeRouterRefresh({ tables: MITARBEITER_TABS_REFRESH_TABLES });
+  const scheduleRefresh = useRealtimeRouterRefresh({ tables: MITARBEITER_TABS_REFRESH_TABLES });
 
-  const router = useRouter();
   const deadlineMs = nextHolderAccessChangeAt === null ? null : Date.parse(nextHolderAccessChangeAt);
-  useDeadlineRefresh(deadlineMs, () => router.refresh());
+  useDeadlineRefresh(deadlineMs, scheduleRefresh);
 
   // Count pending invites for the badge
   const pendingCount = invites.filter(

@@ -24,6 +24,7 @@ import type { OrganizationResponsibility, ResponsibilityPerson } from './types';
 import { delegationWindowState, revokedOnOf } from './delegation-window';
 import type { SubstituteAbsenceSpan } from './substitute-absence';
 
+/** @internal Fixtures supply resolution state without the server-only access metadata. */
 export type ResponsibilityRuntimeState = {
   members: ResponsibilityMember[];
   people: ResponsibilityPerson[];
