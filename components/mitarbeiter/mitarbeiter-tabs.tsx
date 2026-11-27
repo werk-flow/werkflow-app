@@ -1,5 +1,7 @@
 'use client';
 
+import { useDeadlineRefresh } from '@/hooks/use-business-day-refresh';
+
 import { useMemo } from 'react';
 import { SectionError } from '@/components/ui/section-error';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
@@ -33,6 +35,7 @@ interface MitarbeiterTabsProps {
   personnelProfileNames: Record<string, string>;
   targetsByUserId?: Record<string, DailyTarget> | undefined;
   removalBlockedByUserId: Record<string, string>;
+  nextHolderAccessChangeAt: string | null;
   currentUserId: string;
   currentUserRole: OrgRole;
   organizationId: string;
@@ -214,6 +217,7 @@ export function MitarbeiterTabs({
   personnelProfileNames,
   targetsByUserId,
   removalBlockedByUserId,
+  nextHolderAccessChangeAt,
   currentUserId,
   currentUserRole,
   organizationId,
@@ -241,7 +245,10 @@ export function MitarbeiterTabs({
     breakPolicy,
   });
 
-  useRealtimeRouterRefresh({ tables: MITARBEITER_TABS_REFRESH_TABLES });
+  const scheduleRefresh = useRealtimeRouterRefresh({ tables: MITARBEITER_TABS_REFRESH_TABLES });
+
+  const deadlineMs = nextHolderAccessChangeAt === null ? null : Date.parse(nextHolderAccessChangeAt);
+  useDeadlineRefresh(deadlineMs, scheduleRefresh);
 
   // Count pending invites for the badge
   const pendingCount = invites.filter(
