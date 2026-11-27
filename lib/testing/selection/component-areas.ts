@@ -33,6 +33,7 @@ const COMPONENT_AREAS: readonly (readonly [string, readonly string[], readonly s
       'lifecycle-',
       'material-',
       'service-evidence-link',
+      'service-report-delivery',
       'site-access',
       'work-',
     ],

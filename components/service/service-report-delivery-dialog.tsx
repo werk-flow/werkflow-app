@@ -62,17 +62,51 @@ type StepAction<Action extends (...args: never[]) => Promise<unknown>> = {
   isPending: boolean;
 };
 
+/** The attempt key of what the office last pressed, until the server answers it. */
+type PayloadAttemptKey = {
+  /** The key for `payload`: the pressed one's again when it is unchanged, else a new one. */
+  keyFor: (payload: string) => string;
+  /** The server answered: the next press is a new send. */
+  settle: () => void;
+};
+
+/**
+ * Kept by the dialog, so „Zurück“ and reopening a step keep it: an unchanged
+ * send pressed again after a lost answer replays the same attempt in the
+ * database instead of sending or recording twice.
+ */
+function usePayloadAttemptKey(): PayloadAttemptKey {
+  const [pressed, setPressed] = useState<{ payload: string; key: string } | null>(null);
+  return {
+    keyFor: (payload) => {
+      if (pressed?.payload === payload) return pressed.key;
+      const key = crypto.randomUUID();
+      setPressed({ payload, key });
+      return key;
+    },
+    settle: () => setPressed(null),
+  };
+}
+
+/** The manual step's note and its attempt key, kept by the dialog until the record is confirmed. */
+type NoteDraft = { value: string; set: (note: string) => void; attempt: PayloadAttemptKey };
+
+/** What the server stores of an email, trimmed as it trims it. */
+const mailPayload = (form: DeliveryMailDefaults) =>
+  JSON.stringify([form.recipient.trim(), form.subject.trim(), form.text.trim()]);
+
 /**
  * The email step: the report's filed PDF to one recipient, once per filled
- * form. The dialog keeps the form, so a send the provider refused returns to
- * the sends, where „Erneut senden“ repeats it, and a new email starts from
- * what the office typed.
+ * form. The dialog keeps the form and its attempt key, so a send the provider
+ * refused returns to the sends, where „Erneut senden“ repeats it, and a new
+ * email starts from what the office typed.
  */
 function EmailStep({
   reportId,
   action,
   form,
   setForm,
+  attempt,
   sentBefore,
   onDone,
   onBack,
@@ -82,29 +116,28 @@ function EmailStep({
   form: DeliveryMailDefaults;
   /** The form's new state; null once it went out. */
   setForm: (form: DeliveryMailDefaults | null) => void;
+  attempt: PayloadAttemptKey;
   sentBefore: string | null;
   onDone: () => void;
   onBack: () => void;
 }): ReactElement {
   const { showBanner } = useBanner();
   const { run, isPending } = action;
-  const [attemptKey, setAttemptKey] = useState(() => crypto.randomUUID());
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const errors = attempted ? mailErrors(form) : {};
-  const change = (patch: Partial<DeliveryMailDefaults>) => {
-    setForm({ ...form, ...patch });
-    setAttemptKey(crypto.randomUUID());
-  };
+  const change = (patch: Partial<DeliveryMailDefaults>) => setForm({ ...form, ...patch });
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setAttempted(true);
     if (focusFirstInvalidField(mailErrors(form))) return;
     setError(null);
+    const attemptKey = attempt.keyFor(mailPayload(form));
     const result = await run({ reportId, attemptKey, ...form }).catch(() => null);
     if (!result) return setError(SEND_FAILED);
     if (!result.success)
       return setError(describeFailure(result.error, REPORT_DELIVERY_FAILURES, SEND_FAILED));
+    attempt.settle();
     if (result.state !== 'failed') setForm(null);
     showBanner(sendBanner(result, 'Der Servicebericht', form.recipient.trim()));
     onDone();
@@ -135,26 +168,29 @@ function EmailStep({
 function ManualStep({
   reportId,
   action,
+  note,
   onDone,
   onBack,
 }: {
   reportId: string;
   action: StepAction<typeof markServiceReportSentManually>;
+  note: NoteDraft;
   onDone: () => void;
   onBack: () => void;
 }): ReactElement {
   const { showBanner } = useBanner();
   const { run, isPending } = action;
-  const [note, setNote] = useState('');
-  const [attemptKey, setAttemptKey] = useState(() => crypto.randomUUID());
   const [error, setError] = useState<string | null>(null);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
-    const result = await run({ reportId, attemptKey, note }).catch(() => null);
+    const attemptKey = note.attempt.keyFor(note.value.trim());
+    const result = await run({ reportId, attemptKey, note: note.value }).catch(() => null);
     if (!result) return setError(RECORD_FAILED);
     if (!result.success)
       return setError(describeFailure(result.error, REPORT_DELIVERY_FAILURES, RECORD_FAILED));
+    note.attempt.settle();
+    note.set('');
     showBanner({ variant: 'success', message: 'Der Servicebericht ist als manuell versendet vermerkt.' });
     onDone();
   };
@@ -163,12 +199,10 @@ function ManualStep({
       <DialogBody className="space-y-2 py-1">
         <Field label="Notiz" htmlFor="delivery-note" description="Zum Beispiel „per Post am 21.11.“">
           <Input
-            value={note}
-            onChange={(event) => {
-              setNote(event.target.value);
-              setAttemptKey(crypto.randomUUID());
-            }}
+            value={note.value}
+            onChange={(event) => note.set(event.target.value)}
             maxLength={DELIVERY_LIMITS.note}
+            disabled={isPending}
           />
         </Field>
         <ErrorText>{error}</ErrorText>
@@ -272,6 +306,9 @@ export function ServiceReportDeliveryDialog({
 }): ReactElement {
   const [step, setStep] = useState<Step>('overview');
   const [draft, setDraft] = useState<DeliveryMailDefaults | null>(null);
+  const emailAttempt = usePayloadAttemptKey();
+  const [note, setNote] = useState('');
+  const noteDraft: NoteDraft = { value: note, set: setNote, attempt: usePayloadAttemptKey() };
   const send = useServerAction(sendServiceReportEmail);
   const manual = useServerAction(markServiceReportSentManually);
   const retry = useServerAction(retryServiceReportDelivery);
@@ -315,12 +352,13 @@ export function ServiceReportDeliveryDialog({
             action={send}
             form={draft ?? defaults}
             setForm={setDraft}
+            attempt={emailAttempt}
             sentBefore={priorEmailAdvice(delivery.list.entries)}
             onDone={done}
             onBack={back}
           />
         ) : shown === 'manual' ? (
-          <ManualStep reportId={reportId} action={manual} onDone={done} onBack={back} />
+          <ManualStep reportId={reportId} action={manual} note={noteDraft} onDone={done} onBack={back} />
         ) : (
           <OverviewStep
             read={read}

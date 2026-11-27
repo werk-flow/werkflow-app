@@ -16,9 +16,9 @@
 --   service_report, with its own filed PDF: a superseded report, another
 --   report's document, a report without its hash, an employee and another
 --   organization are refused; a repeated request records one delivery; a
---   manual send is recorded; the list reads the report's sends only; a failed
---   send of a report regenerated since is not retried; a row names exactly
---   one subject.
+--   manual send is recorded; the list reads exactly the report's sends, not
+--   another report's of the same organization; a failed send of a report
+--   regenerated since is not retried; a row names exactly one subject.
 -- Only the service role executes the function; no role rewrites a report.
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
@@ -276,6 +276,8 @@ do $$ declare
   v_attempt constant text := '47160000-0000-4000-8000-0000000000a1';
   v_payload jsonb;
   v_delivery public.document_deliveries%rowtype;
+  v_manual uuid;
+  v_other uuid;
 begin
   perform pg_temp.expect_refusal('an employee',
     pg_temp.request_report(v_employee, v_org, '47160000-0000-4000-8000-000000000083',
@@ -317,12 +319,26 @@ begin
     raise exception 'a repeated request recorded or claimed again';
   end if;
   perform public.settle_document_delivery(v_org::uuid, v_delivery.id, 1, 'failed', null, 'email_provider_503');
-  perform public.record_manual_delivery(v_admin::uuid, v_org::uuid, gen_random_uuid(), 'service_report',
+  v_manual := public.record_manual_delivery(v_admin::uuid, v_org::uuid, gen_random_uuid(), 'service_report',
     '47160000-0000-4000-8000-000000000083', '47160000-0000-4000-8000-000000000094', 'per Post');
+  -- Report 84 regenerated with its hash as 87 is sendable, and its own send stands beside 83's.
+  perform public.register_maintenance_service_report(
+    v_org::uuid, v_admin::uuid, '47160000-0000-4000-8000-000000000087', '47160000-0000-4000-8000-000000000073',
+    '47160000-0000-4000-8000-000000000084', '47160000-0000-4000-8000-000000000097',
+    v_org || '/service-reports/47160000-0000-4000-8000-000000000073/r2.pdf',
+    'Servicebericht AUF-REPORT-1.pdf', 4096, repeat('e', 64));
+  v_other := public.record_manual_delivery(v_admin::uuid, v_org::uuid, gen_random_uuid(), 'service_report',
+    '47160000-0000-4000-8000-000000000087', '47160000-0000-4000-8000-000000000097', 'per Bote');
 
-  -- The list reads the report's two sends, under its kind and organization only.
-  if (public.list_document_deliveries(v_org::uuid, 'service_report', '47160000-0000-4000-8000-000000000083', 50)
-        ->> 'total')::integer is distinct from 2
+  -- The list reads exactly the report's two sends, under its kind and organization only.
+  v_payload := public.list_document_deliveries(v_org::uuid, 'service_report',
+    '47160000-0000-4000-8000-000000000083', 50);
+  if (v_payload ->> 'total')::integer is distinct from 2
+     or (select array_agg((row_data ->> 'id')::uuid order by row_data ->> 'id')
+         from jsonb_array_elements(v_payload -> 'rows') row_data)
+       is distinct from (select array_agg(id order by id::text) from unnest(array[v_delivery.id, v_manual]) id)
+     or (public.list_document_deliveries(v_org::uuid, 'service_report', '47160000-0000-4000-8000-000000000087', 50)
+        -> 'rows' -> 0 ->> 'id')::uuid is distinct from v_other
      or (public.list_document_deliveries(v_org::uuid, 'invoice', '47160000-0000-4000-8000-000000000083', 50)
         ->> 'total')::integer is distinct from 0
      or (public.list_document_deliveries(v_foreign_org::uuid, 'service_report',
