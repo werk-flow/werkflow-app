@@ -205,7 +205,14 @@ function OfferPreviewDialog({ offer, onClose }: { offer: SendableOffer; onClose:
               hast, und genau dieses PDF wird abgelegt und lässt sich danach nicht mehr ändern.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-4">
+          <DialogBody
+            className="space-y-4"
+            // A blocked draft's body holds no control (the frame is out of the tab order), so
+            // the body itself takes focus and the keyboard can scroll it (WCAG 2.1.1).
+            role={blocker ? 'region' : undefined}
+            aria-label={blocker ? `Vorschau ${offer.offerNumber}` : undefined}
+            tabIndex={blocker ? 0 : undefined}
+          >
             {preview.failure ? (
               <SectionError failure={preview.failure} />
             ) : (
