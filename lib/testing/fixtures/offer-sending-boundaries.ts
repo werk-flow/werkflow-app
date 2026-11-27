@@ -366,8 +366,22 @@ assert.equal(world.rpcCalls.find((call) => call.name === 'send_offer')?.args.p_d
 assert.equal(stored.length, 3);
 sentElsewhere = false;
 
-// A draft another session saved meanwhile is refused before anything is rendered or stored.
+// A draft another session saved meanwhile is refused by the one call, before anything is rendered or stored.
+sendAnswer = () => ({ data: null, error: { code: 'P0001', message: 'offer_changed' } });
+world.rpcCalls.length = 0;
 assert.deepEqual(await send({ expectedContentVersion: 3 }), { success: false, error: 'offer_changed' });
+assert.equal(stored.length, 3);
+assert.equal(world.rpcCalls.find((call) => call.name === 'send_offer')?.args.p_document_id, undefined);
+
+// A press repeated after its send committed and another tab opened revision 2 as a draft: the draft is
+// at newer versions, and the one call still answers the recorded revision 1, storing nothing.
+sendAnswer = () => ({ data: { revision: 1, documentId: sentDocumentId, replay: true }, error: null });
+assert.deepEqual(await send({ expectedVersion: 2, expectedContentVersion: 3 }), {
+  success: true,
+  offerId,
+  revision: 1,
+  documentId: sentDocumentId,
+});
 assert.equal(stored.length, 3);
 
 // The field worker on a job of the same customer gets no signed URL for the sent PDF;

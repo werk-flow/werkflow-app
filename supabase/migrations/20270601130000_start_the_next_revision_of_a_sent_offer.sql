@@ -61,7 +61,9 @@ begin
   -- Under the row lock an earlier start of this offer has committed its event.
   select * into v_earlier from public.offer_events event
   where event.organization_id = p_organization_id and event.attempt_key = p_attempt_key;
-  if found and (v_earlier.event_type <> 'revision_started' or v_earlier.offer_id <> p_offer_id) then
+  -- A key answers only the start it was sent for: from the same offer at the same version.
+  if found and (v_earlier.event_type <> 'revision_started' or v_earlier.offer_id <> p_offer_id
+    or (v_earlier.payload ->> 'fromVersion')::integer <> p_expected_version) then
     raise exception 'invalid_input';
   end if;
   if not found then

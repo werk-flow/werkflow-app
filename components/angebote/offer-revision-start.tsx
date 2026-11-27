@@ -24,7 +24,7 @@ const START_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
 /**
  * „Bearbeiten“ of a sent offer: after a confirmation the offer becomes the
  * draft of its next revision, with the Positionen as sent. The sent revision
- * stays as it was and stays valid until the next one is recorded as sent.
+ * stays as it was and the newest sent one until the next is recorded as sent.
  */
 export function StartOfferRevisionButton({
   offer,
@@ -36,8 +36,10 @@ export function StartOfferRevisionButton({
 }) {
   const hydrated = useHydrated();
   const { showBanner } = useBanner();
-  // One key per page of the sent offer: a press repeated after a lost answer gets the first start.
-  const [attemptKey] = useState(() => crypto.randomUUID());
+  // One key per sent version: a press repeated after a lost answer gets the first start, and a
+  // version sent since, such as revision n+1 from another tab, starts its own next revision.
+  const [attempt, setAttempt] = useState(() => ({ version: offer.version, key: crypto.randomUUID() }));
+  if (attempt.version !== offer.version) setAttempt({ version: offer.version, key: crypto.randomUUID() });
   // The action's answer carries the page with the draft; the dialog stays pending until it is on screen.
   const settle = useSettleOnChange(offer.version);
   const start = useServerAction(startOfferRevision);
@@ -53,7 +55,7 @@ export function StartOfferRevisionButton({
       title={`Revision ${next} bearbeiten?`}
       description={
         <p>
-          {`Revision ${sentRevision} bleibt so, wie du sie gesendet hast, mit ihrem PDF. Du bearbeitest einen Entwurf für Revision ${next}. Bis du ihn als gesendet festhältst, gilt Revision ${sentRevision}.`}
+          {`Revision ${sentRevision} bleibt so, wie du sie gesendet hast, mit ihrem PDF. Du bearbeitest einen Entwurf für Revision ${next}. Bis du ihn als gesendet festhältst, bleibt Revision ${sentRevision} die zuletzt gesendete.`}
         </p>
       }
       confirmLabel={`Revision ${next} bearbeiten`}
@@ -63,7 +65,7 @@ export function StartOfferRevisionButton({
           .run({
             offerId: offer.id,
             expectedVersion: offer.version,
-            attemptKey,
+            attemptKey: attempt.key,
           })
           .catch(() => null);
         if (!result?.success) {
@@ -72,7 +74,7 @@ export function StartOfferRevisionButton({
         await settle(since);
         showBanner({
           variant: 'success',
-          message: `${offer.offerNumber} ist ein Entwurf für Revision ${result.revision}. Revision ${result.revision - 1} gilt, bis du ihn als gesendet festhältst.`,
+          message: `${offer.offerNumber} ist ein Entwurf für Revision ${result.revision}. Revision ${result.revision - 1} bleibt die zuletzt gesendete, bis du ihn als gesendet festhältst.`,
         });
         return null;
       }}

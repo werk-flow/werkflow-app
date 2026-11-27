@@ -144,9 +144,14 @@ export async function recordOfferSent(
   const input = parsed.data;
   const offer = await readOffer(context.orgId, input.offerId);
   if (!offer) return { success: false, error: 'offer_not_found' };
-  if (offer.status !== 'entwurf') return sendRendered(context, input, offer, null);
-  if (offer.version !== input.expectedVersion || offer.contentVersion !== input.expectedContentVersion) {
-    return { success: false, error: 'offer_changed' };
+  // Sent meanwhile, or sent and opened as the next revision's draft: the one call answers the recorded
+  // send of these versions, or refuses with offer_changed, before anything is rendered or stored.
+  if (
+    offer.status !== 'entwurf' ||
+    offer.version !== input.expectedVersion ||
+    offer.contentVersion !== input.expectedContentVersion
+  ) {
+    return sendRendered(context, input, offer, null);
   }
   const issuedOn = getBusinessTodayIso();
   const rendered = await renderOfferPdf(context, offer, issuedOn).catch((error: unknown) => {

@@ -514,9 +514,14 @@ begin
 end;
 $$;
 
--- A start from a version before revision 2 was sent is refused.
+-- A start from a version before revision 2 was sent is refused, and so is the
+-- key of revision 2's start sent again from the version revision 2 left: it
+-- names another start, never a replay that leaves no draft.
 select pg_temp.expect_refusal('a start from an older version', format(
   'select pg_temp.start(%L, 3, gen_random_uuid())', pg_temp.id('first')), 'offer_changed');
+select pg_temp.expect_refusal('an earlier start''s key from a later version', format(
+  'select pg_temp.start(%L, 4, %L)', pg_temp.id('first'), '38070000-0000-4000-8000-000000000111'),
+  'invalid_input');
 
 -- Revision 3 with a changed price: revisions 1 and 2 keep theirs. A further
 -- revision that is never sent stays a draft, and revision 3 stays the newest sent one.
