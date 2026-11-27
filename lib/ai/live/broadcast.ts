@@ -14,7 +14,7 @@ import { getSupabaseSecretKey } from '@/lib/env/server';
 import { logError } from '@/lib/logging';
 
 /** The live channel's deltas leave at most this often: a fast model sends one message per interval. */
-export const KI_LIVE_INTERVAL_MS = 250;
+const KI_LIVE_INTERVAL_MS = 250;
 
 type Schedule = (run: () => void, delayMs: number) => () => void;
 
@@ -45,7 +45,9 @@ const sendThroughRest: KiLiveSend = async (topic, events, signal) => {
 };
 
 /**
- * Sends a turn's messages under their time limit. A failure costs only
+ * Sends a turn's messages under their time limit, the answer's end with a
+ * second try inside it: a follower that misses the end shows the answer as
+ * still written until it reads the thread again. A failure costs only
  * freshness, so it is logged once per turn: a channel that fails once usually
  * fails for every message.
  */
@@ -53,17 +55,21 @@ function createPost(
   topic: string,
   send: KiLiveSend,
   timeoutMs: number,
-): (messages: KiLiveMessage[]) => Promise<void> {
+): (messages: KiLiveMessage[], tries?: number) => Promise<void> {
   let failureLogged = false;
-  return async (messages) => {
+  return async (messages, tries = 1) => {
     const events = messages.map((message): KiLiveEvent => ({ ...message, v: KI_LIVE_PROTOCOL }));
-    let failure: unknown = null;
-    try {
-      if (!(await send(topic, events, AbortSignal.timeout(timeoutMs)))) failure = 'not_accepted';
-    } catch (error) {
-      failure = error;
+    const signal = AbortSignal.timeout(timeoutMs);
+    let failure: unknown = 'timeout';
+    for (let attempt = 0; attempt < tries && !signal.aborted; attempt += 1) {
+      try {
+        if (await send(topic, events, signal)) return;
+        failure = 'not_accepted';
+      } catch (error) {
+        failure = error;
+      }
     }
-    if (failure === null || failureLogged) return;
+    if (failureLogged) return;
     failureLogged = true;
     logError('kiLive: broadcast failed', failure);
   };
@@ -95,6 +101,7 @@ export function createKiLiveBroadcast(
   let sent = 0;
   let saved = 0;
   let ended = false;
+  let revoked = false;
   let inFlight: Promise<void> | null = null;
   let cancelPump: (() => void) | null = null;
 
@@ -145,24 +152,35 @@ export function createKiLiveBroadcast(
       saved(length) {
         saved = length;
       },
+      revoked() {
+        // The author lost access mid-turn: Realtime may still hold their join, so nothing more is sent.
+        revoked = true;
+        ended = true;
+        cancelPump?.();
+        cancelPump = null;
+      },
     },
     async end(end) {
       ended = true;
       cancelPump?.();
       cancelPump = null;
       await inFlight;
+      if (revoked) return;
       const length = sent + pending.length;
       const last = takeText();
-      await post([
-        ...(last ? [last] : []),
-        {
-          type: 'end',
-          command: input.commandId,
-          status: end.status,
-          failure: end.status === 'complete' ? null : end.message,
-          length,
-        },
-      ]);
+      await post(
+        [
+          ...(last ? [last] : []),
+          {
+            type: 'end',
+            command: input.commandId,
+            status: end.status,
+            failure: end.status === 'complete' ? null : end.message,
+            length,
+          },
+        ],
+        2,
+      );
     },
   };
 }

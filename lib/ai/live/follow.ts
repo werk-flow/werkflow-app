@@ -61,13 +61,17 @@ export function mergeNewer(held: AiThreadWindow | null, read: AiThreadWindow): A
  * offset): the caller holds the event, reads the thread from the cursor and
  * applies it again. An event the window already holds changes nothing.
  */
-export function applyKiLiveEvent(
+function applyKiLiveEvent(
   window: AiThreadWindow,
   event: KiLiveEvent,
 ): { window: AiThreadWindow; applied: boolean } {
   const unchanged = { window, applied: true };
   if (event.type === 'started') {
     const keys = new Set(window.messages.map((message) => message.key));
+    // A turn that starts past messages the page never saw waits, so the cursor does not skip them.
+    const last = Math.max(0, ...window.messages.map((message) => message.sequence));
+    if (!keys.has(userKey(event.command)) && event.user.sequence > last + 1)
+      return { window, applied: false };
     const added: AiChatMessage[] = [];
     if (!keys.has(userKey(event.command)))
       added.push({

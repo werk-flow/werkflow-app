@@ -5,7 +5,7 @@ import type { KiLiveEvent } from '@/lib/ai/live/events';
 mock.module('server-only', () => ({}));
 const logged: unknown[] = [];
 mock.module('@/lib/logging', () => ({ logError: (...args: unknown[]) => logged.push(args) }));
-const { KI_LIVE_INTERVAL_MS, createKiLiveBroadcast } = await import('./broadcast');
+const { createKiLiveBroadcast } = await import('./broadcast');
 
 function manualSchedule() {
   const tasks: Array<{ run: () => void; delayMs: number; cancelled: boolean }> = [];
@@ -59,7 +59,7 @@ test('a turn sends its start, then its text batched per interval with its offset
   expect(network.calls.map((call) => call.topic)).toEqual([`ki-thread:${input.threadId}`]);
   network.calls[0]?.answer(true);
   await flush();
-  expect(clock.tasks.at(-1)?.delayMs).toBe(KI_LIVE_INTERVAL_MS);
+  expect(clock.tasks.at(-1)?.delayMs, 'text leaves at most every 250 ms').toBe(250);
   clock.runDue();
   live.sink.saved(3);
   live.sink.text(' Welt');
@@ -96,6 +96,46 @@ test('text that waits for a slow send joins one later message instead of a queue
   expect(network.calls[1]?.events.map((event) => (event.type === 'text' ? event.delta : event.type))).toEqual(
     ['abc'],
   );
+});
+
+test('the end goes out again when its first send fails, and the topic names the thread in lower case', async () => {
+  const sent: Array<{ topic: string; types: string[] }> = [];
+  const live = createKiLiveBroadcast(
+    { ...input, threadId: input.threadId.toUpperCase() },
+    async (topic, events) => {
+      sent.push({ topic, types: events.map((event) => event.type) });
+      return sent.length > 2;
+    },
+    manualSchedule().schedule,
+  );
+  live.start(started);
+  await flush();
+  await live.end({ status: 'complete' });
+  expect(sent.map((entry) => entry.types)).toEqual([['started'], ['end'], ['end']]);
+  expect(new Set(sent.map((entry) => entry.topic))).toEqual(new Set([`ki-thread:${input.threadId}`]));
+});
+
+test('a save that says the author lost access stops every further send, the end included', async () => {
+  const clock = manualSchedule();
+  const sent: string[] = [];
+  const live = createKiLiveBroadcast(
+    input,
+    async (_topic, events) => {
+      sent.push(...events.map((event) => event.type));
+      return true;
+    },
+    clock.schedule,
+  );
+  live.start(started);
+  await flush();
+  live.sink.text('vorher');
+  clock.runDue();
+  await flush();
+  live.sink.revoked();
+  live.sink.text('nachher');
+  clock.runDue();
+  await live.end({ status: 'complete' });
+  expect(sent).toEqual(['started', 'text']);
 });
 
 test('a failed send is logged once per turn and the end still goes out', async () => {

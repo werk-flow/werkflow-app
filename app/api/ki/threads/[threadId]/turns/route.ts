@@ -93,6 +93,7 @@ export async function POST(
         live.sink.text(delta);
       },
       saved: live.sink.saved,
+      revoked: live.sink.revoked,
     };
     // The invocation stays alive until the run has saved its answer, settled its cost and told the other tabs.
     after(

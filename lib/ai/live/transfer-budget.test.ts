@@ -21,22 +21,23 @@ type Flow =
 /**
  * Measured at the commit that set the ceilings, on the fixture's thread: 60 turns, 40 shown, and
  * answers of 60 parts 25 ms apart (lib/ai/replay.ts, `langsam`).
- * Bytes are what the client receives (JSON of each response, stream line and live event), rows
- * what the database returned, messages the responses, stream lines and live events.
+ * Bytes are what the client receives (JSON of each response, stream line and live event, the sending
+ * tab's own copy of its turn and the first join's catch-up included), rows what the database
+ * returned, messages the responses, stream lines and live events.
  */
 const TRANSFER_MEASURED: Readonly<Record<Flow, Readonly<Record<Metric, number>>>> = {
-  'thread open': { bytes: 39_895, rows: 42, messages: 1 },
-  'live turn, sending tab': { bytes: 4_128, rows: 21, messages: 32 },
-  'live turn, other tab': { bytes: 4_078, rows: 0, messages: 8 },
-  'resume after reload': { bytes: 46_401, rows: 46, messages: 9 },
+  'thread open': { bytes: 39_953, rows: 43, messages: 2 },
+  'live turn, sending tab': { bytes: 8_179, rows: 21, messages: 39 },
+  'live turn, other tab': { bytes: 4_182, rows: 0, messages: 9 },
+  'resume after reload': { bytes: 46_452, rows: 46, messages: 10 },
   'idle reconnect': { bytes: 58, rows: 1, messages: 1 },
 };
 
 const TRANSFER_CEILINGS: Readonly<Record<Flow, Readonly<Record<Metric, number>>>> = {
-  'thread open': { bytes: 44_000, rows: 42, messages: 1 },
-  'live turn, sending tab': { bytes: 4_600, rows: 24, messages: 34 },
-  'live turn, other tab': { bytes: 4_500, rows: 0, messages: 9 },
-  'resume after reload': { bytes: 51_000, rows: 50, messages: 10 },
+  'thread open': { bytes: 44_000, rows: 43, messages: 2 },
+  'live turn, sending tab': { bytes: 9_000, rows: 24, messages: 42 },
+  'live turn, other tab': { bytes: 4_600, rows: 0, messages: 10 },
+  'resume after reload': { bytes: 51_000, rows: 50, messages: 11 },
   'idle reconnect': { bytes: 64, rows: 1, messages: 1 },
 };
 

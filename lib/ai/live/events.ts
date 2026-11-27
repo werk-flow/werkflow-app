@@ -18,8 +18,9 @@ export const KI_LIVE_PROTOCOL = 1;
 /** The broadcast event name every message of the channel uses. */
 export const KI_LIVE_EVENT = 'ki';
 
+/** A thread's topic, with its id in lower case: the policy matches that spelling, and a uuid has no other. */
 export function kiLiveTopic(threadId: string): string {
-  return `ki-thread:${threadId}`;
+  return `ki-thread:${threadId.toLowerCase()}`;
 }
 
 const version = z.number().int().positive();

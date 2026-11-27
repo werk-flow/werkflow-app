@@ -70,8 +70,16 @@ export type AiTurnEnd =
   | { status: 'complete' }
   | { status: 'failed' | 'cancelled'; failure: AiTurnFailure; message: string };
 
-/** Receives the answer while it is written, and how much of it each partial save holds (the live channel). */
-export type AiTurnSink = { text: (delta: string) => void; saved?: (length: number) => void };
+/**
+ * Receives the answer while it is written. The live channel also hears how
+ * much of it each partial save holds, and when a save says the author lost
+ * access to the thread.
+ */
+export type AiTurnSink = {
+  text: (delta: string) => void;
+  saved?: (length: number) => void;
+  revoked?: () => void;
+};
 
 type ItemRef = { id: string; sequence: number };
 
@@ -575,8 +583,12 @@ function savePartial(context: RunContext, answer: Answer): void {
       })
       .abortSignal(AbortSignal.timeout(AI_TURN_LIMITS[context.command.entryPoint].answerSaveTimeoutMs));
     // A missed partial save costs only freshness; the final save follows.
-    if (error) logError('aiTurn: partial save failed', error);
-    else context.sink.saved?.(answer.savedText.length);
+    if (!error) context.sink.saved?.(answer.savedText.length);
+    else {
+      logError('aiTurn: partial save failed', error);
+      if (error.message === 'ai_actor_without_access' || error.message === 'ai_thread_not_found')
+        context.sink.revoked?.();
+    }
     answer.saving = null;
   })();
 }

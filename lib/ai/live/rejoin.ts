@@ -6,7 +6,7 @@
 const REJOIN_FIRST_MS = 1_000;
 const REJOIN_CAP_MS = 30_000;
 /** A join that held this long counts as recovered: its failure starts the backoff from the beginning. */
-export const KI_LIVE_STABLE_MS = 60_000;
+const KI_LIVE_STABLE_MS = 60_000;
 
 /** The failures in a row after the join that just failed; `heldMs` is how long it held, null when it never joined. */
 export function kiLiveFailures(previous: number, heldMs: number | null): number {

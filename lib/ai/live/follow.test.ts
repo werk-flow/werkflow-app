@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test';
 
 import { KI_LIVE_PROTOCOL, type KiLiveEvent } from '@/lib/ai/live/events';
 import {
-  applyKiLiveEvent,
   applyKiLiveEvents,
   fresherMessage,
   kiLiveCursor,
@@ -53,6 +52,14 @@ const earlier: AiThreadWindow = {
     message('c0:assistant', 2, { text: 'Hi' }),
   ],
 };
+/** One event through the page's apply step: `applied` when nothing of it waits for a read. */
+function applyKiLiveEvent(
+  window: AiThreadWindow,
+  event: KiLiveEvent,
+): { window: AiThreadWindow; applied: boolean } {
+  const result = applyKiLiveEvents(window, [event]);
+  return { window: result.window, applied: result.held.length === 0 };
+}
 const answerOf = (window: AiThreadWindow): AiChatMessage | undefined =>
   window.messages.find((entry) => entry.key === `${command}:assistant`);
 
@@ -103,6 +110,16 @@ test('an end applies only when the page holds the whole answer; otherwise the sa
   expect(applyKiLiveEvent(ended, text(7, ' Noch was')).window, 'a finished answer takes no more text').toBe(
     ended,
   );
+});
+
+test('a turn that starts past messages the page never saw waits for a read, so the cursor does not skip them', () => {
+  const later: KiLiveEvent = {
+    ...started,
+    user: { sequence: 5, text: 'Noch was?' },
+    answer: { sequence: 6 },
+  };
+  expect(applyKiLiveEvent(earlier, later).applied).toBe(false);
+  expect(kiLiveCursor(earlier), 'the catch-up starts at the first message the page lacks').toBe(3);
 });
 
 test('text for an answer the page never saw waits for a read', () => {

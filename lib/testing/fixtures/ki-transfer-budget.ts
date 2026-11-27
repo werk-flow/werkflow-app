@@ -111,10 +111,17 @@ const answerText = (window: AiThreadWindow, command: string): string | undefined
 
 seedHeavyThread();
 
-// Thread open: the latest window under its byte cap, not the whole thread.
+// Thread open: the latest window under its byte cap, not the whole thread, then the first join's
+// catch-up from the cursor.
 const rowsBeforeOpen = world.rowsRead;
 const opened = await readWindow();
-measured['thread open'] = { bytes: opened.bytes, rows: world.rowsRead - rowsBeforeOpen, messages: 1 };
+const joined = follower(opened.window);
+await joined.catchUp();
+measured['thread open'] = {
+  bytes: opened.bytes + joined.tab.measure.bytes,
+  rows: world.rowsRead - rowsBeforeOpen,
+  messages: 1 + joined.tab.measure.messages,
+};
 assert.ok(opened.window.hasOlder, 'a heavy thread opens with a window and pages older messages in');
 assert.ok(opened.window.messages.length <= 40, 'a thread opens with at most 40 messages');
 
@@ -124,10 +131,13 @@ assert.ok(opened.window.messages.length <= 40, 'a thread opens with at most 40 m
   const other = follower(opened.window);
   world.onLiveSend = (events) => other.receive(parseEvents(events));
   const rows = world.rowsRead;
+  const sendsBefore = world.liveSends.length;
   const response = await postTurn('[replay:langsam] Wie prüfe ich den Druck?', { commandId: command });
   const body = await response.clone().text();
   await readTurn(world, response);
   world.onLiveSend = null;
+  // The sending tab shows the thread too, so it hears its own turn on the channel as well.
+  const ownCopy = world.liveSends.slice(sendsBefore).flatMap((send) => send.events);
   const turnRows = world.rowsRead - rows;
   const saved = (await readWindow()).window;
   assert.equal(
@@ -140,9 +150,9 @@ assert.ok(opened.window.messages.length <= 40, 'a thread opens with at most 40 m
     "every live send goes to the thread's own topic",
   );
   measured['live turn, sending tab'] = {
-    bytes: Buffer.byteLength(body, 'utf8'),
+    bytes: Buffer.byteLength(body, 'utf8') + ownCopy.reduce((sum: number, event) => sum + bytesOf(event), 0),
     rows: turnRows,
-    messages: body.split('\n').filter(Boolean).length,
+    messages: body.split('\n').filter(Boolean).length + ownCopy.length,
   };
   measured['live turn, other tab'] = other.tab.measure;
 }
@@ -220,6 +230,41 @@ assert.ok(opened.window.messages.length <= 40, 'a thread opens with at most 40 m
   const saved = (await readWindow()).window;
   assert.match(answerText(saved, command) ?? '', /"v":99/);
   assert.equal(answerText(other.tab.window, command), answerText(saved, command));
+}
+
+// An author who loses access in the middle of an answer: Realtime may keep their join, so once a
+// partial save says the access is gone, the channel starts no further send.
+{
+  const command = crypto.randomUUID();
+  const answer = world.rpc;
+  let saves = 0;
+  let sendsStarted = 0;
+  let startedAtRefusal: number | null = null;
+  world.rpc = (call) => {
+    if (call.name === 'update_ai_thread_item' && call.args.p_status === 'streaming') {
+      saves += 1;
+      if (saves > 1) {
+        startedAtRefusal ??= sendsStarted;
+        return { data: null, error: { message: 'ai_actor_without_access' } };
+      }
+    }
+    return answer(call);
+  };
+  world.onLiveSend = () => {
+    sendsStarted += 1;
+  };
+  await readTurn(world, await postTurn('[replay:langsam] Und der Rücklauf?', { commandId: command }));
+  world.onLiveSend = null;
+  world.rpc = answer;
+  assert.ok(
+    startedAtRefusal !== null && startedAtRefusal > 1,
+    'the channel carried the answer while the access held',
+  );
+  assert.equal(
+    sendsStarted,
+    startedAtRefusal,
+    'after a save refused for lost access, the channel must start no further send, the end included',
+  );
 }
 
 process.stdout.write(`TRANSFER ${JSON.stringify(measured)}\n`);

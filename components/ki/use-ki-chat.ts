@@ -125,16 +125,6 @@ function mergeWindow(previous: AiThreadWindow | null, next: AiThreadWindow): AiT
   };
 }
 
-/** How a started turn ended when its end event never arrived. */
-function endWithout(outcome: TurnOutcome): NonNullable<LiveTurn['end']> {
-  return outcome.kind === 'stopped'
-    ? { status: 'cancelled', message: 'Du hast die Antwort angehalten.' }
-    : {
-        status: 'failed',
-        message: 'Die Verbindung ist abgebrochen. Was schon geschrieben war, bleibt gespeichert.',
-      };
-}
-
 export function useThreadList(organizationId: string, initial: ThreadList) {
   const [list, setList] = useState(initial);
   // The page the person asked for: the threads after the last one shown.
@@ -325,6 +315,8 @@ function useLiveFollow(
 ) {
   const held = useRef(new Map<string, KiLiveEvent[]>());
   const filling = useRef(new Set<string>());
+  // A join or a gap that came while the thread's first read or a catch-up was on its way: one more read follows.
+  const wanted = useRef(new Set<string>());
   /** Applies the thread's held events and the new one; returns whether a read could fill what is left. */
   const apply = useCallback(
     (id: string, events: readonly KiLiveEvent[]): boolean => {
@@ -346,15 +338,25 @@ function useLiveFollow(
     },
     [viewsRef, update],
   );
-  /** Reads the thread from the cursor on, once at a time, and applies the held events again. */
+  /**
+   * Reads the thread from the cursor on, one read at a time, and applies the
+   * held events again. A request that comes while the thread has no window
+   * yet or a read is on its way is kept, and one more read follows that one:
+   * its snapshot may predate the event that asked.
+   */
   const catchUp = useCallback(
     async (id: string): Promise<void> => {
       const window = viewsRef.current[id]?.window;
-      if (!window || filling.current.has(id)) return;
+      if (!window || filling.current.has(id)) {
+        wanted.current.add(id);
+        return;
+      }
       filling.current.add(id);
+      wanted.current.delete(id);
       await read(id, { after: kiLiveCursor(window) });
       filling.current.delete(id);
       apply(id, []);
+      if (wanted.current.has(id)) void catchUp(id);
     },
     [viewsRef, read, apply],
   );
@@ -364,10 +366,11 @@ function useLiveFollow(
     },
     [apply, catchUp],
   );
-  /** Applies what waited for a read that just landed. */
+  /** Applies what waited for a read that just landed; a catch-up's own read applies when it returns. */
   const drain = useCallback(
     (id: string) => {
-      if (apply(id, [])) void catchUp(id);
+      if (filling.current.has(id)) return;
+      if (apply(id, []) || wanted.current.has(id)) void catchUp(id);
     },
     [apply, catchUp],
   );
@@ -456,10 +459,20 @@ function markStarted(
 function settleSaved(current: LiveTurn, outcome: TurnOutcome, host: TurnHost): void {
   showAddress(host, current.threadId);
   host.touch(current.threadId, current.user.text);
-  const end = current.end ?? (outcome.kind === 'already_done' ? null : endWithout(outcome));
-  host.settle(current.threadId, end ? [current.user, answerMessage({ ...current, end })] : [], end !== null);
-  // A stopped answer keeps what this page showed; the thread's next read shows how it went on.
-  if (!current.end && outcome.kind !== 'stopped') void host.readWindow(current.threadId);
+  if (current.end) return host.settle(current.threadId, [current.user, answerMessage(current)], true);
+  if (outcome.kind === 'stopped') {
+    // A stopped answer keeps what this page showed; the thread's next read shows how it went on.
+    const end: LiveTurn['end'] = { status: 'cancelled', message: 'Du hast die Antwort angehalten.' };
+    return host.settle(current.threadId, [current.user, answerMessage({ ...current, end })], true);
+  }
+  // Without its end event the answer stays open: the server goes on writing it, the thread's live
+  // channel brings the rest, and a read now shows what is saved.
+  host.settle(
+    current.threadId,
+    outcome.kind === 'already_done' ? [] : [current.user, answerMessage(current)],
+    false,
+  );
+  void host.readWindow(current.threadId);
 }
 
 /** The text of a refused message goes back into its own draft, before what was typed there meanwhile. */
