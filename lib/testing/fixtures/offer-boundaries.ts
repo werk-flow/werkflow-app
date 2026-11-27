@@ -245,7 +245,7 @@ assert.deepEqual(
       CALLER_ID,
       ownOfferId,
       // 1,5 h at 72,50 € is 108,75 €; 19 % VAT on it is 20,6625 €.
-      { netCents: 10875, taxCents: 2066, grossCents: 12941 },
+      { netCents: 10875, taxCents: 2066, grossCents: 12941, positionTypes: true },
       [
         '"positionType":{"kind":"normal"}',
         '"positionType":{"kind":"bedarf"}',

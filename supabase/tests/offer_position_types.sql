@@ -84,12 +84,14 @@ grant execute on function pg_temp.content(bigint) to service_role;
 
 create function pg_temp.save(p_offer uuid, p_content jsonb, p_net bigint default 489000,
   p_organization uuid default '38580000-0000-4000-8000-000000000010',
-  p_actor uuid default '38580000-0000-4000-8000-000000000002', p_version integer default 1)
+  p_actor uuid default '38580000-0000-4000-8000-000000000002', p_version integer default 1,
+  p_legacy boolean default false)
   returns jsonb language sql as $$
   select public.save_offer_content(p_actor, p_organization, p_offer, p_version,
-    gen_random_uuid(), p_content, jsonb_build_object('netCents', p_net, 'taxCents', 92910, 'grossCents', 581910));
+    gen_random_uuid(), p_content, jsonb_build_object('netCents', p_net, 'taxCents', 92910, 'grossCents', 581910)
+      || case when p_legacy then '{}'::jsonb else '{"positionTypes": true}'::jsonb end);
 $$;
-grant execute on function pg_temp.save(uuid, jsonb, bigint, uuid, uuid, integer) to service_role;
+grant execute on function pg_temp.save(uuid, jsonb, bigint, uuid, uuid, integer, boolean) to service_role;
 
 -- K8's foreign key from a Position to its customer condition is validated.
 do $$
@@ -215,11 +217,25 @@ select pg_temp.positions_read_by('38580000-0000-4000-8000-000000000003');
 -- calls are refused for this offer. Its untyped offers save and send as
 -- before (offers.sql, offer_sending.sql).
 set local role service_role;
-select pg_temp.expect_refusal('a save without types', format(
-  'select pg_temp.save(%L, %L, 489000, %L, %L, 2)', pg_temp.id('offer'),
-  pg_temp.content() #- '{0,positions,0,positionType}'
-    #- '{0,positions,2,positionType}' #- '{0,positions,3,positionType}',
-  '38580000-0000-4000-8000-000000000010', '38580000-0000-4000-8000-000000000002'), 'offer_not_editable');
+select pg_temp.expect_refusal(label, format('select pg_temp.save(%L, %L, %s, %L, %L, 2, true)',
+  pg_temp.id('offer'), content, net, '38580000-0000-4000-8000-000000000010',
+  '38580000-0000-4000-8000-000000000002'), 'offer_not_editable')
+from (values
+  ('a save without types', pg_temp.content() #- '{0,positions,0,positionType}'
+    #- '{0,positions,2,positionType}' #- '{0,positions,3,positionType}', 489000),
+  ('a save that clears every Titel', '[]'::jsonb, 0)
+) as cases(label, content, net);
+-- A caller that knows the types may clear the offer.
+savepoint typed_clear;
+do $$
+begin
+  if pg_temp.save(pg_temp.id('offer'), '[]', 0, '38580000-0000-4000-8000-000000000010',
+      '38580000-0000-4000-8000-000000000002', 2) ->> 'contentVersion' is distinct from '3' then
+    raise exception 'a type-aware save could not clear the offer';
+  end if;
+end;
+$$;
+rollback to savepoint typed_clear;
 select pg_temp.expect_refusal('a send whose rendering counted every Position', format(
   'select public.send_offer(%L, %L, %L, 1, 2, gen_random_uuid(), %L, %L, %L, %L, %L, %L, %L, %L, 2048, %L)',
   '38580000-0000-4000-8000-000000000002', '38580000-0000-4000-8000-000000000010', pg_temp.id('offer'), 'post',

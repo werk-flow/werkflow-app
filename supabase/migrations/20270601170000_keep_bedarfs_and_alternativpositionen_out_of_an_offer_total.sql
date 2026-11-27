@@ -13,9 +13,10 @@
 --    positionType {kind: 'normal' | 'bedarf' | 'alternative', alternativeTo},
 --    and a Titel's sum counts its normal Positions only. An Alternativposition
 --    names a normal priced Position of its own Titel, else invalid_input. A
---    caller older than the types names none: over an offer that holds a
---    Bedarfs- or Alternativposition it is refused (offer_not_editable), so a
---    rolled-back build never saves one as a normal Position.
+--    caller that knows the types says so in p_totals (`positionTypes: true`);
+--    an older one is refused for an offer that holds a Bedarfs- or
+--    Alternativposition (offer_not_editable), so a rolled-back build never
+--    saves one as a normal Position or clears it.
 -- 4. get_offer as in 20270501090000, with positionType beside a Position of
 --    another type than „normal“.
 -- 5. send_offer as in 20270601090000; the frozen content names a Position's
@@ -153,9 +154,7 @@ begin
   end if;
   if v_old.status <> 'entwurf' then raise exception 'offer_not_editable'; end if;
   if v_old.content_version <> p_expected_content_version then raise exception 'offer_changed'; end if;
-  if exists (select 1 from jsonb_array_elements(p_sections) section,
-      jsonb_array_elements(section -> 'positions') line
-    where line ->> 'kind' = 'free' and not line ? 'positionType')
+  if p_totals ->> 'positionTypes' is distinct from 'true'
     and exists (select 1 from public.offer_positions line
       where line.organization_id = p_organization_id and line.offer_id = p_offer_id
         and line.position_type <> 'normal')
