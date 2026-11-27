@@ -12594,24 +12594,27 @@ export type Database = {
       time_correction_application_spans: {
         Row: {
           application_id: string;
+          id: number;
           organization_id: string;
           snapshot: string;
           span: unknown;
-          user_id: string;
+          user_id: string | null;
         };
         Insert: {
           application_id: string;
+          id?: never;
           organization_id: string;
           snapshot: string;
           span: unknown;
-          user_id: string;
+          user_id?: string | null;
         };
         Update: {
           application_id?: string;
+          id?: never;
           organization_id?: string;
           snapshot?: string;
           span?: unknown;
-          user_id?: string;
+          user_id?: string | null;
         };
         Relationships: [
           {
