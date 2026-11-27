@@ -126,6 +126,8 @@ type Delivery = {
   state: 'sending' | 'sent' | 'failed';
   attempt: number;
   failureCode: string | null;
+  /** When an attempt ended without the provider's answer, as the table records it. */
+  outcomeUnknownAt?: string;
   stored: Record<'recipient' | 'subject' | 'text' | 'senderName' | 'fromHeader' | 'replyTo', unknown>;
 };
 const deliveries: Delivery[] = [];
@@ -213,6 +215,7 @@ const syncTable = () => {
     invoice_id: invoiceId,
     document_id: originalId,
     recipient_email: delivery.stored.recipient,
+    outcome_unknown_at: delivery.outcomeUnknownAt ?? null,
     email_subject: delivery.stored.subject,
     message_text: delivery.stored.text,
   }));
@@ -428,6 +431,7 @@ assert.deepEqual(await retryInvoiceDelivery({ deliveryId: failedDelivery.id, exp
   success: true,
   state: 'sent',
   failureCode: null,
+  outcomeUnknown: false,
 });
 assert.equal(callsNamed('retry_document_delivery')[0]?.args.p_expected_attempt, 1);
 assert.equal(callsNamed('consume_rate_limit').length, 2, 'the retry did not count its recipient');
@@ -437,6 +441,7 @@ assert.deepEqual(await retryInvoiceDelivery({ deliveryId: failedDelivery.id, exp
   success: true,
   state: 'sent',
   failureCode: null,
+  outcomeUnknown: false,
 });
 assert.equal(mailsOf(failedDelivery.id).length, 1, 'the retry did not send exactly once');
 assert.equal(
@@ -479,9 +484,32 @@ assert.deepEqual(await retryInvoiceDelivery({ deliveryId: lateDelivery.id, expec
   success: true,
   state: 'failed',
   failureCode: 'delivery_window_passed',
+  outcomeUnknown: false,
 });
 assert.equal(mailsOf(lateDelivery.id).length, 0, 'an attempt past the key window was sent');
 
+// A press from a page that predates another session's attempts: attempt 2 went unanswered and
+// attempt 3 failed. The answer is attempt 3's, and it says the record's outcome is unknown, so
+// the page keeps the send unclear though its own row knew only attempt 1's failure.
+const takenOverDelivery: Delivery = {
+  ...lateDelivery,
+  id: crypto.randomUUID(),
+  attemptKey: crypto.randomUUID(),
+  requestedAt: new Date().toISOString(),
+  state: 'failed',
+  attempt: 3,
+  failureCode: 'email_provider_503',
+  outcomeUnknownAt: new Date(Date.now() - 60 * 60_000).toISOString(),
+};
+deliveries.push(takenOverDelivery);
+syncTable();
+assert.deepEqual(await retryInvoiceDelivery({ deliveryId: takenOverDelivery.id, expectedAttempt: 1 }), {
+  success: true,
+  state: 'failed',
+  failureCode: 'email_provider_503',
+  outcomeUnknown: true,
+});
+assert.equal(mailsOf(takenOverDelivery.id).length, 0, 'a retry of an older attempt sent a mail');
 // A Servicebericht's delivery is no invoice's: refused before any claim.
 const reportDeliveryId = '98200000-0000-4000-8000-000000000601';
 world.tables.document_deliveries = [

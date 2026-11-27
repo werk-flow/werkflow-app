@@ -48,13 +48,27 @@ function nextStep(code: string | null, retryStep: string): string {
 }
 
 /**
- * What became of a delivery that takes no further step, as on a cancelled
- * invoice: the last attempt's reason, and whether an earlier attempt without
- * the provider's answer may have reached the customer.
+ * What became of a failed delivery: the last attempt's reason, and whether an
+ * earlier attempt without the provider's answer may have reached the customer.
+ * A `retryStep` adds what helps, `''` where no retry is named; null names no
+ * step, since a cancelled invoice takes none.
  */
-export function pastDeliveryOutcome(entry: Pick<DeliveryEntry, 'failureCode' | 'outcomeUnknown'>): string {
-  const reason = deliveryFailureSentence(entry.failureCode);
-  if (!entry.outcomeUnknown || outcomeUnknown(entry.failureCode)) return reason;
+export function deliveryOutcome(
+  entry: Pick<DeliveryEntry, 'failureCode' | 'outcomeUnknown'>,
+  retryStep: string | null,
+): string {
+  const code = entry.failureCode;
+  if (!entry.outcomeUnknown || outcomeUnknown(code)) {
+    return retryStep === null ? deliveryFailureSentence(code) : deliveryFailureAdvice(code, retryStep);
+  }
+  // A retry repeats the same mail, which the provider sends once; a new email could be a second one.
+  const step =
+    retryStep === null
+      ? ''
+      : refusedByProvider(code)
+        ? 'Frag beim Kunden nach, ob die frühere E-Mail ankam, bevor du über „Per E-Mail senden“ eine neue an die richtige Adresse sendest.'
+        : nextStep(code, retryStep);
+  const reason = [deliveryFailureSentence(code), step].filter(Boolean).join(' ');
   return `Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: ${reason}`;
 }
 

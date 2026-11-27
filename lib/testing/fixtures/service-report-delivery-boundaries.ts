@@ -353,6 +353,7 @@ for (let press = 0; press < 2; press += 1) {
     success: true,
     state: 'sent',
     failureCode: null,
+    outcomeUnknown: false,
   });
 }
 assert.equal(mailsOf(failed.id).length, 1, 'the retry did not send exactly once');

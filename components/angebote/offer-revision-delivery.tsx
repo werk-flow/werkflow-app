@@ -23,7 +23,7 @@ const OFFER_DELIVERY_FAILURES: Readonly<Record<string, string>> = {
   document_not_found:
     'Das abgelegte PDF dieser Revision lässt sich nicht versenden. Prüfe es unter „PDF öffnen“.',
   delivery_retry_expired:
-    'Der Versand ist älter als einen Tag und lässt sich nicht mehr wiederholen. Sende das Angebot bei Bedarf neu per E-Mail.',
+    'Der Versand ist älter als 23 Stunden und lässt sich nicht mehr wiederholen. Sende das Angebot bei Bedarf neu per E-Mail.',
 };
 
 export function OfferRevisionDelivery({

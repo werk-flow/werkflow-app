@@ -1,7 +1,12 @@
 'use server';
 
 import type { ActionResult } from '@/lib/action-result';
-import { retryDocumentDelivery, sendDocument, type DeliveryOutcome } from '@/lib/delivery/document-delivery';
+import {
+  retryDocumentDelivery,
+  sendDocument,
+  type DeliveryOutcome,
+  type RetryOutcome,
+} from '@/lib/delivery/document-delivery';
 import { sendDocumentEmailSchema } from '@/lib/delivery/delivery-types';
 import { logError } from '@/lib/logging';
 import type { ActionContext } from '@/lib/org/action-context';
@@ -68,7 +73,7 @@ export async function sendOfferRevisionEmail(
 /** „Erneut senden“: a failed delivery of a revision once more, with what it carried. */
 export async function retryOfferRevisionDelivery(
   rawInput: z.input<typeof retryOfferRevisionDeliverySchema>,
-): Promise<DeliveryOutcome> {
+): Promise<RetryOutcome> {
   const parsed = retryOfferRevisionDeliverySchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   try {
