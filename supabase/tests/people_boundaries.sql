@@ -292,6 +292,42 @@ begin
     if sqlerrm <> 'responsibility_holder_probe' then raise; end if;
   end;
 
+  -- A removal counts another holder only while they can approve, as the
+  -- approval checks do: a co-holder whose access is suspended, or not yet
+  -- active, leaves the removed member as the group's last holder.
+  begin
+    insert into public.personnel_access_lifecycles (
+      organization_id, employee_record_id, state, state_effective_at
+    ) values (org, holder_two_record, 'suspended', now())
+    on conflict (employee_record_id) do update
+      set state = excluded.state, state_effective_at = excluded.state_effective_at,
+          scheduled_state = null, scheduled_for = null;
+    if app_private.p1_24_has_effective_access(org, '39000000-0000-0000-0000-000000000009')
+      then raise exception 'the suspended co-holder still has effective access'; end if;
+    begin
+      delete from public.organization_members
+      where organization_id = org and user_id = '39000000-0000-0000-0000-000000000008';
+      raise exception 'a removal counted a suspended co-holder as the remaining holder';
+    exception when others then
+      if sqlerrm <> 'last_responsibility_holder:time_approval' then raise; end if;
+    end;
+    update public.personnel_access_lifecycles
+    set state = 'scheduled', scheduled_state = 'active', scheduled_for = now() + interval '7 days'
+    where employee_record_id = holder_two_record;
+    if app_private.p1_24_has_effective_access(org, '39000000-0000-0000-0000-000000000009')
+      then raise exception 'the not yet active co-holder already has effective access'; end if;
+    begin
+      delete from public.organization_members
+      where organization_id = org and user_id = '39000000-0000-0000-0000-000000000008';
+      raise exception 'a removal counted a not yet active co-holder as the remaining holder';
+    exception when others then
+      if sqlerrm <> 'last_responsibility_holder:time_approval' then raise; end if;
+    end;
+    raise exception 'responsibility_holder_probe';
+  exception when others then
+    if sqlerrm <> 'responsibility_holder_probe' then raise; end if;
+  end;
+
   -- Lock order: a member's row, then the organization lock, then personnel
   -- records, which a role-default snapshot or a save locks through its
   -- foreign keys after the organization lock. A removal locks the removed
@@ -314,8 +350,8 @@ $$;
 
 -- An employment transition that ends or pauses a holder's employment keeps
 -- every selected group with an active holder: a member of the organization
--- whose personnel record has no exit date, as the last-holder check on a
--- member removal counts. A holder who already exited or left the
+-- with effective access whose personnel record has no exit date, as the
+-- last-holder check on a member removal counts. A holder who already exited or left the
 -- organization stays listed in the group but holds nothing. The transition
 -- takes the organization holder lock before it counts, so it serializes with
 -- the other holder changes, and before it writes the personnel record, in the
