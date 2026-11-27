@@ -86,8 +86,10 @@ import { initializeLeistungenBoundary, LeistungenContractFixture } from './leist
 import { OffersContractFixture } from './offers-boundaries';
 import {
   InvoiceDeliveriesContractFixture,
+  InvoiceDeliveryRetryContractFixture,
   InvoiceEditorContractFixture,
   InvoiceSettingsContractFixture,
+  mountInvoiceDeliveriesHydration,
 } from './invoice-editor-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { ServiceReportDeliveryContractFixture } from './service-report-delivery-boundaries';
@@ -610,7 +612,9 @@ const root = document.getElementById('root');
 if (!root) throw new Error('UI contract fixture root is missing.');
 // The hydration contracts server-render their page into its own container.
 const hydrationRoot = document.getElementById('hydration-root');
-if (hydrationRoot)
+if (hydrationRoot?.dataset.fixture === 'invoice-deliveries-hydration')
+  mountInvoiceDeliveriesHydration(hydrationRoot);
+else if (hydrationRoot)
   mountHydrationFixture(
     hydrationRoot,
     hydrationRoot.dataset.fixture === 'instruction-hydration'
@@ -677,6 +681,10 @@ createRoot(root).render(
     <InvoiceDeliveriesContractFixture cancelled={false} />
   ) : window.uiContractFixture === 'invoice-deliveries-cancelled' ? (
     <InvoiceDeliveriesContractFixture cancelled />
+  ) : window.uiContractFixture === 'invoice-deliveries-retry' ? (
+    <InvoiceDeliveryRetryContractFixture />
+  ) : window.uiContractFixture === 'invoice-deliveries-stale-retry' ? (
+    <InvoiceDeliveryRetryContractFixture stale />
   ) : window.uiContractFixture === 'service-report-delivery' ? (
     <ServiceReportDeliveryContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (

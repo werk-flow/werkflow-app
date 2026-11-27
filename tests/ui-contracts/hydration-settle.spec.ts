@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
+import { openHydrationFixture } from './open-fixture';
 
 // A component hydrated inside a Suspense boundary runs its mount effects at
 // idle priority. While a route transition stays pending, an idle update from
@@ -13,17 +13,7 @@ async function openHydratedPage(
   page: Page,
   name: 'instruction-hydration' | 'auftraege-hydration',
 ): Promise<void> {
-  const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
-  if (!bundle) throw new Error('Run through the UI contract runner');
-  const url = 'http://localhost/ui-contracts';
-  await page.route(url, (route) =>
-    route.fulfill({
-      contentType: 'text/html',
-      body: `<html lang="de"><body><div id="root"></div><div id="hydration-root" data-fixture="${name}"></div></body></html>`,
-    }),
-  );
-  await page.goto(url);
-  await page.evaluate(() => {
+  await openHydrationFixture(page, name, () => {
     const commits = { count: 0 };
     Object.assign(window, {
       hydrationCommits: commits,
@@ -40,7 +30,6 @@ async function openHydratedPage(
       },
     });
   });
-  await page.addScriptTag({ path: bundle });
   // The boundary hydrated, and its mount effect started the pending transition.
   await expect(page).toHaveTitle('Route wird geladen');
 }
@@ -70,7 +59,6 @@ async function expectSettledAfterChange(page: Page, changed: Locator): Promise<v
 test('a hydrated instruction list settles after a server refresh during a pending route transition', async ({
   page,
 }) => {
-  assertWorkspaceTestLock();
   await openHydratedPage(page, 'instruction-hydration');
   await expectSettledAfterChange(
     page,
@@ -81,7 +69,6 @@ test('a hydrated instruction list settles after a server refresh during a pendin
 test('a hydrated Aufträge list settles after an own-action echo during a pending route transition', async ({
   page,
 }) => {
-  assertWorkspaceTestLock();
   await openHydratedPage(page, 'auftraege-hydration');
   await expectSettledAfterChange(
     page,

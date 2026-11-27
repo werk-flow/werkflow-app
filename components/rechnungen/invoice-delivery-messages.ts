@@ -10,5 +10,5 @@ export const DELIVERY_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   original_missing: 'Das Original der Rechnung ist noch nicht abgelegt. Erstelle zuerst den Beleg.',
   document_not_found: 'Das Original der Rechnung ist nicht mehr verfügbar.',
   delivery_retry_expired:
-    'Der Versand ist älter als einen Tag und lässt sich nicht mehr wiederholen. Sende die Rechnung bei Bedarf neu per E-Mail.',
+    'Der Versand ist älter als 23 Stunden und lässt sich nicht mehr wiederholen. Sende die Rechnung bei Bedarf neu per E-Mail.',
 };

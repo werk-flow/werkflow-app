@@ -88,6 +88,8 @@ declare global {
       | 'invoice-settings'
       | 'invoice-deliveries-issued'
       | 'invoice-deliveries-cancelled'
+      | 'invoice-deliveries-retry'
+      | 'invoice-deliveries-stale-retry'
       | 'service-report-delivery'
       | 'site-access-review'
       | 'site-access-proposal'
