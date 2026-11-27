@@ -84,6 +84,8 @@ declare global {
       | 'offers'
       | 'invoice-editor'
       | 'invoice-settings'
+      | 'invoice-deliveries-issued'
+      | 'invoice-deliveries-cancelled'
       | 'site-access-review'
       | 'site-access-proposal'
       | AuthUrlFixtureName

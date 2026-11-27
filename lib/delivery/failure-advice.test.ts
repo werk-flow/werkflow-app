@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { DeliveryEntry } from './delivery-types';
-import { deliveryFailureAdvice, priorEmailAdvice } from './failure-advice';
+import { deliveryFailureAdvice, deliveryFailureSentence, priorEmailAdvice } from './failure-advice';
 
 // A failed send names the step that helps. Tier 2.
 
@@ -14,6 +14,17 @@ test('a mail the provider refused points to a new email, since the retry repeats
     'Die E-Mail ist nicht rausgegangen. Unter „Versand“ kannst du sie erneut senden.',
   );
   expect(deliveryFailureAdvice('attachment_unavailable')).toBe('Das Original war gerade nicht lesbar.');
+});
+
+test('the reason of a failure names no step, since a cancelled invoice is never sent again', () => {
+  for (const code of ['email_not_configured', 'email_provider_422', 'email_provider_unreachable', null]) {
+    const reason = deliveryFailureSentence(code);
+    expect(reason).not.toContain('Versuche');
+    expect(reason).not.toContain('senden');
+  }
+  expect(deliveryFailureAdvice('email_not_configured')).toBe(
+    'Der E-Mail-Versand war nicht eingerichtet. Versuche es später erneut.',
+  );
 });
 
 const email = (

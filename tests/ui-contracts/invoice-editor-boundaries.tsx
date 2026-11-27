@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 
+import { InvoiceDeliveries } from '@/components/rechnungen/invoice-delivery';
 import { InvoiceEditor } from '@/components/rechnungen/invoice-editor';
 import { InvoiceSettingsForm } from '@/components/settings/invoice-settings-form';
 import { BannerProvider } from '@/components/ui/banner';
+import type { DeliveryList } from '@/lib/delivery/delivery-types';
 import type { InvoiceSettings } from '@/lib/invoices/settings';
 import type { InvoiceDetail } from '@/lib/invoices/types';
 import { CalendarOrganizationContext } from './calendar-service-boundaries';
 
-// The invoice editor and the invoice settings form. The spec renders a newer
-// read of the page as a refresh would: the invoice issued, or the settings in
-// a new Berlin year.
+// The invoice editor, the invoice settings form and an issued or cancelled
+// invoice's „Versand“. The spec renders a newer read of the page as a refresh
+// would: the invoice issued, or the settings in a new Berlin year.
 declare global {
   interface Window {
     /** Renders the page again as after another session issued the invoice as RE-2037-001. */
@@ -115,6 +117,72 @@ export function InvoiceSettingsContractFixture(): React.JSX.Element {
           organizationId="00000000-0000-4000-8000-000000000001"
           settings={settings}
           canEdit
+        />
+      </main>
+    </BannerProvider>
+  );
+}
+
+const HOUR = 60 * 60 * 1000;
+
+/** One sent email and one failed email whose retry window is open. */
+const DELIVERIES: DeliveryList = {
+  total: 2,
+  entries: [
+    {
+      id: '98000000-0000-4000-8000-000000000002',
+      channel: 'email',
+      state: 'failed',
+      recipient: 'buchhaltung@lindenhof.example',
+      subject: 'Rechnung RE-2037-001 – Haustechnik Sonnenberg GmbH',
+      note: '',
+      attempts: 1,
+      failureCode: 'email_provider_503',
+      outcomeUnknown: false,
+      createdAt: '2037-11-21T09:30:00.000Z',
+      sentAt: null,
+      createdBy: 'Erika Musterfrau',
+      retryFrom: new Date(Date.now() - HOUR).toISOString(),
+      retryUntil: new Date(Date.now() + HOUR).toISOString(),
+    },
+    {
+      id: '98000000-0000-4000-8000-000000000001',
+      channel: 'email',
+      state: 'sent',
+      recipient: 'erika.musterfrau@lindenhof.example',
+      subject: 'Rechnung RE-2037-001 – Haustechnik Sonnenberg GmbH',
+      note: '',
+      attempts: 1,
+      failureCode: null,
+      outcomeUnknown: false,
+      createdAt: '2037-11-20T09:00:00.000Z',
+      sentAt: '2037-11-20T09:00:05.000Z',
+      createdBy: 'Erika Musterfrau',
+      retryFrom: null,
+      retryUntil: null,
+    },
+  ],
+};
+
+/** „Versand“ as the invoice page renders it: a cancelled invoice gets no mail defaults. */
+export function InvoiceDeliveriesContractFixture({ cancelled }: { cancelled: boolean }): React.JSX.Element {
+  return (
+    <BannerProvider>
+      <main>
+        <h1>Komponentenverträge</h1>
+        <InvoiceDeliveries
+          invoiceId="96000000-0000-4000-8000-000000000001"
+          invoiceNumber="RE-2037-001"
+          list={DELIVERIES}
+          defaults={
+            cancelled
+              ? null
+              : {
+                  recipient: 'erika.musterfrau@lindenhof.example',
+                  subject: 'Rechnung RE-2037-001 – Haustechnik Sonnenberg GmbH',
+                  text: 'Guten Tag,',
+                }
+          }
         />
       </main>
     </BannerProvider>

@@ -285,15 +285,18 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.includes('/components/auftraege/handover/'))
                 return { path: join(import.meta.dir, 'work-handover-service-boundaries.ts') };
             });
-            // The invoice editor and settings form: held catalog read and settings save, inert issue and router.
+            // The invoice editor, settings form and „Versand“: held catalog read and settings save, inert
+            // issue, delivery, router and realtime.
             builder.onResolve(
               {
                 filter:
-                  /^(?:@\/lib\/invoices\/(?:line-source-actions|issue-actions|settings-actions)|@\/hooks\/use-realtime-router-refresh|next\/navigation|next\/link)$/,
+                  /^(?:@\/lib\/invoices\/(?:line-source-actions|issue-actions|settings-actions|delivery-actions)|@\/hooks\/use-realtime-router-refresh|next\/navigation|next\/link)$/,
               },
               (args) => {
                 if (
-                  /(?:invoice-(?:editor|catalog-line|issue)|invoice-settings-form)\.tsx$/.test(args.importer)
+                  /(?:invoice-(?:editor|catalog-line|issue|delivery|delivery-dialogs)|invoice-settings-form)\.tsx$/.test(
+                    args.importer,
+                  )
                 )
                   return { path: join(import.meta.dir, 'invoice-editor-service-boundaries.tsx') };
               },

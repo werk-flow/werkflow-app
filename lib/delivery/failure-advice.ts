@@ -17,11 +17,17 @@ function refusedByProvider(code: string | null): boolean {
   return code === 'email_validation_error' || code === 'email_provider_422';
 }
 
-/** Why a delivery failed, from its stored code; the code itself never reaches the screen. */
-function deliveryFailureSentence(code: string | null): string {
-  if (code === 'email_not_configured' || code === 'email_provider_unauthorized') {
-    return 'Der E-Mail-Versand ist gerade nicht eingerichtet. Versuche es später erneut.';
-  }
+// WerkFlow's mail provider was not set up or refused WerkFlow's key.
+function notConfigured(code: string | null): boolean {
+  return code === 'email_not_configured' || code === 'email_provider_unauthorized';
+}
+
+/**
+ * Why a delivery failed, from its stored code, without a next step; the code
+ * itself never reaches the screen.
+ */
+export function deliveryFailureSentence(code: string | null): string {
+  if (notConfigured(code)) return 'Der E-Mail-Versand war nicht eingerichtet.';
   if (outcomeUnknown(code)) {
     return 'Der Mailanbieter hat nicht geantwortet. Ob die E-Mail rausging, ist unklar.';
   }
@@ -31,16 +37,19 @@ function deliveryFailureSentence(code: string | null): string {
   return 'Die E-Mail ist nicht rausgegangen.';
 }
 
-/**
- * Why a delivery failed and what helps: a refused mail needs a new email to a
- * corrected address, since „Erneut senden“ repeats the stored one; any other
- * failure takes `retryStep`, if any.
- */
+/** What helps after a failure; `retryStep` names the retry where one is offered. */
+function nextStep(code: string | null, retryStep: string): string {
+  // „Erneut senden“ repeats the stored address.
+  if (refusedByProvider(code)) {
+    return 'Prüfe die Adresse und sende über „Per E-Mail senden“ eine neue E-Mail an die richtige Adresse.';
+  }
+  if (notConfigured(code)) return ['Versuche es später erneut.', retryStep].filter(Boolean).join(' ');
+  return retryStep;
+}
+
+/** Why a delivery failed and what helps. */
 export function deliveryFailureAdvice(code: string | null, retryStep = ''): string {
-  const step = refusedByProvider(code)
-    ? 'Prüfe die Adresse und sende über „Per E-Mail senden“ eine neue E-Mail an die richtige Adresse.'
-    : retryStep;
-  return [deliveryFailureSentence(code), step].filter(Boolean).join(' ');
+  return [deliveryFailureSentence(code), nextStep(code, retryStep)].filter(Boolean).join(' ');
 }
 
 /**
