@@ -466,6 +466,13 @@ from (values
   ('an issue''s history entry without its issue', format(
     'do $x$ begin %s; set constraints invoice_history_kept immediate; end $x$', pg_temp.issued_event('RG10236')),
     'invoice_history_unkept'),
+  ('a second history entry of an issue', format($sql$do $x$ begin
+      insert into public.invoice_events (organization_id, invoice_id, event_type, status, version, payload, actor_id,
+        attempt_key)
+      select organization_id, invoice_id, event_type, status, version, payload, actor_id, gen_random_uuid()
+      from public.invoice_events where invoice_id = %L and event_type = 'issued';
+      set constraints invoice_history_kept immediate;
+    end $x$$sql$, pg_temp.id('first')), 'invoice_history_unkept'),
   ('insert an issued invoice', format($sql$insert into public.invoices (organization_id, client_id,
       recipient_client_id, status, invoice_number, issue_date, issued_at, issue_snapshot)
     values (%L, %L, %L, 'ausgestellt', 'RG10236', (now() at time zone 'Europe/Berlin')::date, now(), '{}')$sql$,

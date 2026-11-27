@@ -33,7 +33,7 @@
 -- were.
 --
 -- Expand-only: replaced guards and functions with their signatures, two new
--- trigger functions, three new triggers.
+-- trigger functions, a line comparison, three new triggers.
 --
 -- Prevention: Tier 1 (the guards), Tier 2 supabase/tests/invoice_issue.sql
 -- and supabase/tests/invoice_cancel.sql.
@@ -143,6 +143,39 @@ create trigger advance_invoice_series after update on public.invoices
   for each row when (old.status = 'entwurf' and new.status <> 'entwurf')
   execute function app_private.advance_invoice_series();
 
+-- Whether p_invoice_id's lines are p_source_id's, each quantity and amount times p_sign (-1 for a
+-- Stornorechnung, 1 for a correction), with their sources.
+create function app_private.invoice_lines_mirror(
+  p_organization_id uuid,
+  p_invoice_id uuid,
+  p_source_id uuid,
+  p_sign integer
+)
+returns boolean
+language sql
+stable
+security invoker
+set search_path to ''
+as $$
+  with source as (
+    select line.position, line.name, line.description, p_sign * line.quantity as quantity, line.unit,
+      line.unit_price_cents, line.price_quantity, line.tax_category, line.tax_rate_basis_points,
+      p_sign * line.net_cents as net_cents, line.leistung_id, line.item_id
+    from public.invoice_lines line
+    where line.invoice_id = p_source_id and line.organization_id = p_organization_id
+  ), copy as (
+    select line.position, line.name, line.description, line.quantity, line.unit, line.unit_price_cents,
+      line.price_quantity, line.tax_category, line.tax_rate_basis_points, line.net_cents, line.leistung_id,
+      line.item_id
+    from public.invoice_lines line
+    where line.invoice_id = p_invoice_id and line.organization_id = p_organization_id
+  )
+  select not exists (select * from source except select * from copy)
+    and not exists (select * from copy except select * from source);
+$$;
+revoke all on function app_private.invoice_lines_mirror(uuid, uuid, uuid, integer) from public, anon, authenticated;
+grant execute on function app_private.invoice_lines_mirror(uuid, uuid, uuid, integer) to service_role;
+
 -- 3. As in 20270310090000_cancel_and_correct_issued_invoices.sql, with every
 -- flag replaced by the rows the function leaves. Every other rule stays: a
 -- link never changes, a work or person reference clears only when its target
@@ -174,8 +207,8 @@ begin
       raise exception 'invoice_issued';
     end if;
     -- A Stornorechnung only for an issued invoice that is neither a Stornorechnung nor a credit, and a
-    -- correction only for an invoice with its issued Stornorechnung; cancel_invoice's history entry,
-    -- written first, names each by its id.
+    -- correction only for an invoice with its issued Stornorechnung; the history entry cancel_invoice
+    -- wrote first in this transaction names each by its id, so an earlier cancel's entry names no new one.
     if new.cancels_invoice_id is not null and (
       not exists (
         select 1 from public.invoices cancelled
@@ -185,7 +218,8 @@ begin
       or not exists (
         select 1 from public.invoice_events event
         where event.organization_id = new.organization_id and event.invoice_id = new.cancels_invoice_id
-          and event.event_type = 'cancelled' and event.payload ->> 'stornoId' = new.id::text))
+          and event.event_type = 'cancelled' and event.payload ->> 'stornoId' = new.id::text
+          and event.created_at = now()))
     then
       raise exception 'invoice_link_fixed';
     end if;
@@ -197,7 +231,8 @@ begin
       or not exists (
         select 1 from public.invoice_events event
         where event.organization_id = new.organization_id and event.invoice_id = new.corrects_invoice_id
-          and event.event_type = 'cancelled' and event.payload ->> 'correctionId' = new.id::text))
+          and event.event_type = 'cancelled' and event.payload ->> 'correctionId' = new.id::text
+          and event.created_at = now()))
     then
       raise exception 'invoice_link_fixed';
     end if;
@@ -270,30 +305,7 @@ begin
             v_cancelled.line_net_cents, v_cancelled.tax_cents, v_cancelled.gross_cents)
         or (new.payment_due_days, new.discount_days, new.discount_basis_points, new.opening_text, new.closing_text)
           is distinct from (0, null::integer, null::integer, '', '')
-        or exists (
-          (select line.position, line.name, line.description, -line.quantity, line.unit, line.unit_price_cents,
-              line.price_quantity, line.tax_category, line.tax_rate_basis_points, -line.net_cents,
-              line.leistung_id, line.item_id
-            from public.invoice_lines line
-            where line.invoice_id = v_cancelled.id and line.organization_id = new.organization_id)
-          except
-          (select line.position, line.name, line.description, line.quantity, line.unit, line.unit_price_cents,
-              line.price_quantity, line.tax_category, line.tax_rate_basis_points, line.net_cents,
-              line.leistung_id, line.item_id
-            from public.invoice_lines line
-            where line.invoice_id = new.id and line.organization_id = new.organization_id))
-        or exists (
-          (select line.position, line.name, line.description, line.quantity, line.unit, line.unit_price_cents,
-              line.price_quantity, line.tax_category, line.tax_rate_basis_points, line.net_cents,
-              line.leistung_id, line.item_id
-            from public.invoice_lines line
-            where line.invoice_id = new.id and line.organization_id = new.organization_id)
-          except
-          (select line.position, line.name, line.description, -line.quantity, line.unit, line.unit_price_cents,
-              line.price_quantity, line.tax_category, line.tax_rate_basis_points, -line.net_cents,
-              line.leistung_id, line.item_id
-            from public.invoice_lines line
-            where line.invoice_id = v_cancelled.id and line.organization_id = new.organization_id))
+        or not app_private.invoice_lines_mirror(new.organization_id, new.id, v_cancelled.id, -1)
       then
         raise exception 'invoice_issued';
       end if;
@@ -364,10 +376,9 @@ $$;
 revoke all on function app_private.guard_issued_invoice() from public, anon, authenticated, service_role;
 
 -- 4. An issue's or a cancel's history entry, written first, stands only beside the rows it names: checked
--- at commit, so a transaction that wrote the entry but left the issue or cancel unfinished rolls back. A
--- cancel's entry names its Storniert invoice at that version, its issued Stornorechnung with that number
--- and day, and the correction draft it opened, if any; so no issued Stornorechnung commits beside an
--- original still Ausgestellt. Refusal: invoice_history_unkept.
+-- at commit, so a transaction that wrote the entry but left the issue or cancel unfinished rolls back, and
+-- no issued Stornorechnung commits beside an original still Ausgestellt. Each invoice has at most one of
+-- each. Refusal: invoice_history_unkept.
 create function app_private.check_invoice_history_kept()
 returns trigger
 language plpgsql
@@ -375,30 +386,65 @@ security invoker
 set search_path to ''
 as $$
 begin
-  if new.event_type = 'issued' and not exists (
-    select 1 from public.invoices invoice
-    where invoice.id = new.invoice_id and invoice.organization_id = new.organization_id
-      and invoice.status <> 'entwurf' and invoice.issued_by is not distinct from new.actor_id
-      and new.payload -> 'invoiceNumber' = to_jsonb(invoice.invoice_number)
-      and new.payload -> 'issueDate' = to_jsonb(invoice.issue_date))
+  -- The invoice's row lock orders two transactions that write its history: the later one counts both.
+  perform 1 from public.invoices invoice
+  where invoice.id = new.invoice_id and invoice.organization_id = new.organization_id
+  for update;
+  if (select count(*) from public.invoice_events event
+      where event.organization_id = new.organization_id and event.invoice_id = new.invoice_id
+        and event.event_type = new.event_type) <> 1
   then
     raise exception 'invoice_history_unkept';
   end if;
-  if new.event_type = 'cancelled' and (
-    not exists (
+  -- An issue's entry: the issued invoice with that number, day, amount, version and actor; a
+  -- Stornorechnung's original Storniert beside it.
+  if new.event_type = 'issued' and not exists (
+    select 1 from public.invoices invoice
+    where invoice.id = new.invoice_id and invoice.organization_id = new.organization_id
+      and invoice.status <> 'entwurf' and new.status = 'ausgestellt' and invoice.version = new.version
+      and invoice.issued_by is not distinct from new.actor_id
+      and new.payload -> 'invoiceNumber' = to_jsonb(invoice.invoice_number)
+      and new.payload -> 'issueDate' = to_jsonb(invoice.issue_date)
+      and new.payload -> 'grossCents' = to_jsonb(invoice.gross_cents)
+      and (invoice.cancels_invoice_id is null or exists (
+        select 1 from public.invoices original
+        where original.id = invoice.cancels_invoice_id and original.organization_id = invoice.organization_id
+          and original.status = 'storniert')))
+  then
+    raise exception 'invoice_history_unkept';
+  end if;
+  -- A cancel's entry: the original Storniert at that version, its issued Stornorechnung with that number
+  -- and day, and the correction draft it opened, if any, with the original's customer, work, terms,
+  -- texts, totals and lines.
+  if new.event_type = 'cancelled' and not (
+    new.status = 'storniert'
+    and new.payload ?& array['stornoId', 'stornoNumber', 'issueDate', 'correctionId']
+    and exists (
       select 1 from public.invoices original
-      where original.id = new.invoice_id and original.organization_id = new.organization_id
-        and original.status = 'storniert' and original.version = new.version)
-    or not exists (
-      select 1 from public.invoices storno
-      where storno.id::text = new.payload ->> 'stornoId' and storno.organization_id = new.organization_id
-        and storno.cancels_invoice_id = new.invoice_id and storno.status = 'ausgestellt'
+      join public.invoices storno
+        on storno.organization_id = original.organization_id and storno.cancels_invoice_id = original.id
+        and storno.id::text = new.payload ->> 'stornoId' and storno.status = 'ausgestellt'
         and new.payload -> 'stornoNumber' = to_jsonb(storno.invoice_number)
-        and new.payload -> 'issueDate' = to_jsonb(storno.issue_date))
-    or (coalesce(new.payload -> 'correctionId', 'null') <> 'null' and not exists (
-      select 1 from public.invoices correction
-      where correction.id::text = new.payload ->> 'correctionId' and correction.organization_id = new.organization_id
-        and correction.corrects_invoice_id = new.invoice_id)))
+        and new.payload -> 'issueDate' = to_jsonb(storno.issue_date)
+      where original.id = new.invoice_id and original.organization_id = new.organization_id
+        and original.status = 'storniert' and original.version = new.version
+        and (new.payload -> 'correctionId' = 'null' or exists (
+          select 1 from public.invoices correction
+          where correction.id::text = new.payload ->> 'correctionId'
+            and correction.organization_id = original.organization_id
+            and correction.corrects_invoice_id = original.id and correction.status = 'entwurf'
+            and correction.version = 1
+            and (correction.client_id, correction.job_id, correction.project_id, correction.service_case_id,
+                correction.service_start, correction.service_end, correction.payment_due_days,
+                correction.discount_days, correction.discount_basis_points, correction.order_reference,
+                correction.buyer_reference, correction.opening_text, correction.closing_text,
+                correction.line_net_cents, correction.tax_cents, correction.gross_cents)
+              is not distinct from (original.client_id, original.job_id, original.project_id,
+                original.service_case_id, original.service_start, original.service_end, original.payment_due_days,
+                original.discount_days, original.discount_basis_points, original.order_reference,
+                original.buyer_reference, original.opening_text, original.closing_text, original.line_net_cents,
+                original.tax_cents, original.gross_cents)
+            and app_private.invoice_lines_mirror(original.organization_id, correction.id, original.id, 1)))))
   then
     raise exception 'invoice_history_unkept';
   end if;

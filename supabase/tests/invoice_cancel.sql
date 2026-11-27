@@ -524,6 +524,10 @@ from (values
     'update public.invoices set payment_due_days = 14 where id = %L', pg_temp.id('kept storno')))
 ) as cases(label, statement);
 select pg_temp.issue_kept_storno();
+-- At commit (here at once) no issued Stornorechnung stands beside an original still Ausgestellt.
+select pg_temp.expect_refusal('a Stornorechnung issued beside an original still Ausgestellt',
+  'do $x$ begin set constraints invoice_history_kept immediate; end $x$', 'invoice_history_unkept');
+set constraints invoice_history_kept deferred;
 -- Beside its issued Stornorechnung, even under the former cancel flag, „kept“ stays Ausgestellt while no
 -- cancel's history entry names that Stornorechnung.
 select pg_temp.expect_refusal(label, format(statement, pg_temp.id('kept')), 'invoice_issued')
@@ -534,17 +538,32 @@ from (values
 ) as cases(label, statement);
 -- A cancel's history entry stands only beside its finished cancel, checked at commit (here at once): with
 -- „kept“ still Ausgestellt the transaction is refused.
-create function pg_temp.kept_cancelled_event() returns text language sql as $$
+create function pg_temp.kept_cancelled_event(p_correction uuid default null) returns text language sql as $$
   select format($sql$insert into public.invoice_events (organization_id, invoice_id, event_type, status, version,
       payload, actor_id, attempt_key)
     select original.organization_id, original.id, 'cancelled', 'storniert', original.version,
       jsonb_build_object('stornoId', storno.id, 'stornoNumber', storno.invoice_number, 'issueDate', storno.issue_date,
-        'correctionId', null), %L, gen_random_uuid()
+        'correctionId', %L::uuid), %L, gen_random_uuid()
     from public.invoices original join public.invoices storno on storno.cancels_invoice_id = original.id
-    where original.id = %L$sql$, '38080000-0000-4000-8000-000000000002', pg_temp.id('kept'))
+    where original.id = %L$sql$, p_correction, '38080000-0000-4000-8000-000000000002', pg_temp.id('kept'))
 $$;
 select pg_temp.expect_refusal('a cancel''s history entry beside an unfinished cancel', format(
   'do $x$ begin %s; set constraints invoice_history_kept immediate; end $x$', pg_temp.kept_cancelled_event()),
+  'invoice_history_unkept');
+-- A correction the entry names carries the original's terms and lines: one with other terms and no lines
+-- is refused at commit, though the rest of the cancel is finished.
+select pg_temp.expect_refusal('a cancel whose correction lacks the original''s terms and lines', format(
+  $sql$do $x$ begin
+    %s;
+    insert into public.invoices (id, organization_id, client_id, recipient_client_id, payment_due_days,
+      corrects_invoice_id, created_by, updated_by)
+    values (%L, %L, %L, %L, 99, %L, %L, %L);
+    update public.invoices set status = 'storniert' where id = %L;
+    set constraints invoice_history_kept immediate;
+  end $x$$sql$, pg_temp.kept_cancelled_event('38080000-0000-4000-8000-000000000501'),
+  '38080000-0000-4000-8000-000000000501', '38080000-0000-4000-8000-000000000010',
+  '38080000-0000-4000-8000-000000000020', '38080000-0000-4000-8000-000000000020', pg_temp.id('kept'),
+  '38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000002', pg_temp.id('kept')),
   'invoice_history_unkept');
 set constraints invoice_history_kept deferred;
 -- With that history entry the status alone turns, whoever writes: these are the rows a cancel leaves.
@@ -580,6 +599,17 @@ select pg_temp.issue('credit', 2, (select issue_snapshot from issued where id = 
 select pg_temp.expect_refusal('cancel a credit', format(
   'select pg_temp.cancel(%L, %L, ''credit'', gen_random_uuid(), ''Falsch'', false)',
   '38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010'), 'invoice_not_cancellable');
+
+-- Only the cancel's own transaction links a correction: an entry from an earlier transaction names no new one.
+select pg_temp.expect_refusal('a correction named by an earlier cancel''s entry', format($sql$do $x$ begin
+    insert into public.invoice_events (organization_id, invoice_id, event_type, status, version, payload, actor_id,
+      attempt_key, created_at)
+    values (%1$L, %2$L, 'cancelled', 'storniert', 3, jsonb_build_object('correctionId', %3$L::uuid), %4$L,
+      gen_random_uuid(), now() - interval '1 day');
+    insert into public.invoices (id, organization_id, client_id, recipient_client_id, corrects_invoice_id)
+    values (%3$L, %1$L, %5$L, %5$L, %2$L);
+  end $x$$sql$, '38080000-0000-4000-8000-000000000010', pg_temp.id('cancelled'), '38080000-0000-4000-8000-000000000502',
+  '38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000020'), 'invoice_link_fixed');
 
 -- The correction is a draft like any: it is edited, and deleted with its link.
 select pg_temp.expect_refusal('move the correction to another invoice',
