@@ -67,7 +67,7 @@ import {
   passedSinceSelection,
   selectionBaseline,
 } from '../lib/testing/selection/group-selection';
-import { renderedGroupFiles } from '../lib/testing/selection/surface-closure';
+import { renderedSurfaceFiles, surfaceRoots } from '../lib/testing/selection/surface-closure';
 import { calculateCandidateFingerprint } from '../lib/testing/evidence/candidate-identity';
 import {
   browserGroupReuseProblem,
@@ -348,7 +348,7 @@ async function main(): Promise<void> {
     .filter((result) => result.status !== 'passed')
     .map((result) => result.groupId);
   unresolved.push(...unresolvedBrowserGroupIds(browserHistory, options.target));
-  const rendered = renderedGroupFiles(repository, qualification.graph);
+  const rendered = renderedSurfaceFiles(qualification.graph, surfaceRoots(repository));
   const selections = groupSelections({
     mode: options.mode,
     groups: qualified.map((entry) => ({

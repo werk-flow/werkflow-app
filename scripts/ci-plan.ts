@@ -24,7 +24,7 @@ import {
 import { E_INVOICE_STEP, eInvoiceReason } from '../lib/testing/selection/e-invoice-selection';
 import { fastTierPlan, tailwindScan } from '../lib/testing/selection/fast-tier';
 import { readGroupDurations } from '../lib/testing/selection/group-durations';
-import { renderedGroupFiles } from '../lib/testing/selection/surface-closure';
+import { renderedSurfaceFiles, surfaceRoots } from '../lib/testing/selection/surface-closure';
 import { getTestGroups } from '../lib/testing/selection/test-groups';
 import { z } from '../lib/zod';
 import { workflowsFolder } from '../lib/testing/ci-workflow';
@@ -104,7 +104,7 @@ function rowsOnly(mergeBase: string, file: string): boolean {
 
 const groups = getTestGroups(repository);
 const qualification = createGroupQualification(repository, groups, captureInputSnapshot(repository));
-const rendered = renderedGroupFiles(repository, qualification.graph);
+const rendered = renderedSurfaceFiles(qualification.graph, surfaceRoots(repository));
 const change = flag === '--base' ? changedSince(value) : undefined;
 const durations = readGroupDurations(repository);
 const read = (path: string): string => readFileSync(join(repository, path), 'utf8');
