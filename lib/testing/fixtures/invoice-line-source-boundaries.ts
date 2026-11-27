@@ -34,6 +34,7 @@ const leistung = (id: string, organizationId: string, fields: Record<string, unk
   leistung_number: 'L-7',
   name: 'Monteurstunde',
   description: 'Arbeitszeit Geselle',
+  kind: 'arbeit',
   unit: 'hour',
   tax_rate_basis_points: 1900,
   archived_at: null,

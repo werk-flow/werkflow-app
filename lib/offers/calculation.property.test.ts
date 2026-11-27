@@ -40,6 +40,7 @@ const positionArbitrary: fc.Arbitrary<OfferFreePosition> = fc
     taxRateBasisPoints,
     source: null,
     cost,
+    priceSource: { kind: 'manuell' },
   }));
 
 const offerArbitrary: fc.Arbitrary<OfferSection[]> = fc.array(

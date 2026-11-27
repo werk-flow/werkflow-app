@@ -19,6 +19,7 @@ function free(
     taxRateBasisPoints: options.taxRateBasisPoints ?? 1900,
     source: null,
     cost: null,
+    priceSource: { kind: 'manuell' },
   };
 }
 

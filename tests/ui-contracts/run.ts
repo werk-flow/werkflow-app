@@ -127,6 +127,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               )
                 return { path: join(import.meta.dir, 'calendar-service-boundaries.tsx') };
             });
+            // The conditions section saves through its contract's stand-in.
+            builder.onResolve({ filter: /^@\/lib\/price-catalog\/actions$/ }, (args) => {
+              if (args.importer.endsWith('client-conditions-section.tsx'))
+                return { path: join(import.meta.dir, 'customer-conditions-service-boundaries.ts') };
+            });
             builder.onResolve({ filter: /^@\/lib\/vacation\/actions$/ }, () => ({
               path: join(import.meta.dir, 'approval-service-boundaries.ts'),
             }));

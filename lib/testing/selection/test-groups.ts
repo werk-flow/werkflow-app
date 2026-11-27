@@ -439,7 +439,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ],
     ['inventory'],
   ],
-  ['leistung-prices', ['leistung_prices.sql'], ['commercial']],
+  ['leistung-prices', ['leistung_prices.sql', 'client_price_conditions.sql'], ['commercial', 'customers']],
   ['offers', ['offers.sql', 'offers_concurrency.sql', 'offer_sending.sql'], ['commercial', 'customers']],
   ['invoice-drafts', ['invoice_drafts.sql', 'invoice_line_sources.sql'], ['commercial', 'customers']],
   ['invoice-issue', ['invoice_issue.sql', 'invoice_issue_concurrency.sql'], ['commercial', 'documents']],
