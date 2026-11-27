@@ -279,6 +279,17 @@ describe('getNoTargetReason', () => {
     );
   });
 
+  test('a half-day absence on a free day leaves the free day as the reason', () => {
+    const halfSickSaturday = resolveDailyTarget({
+      dateIso: '2026-08-08',
+      ...base,
+      absences: [
+        { type: 'sickness', startDate: '2026-08-08', endDate: '2026-08-08', dayPortion: 'half_day' },
+      ],
+    });
+    expect(getNoTargetReason(halfSickSaturday)).toBe('Kein Arbeitstag laut Wochenplan');
+  });
+
   test('an unconfigured person rests on the weekend, not by a Wochenplan', () => {
     const saturday = resolveDailyTarget({ dateIso: '2026-08-08', ...base, schedules: [] });
     expect(getNoTargetReason(saturday)).toBe('Wochenende');

@@ -370,9 +370,11 @@ export function getNoTargetReason(target: DailyTarget): string | null {
   if (target.isHoliday) return `Feiertag: ${target.holidayName}`;
   if (target.isClosureDay)
     return target.closureLabel ? `Betriebsruhe (${target.closureLabel})` : 'Betriebsruhe';
-  if (target.absence?.type === 'vacation') return 'Urlaub';
-  if (target.absence?.type === 'sickness') return 'Krankmeldung';
-  if (target.absence?.type === 'school') return 'Berufsschule';
+  // A half-day absence only halves a target; on a day without one, the day's own rule is the reason.
+  const fullAbsence = target.absence?.portion === 'full' ? target.absence.type : null;
+  if (fullAbsence === 'vacation') return 'Urlaub';
+  if (fullAbsence === 'sickness') return 'Krankmeldung';
+  if (fullAbsence === 'school') return 'Berufsschule';
   if (target.source === 'schedule') return 'Kein Arbeitstag laut Wochenplan';
   return 'Wochenende';
 }
