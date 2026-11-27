@@ -4,7 +4,7 @@ import type { LeistungKind } from './types';
 
 // Kundenkonditionen: a customer's own prices, kept by Admin and Büro as
 // numbered versions with a first valid day
-// (supabase/migrations/20270501130000_price_new_offer_positions_by_customer_conditions.sql).
+// (supabase/migrations/20270601100000_price_new_offer_positions_by_customer_conditions.sql).
 // A version holds a discount on each kind of line and an own net price per
 // named Leistung. The conditions key on the kind of line, never on an
 // article category. This module is the one rule that prices a new offer
