@@ -107,7 +107,8 @@ function applyKiLiveEvent(
   } else {
     // The answer's end with text this page never received: the saved answer holds it.
     if (answer.text.length < event.length) return { window, applied: false };
-    next = { ...answer, status: event.status, failure: event.failure };
+    // A stopped answer ends where its last save ended; text this page holds past it was never kept.
+    next = { ...answer, text: answer.text.slice(0, event.length), status: event.status, failure: event.failure };
   }
   return {
     window: { ...window, messages: window.messages.map((message) => (message === answer ? next : message)) },

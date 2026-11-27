@@ -122,6 +122,22 @@ test('a turn that starts past messages the page never saw waits for a read, so t
   expect(kiLiveCursor(earlier), 'the catch-up starts at the first message the page lacks').toBe(3);
 });
 
+test('a stopped answer ends where its last save ended, on every tab', () => {
+  let window = applyKiLiveEvent(earlier, started).window;
+  window = applyKiLiveEvent(window, text(0, 'Erst das Ventil öffnen')).window;
+  const stopped: KiLiveEvent = {
+    v,
+    type: 'end',
+    command,
+    status: 'cancelled',
+    failure: 'Du hast die Antwort angehalten.',
+    length: 15,
+  };
+  const ended = applyKiLiveEvent(window, stopped).window;
+  expect(answerOf(ended)?.text).toBe('Erst das Ventil');
+  expect(answerOf(ended)?.status).toBe('cancelled');
+});
+
 test('text for an answer the page never saw waits for a read', () => {
   expect(applyKiLiveEvent(earlier, text(0, 'Erst')).applied).toBe(false);
 });

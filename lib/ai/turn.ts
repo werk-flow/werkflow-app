@@ -64,7 +64,8 @@ export type AiTurnFailure =
   | 'provider_refused'
   | 'provider_unavailable'
   | 'model_refused'
-  | 'interrupted';
+  | 'interrupted'
+  | 'stopped';
 
 export type AiTurnEnd =
   | { status: 'complete' }
@@ -308,6 +309,8 @@ type Answer = {
   saving: Promise<void> | null;
   ledgerFailed: boolean;
   retriesLeft: number;
+  /** Aborts when the person stopped the answer: its partial save found it finished (lib/ai/live/). */
+  stopped: AbortController;
 };
 
 type StepOutcome =
@@ -324,6 +327,7 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
     saving: null,
     ledgerFailed: false,
     retriesLeft: limits.maxRetries,
+    stopped: new AbortController(),
   };
   // The turn's time counts from the request's arrival, so setup cannot eat the time to settle.
   const turnSignal = AbortSignal.timeout(
@@ -341,6 +345,8 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
         inputTokenCap: limits.maxInputTokens,
       });
       end = await runSteps({ ...context, modelContext, turnSignal }, answer);
+      // Whatever the aborted request reported, a stopped answer ends as stopped.
+      if (answer.stopped.signal.aborted) end = failedEnd('cancelled', 'stopped');
     }
   } catch (error) {
     logError('aiTurn: run failed', error instanceof Error ? error.name : 'unknown');
@@ -397,7 +403,10 @@ function failedEnd(status: 'failed' | 'cancelled', failure: AiTurnFailure): AiTu
 async function readStepGate(
   organizationId: string,
   turnSignal: AbortSignal,
-): Promise<'open' | 'disabled' | 'undecidable' | 'timeout'> {
+  stopSignal: AbortSignal,
+): Promise<'open' | 'disabled' | 'undecidable' | 'timeout' | 'stopped'> {
+  // The person stopped the answer: no further step or retry starts.
+  if (stopSignal.aborted) return 'stopped';
   const timeUp = new Promise<'timeout'>((resolve) => {
     if (turnSignal.aborted) resolve('timeout');
     else turnSignal.addEventListener('abort', () => resolve('timeout'), { once: true });
@@ -418,7 +427,7 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
   let messages = context.modelContext.messages;
   for (let step = 1; ; step += 1) {
     if (step > limits.maxSteps) return failedEnd('cancelled', 'step_limit');
-    const gate = await readStepGate(context.command.organizationId, context.turnSignal);
+    const gate = await readStepGate(context.command.organizationId, context.turnSignal, answer.stopped.signal);
     if (gate !== 'open') return failedEnd('cancelled', gate);
     if (!isAllowedModel(context.model)) return failedEnd('failed', 'provider_refused');
     const prompt = serializedInput(context.modelContext, messages);
@@ -431,7 +440,7 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
       turnSignal: context.turnSignal,
     });
     if (outcome.kind === 'failed') {
-      const stopped = outcome.failure === 'timeout' || outcome.failure === 'answer_too_long';
+      const stopped = ['timeout', 'answer_too_long', 'stopped'].includes(outcome.failure);
       return failedEnd(stopped ? 'cancelled' : 'failed', outcome.failure);
     }
     if (outcome.finishReason === 'length') return failedEnd('cancelled', 'answer_too_long');
@@ -461,7 +470,9 @@ async function runStep(
       ? result.finishReason === 'tool-calls'
         ? 'tool_calls'
         : 'completed'
-      : (classified?.outcome ?? 'provider_error');
+      : answer.stopped.signal.aborted
+        ? 'stopped'
+        : (classified?.outcome ?? 'provider_error');
     const provider = result.ok ? null : providerFailure(result.error);
     const billed = !result.ok && (result.started || acceptedByProvider(result.error));
     // Every attempt is ledgered at its cost before anything else, so a retry never goes uncounted (B15).
@@ -478,6 +489,7 @@ async function runStep(
         responseMessages: result.responseMessages,
       };
     }
+    if (answer.stopped.signal.aborted) return { kind: 'failed', failure: 'stopped' };
     const { failure, retryable } = classified ?? { failure: 'interrupted', retryable: false };
     // What the user already saw is never written twice: a stream that broke after it wrote is not retried.
     if (!retryable || written || answer.retriesLeft <= 0) {
@@ -487,7 +499,7 @@ async function runStep(
       return { kind: 'failed', failure };
     }
     answer.retriesLeft -= 1;
-    const gate = await readStepGate(context.command.organizationId, step.turnSignal);
+    const gate = await readStepGate(context.command.organizationId, step.turnSignal, answer.stopped.signal);
     if (gate !== 'open') return { kind: 'failed', failure: gate };
   }
 }
@@ -513,7 +525,7 @@ async function runAttempt(
     maxOutputTokens: limits.maxOutputTokens,
     // The harness retries, so it can ledger each attempt and never retry a spend limit.
     maxRetries: 0,
-    abortSignal: AbortSignal.any([step.turnSignal, attemptAbort.signal]),
+    abortSignal: AbortSignal.any([step.turnSignal, attemptAbort.signal, answer.stopped.signal]),
     timeout: { stepMs: limits.stepTimeoutMs, chunkMs: limits.chunkTimeoutMs },
     providerOptions: { anthropic: { thinking: { type: 'adaptive' }, effort: limits.effort } },
     telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
@@ -584,6 +596,8 @@ function savePartial(context: RunContext, answer: Answer): void {
       .abortSignal(AbortSignal.timeout(AI_TURN_LIMITS[context.command.entryPoint].answerSaveTimeoutMs));
     // A missed partial save costs only freshness; the final save follows.
     if (!error) context.sink.saved?.(answer.savedText.length);
+    // The person stopped the answer: its stop finished it, so the request ends here.
+    else if (error.message === 'ai_thread_item_finished') answer.stopped.abort();
     else {
       logError('aiTurn: partial save failed', error);
       if (error.message === 'ai_actor_without_access' || error.message === 'ai_thread_not_found')

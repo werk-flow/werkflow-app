@@ -13,4 +13,5 @@ export const AI_TURN_FAILURE_MESSAGES: Readonly<Record<AiTurnFailure, string>> =
   provider_unavailable: `${AI_PRODUCT_NAME} ist gerade nicht erreichbar. Versuch es in ein paar Minuten noch einmal.`,
   model_refused: `Dabei kann ${AI_PRODUCT_NAME} nicht helfen.`,
   interrupted: 'Die Antwort wurde unterbrochen. Versuch es noch einmal.',
+  stopped: 'Du hast die Antwort angehalten.',
 };
