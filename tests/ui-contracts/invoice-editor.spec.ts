@@ -59,6 +59,8 @@ test('a cancelled invoice lists its earlier sends and offers no send, retry or m
   await expect(visibleText(page, 'E-Mail an erika.musterfrau@lindenhof.example')).toBeVisible();
   await expect(visibleText(page, 'E-Mail an buchhaltung@lindenhof.example')).toBeVisible();
   await expect(visibleText(page, 'Die E-Mail ist nicht rausgegangen.')).toBeVisible();
+  // An unanswered first attempt may have reached the customer, though the retry failed.
+  await expect(visibleText(page, 'Ob die E-Mail rausging, ist unklar.')).toBeVisible();
   await expect(page.getByRole('button')).toHaveCount(0);
 });
 

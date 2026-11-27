@@ -73,15 +73,25 @@ function DeliveryFacts({ entry, children }: { entry: DeliveryEntry; children: Re
   );
 }
 
-/** A delivery of a cancelled invoice: what happened to it, with no step to take. */
+/**
+ * A delivery of a cancelled invoice: what happened to it, with no step to
+ * take. Only a sending row changes by the clock, when its attempt goes
+ * unanswered; an attempt without the provider's answer may have reached the
+ * customer, also when a later one failed.
+ */
 function PastDeliveryRow({ entry }: { entry: DeliveryEntry }) {
-  const { unanswered } = useRetryWindow(entry);
+  const unansweredFrom = entry.state === 'sending' && entry.retryFrom ? Date.parse(entry.retryFrom) : null;
+  const { unanswered } = retryWindowAt(
+    entry,
+    useWallClockTick(60_000, unansweredFrom !== null, unansweredFrom),
+  );
+  const unclear = unanswered || (entry.state === 'failed' && entry.outcomeUnknown);
   return (
     <li className="py-3">
       <DeliveryFacts entry={entry}>
         {(entry.state === 'failed' || unanswered) && (
           <p className="text-sm text-destructive">
-            {deliveryFailureSentence(unanswered ? 'email_provider_unreachable' : entry.failureCode)}
+            {deliveryFailureSentence(unclear ? 'email_provider_unreachable' : entry.failureCode)}
           </p>
         )}
       </DeliveryFacts>

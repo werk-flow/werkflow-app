@@ -125,10 +125,29 @@ export function InvoiceSettingsContractFixture(): React.JSX.Element {
 
 const HOUR = 60 * 60 * 1000;
 
-/** One sent email and one failed email whose retry window is open. */
+/**
+ * One sent email, one failed email whose retry window is open, and one whose
+ * first attempt went unanswered before a retry failed and the window closed.
+ */
 const DELIVERIES: DeliveryList = {
-  total: 2,
+  total: 3,
   entries: [
+    {
+      id: '98000000-0000-4000-8000-000000000003',
+      channel: 'email',
+      state: 'failed',
+      recipient: 'verwaltung@lindenhof.example',
+      subject: 'Rechnung RE-2037-001 – Haustechnik Sonnenberg GmbH',
+      note: '',
+      attempts: 2,
+      failureCode: 'email_provider_503',
+      outcomeUnknown: true,
+      createdAt: '2037-11-21T10:00:00.000Z',
+      sentAt: null,
+      createdBy: 'Erika Musterfrau',
+      retryFrom: null,
+      retryUntil: null,
+    },
     {
       id: '98000000-0000-4000-8000-000000000002',
       channel: 'email',

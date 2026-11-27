@@ -8,9 +8,9 @@ import type { ActionContext } from '@/lib/org/action-context';
 import { InvoiceDeliveries } from './invoice-delivery';
 
 /**
- * „Versand“ of an issued or cancelled invoice whose original is filed: its
- * deliveries, and for an issued one what the email form proposes. A failed
- * read fails this section alone.
+ * „Versand“ of an issued invoice whose original is filed, or of a cancelled
+ * invoice: its deliveries, and for an issued one what the email form
+ * proposes. A failed read fails this section alone.
  */
 export async function InvoiceDeliverySection({
   caller,
