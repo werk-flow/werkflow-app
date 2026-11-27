@@ -72,7 +72,7 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
   );
   assert.deepEqual(
     offeredTools(second),
-    ['artikel_finden', 'auftraege_finden', 'kunden_finden'],
+    ['artikel_finden', 'auftraege_finden', 'frage_stellen', 'kunden_finden', 'plan_zeigen'],
     'a turn that read untrusted text must offer no memory write and no write tool (B10)',
   );
   const asked = toolResults(third).slice(1);

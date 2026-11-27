@@ -1,3 +1,4 @@
+import { aiThreadRowSchema } from '@/lib/ai/thread-rows';
 import { z } from '@/lib/zod';
 
 // What a WerkFlow KI thread's live channel carries (werk-flow/werkflow-planning#532,
@@ -13,7 +14,7 @@ import { z } from '@/lib/zod';
  * code (the server-side reload switch). Raise it with every change of the
  * shapes below.
  */
-export const KI_LIVE_PROTOCOL = 1;
+export const KI_LIVE_PROTOCOL = 2;
 
 /** The broadcast event name every message of the channel uses. */
 export const KI_LIVE_EVENT = 'ki';
@@ -43,6 +44,13 @@ export const kiLiveEventSchema = z.discriminatedUnion('type', [
     delta: z.string(),
     /** How much of the answer its last partial save holds: a read of the thread covers that much. */
     saved: z.number().int().nonnegative(),
+  }),
+  z.object({
+    v: version,
+    type: z.literal('row'),
+    command,
+    /** A tool call, question or to-do list of the turn, as saved; a later save of it carries a higher revision. */
+    row: aiThreadRowSchema,
   }),
   z.object({
     v: version,

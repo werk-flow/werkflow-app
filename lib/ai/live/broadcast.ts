@@ -8,6 +8,7 @@ import {
   type KiLiveMessage,
   kiLiveTopic,
 } from '@/lib/ai/live/events';
+import type { AiThreadRow } from '@/lib/ai/thread-types';
 import type { AiTurnEnd, AiTurnSink } from '@/lib/ai/turn';
 import { type Schedule, timerSchedule } from '@/lib/ai/turn-stream';
 import { getSupabaseUrl } from '@/lib/env/public';
@@ -89,6 +90,40 @@ function endMessage(command: string, end: AiTurnEnd, length: number): KiLiveMess
 }
 
 /**
+ * What a turn wrote and saved but did not send yet: its text from the
+ * offset sent so far, then the rows saved after it, in order.
+ */
+function createOutbox(command: string) {
+  let pending = '';
+  let rows: KiLiveMessage[] = [];
+  let sent = 0;
+  let saved = 0;
+  return {
+    text(delta: string): void {
+      pending += delta;
+    },
+    row(row: AiThreadRow): void {
+      rows.push({ type: 'row', command, row });
+    },
+    saved(length: number): void {
+      saved = length;
+    },
+    waiting: (): boolean => pending.length > 0 || rows.length > 0,
+    /** The answer's length once all its text is sent. */
+    length: (): number => sent + pending.length,
+    take(): KiLiveMessage[] {
+      const taken = rows;
+      rows = [];
+      if (!pending) return taken;
+      const text: KiLiveMessage = { type: 'text', command, at: sent, delta: pending, saved };
+      sent += pending.length;
+      pending = '';
+      return [text, ...taken];
+    },
+  };
+}
+
+/**
  * One turn's live messages on its thread's channel, in order and throttled.
  * Text that waits for a send joins the next message, so a slow send never
  * queues more than one. A failed send costs only freshness: the next message
@@ -101,9 +136,7 @@ export function createKiLiveBroadcast(
 ): KiLiveBroadcast {
   const topic = kiLiveTopic(input.threadId);
   const { liveSendTimeoutMs } = AI_TURN_LIMITS[input.entryPoint];
-  let pending = '';
-  let sent = 0;
-  let saved = 0;
+  const outbox = createOutbox(input.commandId);
   let ended = false;
   let revoked = false;
   let inFlight: Promise<void> | null = null;
@@ -111,32 +144,18 @@ export function createKiLiveBroadcast(
 
   const post = createPost(topic, send, liveSendTimeoutMs);
 
-  const takeText = (): KiLiveMessage | null => {
-    if (!pending) return null;
-    const message: KiLiveMessage = {
-      type: 'text',
-      command: input.commandId,
-      at: sent,
-      delta: pending,
-      saved,
-    };
-    sent += pending.length;
-    pending = '';
-    return message;
-  };
-
   const dispatch = (messages: KiLiveMessage[]): void => {
     inFlight = post(messages).finally(() => {
       inFlight = null;
-      if (pending && !ended) schedulePump();
+      if (outbox.waiting() && !ended) schedulePump();
     });
   };
 
   const pump = (): void => {
     cancelPump = null;
     if (inFlight || ended) return;
-    const message = takeText();
-    if (message) dispatch([message]);
+    const messages = outbox.take();
+    if (messages.length > 0) dispatch(messages);
   };
 
   function schedulePump(): void {
@@ -157,11 +176,14 @@ export function createKiLiveBroadcast(
     sink: {
       text(delta) {
         if (ended) return;
-        pending += delta;
+        outbox.text(delta);
         schedulePump();
       },
-      saved(length) {
-        saved = length;
+      saved: outbox.saved,
+      row(row) {
+        if (ended) return;
+        outbox.row(row);
+        schedulePump();
       },
       revoked() {
         // The author lost access mid-turn: Realtime may still hold their join, so nothing more is sent.
@@ -173,9 +195,8 @@ export function createKiLiveBroadcast(
       stop();
       await inFlight;
       if (revoked) return;
-      const length = sent + pending.length;
-      const last = takeText();
-      await post([...(last ? [last] : []), endMessage(input.commandId, end, length)], 2);
+      const length = outbox.length();
+      await post([...outbox.take(), endMessage(input.commandId, end, length)], 2);
     },
   };
 }

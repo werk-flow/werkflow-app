@@ -1,6 +1,6 @@
 import { expect, mock, spyOn, test } from 'bun:test';
 
-import type { KiLiveEvent } from '@/lib/ai/live/events';
+import { KI_LIVE_PROTOCOL, type KiLiveEvent } from '@/lib/ai/live/events';
 
 mock.module('server-only', () => ({}));
 const { createKiLiveBroadcast } = await import('./broadcast');
@@ -62,14 +62,14 @@ test('a turn sends its start, then its text batched per interval with its offset
   live.sink.saved(3);
   live.sink.text(' Welt');
   expect(network.calls[1]?.events).toEqual([
-    { v: 1, type: 'text', command: 'c1', at: 0, delta: 'Hallo', saved: 0 },
+    { v: KI_LIVE_PROTOCOL, type: 'text', command: 'c1', at: 0, delta: 'Hallo', saved: 0 },
   ]);
   network.calls[1]?.answer(true);
   const ended = live.end({ status: 'complete' });
   await flush();
   expect(network.calls[2]?.events, 'the end must carry the rest of the text before it, in one send').toEqual([
-    { v: 1, type: 'text', command: 'c1', at: 5, delta: ' Welt', saved: 3 },
-    { v: 1, type: 'end', command: 'c1', status: 'complete', failure: null, length: 10 },
+    { v: KI_LIVE_PROTOCOL, type: 'text', command: 'c1', at: 5, delta: ' Welt', saved: 3 },
+    { v: KI_LIVE_PROTOCOL, type: 'end', command: 'c1', status: 'complete', failure: null, length: 10 },
   ]);
   network.calls[2]?.answer(true);
   await ended;
@@ -177,7 +177,7 @@ test('a failed send is logged once per turn and the end still goes out', async (
   await flush();
   await live.end({ status: 'failed', failure: 'interrupted', message: 'Die Antwort wurde unterbrochen.' });
   expect(sent.at(-1)?.at(-1)).toEqual({
-    v: 1,
+    v: KI_LIVE_PROTOCOL,
     type: 'end',
     command: 'c1',
     status: 'failed',

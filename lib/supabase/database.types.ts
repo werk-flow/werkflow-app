@@ -202,6 +202,7 @@ export type Database = {
         Row: {
           body: Json;
           created_at: string;
+          detail: Json | null;
           id: string;
           idempotency_key: string;
           kind: Database["public"]["Enums"]["ai_thread_item_kind"];
@@ -214,6 +215,7 @@ export type Database = {
         Insert: {
           body: Json;
           created_at?: string;
+          detail?: Json | null;
           id?: string;
           idempotency_key: string;
           kind: Database["public"]["Enums"]["ai_thread_item_kind"];
@@ -226,6 +228,7 @@ export type Database = {
         Update: {
           body?: Json;
           created_at?: string;
+          detail?: Json | null;
           id?: string;
           idempotency_key?: string;
           kind?: Database["public"]["Enums"]["ai_thread_item_kind"];
@@ -21069,6 +21072,23 @@ export type Database = {
           p_run_id: string;
         };
         Returns: string;
+      };
+      record_ai_tool_item: {
+        Args: {
+          p_body: Json;
+          p_detail?: Json;
+          p_item_key: string;
+          p_kind: Database["public"]["Enums"]["ai_thread_item_kind"];
+          p_ledger_key?: string;
+          p_model_id?: string;
+          p_organization_id: string;
+          p_outcome?: string;
+          p_prompt_version?: string;
+          p_run_id: string;
+          p_status: Database["public"]["Enums"]["ai_thread_item_status"];
+          p_user_id: string;
+        };
+        Returns: number;
       };
       record_client_communication_exception: {
         Args: {

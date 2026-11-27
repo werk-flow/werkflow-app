@@ -1,5 +1,5 @@
 import type { KiLiveEvent } from '@/lib/ai/live/events';
-import type { AiChatMessage, AiThreadWindow } from '@/lib/ai/thread-types';
+import type { AiChatMessage, AiThreadEntry, AiThreadRow, AiThreadWindow } from '@/lib/ai/thread-types';
 
 // How a tab follows a thread from its live channel (werk-flow/werkflow-planning#532):
 // resume is a snapshot plus a sequence cursor. The snapshot is the thread's
@@ -9,13 +9,23 @@ import type { AiChatMessage, AiThreadWindow } from '@/lib/ai/thread-types';
 const userKey = (command: string): string => `${command}:user`;
 const answerKey = (command: string): string => `${command}:assistant`;
 
+/** Whether an entry is a message, as opposed to a row of the agent's work. */
+export function isChatMessage(entry: AiThreadEntry): entry is AiChatMessage {
+  return entry.role === 'user' || entry.role === 'assistant';
+}
+
 /**
- * Which of two copies of one message to show. A snapshot never takes back a
+ * Which of two copies of one entry to show. A snapshot never takes back a
  * finished answer for an older copy still being written, nor shortens an
- * answer still being written that the page holds further; an unchanged message
- * keeps its object, so it does not render again.
+ * answer still being written that the page holds further; a row shows its
+ * higher revision. An unchanged entry keeps its object, so it does not render
+ * again.
  */
-export function fresherMessage<Message extends AiChatMessage>(held: Message, read: Message): Message {
+export function fresherMessage<Entry extends AiThreadEntry>(held: Entry, read: Entry): Entry {
+  if (!isChatMessage(held) || !isChatMessage(read)) {
+    const heldRevision = isChatMessage(held) ? 0 : held.revision;
+    return !isChatMessage(read) && read.revision > heldRevision ? read : held;
+  }
   if (read.status === 'streaming') {
     if (held.status !== 'streaming') return held;
     if (held.text.length > read.text.length && held.text.startsWith(read.text)) return held;
@@ -28,9 +38,9 @@ export function fresherMessage<Message extends AiChatMessage>(held: Message, rea
   return same ? held : read;
 }
 
-const bySequence = (left: AiChatMessage, right: AiChatMessage): number => left.sequence - right.sequence;
+const bySequence = (left: AiThreadEntry, right: AiThreadEntry): number => left.sequence - right.sequence;
 
-function withMessages(window: AiThreadWindow, messages: AiChatMessage[]): AiThreadWindow {
+function withMessages(window: AiThreadWindow, messages: AiThreadEntry[]): AiThreadWindow {
   return { ...window, messages: messages.toSorted(bySequence) };
 }
 
@@ -65,6 +75,45 @@ export function mergeNewer(held: AiThreadWindow | null, read: AiThreadWindow): A
   return withMessages({ hasOlder: held?.hasOlder ?? read.hasOlder, messages: [] }, [...byKey.values()]);
 }
 
+/** A thread's window with a row in place of its older copy; an unchanged row keeps the window. */
+export function placeRow(window: AiThreadWindow, row: AiThreadRow): AiThreadWindow {
+  const held = window.messages.find((message) => message.key === row.key);
+  const next = held ? fresherMessage<AiThreadEntry>(held, row) : row;
+  if (next === held) return window;
+  return withMessages(window, [...window.messages.filter((message) => message !== held), next]);
+}
+
+/**
+ * A read window joined with what the page holds, each entry once by its key
+ * and in sequence order. A read never takes back an answer for an older
+ * snapshot of it (lib/ai/live/follow.ts), and keeps the entries it did not
+ * cover: turns settled after the read began, and older pages already shown
+ * when they reach the window without a gap. The window holds every kind of
+ * entry, rows included, so a row at its edge leaves no gap. An unchanged
+ * entry keeps its object, so it does not render again.
+ */
+export function mergeWindow(previous: AiThreadWindow | null, next: AiThreadWindow): AiThreadWindow {
+  const held = new Map(previous?.messages.map((message) => [message.key, message]));
+  const read = new Set(next.messages.map((message) => message.key));
+  const first = Math.min(...next.messages.map((message) => message.sequence));
+  const fresh = next.messages.map((message) => {
+    const old = held.get(message.key);
+    return old ? fresherMessage(old, message) : message;
+  });
+  const unread = (previous?.messages ?? []).filter((message) => !read.has(message.key));
+  // Older pages stay only when they reach the read window; otherwise paging starts at the window again.
+  const older = unread.filter((message) => message.sequence < first);
+  // An empty read has nothing to place the held messages against, so they all stay.
+  const connected =
+    next.messages.length === 0 ||
+    (older.length > 0 && Math.max(...older.map((message) => message.sequence)) === first - 1);
+  const kept = connected ? unread : unread.filter((message) => message.sequence > first);
+  return {
+    hasOlder: connected ? (previous?.hasOlder ?? false) : next.hasOlder,
+    messages: [...kept, ...fresh].toSorted((left, right) => left.sequence - right.sequence),
+  };
+}
+
 /**
  * One live event applied to a thread's window. `applied: false` means the
  * window lacks what the event builds on (its answer, or text before its
@@ -76,6 +125,8 @@ function applyKiLiveEvent(
   event: KiLiveEvent,
 ): { window: AiThreadWindow; applied: boolean } {
   const unchanged = { window, applied: true };
+  // A row has its own place in the thread: it lands at once, and a catch-up fills what lies before it.
+  if (event.type === 'row') return { window: placeRow(window, event.row), applied: true };
   if (event.type === 'started') {
     const keys = new Set(window.messages.map((message) => message.key));
     // A turn that starts past messages the page never saw waits, so the cursor does not skip them. A
@@ -110,10 +161,12 @@ function applyKiLiveEvent(
       ? unchanged
       : { window: withMessages(window, [...window.messages, ...added]), applied: true };
   }
-  const answer = window.messages.find((message) => message.key === answerKey(event.command));
+  const answer = window.messages.find(
+    (message): message is AiChatMessage => message.key === answerKey(event.command) && isChatMessage(message),
+  );
   if (!answer) return { window, applied: false };
   if (answer.status !== 'streaming') return unchanged;
-  let next: AiChatMessage;
+  let next: AiThreadEntry;
   if (event.type === 'text') {
     if (event.at > answer.text.length) return { window, applied: false };
     const fresh = event.delta.slice(answer.text.length - event.at);

@@ -1,3 +1,4 @@
+import type { AiThreadRow } from '@/lib/ai/thread-types';
 import type { AiTurnEnd, AiTurnSink } from '@/lib/ai/turn';
 
 /** Text deltas reach the client at most this often (brief non-negotiable 4). */
@@ -18,6 +19,7 @@ type TurnEvent =
       assistantItem: { id: string; sequence: number };
     }
   | { type: 'text'; delta: string }
+  | { type: 'row'; row: AiThreadRow }
   | ({ type: 'end' } & AiTurnEnd);
 
 /**
@@ -67,6 +69,12 @@ export function createTurnEventStream(schedule: Schedule = timerSchedule): {
       text(delta) {
         pending += delta;
         cancelFlush ??= schedule(flush, DELTA_BATCH_MS);
+      },
+      // A row follows the text written before it at once.
+      row(row) {
+        cancelFlush?.();
+        flush();
+        send({ type: 'row', row });
       },
     },
     end(end) {

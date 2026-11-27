@@ -3,6 +3,7 @@ import 'server-only';
 import { type ToolResultPart, type ToolSet, tool } from 'ai';
 
 import type { ToolValue } from '@/lib/ai/context';
+import type { AiToolControl } from '@/lib/ai/thread-types';
 import { logError } from '@/lib/logging';
 import type { ActionContext } from '@/lib/org/action-context';
 import type { OrgRole } from '@/lib/roles';
@@ -12,9 +13,6 @@ import type { z } from '@/lib/zod';
 // docs/technical/security.md, "Add an agent tool"). eslint.config.mjs bans the
 // AI SDK's tool helpers everywhere else, and lib/ai/tools/registry.test.ts walks
 // the registry for identity keys, length caps and boundary cases.
-
-/** What a tool may do (B1): read, write a draft a person finishes, or ask first. No level reaches outside. */
-type AiToolControl = 'read' | 'draft' | 'confirm';
 
 /**
  * The data classes a tool may return. Personnel, health, time, Zeitkonto,
@@ -46,7 +44,14 @@ type AiToolSpec<Name extends string, Input> = {
   input: z.ZodType<Input>;
   /** Who gets the tool (B6); the domain reader's own role and object checks still run. */
   roles: readonly OrgRole[];
+  /** What a tool may do (B1): read, write a draft a person finishes, or ask first. No level reaches outside. */
   control: AiToolControl;
+  /**
+   * A harness tool's row in the thread: its validated input is a question
+   * with options or the turn's to-do list. Every other tool's call shows as a
+   * tool row.
+   */
+  shows?: 'question' | 'todo_list';
   /** Where the call is recorded: a read writes only the run ledger's row (B19). */
   audit: 'ledger';
   /** A read repeats safely; a write's idempotency key comes with the first write tool. */

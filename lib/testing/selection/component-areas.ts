@@ -58,6 +58,7 @@ const COMPONENT_AREAS: readonly (readonly [string, readonly string[], readonly s
     [
       'ai-settings',
       'ki-chat',
+      'ki-rows',
       'auth-url-session',
       'company-',
       'join-requests',

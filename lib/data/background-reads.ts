@@ -2,8 +2,8 @@ import 'server-only';
 
 import { z } from '@/lib/zod';
 
-import { getAiThreadPage, getAiThreadWindow } from '@/lib/ai/thread-reads';
-import { aiThreadPageInput, aiThreadWindowInput } from '@/lib/ai/thread-types';
+import { getAiThreadPage, getAiThreadWindow, getAiToolDetail } from '@/lib/ai/thread-reads';
+import { aiThreadPageInput, aiThreadWindowInput, aiToolDetailInput } from '@/lib/ai/thread-types';
 import { getAttentionOverview } from '@/lib/attention/actions';
 import { getAbsenceAffectedVisits } from '@/lib/calendar/actions';
 import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
@@ -438,6 +438,7 @@ export const BACKGROUND_READS = {
   // WerkFlow KI: a page of the caller's own threads, and a thread's window as it opens or pages back.
   'ki-thread-page': defineRead(aiThreadPageInput, (input) => getAiThreadPage(input)),
   'ki-thread-window': defineRead(aiThreadWindowInput, (input) => getAiThreadWindow(input)),
+  'ki-tool-detail': defineRead(aiToolDetailInput, (input) => getAiToolDetail(input)),
 } as const;
 
 export type BackgroundReadKind = keyof typeof BACKGROUND_READS;

@@ -146,3 +146,8 @@ export function AiMarkdown({ text }: { text: string }): React.JSX.Element {
     </div>
   );
 }
+
+/** One line of model or record text, inline: the same safe subset, for a label, an option or a list entry. */
+export function AiInlineText({ text }: { text: string }): React.JSX.Element {
+  return <span className="break-words">{inline(text.replace(/\s*\n\s*/g, ' '))}</span>;
+}

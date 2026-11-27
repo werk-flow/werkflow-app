@@ -139,3 +139,131 @@ export async function seedKiThread(
   }
   return threadId;
 }
+
+/** The customer the seeded tool call of `seedKiTurnWithRows` finds. */
+export const KI_SEEDED_CUSTOMER = 'Müller Haustechnik';
+
+/**
+ * Seeds one finished turn in which the agent worked through its harness
+ * (werk-flow/werkflow-planning#533): a ticked plan, a customer search with its
+ * input and result, the answer and a question with options, written through
+ * the database calls a live turn makes. A repeat finds the turn answered and
+ * writes nothing.
+ */
+export async function seedKiTurnWithRows(ki: KiOrganization, role: KiRole, text: string): Promise<string> {
+  const admin = createAdminClient();
+  const threadId = seededUuid(`${ki.users[role].id}:rows:${text}`);
+  const command = seededUuid(`${threadId}:command`);
+  const author = { p_organization_id: ki.organizationId, p_user_id: ki.users[role].id };
+  const { data } = await admin
+    .rpc('start_ai_turn', {
+      ...author,
+      p_thread_id: threadId,
+      p_title: text,
+      p_command_id: command,
+      p_text: text,
+      p_reserve_micro_usd: 1000,
+    })
+    .single()
+    .throwOnError();
+  if (data.verdict !== 'started' || !data.run_id || !data.answer_item_id) return threadId;
+  const run = { ...author, p_run_id: data.run_id };
+  const ledger = (key: string, tool: string) => ({
+    p_ledger_key: key,
+    p_model_id: 'seed',
+    p_prompt_version: 'seed',
+    p_outcome: `tool_call_${tool}_ok`,
+  });
+  const steps = (done: boolean) => [
+    { text: 'Kunden suchen', done: true },
+    { text: 'Ansprechpartner nennen', done },
+  ];
+  await admin
+    .rpc('record_ai_tool_item', {
+      ...run,
+      p_kind: 'todo_list',
+      p_status: 'complete',
+      p_item_key: `${command}:plan`,
+      p_body: { revision: 1, steps: steps(false) },
+      ...ledger(`${command}:tool:1`, 'plan_zeigen'),
+    })
+    .throwOnError();
+  await admin
+    .rpc('record_ai_tool_item', {
+      ...run,
+      p_kind: 'tool_call',
+      p_status: 'complete',
+      p_item_key: `${command}:tool:2`,
+      p_body: {
+        revision: 2,
+        label: 'Kunden und Einsatzorte finden',
+        control: 'read',
+        outcome: 'ok',
+        detail: true,
+      },
+      p_detail: {
+        input: { suche: 'Müller' },
+        result: {
+          kunden: [
+            {
+              kundeId: seededUuid(`${threadId}:kunde-1`),
+              name: { source: 'record_text', text: KI_SEEDED_CUSTOMER },
+              kundennummer: { source: 'record_text', text: 'K-1001' },
+              adresse: { source: 'record_text', text: 'Lindenstraße 1, 70173 Stuttgart' },
+              link: '/kunden',
+            },
+            {
+              kundeId: seededUuid(`${threadId}:kunde-2`),
+              name: { source: 'record_text', text: 'Müller Bau GmbH' },
+              kundennummer: { source: 'record_text', text: 'K-1002' },
+              adresse: { source: 'record_text', text: 'Hauptstraße 12, 70178 Stuttgart' },
+              link: '/kunden',
+            },
+          ],
+          gesamt: 2,
+        },
+      },
+      ...ledger(`${command}:tool:2`, 'kunden_finden'),
+    })
+    .throwOnError();
+  await admin
+    .rpc('record_ai_tool_item', {
+      ...run,
+      p_kind: 'todo_list',
+      p_status: 'complete',
+      p_item_key: `${command}:plan`,
+      p_body: { revision: 3, steps: steps(true) },
+      ...ledger(`${command}:tool:3`, 'plan_zeigen'),
+    })
+    .throwOnError();
+  await admin
+    .rpc('update_ai_thread_item', {
+      ...author,
+      p_item_id: data.answer_item_id,
+      p_status: 'complete',
+      p_body: { text: 'Ich habe zwei Kunden mit „Müller“ gefunden: Müller Haustechnik und Müller Bau GmbH.' },
+    })
+    .throwOnError();
+  await admin
+    .rpc('record_ai_tool_item', {
+      ...run,
+      p_kind: 'question',
+      p_status: 'complete',
+      p_item_key: `${command}:tool:4`,
+      p_body: {
+        revision: 1,
+        question: 'Welchen Kunden meinst du?',
+        options: [KI_SEEDED_CUSTOMER, 'Müller Bau GmbH'],
+      },
+      ...ledger(`${command}:tool:4`, 'frage_stellen'),
+    })
+    .throwOnError();
+  await admin
+    .rpc('settle_ai_run', {
+      p_organization_id: ki.organizationId,
+      p_run_id: data.run_id,
+      p_status: 'succeeded',
+    })
+    .throwOnError();
+  return threadId;
+}
