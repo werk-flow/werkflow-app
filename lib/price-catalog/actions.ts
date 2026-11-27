@@ -27,7 +27,7 @@ import {
 // organization and manager role on the server and writes only inside it;
 // the tables have no client grant (supabase/migrations/20261201180000_keep_dated_leistung_prices.sql).
 // A customer's conditions are kept the same way
-// (20270501110000_price_new_offer_positions_by_customer_conditions.sql).
+// (20270501130000_price_new_offer_positions_by_customer_conditions.sql).
 
 const LEISTUNGEN_PATH = '/angebote/leistungen';
 

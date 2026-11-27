@@ -1,6 +1,6 @@
 -- A customer's own conditions, kept as versions that never change, price new
 -- offer Positions, and each Position keeps where its price came from
--- (migration 20270501110000_price_new_offer_positions_by_customer_conditions.sql).
+-- (migration 20270501130000_price_new_offer_positions_by_customer_conditions.sql).
 begin;
 
 insert into auth.users (

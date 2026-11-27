@@ -21,7 +21,7 @@ import type { OfferFreePosition } from './types';
 // Leistung, or typed (20270501090000_calculate_offers_with_leistungen_and_costs.sql),
 // and where its price came from: a source stays only with the server's proof
 // for this offer, entry, price and price quantity; any other price is „manuell“
-// (20270501110000_price_new_offer_positions_by_customer_conditions.sql).
+// (20270501130000_price_new_offer_positions_by_customer_conditions.sql).
 
 const contentRefusal = writeRefusalFor(
   new Set([
