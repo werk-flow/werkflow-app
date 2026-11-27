@@ -9,6 +9,16 @@
 -- * An employee, another organization's admin, another organization's visit
 --   and a visit that is not completed are refused; a storage key outside the
 --   organization is invalid.
+-- * A report records its PDF's content hash when the caller passes one
+--   (20270420090000_send_service_reports_through_document_delivery.sql); a
+--   call without it, as before, still files the report.
+-- * E2c's delivery sends the visit's latest report under the subject
+--   service_report, with its own filed PDF: a superseded report, another
+--   report's document, a report without its hash, an employee and another
+--   organization are refused; a repeated request records one delivery; a
+--   manual send is recorded; the list reads the report's sends only; a failed
+--   send of a report regenerated since is not retried; a row names exactly
+--   one subject.
 -- Only the service role executes the function; no role rewrites a report.
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
@@ -60,7 +70,7 @@ insert into public.maintenance_due_work(id,organization_id,maintenance_plan_id,m
 set local session_replication_role = origin;
 
 do $$ declare
-  v_function constant text := 'public.register_maintenance_service_report(uuid,uuid,uuid,uuid,uuid,uuid,text,text,bigint)';
+  v_function constant text := 'public.register_maintenance_service_report(uuid,uuid,uuid,uuid,uuid,uuid,text,text,bigint,text)';
   v_role text;
 begin
   if has_function_privilege('anon', v_function, 'execute')
@@ -133,6 +143,9 @@ begin
     pg_temp.register(v_org, v_admin, v_report, v_open, null, v_document, v_org), 'service_report_visit_not_completed');
   perform pg_temp.expect_refusal('a key outside the organization',
     pg_temp.register(v_org, v_admin, v_report, v_completed, null, v_document, v_foreign_org), 'invalid_input');
+  perform pg_temp.expect_refusal('a malformed content hash',
+    left(pg_temp.register(v_org, v_admin, v_report, v_completed, null, v_document, v_org), -1) || ', ''abc'')',
+    'invalid_input');
   if exists (select 1 from public.maintenance_service_reports
              where organization_id = '47160000-0000-4000-8000-000000000010')
      or exists (select 1 from public.documents where id = v_document::uuid) then
@@ -207,7 +220,7 @@ begin
     '47160000-0000-4000-8000-000000000083', '47160000-0000-4000-8000-000000000071',
     '47160000-0000-4000-8000-000000000081', '47160000-0000-4000-8000-000000000094',
     '47160000-0000-4000-8000-000000000010/service-reports/47160000-0000-4000-8000-000000000071/r2.pdf',
-    'Servicebericht AUF-REPORT-1.pdf', 4096
+    'Servicebericht AUF-REPORT-1.pdf', 4096, repeat('c', 64)
   );
   if not exists (
     select 1 from public.maintenance_service_reports
@@ -219,6 +232,11 @@ begin
     or (select count(*) from public.maintenance_service_reports
         where organization_id = '47160000-0000-4000-8000-000000000010') <> 2 then
     raise exception 'the regenerated report is not number 2 beside the first';
+  end if;
+  if (select metadata ->> 'contentHash' from public.documents where id = '47160000-0000-4000-8000-000000000094')
+       is distinct from repeat('c', 64)
+     or (select metadata ? 'contentHash' from public.documents where id = '47160000-0000-4000-8000-000000000091') then
+    raise exception 'a report did not record exactly the content hash its caller passed';
   end if;
 end $$;
 
@@ -235,6 +253,98 @@ do $$ begin
      is distinct from 'Servicebericht AUF-REPORT-1 (2).pdf' then
     raise exception 'a report of the same job did not take the next free name';
   end if;
+end $$;
+
+-- E2c's delivery of a report (20270420090000): report 81 was superseded by
+-- 83, whose PDF carries its hash; 84 was filed without one.
+create function pg_temp.request_report(p_actor text, p_org text, p_report text, p_document text,
+  p_kind text default 'service_report', p_attempt text default null)
+returns text language sql as $$
+  select format(
+    'select public.request_document_delivery(%L, %L, %s, %L, %L, %L, %L, %L, %L, %L, %L, null)',
+    p_actor, p_org, coalesce(quote_literal(p_attempt) || '::uuid', 'gen_random_uuid()'), p_kind, p_report,
+    p_document, 'erika.musterfrau@example.com', 'Servicebericht AUF-REPORT-1', 'Guten Tag.',
+    'Haustechnik Sonnenberg GmbH', '"Haustechnik Sonnenberg GmbH" <bericht@werkflow.example>');
+$$;
+
+do $$ declare
+  v_org constant text := '47160000-0000-4000-8000-000000000010';
+  v_foreign_org constant text := '47160000-0000-4000-8000-000000000011';
+  v_admin constant text := '47160000-0000-4000-8000-000000000001';
+  v_employee constant text := '47160000-0000-4000-8000-000000000002';
+  v_foreign_admin constant text := '47160000-0000-4000-8000-000000000003';
+  v_attempt constant text := '47160000-0000-4000-8000-0000000000a1';
+  v_payload jsonb;
+  v_delivery public.document_deliveries%rowtype;
+begin
+  perform pg_temp.expect_refusal('an employee',
+    pg_temp.request_report(v_employee, v_org, '47160000-0000-4000-8000-000000000083',
+      '47160000-0000-4000-8000-000000000094'), 'not_authorized');
+  perform pg_temp.expect_refusal('another organization',
+    pg_temp.request_report(v_foreign_admin, v_foreign_org, '47160000-0000-4000-8000-000000000083',
+      '47160000-0000-4000-8000-000000000094'), 'service_report_not_found');
+  perform pg_temp.expect_refusal('a superseded report',
+    pg_temp.request_report(v_admin, v_org, '47160000-0000-4000-8000-000000000081',
+      '47160000-0000-4000-8000-000000000091'), 'service_report_stale');
+  perform pg_temp.expect_refusal('another report''s document',
+    pg_temp.request_report(v_admin, v_org, '47160000-0000-4000-8000-000000000083',
+      '47160000-0000-4000-8000-000000000095'), 'document_not_found');
+  perform pg_temp.expect_refusal('a report filed without its hash',
+    pg_temp.request_report(v_admin, v_org, '47160000-0000-4000-8000-000000000084',
+      '47160000-0000-4000-8000-000000000095'), 'document_not_found');
+  perform pg_temp.expect_refusal('a report named as an invoice',
+    pg_temp.request_report(v_admin, v_org, '47160000-0000-4000-8000-000000000083',
+      '47160000-0000-4000-8000-000000000094', 'invoice'), 'invoice_not_found');
+  if exists (select 1 from public.document_deliveries where organization_id = v_org::uuid) then
+    raise exception 'a refused request recorded a delivery';
+  end if;
+
+  -- The latest report sends its own PDF, recorded under its subject; the same attempt again claims nothing.
+  execute pg_temp.request_report(v_admin, v_org, '47160000-0000-4000-8000-000000000083',
+    '47160000-0000-4000-8000-000000000094', 'service_report', v_attempt) into v_payload;
+  select * into strict v_delivery from public.document_deliveries where id = (v_payload ->> 'deliveryId')::uuid;
+  if not (v_payload ->> 'claimed')::boolean or v_payload ->> 'contentHash' is distinct from repeat('c', 64)
+     or (v_delivery.subject_kind, v_delivery.service_report_id, v_delivery.invoice_id, v_delivery.document_id)
+       is distinct from ('service_report', '47160000-0000-4000-8000-000000000083'::uuid, null::uuid,
+         '47160000-0000-4000-8000-000000000094'::uuid) then
+    raise exception 'the report''s delivery reads %', row_to_json(v_delivery);
+  end if;
+  execute pg_temp.request_report(v_admin, v_org, '47160000-0000-4000-8000-000000000083',
+    '47160000-0000-4000-8000-000000000094', 'service_report', v_attempt) into v_payload;
+  if (v_payload ->> 'claimed')::boolean
+     or (select count(*) from public.document_deliveries where organization_id = v_org::uuid) <> 1 then
+    raise exception 'a repeated request recorded or claimed again';
+  end if;
+  perform public.settle_document_delivery(v_org::uuid, v_delivery.id, 1, 'failed', null, 'email_provider_503');
+  perform public.record_manual_delivery(v_admin::uuid, v_org::uuid, gen_random_uuid(), 'service_report',
+    '47160000-0000-4000-8000-000000000083', '47160000-0000-4000-8000-000000000094', 'per Post');
+
+  -- The list reads the report's two sends, under its kind and organization only.
+  if (public.list_document_deliveries(v_org::uuid, 'service_report', '47160000-0000-4000-8000-000000000083', 50)
+        ->> 'total')::integer is distinct from 2
+     or (public.list_document_deliveries(v_org::uuid, 'invoice', '47160000-0000-4000-8000-000000000083', 50)
+        ->> 'total')::integer is distinct from 0
+     or (public.list_document_deliveries(v_foreign_org::uuid, 'service_report',
+        '47160000-0000-4000-8000-000000000083', 50) ->> 'total')::integer is distinct from 0 then
+    raise exception 'the list read other sends than the report''s';
+  end if;
+
+  -- Regenerated since, the report's failed send is not retried: the customer gets the newer one.
+  perform public.register_maintenance_service_report(
+    v_org::uuid, v_admin::uuid, '47160000-0000-4000-8000-000000000086', '47160000-0000-4000-8000-000000000071',
+    '47160000-0000-4000-8000-000000000083', '47160000-0000-4000-8000-000000000096',
+    v_org || '/service-reports/47160000-0000-4000-8000-000000000071/r3.pdf',
+    'Servicebericht AUF-REPORT-1.pdf', 4096, repeat('d', 64));
+  perform pg_temp.expect_refusal('a retry of a report regenerated since',
+    format('select public.retry_document_delivery(%L, %L, %L, 1)', v_admin, v_org, v_delivery.id),
+    'service_report_stale');
+
+  -- A row names exactly one subject.
+  perform pg_temp.expect_refusal('a report delivery without its report', format(
+    'insert into public.document_deliveries (organization_id, subject_kind, document_id, attachment_content_hash,
+       channel, state, attempt_key, dispatched_at)
+     values (%L, ''service_report'', %L, repeat(''c'', 64), ''manual'', ''sent'', gen_random_uuid(), now())',
+    v_org, '47160000-0000-4000-8000-000000000094'), 'document_deliveries_subject_check');
 end $$;
 
 reset role;

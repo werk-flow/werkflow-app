@@ -1,10 +1,11 @@
 'use client';
 
-import { useRef, type ReactElement } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
 import { ClipboardCheck, MapPin } from 'lucide-react';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import { DUE_ROW_CLASS } from '@/components/service/maintenance-lists';
+import { ServiceReportDeliveryDialog } from '@/components/service/service-report-delivery-dialog';
 import { ListPagination } from '@/components/shared/list-pagination';
 import { StaleRegion } from '@/components/shared/stale-region';
 import { Badge } from '@/components/ui/badge';
@@ -30,8 +31,8 @@ import { formatGermanDate } from '@/lib/utils';
 
 // „Abgeschlossene Wartungsbesuche“ on the Wartung page: each completed visit
 // with „Servicebericht erstellen“, and once filed „Herunterladen“ and „Neu
-// erstellen“. A report reaches the visit job's documents, where the assigned
-// employee downloads it too.
+// erstellen“, „Versenden“ opens its sends. A report reaches the visit job's
+// documents, where the assigned employee downloads it too.
 
 // A finished visit is a reached good state; an unfinished one is neutral, its next step lives in Aufgaben.
 const OUTCOME_VARIANTS = { complete: 'success', partial: 'secondary', unresolved: 'secondary' } as const;
@@ -85,6 +86,9 @@ function VisitRow({ visit, actions }: { visit: CompletedVisit; actions: ReportAc
             >
               Herunterladen
             </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => actions.deliver(visit)}>
+              Versenden
+            </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => actions.create(visit)}>
               Neu erstellen
             </Button>
@@ -100,7 +104,7 @@ function VisitRow({ visit, actions }: { visit: CompletedVisit; actions: ReportAc
 }
 
 /** Create and download, each pending on its row and answered by a banner. */
-function useReportActions(refresh: () => Promise<void>) {
+function useReportActions(refresh: () => Promise<void>, deliver: (visit: CompletedVisit) => void) {
   const busy = useBusyIds();
   const { showBanner } = useBanner();
   // An attempt whose answer was lost keeps its id, so the retry answers with the report it made.
@@ -138,7 +142,7 @@ function useReportActions(refresh: () => Promise<void>) {
       if (result.success) window.location.assign(result.signedUrl);
       else showBanner({ variant: 'error', message: 'Der Servicebericht konnte nicht geladen werden.' });
     });
-  return { create, download, isBusy: busy.isBusy };
+  return { create, download, deliver, isBusy: busy.isBusy };
 }
 
 type ReportActions = ReturnType<typeof useReportActions>;
@@ -183,7 +187,8 @@ function ServiceReportPage({
     },
   });
   const view = live.data ?? initial;
-  const actions = useReportActions(live.refresh);
+  const [delivering, setDelivering] = useState<CompletedVisit | null>(null);
+  const actions = useReportActions(live.refresh, setDelivering);
 
   return (
     <StaleRegion stale={live.isStale} onRetry={live.refresh}>
@@ -209,6 +214,13 @@ function ServiceReportPage({
             label="Abgeschlossene Wartungsbesuche"
           />
         </div>
+      )}
+      {delivering?.latestReport && (
+        <ServiceReportDeliveryDialog
+          reportId={delivering.latestReport.id}
+          visitLabel={`${formatGermanDate(delivering.completedOn)} · ${delivering.planNumber} · ${delivering.clientName}`}
+          onClose={() => setDelivering(null)}
+        />
       )}
     </StaleRegion>
   );

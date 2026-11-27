@@ -1,3 +1,4 @@
+import type { DeliveryList, DeliveryMailDefaults } from '@/lib/delivery/delivery-types';
 import type { MaintenanceScopeOutcome } from '@/lib/maintenance/types';
 
 // Types and the page parameter only, so the client list imports no server code.
@@ -30,3 +31,6 @@ export type CompletedVisitPage = {
   page: number;
   pageSize: number;
 };
+
+/** „Versand“ of one Servicebericht: its deliveries and what the email form proposes. */
+export type ServiceReportDelivery = { list: DeliveryList; defaults: DeliveryMailDefaults };

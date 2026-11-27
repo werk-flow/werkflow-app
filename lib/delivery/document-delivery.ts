@@ -38,7 +38,7 @@ import { DELIVERY_STATES, type DeliveryState, type DeliverySubject } from './del
  */
 const SEND_DEADLINE_MS = (23 * 60 + 30) * 60_000;
 
-type DeliveryCaller = Pick<ActionContext, 'userId' | 'orgId' | 'isManagerOrAbove'>;
+export type DeliveryCaller = Pick<ActionContext, 'userId' | 'orgId' | 'isManagerOrAbove'>;
 
 export type DeliveryOutcome = ActionResult<{ state: DeliveryState; failureCode: string | null }>;
 
@@ -50,6 +50,8 @@ const refusal = writeRefusalFor(
     'not_authorized',
     'invoice_not_found',
     'invoice_not_issued',
+    'service_report_not_found',
+    'service_report_stale',
     'document_not_found',
     'delivery_not_found',
     'delivery_not_retryable',
@@ -207,7 +209,7 @@ async function recordedOutcome(
     createSupabaseAdminClient()
       .from('document_deliveries')
       .select(
-        'state, failure_code, channel, subject_kind, invoice_id, document_id, recipient_email, email_subject, message_text',
+        'state, failure_code, channel, subject_kind, invoice_id, service_report_id, document_id, recipient_email, email_subject, message_text',
       )
       .eq('organization_id', caller.orgId)
       .eq('attempt_key', request.attemptKey)
@@ -218,7 +220,7 @@ async function recordedOutcome(
   const sameMail =
     data?.channel === 'email' &&
     data.subject_kind === request.subject.kind &&
-    data.invoice_id === request.subject.id &&
+    (data.invoice_id ?? data.service_report_id) === request.subject.id &&
     data.document_id === request.documentId &&
     data.recipient_email === request.recipient &&
     data.email_subject === request.emailSubject &&

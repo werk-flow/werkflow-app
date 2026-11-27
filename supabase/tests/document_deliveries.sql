@@ -97,7 +97,8 @@ begin
       where attribute.attrelid = 'public.document_deliveries'::regclass and attribute.attnum > 0
         and not attribute.attisdropped
         and has_column_privilege('authenticated', 'public.document_deliveries', attribute.attname, 'SELECT'))
-    is distinct from array['id', 'invoice_id', 'organization_id', 'state', 'subject_kind', 'updated_at']
+    is distinct from array['id', 'invoice_id', 'organization_id', 'service_report_id', 'state', 'subject_kind',
+      'updated_at']
     or has_any_column_privilege('anon', 'public.document_deliveries', 'SELECT') then
     raise exception 'a client role reads delivery columns beyond the signal';
   end if;
