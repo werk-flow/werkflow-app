@@ -82,6 +82,7 @@ import { initializeLeistungenBoundary, LeistungenContractFixture } from './leist
 import { OffersContractFixture } from './offers-boundaries';
 import {
   InvoiceDeliveriesContractFixture,
+  InvoiceDeliveryRetryContractFixture,
   InvoiceEditorContractFixture,
   InvoiceSettingsContractFixture,
   mountInvoiceDeliveriesHydration,
@@ -673,6 +674,8 @@ createRoot(root).render(
     <InvoiceDeliveriesContractFixture cancelled={false} />
   ) : window.uiContractFixture === 'invoice-deliveries-cancelled' ? (
     <InvoiceDeliveriesContractFixture cancelled />
+  ) : window.uiContractFixture === 'invoice-deliveries-retry' ? (
+    <InvoiceDeliveryRetryContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>

@@ -88,6 +88,26 @@ test('an issued invoice keeps a send unclear when an unanswered attempt was foll
   ).toBeVisible();
 });
 
+// A retry of such a send fails again: its message keeps the send unclear, and once the refreshed
+// row shows the new attempt, the row alone says what happened.
+test('a failed retry of a send that may have gone out stays unclear and gives way to the refreshed row', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'invoice-deliveries-retry');
+  const unclear = 'Ob die E-Mail rausging, ist unklar';
+  await expect(textInDom(page, unclear)).toHaveCount(1);
+  await page.getByRole('button', { name: 'Erneut senden' }).click();
+  await expectHeldWrite(page, 'retryInvoiceDelivery');
+  await answerHeldWrite(page, null);
+  await expect(
+    visibleText(page, 'Letzter Versuch: Die E-Mail ist nicht rausgegangen. Versuche es später erneut.'),
+  ).toBeVisible();
+  await page.evaluate(() => window.uiContractDeliveryRefresh?.());
+  await expect(visibleText(page, '3 Versuche')).toBeVisible();
+  await expect(textInDom(page, 'Versuche es später erneut.')).toHaveCount(0);
+  await expect(textInDom(page, unclear)).toHaveCount(1);
+});
+
 // The server renders „Versand“ by its clock, the browser hydrates it by its own. An attempt that
 // turns unanswered in between must not make the two renders differ.
 test("an issued invoice's send row renders without a clock on the server and turns unanswered after hydration", async ({

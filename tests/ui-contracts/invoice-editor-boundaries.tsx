@@ -6,7 +6,7 @@ import { InvoiceDeliveries } from '@/components/rechnungen/invoice-delivery';
 import { InvoiceEditor } from '@/components/rechnungen/invoice-editor';
 import { InvoiceSettingsForm } from '@/components/settings/invoice-settings-form';
 import { BannerProvider } from '@/components/ui/banner';
-import type { DeliveryList } from '@/lib/delivery/delivery-types';
+import type { DeliveryEntry, DeliveryList } from '@/lib/delivery/delivery-types';
 import type { InvoiceSettings } from '@/lib/invoices/settings';
 import type { InvoiceDetail } from '@/lib/invoices/types';
 import { CalendarOrganizationContext } from './calendar-service-boundaries';
@@ -21,6 +21,8 @@ declare global {
     uiContractInvoiceIssuedElsewhere: (() => void) | null;
     /** Renders the settings page again as read after New Year's midnight: the series restarts at 1. */
     uiContractInvoiceSettingsNewYear: (() => void) | null;
+    /** Renders „Versand“ again as read after the retry: one more attempt. */
+    uiContractDeliveryRefresh: (() => void) | null;
     /** What React reported while it hydrated the server-rendered „Versand“, such as a mismatch. */
     uiContractHydrationErrors: string[];
   }
@@ -217,6 +219,34 @@ export function InvoiceDeliveriesContractFixture({
       </main>
     </BannerProvider>
   );
+}
+
+/** One email whose first attempt went unanswered and whose retry failed; its retry window is still open. */
+const UNCLEAR_FAILED: DeliveryEntry = {
+  id: '98000000-0000-4000-8000-000000000005',
+  channel: 'email',
+  state: 'failed',
+  recipient: 'verwaltung@lindenhof.example',
+  subject: 'Rechnung RE-2037-001 – Haustechnik Sonnenberg GmbH',
+  note: '',
+  attempts: 2,
+  failureCode: 'email_provider_503',
+  outcomeUnknown: true,
+  createdAt: '2037-11-21T10:00:00.000Z',
+  sentAt: null,
+  createdBy: 'Erika Musterfrau',
+  retryFrom: new Date(Date.now() - HOUR).toISOString(),
+  retryUntil: new Date(Date.now() + HOUR).toISOString(),
+};
+
+/** „Versand“ of an issued invoice with that email; a refresh brings one more attempt. */
+export function InvoiceDeliveryRetryContractFixture(): React.JSX.Element {
+  const [entry, setEntry] = useState(UNCLEAR_FAILED);
+  useEffect(() => {
+    window.uiContractDeliveryRefresh = () =>
+      setEntry((current) => ({ ...current, attempts: current.attempts + 1 }));
+  }, []);
+  return <InvoiceDeliveriesContractFixture cancelled={false} list={{ total: 1, entries: [entry] }} />;
 }
 
 const MINUTE = 60 * 1000;

@@ -21,7 +21,7 @@ import {
   type DeliveryMailDefaults,
   type DeliveryState,
 } from '@/lib/delivery/delivery-types';
-import { deliveryFailureAdvice, deliveryOutcome, priorEmailAdvice } from '@/lib/delivery/failure-advice';
+import { deliveryOutcome, priorEmailAdvice } from '@/lib/delivery/failure-advice';
 import { retryWindowAt, retryWindowEnd } from '@/lib/delivery/retry-window';
 import { retryInvoiceDelivery } from '@/lib/invoices/delivery-actions';
 import { formatBerlinDateTime } from '@/lib/utils';
@@ -85,17 +85,25 @@ function DeliveryRow({
   const router = useRouter();
   const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(retryInvoiceDelivery);
-  const [error, setError] = useState<string | null>(null);
+  // A retry's message belongs to the attempt it started from; the refreshed row tells a later one.
+  const [error, setError] = useState<{ attempt: number; message: string } | null>(null);
   const { retryable, unanswered } =
     now === null ? { retryable: false, unanswered: false } : retryWindowAt(entry, now);
   const retry = async () => {
+    const attempt = entry.attempts;
+    const fail = (message: string) => setError({ attempt, message });
     setError(null);
-    const result = await run({ deliveryId: entry.id, expectedAttempt: entry.attempts }).catch(() => null);
-    if (!result) return setError(RETRY_FAILED);
-    if (!result.success)
-      return setError(describeFailure(result.error, DELIVERY_FAILURE_MESSAGES, RETRY_FAILED));
+    const result = await run({ deliveryId: entry.id, expectedAttempt: attempt }).catch(() => null);
+    if (!result) return fail(RETRY_FAILED);
+    if (!result.success) return fail(describeFailure(result.error, DELIVERY_FAILURE_MESSAGES, RETRY_FAILED));
     if (result.state === 'failed')
-      setError(deliveryFailureAdvice(result.failureCode, 'Versuche es später erneut.'));
+      fail(
+        deliveryOutcome(
+          // Taking over an unanswered attempt leaves the outcome unknown.
+          { failureCode: result.failureCode, outcomeUnknown: entry.outcomeUnknown || unanswered },
+          'Versuche es später erneut.',
+        ),
+      );
     else if (result.state === 'sent')
       showBanner({ variant: 'success', message: `E-Mail an ${entry.recipient ?? ''} versendet.` });
     router.refresh();
@@ -114,12 +122,14 @@ function DeliveryRow({
             <p className="text-sm text-destructive">
               {deliveryOutcome(
                 unanswered ? { failureCode: 'email_provider_unreachable', outcomeUnknown: true } : entry,
-                sendable,
+                sendable ? '' : null,
               )}
             </p>
           )}
-          {/* A later send, here or in another session, makes an earlier retry's error stale. */}
-          <ErrorText>{entry.state === 'sent' ? null : error}</ErrorText>
+          {/* A later attempt or a cancel, here or in another session, makes a retry's error stale. */}
+          <ErrorText>
+            {sendable && error?.attempt === entry.attempts && entry.state !== 'sent' ? error.message : null}
+          </ErrorText>
         </div>
       </div>
       {sendable && retryable && (

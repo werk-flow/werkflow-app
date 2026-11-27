@@ -23,7 +23,7 @@ test('a past delivery names no step, since a cancelled invoice is never sent aga
     'email_provider_unreachable',
     null,
   ]) {
-    const outcome = deliveryOutcome({ failureCode, outcomeUnknown: false }, false);
+    const outcome = deliveryOutcome({ failureCode, outcomeUnknown: false }, null);
     expect(outcome).not.toContain('Versuche');
     expect(outcome).not.toContain('senden');
   }
@@ -33,17 +33,17 @@ test('a past delivery names no step, since a cancelled invoice is never sent aga
 });
 
 test('a failed delivery keeps its last reason and says when an earlier attempt may have reached the customer', () => {
-  expect(deliveryOutcome({ failureCode: 'email_provider_503', outcomeUnknown: true }, false)).toBe(
+  expect(deliveryOutcome({ failureCode: 'email_provider_503', outcomeUnknown: true }, null)).toBe(
     'Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: Die E-Mail ist nicht rausgegangen.',
   );
   // An invoice that can still be sent keeps the last attempt's step after it.
-  expect(deliveryOutcome({ failureCode: 'email_provider_422', outcomeUnknown: true }, true)).toBe(
+  expect(deliveryOutcome({ failureCode: 'email_provider_422', outcomeUnknown: true }, '')).toBe(
     'Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: Der Mailanbieter hat die E-Mail abgelehnt. Prüfe die Adresse und sende über „Per E-Mail senden“ eine neue E-Mail an die richtige Adresse.',
   );
   // The last attempt itself got no usable answer: its reason already says so, once.
-  expect(
-    deliveryOutcome({ failureCode: 'email_provider_invalid_response', outcomeUnknown: true }, true),
-  ).toBe('Der Mailanbieter hat nicht geantwortet. Ob die E-Mail rausging, ist unklar.');
+  expect(deliveryOutcome({ failureCode: 'email_provider_invalid_response', outcomeUnknown: true }, '')).toBe(
+    'Der Mailanbieter hat nicht geantwortet. Ob die E-Mail rausging, ist unklar.',
+  );
 });
 
 const email = (
