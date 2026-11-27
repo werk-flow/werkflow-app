@@ -244,10 +244,8 @@ async function storeInvoiceOriginal(
     p_organization_id: organizationId,
     p_paths: [path],
   });
-  if (error) {
-    logError('storeInvoiceOriginal: queue_storage_purge failed', error);
-    throw new Error('original_not_queued');
-  }
+  // The caller logs the failure once, by this code.
+  if (error) throw Object.assign(new Error('original_not_queued'), { code: 'original_not_queued' });
   await putStorageObject({ organizationId, path, body: bytes, contentType: 'application/pdf' });
   const contentHash = createHash('sha256').update(bytes).digest('hex');
   return { documentId, path, fileName, sizeBytes: bytes.byteLength, contentHash };
