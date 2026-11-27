@@ -15,7 +15,15 @@ const SENDING_SUFFIX = ':sending';
 const memoryDrafts = new Map<string, string>();
 const draftListeners = new Set<() => void>();
 
+/** Moves on at every sign-out's clear: a write begun before it belongs to the session that ended. */
+let clears = 0;
+
+export function draftClears(): number {
+  return clears;
+}
+
 onKiDraftsCleared(() => {
+  clears += 1;
   memoryDrafts.clear();
   for (const listener of draftListeners) listener();
 });

@@ -10,6 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { readDraft, subscribeDrafts, writeDraft } from '@/lib/ai/chat-drafts';
+import type { AiUploadedFile } from '@/lib/ai/files/types';
+import { KiAttachButtons, KiAttachmentList, useKiUploads } from './ki-attachments';
 
 // The composer stays mounted while the person switches threads (brief
 // non-negotiable 8); its drafts live in lib/ai/chat-drafts.ts.
@@ -26,20 +28,34 @@ function sendsOnEnter(event: React.KeyboardEvent<HTMLTextAreaElement>): boolean 
   );
 }
 
+/** The composer's refusals, each once, and that WerkFlow KI can be wrong. */
+function ComposerNotes({ errors }: { errors: readonly (string | null)[] }): React.JSX.Element {
+  return (
+    <>
+      {[...new Set(errors)].map((message) => message && <ErrorText key={message}>{message}</ErrorText>)}
+      <p className="text-xs text-muted-foreground">
+        {AI_PRODUCT_NAME} ist eine KI und kann sich irren. Prüf wichtige Angaben, bevor du sie verwendest.
+      </p>
+    </>
+  );
+}
+
 export const KiComposer = memo(function KiComposer({
+  organizationId,
   draft,
   running,
   error,
   onSend,
   onStop,
 }: {
+  organizationId: string;
   /** The sessionStorage key of the open thread's draft. */
   draft: string;
   /** An answer is being written: the composer offers to stop it instead of sending. */
   running: boolean;
   error: string | null;
-  /** Sends the text of the draft under `draft`; the composer has already cleared it. */
-  onSend: (text: string, draft: string) => void;
+  /** Sends the text and files of the draft under `draft`; the composer has already cleared it. */
+  onSend: (text: string, draft: string, uploads: readonly AiUploadedFile[]) => void;
   onStop: () => void;
 }): React.JSX.Element {
   const text = useSyncExternalStore(
@@ -48,6 +64,7 @@ export const KiComposer = memo(function KiComposer({
     () => '',
   );
   const [missing, setMissing] = useState(false);
+  const files = useKiUploads(organizationId, draft);
 
   function submit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -58,13 +75,17 @@ export const KiComposer = memo(function KiComposer({
       focusFirstInvalidField({ [COMPOSER_ID]: 'missing' });
       return;
     }
+    const uploads = files.take();
+    if (!uploads) return;
     writeDraft(draft, '');
-    onSend(text.trim(), draft);
+    onSend(text.trim(), draft, uploads);
   }
 
   return (
     <form onSubmit={submit} className="shrink-0 space-y-2 border-t bg-background p-4">
+      <KiAttachmentList uploads={files.uploads} uploading={files.uploading} onRemove={files.remove} />
       <div className="flex items-end gap-2">
+        <KiAttachButtons onSelect={files.add} />
         <Field
           label={`Nachricht an ${AI_PRODUCT_NAME}`}
           hideLabel
@@ -101,10 +122,7 @@ export const KiComposer = memo(function KiComposer({
           </Button>
         )}
       </div>
-      {error && <ErrorText>{error}</ErrorText>}
-      <p className="text-xs text-muted-foreground">
-        {AI_PRODUCT_NAME} ist eine KI und kann sich irren. Prüf wichtige Angaben, bevor du sie verwendest.
-      </p>
+      <ComposerNotes errors={[files.error, error]} />
     </form>
   );
 });

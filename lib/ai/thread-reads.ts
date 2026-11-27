@@ -28,6 +28,14 @@ const WINDOW_MESSAGES = 40;
 const WINDOW_BYTES = 256_000;
 
 const bodySchema = z.object({ text: z.string(), failure: z.string().optional() });
+const fileBodySchema = z.object({
+  fileId: z.string(),
+  name: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
+  pages: z.number().nullable(),
+  origin: z.enum(['upload', 'agent']),
+});
 
 function isTurnFailure(code: string): code is AiTurnFailure {
   return Object.hasOwn(AI_TURN_FAILURE_MESSAGES, code);
@@ -135,7 +143,7 @@ async function readWindowItems(
     .select('idempotency_key, sequence, kind, status, body')
     .eq('organization_id', organizationId)
     .eq('thread_id', threadId)
-    .in('kind', ['user_message', 'assistant_message']);
+    .in('kind', ['user_message', 'assistant_message', 'file']);
   if (bound.before !== undefined) query = query.lt('sequence', bound.before);
   if (bound.after !== undefined) query = query.gte('sequence', bound.after);
   const { data, error } = await query
@@ -148,15 +156,20 @@ async function readWindowItems(
   const messages: AiChatMessage[] = [];
   let bytes = 0;
   for (const item of data.slice(0, WINDOW_MESSAGES)) {
+    if (item.kind === 'file') {
+      // Only the file's name and size come with the thread; its bytes load when it is opened.
+      const file = fileBodySchema.safeParse(item.body);
+      if (file.success)
+        messages.push({ ...windowItem(item), role: 'file', text: '', failure: null, file: file.data });
+      continue;
+    }
     const body = bodySchema.safeParse(item.body);
     const text = body.success ? body.data.text : '';
     bytes += Buffer.byteLength(text, 'utf8');
     if (messages.length > 0 && bytes > WINDOW_BYTES) break;
     messages.push({
-      key: item.idempotency_key,
-      sequence: item.sequence,
+      ...windowItem(item),
       role: item.kind === 'user_message' ? 'user' : 'assistant',
-      status: item.status,
       text,
       failure:
         item.status === 'complete' ? null : turnFailureSentence(body.success ? body.data.failure : undefined),
@@ -164,4 +177,8 @@ async function readWindowItems(
   }
   const hasOlder = messages.length < data.length;
   return { messages: bound.after === undefined ? messages.reverse() : messages, hasOlder };
+}
+
+function windowItem(item: { idempotency_key: string; sequence: number; status: AiChatMessage['status'] }) {
+  return { key: item.idempotency_key, sequence: item.sequence, status: item.status };
 }

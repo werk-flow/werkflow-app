@@ -6,6 +6,7 @@ import { spyOn } from 'bun:test';
 import {
   CopyObjectCommand,
   DeleteObjectsCommand,
+  GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -59,6 +60,11 @@ export function installInMemoryBucket(writes?: string[]): Map<string, StoredObje
         bucket.delete(String(object.Key));
       }
       return {};
+    }
+    if (command instanceof GetObjectCommand) {
+      const object = bucket.get(String(command.input.Key));
+      if (!object) throw notFound();
+      return { Body: { transformToByteArray: async () => new Uint8Array(Buffer.from(object.body)) } };
     }
     if (command instanceof HeadObjectCommand) {
       const object = bucket.get(String(command.input.Key));

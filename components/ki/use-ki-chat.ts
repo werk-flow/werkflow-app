@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useClientRead } from '@/hooks/use-client-read';
+import {
+  holdSendingAttachments,
+  moveAttachments,
+  restoreAttachments,
+  takeSendingAttachments,
+} from './attachment-drafts';
+import type { AiUploadedFile } from '@/lib/ai/files/types';
 import type { KiLiveEvent } from '@/lib/ai/live/events';
 import {
   applyKiLiveEvents,
@@ -14,6 +21,7 @@ import {
 import type { AiChatMessage, AiThreadSummary, AiThreadWindow } from '@/lib/ai/thread-types';
 import { readInBackground } from '@/lib/data/background-read-client';
 import {
+  draftClears,
   draftKey,
   holdSending,
   readDraft,
@@ -46,6 +54,9 @@ export type LiveTurn = {
   provisional: boolean;
   /** The person's message: one object for the whole turn, so it never renders again while the answer streams. */
   user: TimelineMessage;
+  /** The uploads the message attaches, and their file items as the timeline shows them. */
+  uploads: readonly AiUploadedFile[];
+  files: readonly TimelineMessage[];
   answer: string;
   /** The answer's sequence in its thread, from the moment the message is saved. */
   answerSequence: number;
@@ -80,6 +91,25 @@ function userMessage(
     status: 'complete',
     text,
     failure: null,
+    ...(unconfirmed ? { unconfirmed } : {}),
+  };
+}
+
+/** The file item an upload becomes in the thread, under the key the server gives it. */
+function fileMessage(
+  commandId: string,
+  upload: AiUploadedFile,
+  sequence: number,
+  unconfirmed: boolean,
+): TimelineMessage {
+  return {
+    key: `${commandId}:file:${upload.fileId}`,
+    sequence,
+    role: 'file',
+    status: 'complete',
+    text: '',
+    failure: null,
+    file: { ...upload, origin: 'upload' },
     ...(unconfirmed ? { unconfirmed } : {}),
   };
 }
@@ -448,39 +478,66 @@ function markStarted(
   event: Extract<TurnEvent, { type: 'started' }>,
   host: TurnHost,
 ): LiveTurn {
-  releaseSending(turn.draft);
+  releaseMessage(turn.draft);
   if (turn.provisional && host.shownRef.current === turn.threadId) {
     const typed = readDraft(turn.draft);
     const destination = draftKey(host.userId, host.organizationId, turn.threadId);
     const held = readDraft(destination);
     writeDraft(turn.draft, '');
     if (typed) writeDraft(destination, held ? `${held}\n\n${typed}` : typed);
+    moveAttachments(turn.draft, destination);
   }
   showAddress(host, turn.threadId);
   host.settle(turn.threadId, [], true);
   host.touch(turn.threadId, turn.user.text);
   const user = userMessage(turn.commandId, turn.user.text, event.userItem.sequence, false);
-  return { ...turn, started: true, user, answerSequence: event.assistantItem.sequence };
+  const sequences = new Map((event.files ?? []).map((file) => [file.fileId, file.sequence]));
+  const files = turn.uploads.map((upload) =>
+    fileMessage(turn.commandId, upload, sequences.get(upload.fileId) ?? 0, false),
+  );
+  return { ...turn, started: true, user, files, answerSequence: event.assistantItem.sequence };
 }
 
 /** Puts a saved turn into its thread and the list; without its end event, the saved answer says how it went on. */
 function settleSaved(current: LiveTurn, outcome: TurnOutcome, host: TurnHost): void {
   showAddress(host, current.threadId);
   host.touch(current.threadId, current.user.text);
-  if (current.end) return host.settle(current.threadId, [current.user, answerMessage(current)], true);
+  if (current.end)
+    return host.settle(current.threadId, [...current.files, current.user, answerMessage(current)], true);
   if (outcome.kind === 'stopped') {
     // A stopped answer keeps what this page showed; the thread's next read shows how it went on.
     const end: LiveTurn['end'] = { status: 'cancelled', message: 'Du hast die Antwort angehalten.' };
-    return host.settle(current.threadId, [current.user, answerMessage({ ...current, end })], true);
+    return host.settle(
+      current.threadId,
+      [...current.files, current.user, answerMessage({ ...current, end })],
+      true,
+    );
   }
   // Without its end event the answer stays open: the server goes on writing it, the thread's live
   // channel brings the rest, and a read now shows what is saved.
   host.settle(
     current.threadId,
-    outcome.kind === 'already_done' ? [] : [current.user, answerMessage(current)],
+    outcome.kind === 'already_done' ? [] : [...current.files, current.user, answerMessage(current)],
     false,
   );
   void host.readWindow(current.threadId);
+}
+
+/** Keeps a copy of a message and its uploads until its turn saved them. */
+function holdMessage(message: Parameters<typeof holdSending>[0], uploads: readonly AiUploadedFile[]): void {
+  holdSending(message);
+  holdSendingAttachments(message.draft, uploads);
+}
+
+function releaseMessage(draft: string): void {
+  releaseSending(draft);
+  holdSendingAttachments(draft, []);
+}
+
+/** A refused message's text and files go back into its own draft, before what was added there meanwhile. */
+function restoreMessage(key: string, text: string, uploads: readonly AiUploadedFile[]): void {
+  restoreDraft(key, text);
+  restoreAttachments(key, uploads);
 }
 
 /** The text of a refused message goes back into its own draft, before what was typed there meanwhile. */
@@ -493,7 +550,7 @@ function restoreDraft(key: string, text: string): void {
 function restoreUnsent(host: TurnHost, refused: Map<string, Refused>): void {
   for (const { draft, threadId, commandId, text } of takeSending(host.userId, host.organizationId)) {
     refused.set(draft, { threadId, commandId, text });
-    restoreDraft(draft, text);
+    restoreMessage(draft, text, takeSendingAttachments(draft));
   }
 }
 
@@ -503,6 +560,7 @@ function newTurn(
   text: string,
   draft: string,
   provisional: boolean,
+  uploads: readonly AiUploadedFile[],
 ): LiveTurn {
   const user = userMessage(commandId, text, 0, true);
   return {
@@ -511,6 +569,8 @@ function newTurn(
     draft,
     provisional,
     user,
+    uploads,
+    files: uploads.map((upload) => fileMessage(commandId, upload, 0, true)),
     answer: '',
     answerSequence: 0,
     started: false,
@@ -533,7 +593,7 @@ function settleRefused(
 ): void {
   const commandId = outcome.kind === 'refused' && outcome.spent ? crypto.randomUUID() : turn.commandId;
   refused.set(turn.draft, { threadId: turn.threadId, commandId, text: turn.user.text });
-  restoreDraft(turn.draft, turn.user.text);
+  restoreMessage(turn.draft, turn.user.text, turn.uploads);
   if (turn.provisional && host.shownRef.current === turn.threadId) host.showOnly(null);
   void host.readWindow(turn.threadId).then((read) => {
     if (read === 'found') host.touch(turn.threadId, turn.user.text);
@@ -560,6 +620,25 @@ function commandFor(
   };
 }
 
+/** Sends the turn's message with its files; its events go to `onEvent`, its outcome to `finish`. */
+function sendLiveTurn(
+  host: TurnHost,
+  turn: LiveTurn,
+  signal: AbortSignal,
+  onEvent: (event: TurnEvent) => void,
+  finish: (turn: LiveTurn, outcome: TurnOutcome) => void,
+): void {
+  void sendTurn({
+    organizationId: host.organizationId,
+    threadId: turn.threadId,
+    commandId: turn.commandId,
+    text: turn.user.text,
+    fileIds: turn.uploads.map((upload) => upload.fileId),
+    signal,
+    onEvent,
+  }).then((outcome) => finish(turn, outcome));
+}
+
 /** The one turn that runs at a time: it sends, streams the answer and puts it into its thread when it ends. */
 function useLiveTurn(host: TurnHost) {
   const [live, setLive] = useState<LiveTurn | null>(null);
@@ -576,6 +655,8 @@ function useLiveTurn(host: TurnHost) {
   // the turn may touch the page the person went to. A message whose turn had not started by then
   // comes back into its draft when the chat opens again, as the same command.
   const leftRef = useRef(false);
+  // A sign-out in the tab cleared the drafts: no answer of a turn begun before writes them again.
+  const clears = useRef(draftClears());
   useEffect(() => {
     leftRef.current = false;
     restoreUnsent(hostRef.current, refusedRef.current);
@@ -592,7 +673,7 @@ function useLiveTurn(host: TurnHost) {
 
   const receive = useCallback(
     (event: TurnEvent) => {
-      if (leftRef.current) return;
+      if (leftRef.current || draftClears() !== clears.current) return;
       if (event.type === 'text') return update((turn) => ({ ...turn, answer: turn.answer + event.delta }));
       if (event.type === 'end')
         return update((turn) => ({ ...turn, end: { status: event.status, message: event.message ?? null } }));
@@ -603,10 +684,15 @@ function useLiveTurn(host: TurnHost) {
 
   const finish = useCallback(
     (turn: LiveTurn, outcome: TurnOutcome) => {
-      if (leftRef.current || liveRef.current?.commandId !== turn.commandId) return;
+      if (
+        leftRef.current ||
+        draftClears() !== clears.current ||
+        liveRef.current?.commandId !== turn.commandId
+      )
+        return;
       const current = liveRef.current;
       abortRef.current = null;
-      releaseSending(current.draft);
+      releaseMessage(current.draft);
       update(() => null);
       if (current.started || outcome.kind === 'already_done')
         return settleSaved(current, outcome, hostRef.current);
@@ -617,31 +703,24 @@ function useLiveTurn(host: TurnHost) {
   );
 
   const send = useCallback(
-    (text: string, draft: string) => {
+    (text: string, draft: string, uploads: readonly AiUploadedFile[]) => {
       const host = hostRef.current;
       setError(null);
       if (liveRef.current) {
-        restoreDraft(draft, text);
+        restoreMessage(draft, text, uploads);
         return setError({ draft, message: describeTurnRefusal('run_active') });
       }
       const { target, commandId } = commandFor(text, host, refusedRef.current.get(draft));
       refusedRef.current.delete(draft);
-      holdSending({ draft, threadId: target, commandId, text });
+      holdMessage({ draft, threadId: target, commandId, text }, uploads);
       host.supersedeReads(target);
       const controller = new AbortController();
       abortRef.current = controller;
-      const turn = newTurn(target, commandId, text, draft, host.threadId === null);
+      const turn = newTurn(target, commandId, text, draft, host.threadId === null, uploads);
       liveRef.current = turn;
       setLive(turn);
       if (!host.threadId) host.showOnly(target);
-      void sendTurn({
-        organizationId: host.organizationId,
-        threadId: target,
-        commandId,
-        text,
-        signal: controller.signal,
-        onEvent: receive,
-      }).then((outcome) => finish(turn, outcome));
+      sendLiveTurn(host, turn, controller.signal, receive, finish);
     },
     [receive, finish],
   );

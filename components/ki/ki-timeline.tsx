@@ -8,6 +8,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { AiChatMessage } from '@/lib/ai/thread-types';
 import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
+import { KiFileCard } from './ki-file-card';
 
 /** A message in the timeline; `unconfirmed` until the server saved it. */
 export type TimelineMessage = AiChatMessage & { unconfirmed?: boolean };
@@ -17,7 +18,23 @@ export type TimelineMessage = AiChatMessage & { unconfirmed?: boolean };
  * another one streams; inside a streaming answer only its last block renders
  * (AiMarkdown, brief non-negotiable 3).
  */
-const KiMessage = memo(function KiMessage({ message }: { message: TimelineMessage }) {
+const KiMessage = memo(function KiMessage({
+  organizationId,
+  message,
+}: {
+  organizationId: string;
+  message: TimelineMessage;
+}) {
+  if (message.role === 'file')
+    return (
+      <li {...unconfirmedMarker(message.unconfirmed)}>
+        <KiFileCard
+          organizationId={organizationId}
+          file={message.file}
+          unconfirmed={message.unconfirmed === true}
+        />
+      </li>
+    );
   if (message.role === 'user')
     return (
       <li className="flex justify-end" {...unconfirmedMarker(message.unconfirmed)}>
@@ -53,12 +70,14 @@ export function KiTimelineSkeleton(): React.JSX.Element {
 }
 
 export function KiTimeline({
+  organizationId,
   messages,
   unconfirmed,
   hasOlder,
   loadingOlder,
   onLoadOlder,
 }: {
+  organizationId: string;
   messages: readonly TimelineMessage[];
   /** The last known content, shown while a fresh read runs. */
   unconfirmed: boolean;
@@ -75,7 +94,7 @@ export function KiTimeline({
       )}
       <ol aria-label="Verlauf" className="space-y-6">
         {messages.map((message) => (
-          <KiMessage key={message.key} message={message} />
+          <KiMessage key={message.key} organizationId={organizationId} message={message} />
         ))}
       </ol>
     </div>

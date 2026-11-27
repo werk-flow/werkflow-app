@@ -16,6 +16,8 @@ type TurnEvent =
       type: 'started';
       userItem: { id: string; sequence: number };
       assistantItem: { id: string; sequence: number };
+      /** The file items the message attached, by file id. */
+      files?: Array<{ fileId: string; sequence: number }>;
     }
   | { type: 'text'; delta: string }
   | ({ type: 'end' } & AiTurnEnd);
