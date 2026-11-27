@@ -77,8 +77,11 @@ export async function getAiThreadPage(
 
 /**
  * The caller's thread as it opens: its latest messages under a byte cap, or
- * the ones before `beforeSequence` when older history pages in. A thread that
- * is not the caller's reads as not found.
+ * the ones before `beforeSequence` when older history pages in. A catch-up
+ * from the live channel's cursor reads the messages from `afterSequence` on,
+ * oldest first; when more follow than one window holds, it reads the latest
+ * window instead, which says that older messages exist. A thread that is not
+ * the caller's reads as not found.
  */
 export async function getAiThreadWindow(
   input: z.infer<typeof aiThreadWindowInput>,
@@ -101,17 +104,46 @@ export async function getAiThreadWindow(
     return { success: false, error: 'load_failed' };
   }
   if (!thread.data) return { success: false, error: 'not_found' };
+  const { afterSequence, beforeSequence } = parsed.data;
+  const items = (bound: { after?: number; before?: number }) =>
+    readWindowItems(supabase, orgId, parsed.data.threadId, bound);
+  if (afterSequence !== undefined) {
+    const newer = await items({ after: afterSequence });
+    if (newer === 'load_failed') return { success: false, error: 'load_failed' };
+    if (!newer.hasOlder) return { success: true, window: newer };
+  }
+  const window = await items(beforeSequence === undefined ? {} : { before: beforeSequence });
+  if (window === 'load_failed') return { success: false, error: 'load_failed' };
+  return { success: true, window };
+}
+
+type ThreadClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+
+/**
+ * Up to a window of messages, in sequence order. With `after`, the ones from
+ * that sequence on; `hasOlder` then says that they did not fit. Otherwise the
+ * latest ones, or those before `before`, newest first under the byte cap.
+ */
+async function readWindowItems(
+  supabase: ThreadClient,
+  organizationId: string,
+  threadId: string,
+  bound: { after?: number; before?: number },
+): Promise<AiThreadWindow | 'load_failed'> {
   let query = supabase
     .from('ai_thread_items')
     .select('idempotency_key, sequence, kind, status, body')
-    .eq('organization_id', orgId)
-    .eq('thread_id', parsed.data.threadId)
+    .eq('organization_id', organizationId)
+    .eq('thread_id', threadId)
     .in('kind', ['user_message', 'assistant_message']);
-  if (parsed.data.beforeSequence) query = query.lt('sequence', parsed.data.beforeSequence);
-  const { data, error } = await query.order('sequence', { ascending: false }).limit(WINDOW_MESSAGES + 1);
+  if (bound.before !== undefined) query = query.lt('sequence', bound.before);
+  if (bound.after !== undefined) query = query.gte('sequence', bound.after);
+  const { data, error } = await query
+    .order('sequence', { ascending: bound.after !== undefined })
+    .limit(WINDOW_MESSAGES + 1);
   if (error) {
     logError('getAiThreadWindow: item read failed', error);
-    return { success: false, error: 'load_failed' };
+    return 'load_failed';
   }
   const messages: AiChatMessage[] = [];
   let bytes = 0;
@@ -131,5 +163,5 @@ export async function getAiThreadWindow(
     });
   }
   const hasOlder = messages.length < data.length;
-  return { success: true, window: { messages: messages.reverse(), hasOlder } };
+  return { messages: bound.after === undefined ? messages.reverse() : messages, hasOlder };
 }

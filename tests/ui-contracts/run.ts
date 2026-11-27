@@ -312,8 +312,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('service-report-delivery-dialog.tsx'))
                 return { path: join(import.meta.dir, 'service-report-delivery-boundaries.tsx') };
             });
-            // The WerkFlow KI chat sends its turns through a held stand-in the spec answers.
-            builder.onResolve({ filter: /^\.\/turn-client$/ }, (args) => {
+            // The WerkFlow KI chat sends its turns, and hears its live channel, through stand-ins the spec drives.
+            builder.onResolve({ filter: /^\.\/(?:turn-client|use-ki-live)$/ }, (args) => {
               if (args.importer.endsWith('components/ki/use-ki-chat.ts'))
                 return { path: join(import.meta.dir, 'ki-chat-boundaries.tsx') };
             });

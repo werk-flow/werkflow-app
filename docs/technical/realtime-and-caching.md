@@ -15,7 +15,7 @@ Decide the feedback, the freshness and the read shape before you write the compo
 5. Name the sessions that must see the change. The changed table is published, or the mutation touches a published owning root.
 6. Write a contract that holds the write open with `holdWrite` and checks the screen before and after the answer, as `tests/ui-contracts/team-qualifications.spec.ts` does. Run `bun run test:ui tests/ui-contracts/<file>.spec.ts`.
 
-Wrong turn: a button that waits for the server, or pending state from a router transition. The user sees nothing for a round trip, and a transition stays pending through unrelated refreshes.
+Wrong turn: a button that waits for the server shows nothing for a round trip; pending state from a router transition stays pending through unrelated refreshes.
 
 ### Add Realtime data
 
@@ -51,7 +51,7 @@ Wrong turn: a Server Action for a background read. One client's actions run one 
 3. On a failed read, wrap the rows and their actions in `StaleRegion` while `isStale` is true.
 4. Build every dialog on the registry's `Dialog`, `AlertDialog` or `Sheet`, so reads suspend while it is open.
 
-Wrong turn: a channel, an interval or a focus listener of your own. It races the shared debounce.
+Wrong turn: your own channel, interval or focus listener, which races the shared debounce.
 
 ## Checklist
 
@@ -130,7 +130,8 @@ A picker receives its whole list only when the list is bounded by nature: the me
 - An INSERT or UPDATE event reaches a receiver only while it may select the primary key, and carries only the columns it may select. A published table with column grants keeps `id`, `organization_id` and `updated_at` granted.
 - Supabase applies RLS to INSERT and UPDATE events but not to raw DELETE events, so the publication carries INSERT and UPDATE only. Triggers insert minimal rows into `realtime_deletions`, whose SELECT policy checks current membership. The provider turns a permitted notification into a DELETE invalidation with only `id` and `organization_id`. Notifications expire and are no replay log. Application and publication changes roll out together.
 - Each feature publishes the mutable rows that signal a new authoritative read. Immutable revisions, links and ledgers stay unpublished and touch an owning root ([data model](data-model.md)). A published row never becomes a second cache. A provider mounted on every page filters events to the rows it shows.
-- The one exception to the raw-event ban is the project-detail delete-exit watcher, which needs the event itself.
+- The project-detail delete-exit watcher alone may use the raw event.
+- WerkFlow KI's chat is the owner's exception (decision 31) to the Broadcast ban: a private topic per thread, sent by the server, joined only by its author through `components/ki/use-ki-live.ts` ([AI automations](../features/ai-automations.md)).
 
 ## Refresh patterns
 
@@ -174,7 +175,7 @@ Connection catch-up runs after database readiness, not after channel join: the d
 ## Latency targets
 
 - A change in one session is visible in another signed-in session within two seconds (`LIVE_TARGET_MS` in `lib/testing/responsiveness-tolerance.ts`).
-- The time-correction dialog reaches usable form options within five seconds of opening (`TIME_CORRECTION_READY_MS`). This target applies to that dialog only.
+- The time-correction dialog reaches usable form options within five seconds of opening (`TIME_CORRECTION_READY_MS`).
 
 [Testing](testing.md#deadlines-and-measured-scenarios) owns how these targets are measured.
 
