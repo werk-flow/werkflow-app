@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, type Locator } from '@playwright/test';
 import { rpcArgs } from '../../../../lib/supabase/rpc-args';
 import { createAdminClient } from '../../../golden/support/db/shared';
+import { confirmed } from '../../../golden/support/steps/shared';
 import type { TestWorld } from '../../../golden/support/world';
 import { acceptanceSet, type OpenSet } from '../acceptance-sets';
 import type { SurfaceDestination } from '../surface-routes';
@@ -128,13 +129,14 @@ async function showCalculation(scope: Locator): Promise<void> {
  * the same page.
  */
 async function alternativeWithoutPosition(scope: Locator): Promise<void> {
-  await scope.locator('#offer-section-0-position-0-alternative-type').click();
+  const row = (number: string) => confirmed(scope.getByRole('listitem', { name: `Position ${number}` }));
+  await row('1.1').getByRole('combobox', { name: 'Positionsart' }).click();
   await scope.page().getByRole('option', { name: 'Bedarfsposition', exact: true }).click();
   await scope.getByRole('button', { name: 'Speichern', exact: true }).click();
   await expect(
     scope.getByText('Wähle die Position, statt der diese Alternative angeboten wird.'),
   ).toBeVisible();
-  await expect(scope.locator('#offer-section-0-position-3-alternative')).toBeFocused();
+  await expect(row('1.3').getByRole('combobox', { name: 'Alternative zu' })).toBeFocused();
 }
 
 /**

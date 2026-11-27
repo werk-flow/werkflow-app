@@ -304,7 +304,7 @@ function PositionFields({
   const label = number ? `Position ${number}` : 'Text';
   const typeBadge = { normal: null, bedarf: 'Bedarf', alternative: 'Alternative' }[position.positionType];
   return (
-    <li className="space-y-3 p-3 sm:p-4">
+    <li aria-label={label} className="space-y-3 p-3 sm:p-4">
       {/* The number and the order buttons share a line above the fields, at every width. */}
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-2 text-sm text-muted-foreground tabular-nums">
