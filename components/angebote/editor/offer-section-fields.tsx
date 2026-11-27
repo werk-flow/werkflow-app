@@ -24,6 +24,7 @@ import {
   type PositionForm,
   type SectionForm,
 } from '@/lib/offers/content-form';
+import { positionNumbers } from '@/lib/offers/numbering';
 import type { OfferPosition } from '@/lib/offers/types';
 import { OfferCatalogPicker } from './offer-article-picker';
 import { PositionCostFields } from './offer-position-cost-fields';
@@ -80,16 +81,6 @@ function OrderButtons({
       </Button>
     </div>
   );
-}
-
-/** The printed number of each position, `1.2`; a text line carries none and the priced positions count on. */
-function positionNumbers(sectionNumber: string, positions: readonly PositionForm[]): Array<string | null> {
-  let counted = 0;
-  return positions.map((position) => {
-    if (position.kind === 'text') return null;
-    counted += 1;
-    return `${sectionNumber}.${counted}`;
-  });
 }
 
 /** One Titel: its name, its positions in order, its subtotal, and adding a position, an article or a text line. */

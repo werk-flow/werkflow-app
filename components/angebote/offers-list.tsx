@@ -7,7 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { ListRow } from '@/components/ui/list-row';
 import { ColumnsTableHeader } from '@/components/ui/skeleton-table';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
-import { OFFER_STATUS_LABELS, type OfferListEntry, type OfferStatus } from '@/lib/offers/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import {
+  isOfferExpired,
+  OFFER_STATUS_LABELS,
+  type OfferListEntry,
+  type OfferStatus,
+} from '@/lib/offers/types';
 import { ClientRecipientLine } from '@/components/shared/client-recipient-line';
 import { rowIntentPrefetch } from '@/lib/ui/row-intent';
 import { cn, formatGermanDate } from '@/lib/utils';
@@ -15,7 +21,10 @@ import { OFFER_COLUMNS } from './offers-columns';
 
 const offerPath = (entry: OfferListEntry) => `/angebote/${entry.id}`;
 
-export function OfferStatusBadge({ status }: { status: OfferStatus }) {
+export function OfferStatusBadge({ status, validUntil }: { status: OfferStatus; validUntil: string }) {
+  if (isOfferExpired({ status, validUntil }, getBusinessTodayIso())) {
+    return <Badge variant="warning">Abgelaufen</Badge>;
+  }
   return (
     <Badge variant={status === 'angenommen' ? 'success' : status === 'entwurf' ? 'outline' : 'secondary'}>
       {OFFER_STATUS_LABELS[status]}
@@ -56,7 +65,7 @@ export function OffersTable({ entries }: { entries: readonly OfferListEntry[] })
                 <ClientRecipientLine clientName={entry.clientName} recipientName={entry.recipientName} />
               </TableCell>
               <TableCell>
-                <OfferStatusBadge status={entry.status} />
+                <OfferStatusBadge status={entry.status} validUntil={entry.validUntil} />
               </TableCell>
               <TableCell className="tabular-nums">{formatGermanDate(entry.validUntil)}</TableCell>
             </TableRow>
@@ -83,7 +92,7 @@ export function OffersCards({
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center justify-between gap-2">
                 <p className="min-w-0 truncate text-sm font-medium">{entry.title}</p>
-                <OfferStatusBadge status={entry.status} />
+                <OfferStatusBadge status={entry.status} validUntil={entry.validUntil} />
               </div>
               <div className="text-xs text-muted-foreground">
                 <ClientRecipientLine clientName={entry.clientName} recipientName={entry.recipientName} />

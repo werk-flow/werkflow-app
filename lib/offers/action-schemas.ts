@@ -7,6 +7,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { MAX_COST_CENTS } from './calculation';
 import { contentFitsOneSave, OFFER_CONTENT_LIMITS } from './content-form';
+import { OFFER_CHANNELS } from './types';
 
 // The inputs of the offer actions. The forms check title, customer and the
 // header's required fields before they submit; the server parses every input again.
@@ -112,3 +113,17 @@ export const saveOfferContentSchema = z.object({
 });
 
 export type SaveOfferContentInput = z.input<typeof saveOfferContentSchema>;
+
+/** „Als gesendet festhalten“ of a draft at the versions its page showed. */
+export const sendOfferSchema = z.object({
+  offerId: uuidSchema,
+  expectedVersion: z.number().int().positive(),
+  expectedContentVersion: z.number().int().positive(),
+  channel: z.enum(OFFER_CHANNELS),
+  /** SHA-256 of the preview the office saw: a send whose rendering differs is refused, never filed. */
+  previewHash: z.string().regex(/^[0-9a-f]{64}$/),
+  /** One key per opening of the dialog: a press repeated after a lost answer gets the first revision. */
+  attemptKey: uuidSchema,
+});
+
+export type SendOfferInput = z.input<typeof sendOfferSchema>;
