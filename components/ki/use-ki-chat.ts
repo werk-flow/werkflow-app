@@ -605,6 +605,12 @@ function useStop(refs: {
   return { requestStop, stop, invalidateStop };
 }
 
+/** A message sent while an answer runs: typed text goes back into its draft, which shows why. */
+function refuseWhileRunning(text: string, draft: string, tap: boolean): { draft: string; message: string } {
+  if (!tap) restoreDraft(draft, text);
+  return { draft, message: describeTurnRefusal('run_active') };
+}
+
 /** The one turn that runs at a time: it sends, streams the answer and puts it into its thread when it ends. */
 function useLiveTurn(host: TurnHost) {
   const [live, setLive] = useState<LiveTurn | null>(null);
@@ -670,10 +676,7 @@ function useLiveTurn(host: TurnHost) {
     (text: string, draft: string, tap = false) => {
       const host = hostRef.current;
       setError(null);
-      if (liveRef.current) {
-        if (!tap) restoreDraft(draft, text);
-        return setError({ draft, message: describeTurnRefusal('run_active') });
-      }
+      if (liveRef.current) return setError(refuseWhileRunning(text, draft, tap));
       const { target, commandId } = commandFor(text, host, takeRetry(retryKey(draft, tap)));
       invalidateStop();
       if (!tap) holdSending({ draft, threadId: target, commandId, text });
