@@ -124,7 +124,9 @@ function finishedRow(
   result: AiToolResult,
 ): RowWrite {
   const ran = result.status === 'ok';
-  const question = tool.shows === 'question' && ran ? questionInput.safeParse(input) : null;
+  // The row holds the input as the tool validated it, trimmed, so the thread reads back what the tool took.
+  const validated = tool.inputSchema.safeParse(input).data;
+  const question = tool.shows === 'question' && ran ? questionInput.safeParse(validated) : null;
   if (question?.success) {
     const { frage, optionen } = question.data;
     return {
@@ -134,7 +136,7 @@ function finishedRow(
       body: { revision: 1, question: frage, options: optionen },
     };
   }
-  const todo = tool.shows === 'todo_list' && ran ? todoInput.safeParse(input) : null;
+  const todo = tool.shows === 'todo_list' && ran ? todoInput.safeParse(validated) : null;
   if (todo?.success) {
     // One list per turn: each call replaces it, and its call count orders the writes.
     const steps = todo.data.schritte.map((entry) => ({ text: entry.text, done: entry.erledigt }));

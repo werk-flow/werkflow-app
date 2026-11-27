@@ -109,7 +109,7 @@ export function mergeWindow(previous: AiThreadWindow | null, next: AiThreadWindo
     (older.length > 0 && Math.max(...older.map((message) => message.sequence)) === first - 1);
   const kept = connected ? unread : unread.filter((message) => message.sequence > first);
   return {
-    hasOlder: connected ? (previous?.hasOlder ?? false) : next.hasOlder,
+    hasOlder: connected ? (previous?.hasOlder ?? next.hasOlder) : next.hasOlder,
     messages: [...kept, ...fresh].toSorted((left, right) => left.sequence - right.sequence),
   };
 }
@@ -125,13 +125,17 @@ function applyKiLiveEvent(
   event: KiLiveEvent,
 ): { window: AiThreadWindow; applied: boolean } {
   const unchanged = { window, applied: true };
-  // A row has its own place in the thread: it lands at once, and a catch-up fills what lies before it.
-  if (event.type === 'row') return { window: placeRow(window, event.row), applied: true };
+  const last = Math.max(0, ...window.messages.map((message) => message.sequence));
+  if (event.type === 'row') {
+    // A new row past sequences the page never loaded waits, so the cursor does not skip them.
+    const held = window.messages.some((message) => message.key === event.row.key);
+    if (!held && event.row.sequence > last + 1) return { window, applied: false };
+    return { window: placeRow(window, event.row), applied: true };
+  }
   if (event.type === 'started') {
     const keys = new Set(window.messages.map((message) => message.key));
     // A turn that starts past messages the page never saw waits, so the cursor does not skip them. A
     // retried command keeps its saved message, so its answer can land past a missing sequence too.
-    const last = Math.max(0, ...window.messages.map((message) => message.sequence));
     const userHeld = keys.has(userKey(event.command));
     const userGap = !userHeld && event.user.sequence > last + 1;
     const answerGap =

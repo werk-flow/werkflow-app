@@ -4,7 +4,7 @@
 // the author opens it. A question ends the turn and the model reads it back next turn; a to-do list
 // keeps one row. Each block states one invariant; a failing assert names it.
 import assert from 'node:assert/strict';
-import { ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
+import { CALLER_ID, ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
 import { OTHER_USER_ID, THREAD_ID, postTurn, resetAiTables, toolCallOutcomes } from './ai-turn-world';
 import { installAiToolWorld } from './ai-tool-world';
 
@@ -143,6 +143,75 @@ const organizationId = () => world.memberships[0]?.orgId ?? '';
   );
   assert.equal(lists[0]?.idempotency_key, `${commandId}:plan`);
   assert.deepEqual(toolCallOutcomes(world), ['tool_call_plan_zeigen_ok', 'tool_call_plan_zeigen_ok']);
+}
+
+// The question and the to-do list store their text as the tool validated it: padded text that passes the
+// tool's trimmed limits must not be stored over the limits the thread reads back, or the row vanishes and
+// a question ends the turn unseen. `runTool` takes its input unparsed, so the call drives it directly.
+{
+  resetAiTables(world);
+  signInAs(world, 'buero');
+  await turn('[replay:echo] Hallo');
+  const { runTool, newToolCalls } = await import('@/lib/ai/tools/tool-calls');
+  const { AI_TOOLS } = await import('@/lib/ai/tools/registry');
+  const { createSupabaseAdminClient } = await import('@/lib/supabase/admin');
+  const runId = String(tableRows(world, 'ai_runs').at(-1)?.id);
+  const run = {
+    admin: createSupabaseAdminClient(),
+    command: {
+      entryPoint: 'chat' as const,
+      organizationId: organizationId(),
+      userId: CALLER_ID,
+      role: 'buero' as const,
+      threadId: THREAD_ID,
+      commandId: crypto.randomUUID(),
+      receivedAt: Date.now(),
+      text: 'Hallo',
+    },
+    runId,
+    runKey: crypto.randomUUID(),
+    model: { modelId: 'replay' },
+    toolCalls: newToolCalls(),
+    sink: { row: () => undefined },
+  };
+  const harnessTool = (name: string) => {
+    const found = AI_TOOLS.find((entry) => entry.name === name);
+    assert.ok(found, `${name} is registered`);
+    return found;
+  };
+  const pad = ' '.repeat(1000);
+  await runTool(
+    run,
+    harnessTool('plan_zeigen'),
+    { schritte: [{ text: `${pad}Aufträge suchen${pad}`, erledigt: false }] },
+    'call-1',
+  );
+  await runTool(
+    run,
+    harnessTool('frage_stellen'),
+    { frage: `${pad}Welchen Kunden meinst du?`, optionen: [`${pad}Müller Bau`, 'Müller Haustechnik '] },
+    'call-2',
+  );
+  const stored = (kind: string) => items().find((item) => item.kind === kind)?.body;
+  assert.deepEqual(
+    stored('todo_list'),
+    { revision: 1, steps: [{ text: 'Aufträge suchen', done: false }] },
+    'the to-do list stores the trimmed step the tool validated',
+  );
+  assert.deepEqual(
+    stored('question'),
+    { revision: 1, question: 'Welchen Kunden meinst du?', options: ['Müller Bau', 'Müller Haustechnik'] },
+    'the question stores the trimmed text the tool validated',
+  );
+  const window = await getAiThreadWindow({ organizationId: organizationId(), threadId: THREAD_ID });
+  assert.ok(window.success);
+  assert.deepEqual(
+    window.window.messages
+      .flatMap((entry) => (entry.role === 'question' || entry.role === 'todo' ? [entry.role] : []))
+      .toSorted(),
+    ['question', 'todo'],
+    'the thread shows both rows',
+  );
 }
 
 // Injection case (B21): a record talked the model into a question whose text and answers carry links

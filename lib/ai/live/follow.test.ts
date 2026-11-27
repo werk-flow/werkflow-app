@@ -225,7 +225,10 @@ test('an older page stays when the window read starts right after a tool row it 
 });
 
 test('a live row lands at its place, and a later save of it replaces it while an older one never does', () => {
-  const window: AiThreadWindow = { hasOlder: false, messages: [message('c1:user', 1, { role: 'user' })] };
+  const window: AiThreadWindow = {
+    hasOlder: false,
+    messages: [message('c1:user', 1, { role: 'user' }), message('c1:assistant', 2, { status: 'streaming' })],
+  };
   const row = (revision: number): KiLiveEvent => ({
     v,
     type: 'row',
@@ -236,6 +239,7 @@ test('a live row lands at its place, and a later save of it replaces it while an
   expect(running.held).toEqual([]);
   expect(running.window.messages.map((entry) => [entry.key, entry.status])).toEqual([
     ['c1:user', 'complete'],
+    ['c1:assistant', 'streaming'],
     ['c1:tool:1', 'streaming'],
   ]);
   const done = applyKiLiveEvents(running.window, [row(2), row(1)]);
@@ -290,4 +294,32 @@ test('an end that arrives after the page already ended the answer still places i
   expect(applyKiLiveEvents(window, [ended]).window.messages.at(-1)).toEqual(
     toolRow(`${command}:tool:1`, 3, 2),
   );
+});
+
+test('a row that reaches a tab without its turn waits for a read, so the cursor does not skip the turn', () => {
+  // The tab missed `started`: it holds nothing of the turn whose row is at sequence 3.
+  const empty: AiThreadWindow = { hasOlder: false, messages: [] };
+  const row: KiLiveEvent = { v, type: 'row', command, row: toolRow(`${command}:tool:1`, 3, 1) };
+  const result = applyKiLiveEvents(empty, [row]);
+  expect(result.held, 'a row above sequences the page never loaded must wait').toEqual([row]);
+  expect(kiLiveCursor(result.window), 'the catch-up starts at the first sequence the page lacks').toBe(1);
+  expect(kiLiveGapFillable(result.held), 'a waiting row asks for a read').toBe(true);
+  const read: AiThreadWindow = {
+    hasOlder: false,
+    messages: [
+      message(`${command}:user`, 1, { role: 'user' }),
+      message(`${command}:assistant`, 2, { status: 'streaming' }),
+    ],
+  };
+  const filled = applyKiLiveEvents(mergeNewer(result.window, read), result.held);
+  expect(filled.held).toEqual([]);
+  expect(filled.window.messages.map((entry) => entry.sequence)).toEqual([1, 2, 3]);
+});
+
+test('an empty window read keeps its older pages when the page held nothing, and an empty thread has none', () => {
+  expect(
+    mergeWindow(null, { hasOlder: true, messages: [] }).hasOlder,
+    'a read whose window holds no shown entry must still page older ones in',
+  ).toBe(true);
+  expect(mergeWindow(null, { hasOlder: false, messages: [] }).hasOlder).toBe(false);
 });

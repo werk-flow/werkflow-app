@@ -46,7 +46,10 @@ export function questionAnswer(
   entries: readonly AiThreadEntry[],
   question: AiThreadRow,
 ): { answered: string } | 'open' | 'closed' {
-  const after = entries.filter((entry) => entry.sequence > question.sequence);
+  // The page can hold a later turn before an earlier one settled, so the first reply goes by sequence.
+  const after = entries
+    .filter((entry) => entry.sequence > question.sequence)
+    .toSorted((left, right) => left.sequence - right.sequence);
   // A reply answers only the latest question before it.
   const next = after.find((entry) => entry.role === 'question')?.sequence ?? Number.POSITIVE_INFINITY;
   const reply = after.find(

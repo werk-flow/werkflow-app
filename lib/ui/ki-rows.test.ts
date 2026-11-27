@@ -139,3 +139,20 @@ test('an opened article row names each of its numbers', () => {
     { text: 'Dichtung · Bestand: 12 · verfügbar: 8', details: ['GC-1 · Packungsmenge: 10'], href: null },
   ]);
 });
+
+test('a question shows its first reply by sequence, whatever order the page holds the turns in', () => {
+  const asked = question('c1:tool:1', 3);
+  // A later turn of another tab landed before this tab's own turn settled.
+  const entries: AiThreadEntry[] = [
+    message('c1:user', 1),
+    message('c1:assistant', 2),
+    asked,
+    message('c3:user', 6, { text: 'Müller Haustechnik' }),
+    message('c3:assistant', 7),
+    message('c2:user', 4, { text: 'Müller Bau' }),
+    message('c2:assistant', 5),
+  ];
+  expect(questionAnswer(entries, asked), 'the reply right after the question answers it').toEqual({
+    answered: 'Müller Bau',
+  });
+});

@@ -143,12 +143,40 @@ export async function seedKiThread(
 /** The customer the seeded tool call of `seedKiTurnWithRows` finds. */
 export const KI_SEEDED_CUSTOMER = 'Müller Haustechnik';
 
+type SeededItem = { idempotency_key: string; kind: string; status: string; body: unknown };
+
+/** The rows a capture of the seeded turn reads, by key, as its last write leaves them. */
+const seededTurnRows = (command: string) => [
+  { key: `${command}:plan`, kind: 'todo_list', revision: 3 },
+  { key: `${command}:tool:2`, kind: 'tool_call', revision: 2 },
+  { key: `${command}:assistant`, kind: 'assistant_message', revision: null },
+  { key: `${command}:tool:4`, kind: 'question', revision: 1 },
+];
+
+const revisionOf = (body: unknown): number | null =>
+  typeof body === 'object' && body !== null && 'revision' in body && typeof body.revision === 'number'
+    ? body.revision
+    : null;
+
+/** The keys of the seeded turn's rows the thread lacks or holds short of their last write. */
+export function unfinishedSeededRows(items: readonly SeededItem[], command: string): string[] {
+  return seededTurnRows(command).flatMap((expected) => {
+    const item = items.find((entry) => entry.idempotency_key === expected.key);
+    const finished =
+      item?.kind === expected.kind &&
+      item.status === 'complete' &&
+      revisionOf(item.body) === expected.revision;
+    return finished ? [] : [expected.key];
+  });
+}
+
 /**
  * Seeds one finished turn in which the agent worked through its harness
  * (werk-flow/werkflow-planning#533): a ticked plan, a customer search with its
  * input and result, the answer and a question with options, written through
- * the database calls a live turn makes. A repeat finds the turn answered and
- * writes nothing.
+ * the database calls a live turn makes. A repeat finds the turn already
+ * started and writes nothing; it fails unless an earlier attempt wrote every
+ * row the capture reads.
  */
 async function seedKiTurnWithRows(ki: KiOrganization, role: KiRole, text: string): Promise<string> {
   const admin = createAdminClient();
@@ -166,7 +194,19 @@ async function seedKiTurnWithRows(ki: KiOrganization, role: KiRole, text: string
     })
     .single()
     .throwOnError();
-  if (data.verdict !== 'started' || !data.run_id || !data.answer_item_id) return threadId;
+  if (data.verdict !== 'started' || !data.run_id || !data.answer_item_id) {
+    const { data: items } = await admin
+      .from('ai_thread_items')
+      .select('idempotency_key, kind, status, body')
+      .eq('thread_id', threadId)
+      .throwOnError();
+    const unfinished = unfinishedSeededRows(items, command);
+    if (unfinished.length > 0)
+      throw new Error(
+        `The KI turn seed stopped part-way (${data.verdict}): thread ${threadId} lacks ${unfinished.join(', ')}.`,
+      );
+    return threadId;
+  }
   const run = { ...author, p_run_id: data.run_id };
   const ledger = (key: string, tool: string) => ({
     p_ledger_key: key,
