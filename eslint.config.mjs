@@ -1617,6 +1617,18 @@ const eslintConfig = defineConfig([
       }),
     },
   },
+  // The owner's exception (decision 31, werk-flow/werkflow-planning#532): the WerkFlow KI chat joins the
+  // shown thread's private Broadcast channel itself, and leaves it while the tab is hidden
+  // (docs/technical/realtime-and-caching.md, "WerkFlow KI live channel").
+  {
+    files: ['components/ki/use-ki-live.ts'],
+    rules: {
+      'no-restricted-syntax': productRestrictions({
+        jsx: true,
+        allow: [channelSelector, visibilitySelector],
+      }),
+    },
+  },
   // Deliberate exception: the recovery form must react to PASSWORD_RECOVERY.
   {
     files: ['app/**/reset-password-form.tsx'],

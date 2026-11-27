@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { after } from 'next/server';
 import type { ActionResult } from '@/lib/action-result';
 import { z } from '@/lib/zod';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -114,6 +115,13 @@ export async function createOrganization(name: string): Promise<CreateOrganizati
       }
       return { success: false, error: 'organization_creation_failed' };
     }
+
+    // A card Checkout's first invoice signals arrived before this organization existed.
+    // Loaded here, so the billing stack stays out of every route that loads these actions.
+    after(async () => {
+      const { runSignalsWaitingForOrganization } = await import('@/lib/werkflow-billing/waiting-signals');
+      await runSignalsWaitingForOrganization(organizationId);
+    });
 
     // Set the org cookie to the new organization
     const cookieStore = await cookies();

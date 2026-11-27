@@ -6,6 +6,7 @@ import { correctionHistoryVisibility } from './history-visibility';
 const holderWith = (source: EffectiveResponsibilityHolder['source']): EffectiveResponsibilityHolder => ({
   employeeRecordId: 'record-caller',
   userId: 'caller',
+  isLastingHolder: true,
   source,
 });
 const delegation = (

@@ -7,7 +7,6 @@ import { ID_BATCH_SIZE } from '@/lib/supabase/query-batches';
 // The board passes every employee record of the organization to this loader.
 // One `in()` per table put all ids into one query string and the gateway
 // answered 414 at 205 records (2026-09-30); each read now goes in id batches.
-mock.module('server-only', () => ({}));
 mock.module('@/lib/data/cached', () => ({
   getCachedOrganizationCalendar: async () => ({
     holidayRegion: null,

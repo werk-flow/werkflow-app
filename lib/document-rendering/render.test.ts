@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { deflateSync } from 'node:zlib';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { getDocumentProxy } from 'unpdf';
@@ -7,7 +7,6 @@ import type { BusinessDocument, DocumentImage, DocumentPosition, DocumentSection
 
 type StationeryPage = NonNullable<BusinessDocument['stationery']>['firstPage'];
 
-mock.module('server-only', () => ({}));
 const { canEmbedFile, renderBusinessDocument } = await import('./render');
 const { sampleOffer } = await import('./sample-offer');
 const { offerLetterhead } = await import('@/lib/company-profile/letterhead');
@@ -226,12 +225,13 @@ function expectPageFrame(pages: TextLine[][]) {
 /** A position's first line stays with its description's first line, and a subtotal with its section's last position. */
 function expectKeepTogether(pages: TextLine[][], sections: DocumentSection[]) {
   for (const section of sections) {
-    for (const item of section.positions) {
+    const positions = section.positions.flatMap((item) => (item.kind === 'text' ? [] : [item]));
+    for (const item of positions) {
       expect(pageOf(pages, `${item.number} Bauteil`), item.number).toBe(
         pageOf(pages, `Beschreibung ${item.number}:`),
       );
     }
-    const last = section.positions.at(-1);
+    const last = positions.at(-1);
     expect(pageOf(pages, `Summe ${section.number} `), section.number).toBe(
       pageOf(pages, `${last?.number} Bauteil`),
     );
@@ -476,6 +476,68 @@ describe('the business document renderer', () => {
     }
   });
 
+  test('a title wider than the page wraps onto further lines instead of running off it', async () => {
+    const title = `Angebot: ${'Austausch der Gasheizung im Mehrfamilienhaus '.repeat(3)}Ende`;
+    for (const document of [
+      { ...serviceOffer, title },
+      { ...stationeryOffer, title },
+    ]) {
+      const lines = (await readPages(await renderBusinessDocument(document)))[0] ?? [];
+      const first = lines.find((line) => line.text.startsWith('Angebot: Austausch'));
+      const last = lines.find((line) => line.text.endsWith('Ende'));
+      expect(first?.text.endsWith('Ende')).toBe(false);
+      expect(last?.top ?? 0).toBeGreaterThan(first?.top ?? PAGE_HEIGHT);
+      expect(last?.left).toBe(first?.left);
+    }
+  });
+
+  test('a long recipient name and a long section title wrap instead of running off the page', async () => {
+    const recipient =
+      'Wohnungseigentümergemeinschaft Lindenstraße 5 bis 9 vertreten durch die Hausverwaltung Ende';
+    const sectionTitle = `${'Heizungsanlage im Untergeschoss '.repeat(4)}Schluss`;
+    const document = {
+      ...serviceOffer,
+      recipientLines: [recipient, 'Hofweg 1', '10117 Berlin'],
+      sections: [{ number: '1', title: sectionTitle, positions: [position('1.1')], subtotalCents: 10000 }],
+    };
+    const lines = (await readPages(await renderBusinessDocument(document)))[0] ?? [];
+    const text = lines.map((line) => line.text);
+    // The name breaks in the address field, before the info block's column.
+    expect(
+      text.some((line) => line.startsWith('Wohnungseigentümergemeinschaft') && !line.includes('Ende')),
+    ).toBe(true);
+    expect(text.some((line) => line.endsWith('Ende'))).toBe(true);
+    // The heading and the subtotal label break before the amount, which stays on the label's first line.
+    expect(text.some((line) => line.startsWith('1 Heizungsanlage') && !line.endsWith('Schluss'))).toBe(true);
+    expect(text.filter((line) => line.endsWith('Schluss')).length).toBe(2);
+    expect(text.some((line) => line.startsWith('Summe 1 Heizungsanlage') && line.endsWith('100,00 €'))).toBe(
+      true,
+    );
+  });
+
+  test('a text line prints its text and description without number, quantity or amount', async () => {
+    const note = {
+      kind: 'text' as const,
+      text: 'Hinweis zur Ausführung',
+      description: 'Nach Absprache mit der Hausverwaltung.',
+    };
+    const document = baseDocument([
+      {
+        number: '1',
+        title: 'Heizung',
+        positions: [position('1.1'), note, position('1.2')],
+        subtotalCents: 20000,
+      },
+    ]);
+    const lines = (await readPages(await renderBusinessDocument(document)))[0] ?? [];
+    const noteLine = lines.find((line) => line.text === 'Hinweis zur Ausführung');
+    const positionLine = lines.find((line) => line.text.startsWith('1.1 '));
+    // Alone on its line, in the Bezeichnung column where a position's text starts after its number.
+    expect(noteLine?.left).toBeGreaterThan(positionLine?.left ?? Number.POSITIVE_INFINITY);
+    expect(lines.map((line) => line.text)).toContain('Nach Absprache mit der Hausverwaltung.');
+    expect(lines.filter((line) => line.text.endsWith('100,00 € 100,00 €'))).toHaveLength(2);
+  });
+
   test('the same document renders to the same bytes', async () => {
     for (const document of [serviceOffer, installationOffer, stationeryOffer]) {
       expect(
@@ -542,7 +604,7 @@ describe('the business document renderer', () => {
   test('the Musterangebot names the organization as sender and adds up', async () => {
     const offer = plainSample('Haustechnik Sonnenberg GmbH');
     for (const section of offer.sections) {
-      const counted = section.positions.filter((item) => item.kind === 'standard');
+      const counted = section.positions.filter((item): item is DocumentPosition => item.kind === 'standard');
       expect(counted.reduce((sum, item) => sum + item.amountCents, 0)).toBe(section.subtotalCents);
     }
     expect(offer.sections.reduce((sum, section) => sum + section.subtotalCents, 0)).toBe(

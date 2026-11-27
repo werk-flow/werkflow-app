@@ -90,7 +90,7 @@ test('the enforced policy allows exactly the configured Supabase and object-stor
       "img-src 'self' data: blob: https://project.supabase.co https://account.eu.r2.cloudflarestorage.com",
       "font-src 'self'",
       "connect-src 'self' https://project.supabase.co wss://project.supabase.co https://account.eu.r2.cloudflarestorage.com",
-      'frame-src https://account.eu.r2.cloudflarestorage.com',
+      'frame-src blob: https://account.eu.r2.cloudflarestorage.com',
       "worker-src 'self'",
       "manifest-src 'self'",
       "object-src 'none'",
@@ -113,7 +113,7 @@ test('the local stack gets its http and ws origins, with the storage endpoint ov
   });
   expect(policy).toContain("connect-src 'self' http://172.20.1.5:54321 ws://172.20.1.5:54321;");
   expect(policy).toContain("img-src 'self' data: blob: http://172.20.1.5:54321;");
-  expect(policy).toContain('frame-src http://172.20.1.5:54321;');
+  expect(policy).toContain('frame-src blob: http://172.20.1.5:54321;');
 });
 
 test('a missing or malformed origin is omitted, never written as undefined', () => {
@@ -126,7 +126,7 @@ test('a missing or malformed origin is omitted, never written as undefined', () 
     expect(policy).not.toMatch(/undefined|null|javascript/);
     expect(policy).toContain("connect-src 'self';");
     expect(policy).toContain("img-src 'self' data: blob:;");
-    expect(policy).toContain("frame-src 'none';");
+    expect(policy).toContain('frame-src blob:;');
     expect(buildReportOnlyContentSecurityPolicy(env)).toContain("img-src 'self' data:;");
   }
 });

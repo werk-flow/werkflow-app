@@ -86,7 +86,7 @@ function runtimeBindings(
     if (bindings && ts.isNamedImports(bindings))
       for (const element of bindings.elements) if (!element.isTypeOnly) names.add(element.name.text);
   }
-  // A server-only module loads after `mock.module('server-only', …)`: a top-level
+  // A module whose dependencies a test mocks loads after `mock.module(…)`: a top-level
   // `const { x } = await import('…')`, so the binding is the module's in the whole file.
   for (const statement of source.statements) {
     if (!ts.isVariableStatement(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const))

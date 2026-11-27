@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import {
   PDFArray,
   PDFDict,
@@ -25,7 +25,6 @@ import { toEn16931 } from '@/lib/invoicing/to-en16931';
 import { invoiceDocument } from './invoice-layout';
 import type { BusinessDocument } from './model';
 
-mock.module('server-only', () => ({}));
 const { renderEInvoicePdf } = await import('./e-invoice');
 
 const LETTERHEAD = {

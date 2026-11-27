@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { KundenContent } from '@/components/kunden/kunden-content';
 import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 import { BannerProvider } from '@/components/ui/banner';
+import { ClientActionsMenu, type ClientRowActions } from '@/components/kunden/client-actions-menu';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { clientCreations, CreateClientDialog } from '@/components/kunden/create-client-dialog';
 import type { Client } from '@/lib/jobs/types';
 
@@ -103,6 +106,71 @@ export function CreateClientContractFixture(): React.JSX.Element {
       <main>
         <h1>Komponentenverträge</h1>
         <CreateClientDialog />
+      </main>
+    </BannerProvider>
+  );
+}
+
+declare global {
+  interface Window {
+    /** Each move of focus out of a dialog, named by the control it went to. */
+    uiContractDialogFocusLeaks: string[] | undefined;
+    /** Settles once the open menu ran its focus return on closing; a spec sets it on the menu it opened. */
+    uiContractMenuFocusReturn: Promise<void> | undefined;
+  }
+}
+
+/**
+ * Records each move of focus out of a dialog. A modal dialog's trap takes
+ * focus back while it leaves, so the control outside never holds it: only the
+ * focusout from the dialog shows the move.
+ */
+function recordDialogFocusLeaks(): void {
+  if (window.uiContractDialogFocusLeaks) return;
+  const leaks: string[] = [];
+  window.uiContractDialogFocusLeaks = leaks;
+  document.addEventListener('focusout', (event) => {
+    const from = event.target instanceof Element ? event.target.closest('[role="dialog"]') : null;
+    const to = event.relatedTarget instanceof Element ? event.relatedTarget : null;
+    if (from && to && !from.contains(to)) leaks.push(to.textContent ?? '');
+  });
+}
+
+const ROW_ACTIONS: ClientRowActions = {
+  isArchivedView: false,
+  onSaved: () => undefined,
+  onRequestRemoval: () => undefined,
+  onRestore: async () => undefined,
+};
+
+/** A row menu inside an open dialog: closing the menu returns focus to its trigger in that dialog. */
+function MenuInDialog(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button onClick={() => setOpen(true)}>Auswahl öffnen</Button>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>Kunde auswählen</DialogTitle>
+          <DialogDescription>Ein Kunde mit seinem Aktionsmenü.</DialogDescription>
+        </DialogHeader>
+        <ClientActionsMenu client={customerContractRow('Sanitär Kaya')} actions={ROW_ACTIONS} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** A customer row's actions menu and the edit dialog its „Bearbeiten“ opens. */
+export function CustomerMenuEditContractFixture(): React.JSX.Element {
+  recordDialogFocusLeaks();
+  return (
+    <BannerProvider>
+      <main>
+        <h1>Komponentenverträge</h1>
+        <section aria-label="Kundenzeile">
+          <ClientActionsMenu client={customerContractRow('Heizungsbau Weber')} actions={ROW_ACTIONS} />
+        </section>
+        <MenuInDialog />
       </main>
     </BannerProvider>
   );

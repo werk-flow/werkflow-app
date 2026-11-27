@@ -322,7 +322,6 @@ const OWN_PROCESS_FLAG = 'PERIOD_WORLD_OWN_PROCESS';
  * and no absences, and the service-role client is the in-memory admin over the world.
  */
 export function inOwnPeriodProcess(file: string): boolean {
-  mock.module('server-only', () => ({}));
   if (process.env[OWN_PROCESS_FLAG] !== '1') {
     test(`${basename(file)} holds in a bun test process of its own`, async () => {
       const { seed, numRuns } = fc.readConfigureGlobal();

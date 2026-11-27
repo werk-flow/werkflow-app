@@ -117,7 +117,6 @@ test.skipIf(ISOLATED)('instruction item hydration passes in an isolated process'
 });
 
 async function loadHydration() {
-  mock.module('server-only', () => ({}));
   // Every row the batched reads return counts the reads of its item key.
   const batches = await import('@/lib/supabase/query-batches');
   const readInBatches = batches.readInBatches;

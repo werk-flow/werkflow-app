@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { TurnEvent } from '@/components/ki/turn-client';
+import { KI_LIVE_PROTOCOL, type KiLiveEvent } from '@/lib/ai/live/events';
+import type { AiThreadWindow } from '@/lib/ai/thread-types';
 import { openContractFixture } from './open-fixture';
 
 // The WerkFlow KI chat (werk-flow/werkflow-planning#530, brief non-negotiables
@@ -479,4 +481,224 @@ test('a read of the latest messages that answers after a newer one changes nothi
   );
   await expect(timeline(page).getByText('Zwei', { exact: true })).toHaveCount(0);
   await expect(timeline(page).getByText('Zwei Meter Rohr.', { exact: true })).toBeVisible();
+});
+
+// The thread's live channel (werk-flow/werkflow-planning#532, brief non-negotiables 7 and 9).
+async function liveEmit(page: Page, event: KiLiveEvent): Promise<void> {
+  await expect.poll(() => page.evaluate(() => window.uiContractKiLive.emit !== null)).toBe(true);
+  await page.evaluate((next) => window.uiContractKiLive.emit?.(next), event);
+}
+
+const liveThread = (page: Page) => page.evaluate(() => window.uiContractKiLive.threadId);
+
+async function showThreadA(page: Page, window: AiThreadWindow): Promise<void> {
+  await page.evaluate(
+    ([id, value]) => {
+      globalThis.window.uiContractKiWindows[id] = value;
+    },
+    [THREAD_A, window] as const,
+  );
+  await threadLink(page, 'Material für die Heizung').click();
+}
+
+test('a turn of another tab streams into the thread on screen, and only the shown thread is joined', async ({
+  page,
+}) => {
+  await openChat(page);
+  await expect.poll(() => liveThread(page), 'the new chat has no thread to join').toBeNull();
+  await showThreadA(page, {
+    messages: [
+      savedMessage('k:user', 1, 'user', 'Wie viel Rohr?'),
+      savedMessage('k:assistant', 2, 'assistant', 'Zwei Meter.'),
+    ],
+    hasOlder: false,
+  });
+  await expect(timeline(page).getByText('Zwei Meter.', { exact: true })).toBeVisible();
+  await expect.poll(() => liveThread(page)).toBe(THREAD_A);
+
+  // A join reads what the page missed from the cursor: after the last message it holds.
+  await page.evaluate(() => {
+    window.uiContractKiReadInputs = [];
+    window.uiContractKiLive.join?.();
+  });
+  await expect
+    .poll(() => page.evaluate(() => window.uiContractKiReadInputs))
+    .toEqual([expect.objectContaining({ threadId: THREAD_A, afterSequence: 3 })]);
+
+  const v = KI_LIVE_PROTOCOL;
+  await liveEmit(page, {
+    v,
+    type: 'started',
+    command: 'x',
+    user: { sequence: 3, text: 'Und Fittinge?' },
+    answer: { sequence: 4 },
+  });
+  await expect(timeline(page).getByText('Und Fittinge?', { exact: true })).toBeVisible();
+  await liveEmit(page, { v, type: 'text', command: 'x', at: 0, delta: 'Vier ', saved: 0 });
+  await liveEmit(page, { v, type: 'text', command: 'x', at: 5, delta: 'Stück.', saved: 5 });
+  await expect(timeline(page).getByText('Vier Stück.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveText('schreibt …');
+  await liveEmit(page, { v, type: 'end', command: 'x', status: 'complete', failure: null, length: 11 });
+  await expect(page.getByRole('status')).toHaveCount(0);
+
+  await threadLink(page, 'Entlüften').click();
+  await expect.poll(() => liveThread(page), 'a switch leaves the thread it no longer shows').toBe(THREAD_B);
+  await page.getByRole('button', { name: 'Neuer Chat' }).click();
+  await expect.poll(() => liveThread(page)).toBeNull();
+  expect(await page.evaluate(() => window.uiContractKiLive.joins)).toEqual([THREAD_A, THREAD_B]);
+});
+
+test('text after a gap waits until the partial save covers it, then the page reads from the cursor and streams on', async ({
+  page,
+}) => {
+  await openChat(page);
+  const writing = (text: string): AiThreadWindow => ({
+    messages: [
+      savedMessage('w:user', 3, 'user', 'Wie entlüfte ich?'),
+      { ...savedMessage('w:assistant', 4, 'assistant', text), status: 'streaming' },
+    ],
+    hasOlder: false,
+  });
+  await showThreadA(page, writing('Erst '));
+  await expect(timeline(page).getByText('Erst', { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    window.uiContractKiReadInputs = [];
+  });
+  const v = KI_LIVE_PROTOCOL;
+  // The partial save holds less than the gap: a read could not fill it, so none goes out.
+  await liveEmit(page, { v, type: 'text', command: 'w', at: 16, delta: 'öffnen.', saved: 10 });
+  await page.evaluate(
+    ([id, value]) => {
+      window.uiContractKiWindows[id] = value;
+    },
+    [THREAD_A, writing('Erst das Ventil ')] as const,
+  );
+  await liveEmit(page, { v, type: 'text', command: 'w', at: 23, delta: ' Fertig.', saved: 16 });
+  await expect(timeline(page).getByText('Erst das Ventil öffnen. Fertig.', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.uiContractKiReadInputs)).toEqual([
+    expect.objectContaining({ threadId: THREAD_A, afterSequence: 4 }),
+  ]);
+});
+
+test('a join or an end that comes while a read is on its way reads once more, so the answer does not stay open', async ({
+  page,
+}) => {
+  await openChat(page);
+  const writing = (text: string, status: 'streaming' | 'complete' = 'streaming'): AiThreadWindow => ({
+    messages: [
+      savedMessage('w:user', 3, 'user', 'Wie entlüfte ich?'),
+      { ...savedMessage('w:assistant', 4, 'assistant', text), status },
+    ],
+    hasOlder: false,
+  });
+  const answerWith = (value: AiThreadWindow) =>
+    page.evaluate(
+      ([id, next]) => {
+        window.uiContractKiWindows[id] = next;
+      },
+      [THREAD_A, value] as const,
+    );
+  const heldReads = () => page.evaluate(() => window.uiContractKiHeldReads?.length ?? 0);
+  const release = (index: number) =>
+    page.evaluate((at) => window.uiContractKiHeldReads?.[at]?.release(), index);
+  await page.evaluate(() => {
+    window.uiContractKiHeldReads = [];
+    window.uiContractKiReadInputs = [];
+  });
+
+  // The thread's first read is on its way when the channel joins: the join's catch-up follows it.
+  await answerWith(writing('Erst '));
+  await threadLink(page, 'Material für die Heizung').click();
+  await expect.poll(heldReads).toBe(1);
+  await page.evaluate(() => window.uiContractKiLive.join?.());
+  await release(0);
+  await expect(timeline(page).getByText('Erst', { exact: true })).toBeVisible();
+  await expect.poll(heldReads).toBe(2);
+  expect((await page.evaluate(() => window.uiContractKiReadInputs))[1]).toEqual(
+    expect.objectContaining({ threadId: THREAD_A, afterSequence: 4 }),
+  );
+
+  // The end arrives while that catch-up is on its way with an older snapshot: one more read follows.
+  await liveEmit(page, {
+    v: KI_LIVE_PROTOCOL,
+    type: 'end',
+    command: 'w',
+    status: 'complete',
+    failure: null,
+    length: 22,
+  });
+  await answerWith(writing('Erst das Ventil öffnen', 'complete'));
+  await release(1);
+  await expect.poll(heldReads).toBe(3);
+  await release(2);
+  await expect(timeline(page).getByText('Erst das Ventil öffnen', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveCount(0);
+});
+
+test("a sending tab whose own stream breaks keeps the answer open and follows the server's rest on the channel", async ({
+  page,
+}) => {
+  await openChat(page);
+  await showThreadA(page, { messages: [], hasOlder: false });
+  await expect.poll(() => liveThread(page)).toBe(THREAD_A);
+  await composer(page).fill('Wie entlüfte ich?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  const [turn] = await page.evaluate(() => window.uiContractKiTurn.calls);
+  const command = turn?.commandId ?? '';
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await emit(page, { type: 'text', delta: 'Erst ' });
+  await page.evaluate(() =>
+    window.uiContractKiTurn.resolve?.({
+      kind: 'refused',
+      message: 'WerkFlow KI ist gerade nicht erreichbar.',
+    }),
+  );
+  // The server goes on writing: the answer stays open, with no failure of its own.
+  await expect(page.getByRole('status')).toHaveText('schreibt …');
+  await expect(timeline(page).getByText('Die Verbindung ist abgebrochen', { exact: false })).toHaveCount(0);
+  const v = KI_LIVE_PROTOCOL;
+  await liveEmit(page, { v, type: 'text', command, at: 0, delta: 'Erst das Ventil.', saved: 0 });
+  await liveEmit(page, { v, type: 'end', command, status: 'complete', failure: null, length: 16 });
+  await expect(timeline(page).getByText('Erst das Ventil.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveCount(0);
+});
+
+test('an answer the channel brought to its end stays finished when the sending tab’s own stream breaks after it', async ({
+  page,
+}) => {
+  await openChat(page);
+  await showThreadA(page, { messages: [], hasOlder: false });
+  await expect.poll(() => liveThread(page)).toBe(THREAD_A);
+  await composer(page).fill('Wie entlüfte ich?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  const [turn] = await page.evaluate(() => window.uiContractKiTurn.calls);
+  const command = turn?.commandId ?? '';
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await emit(page, { type: 'text', delta: 'Erst ' });
+  const v = KI_LIVE_PROTOCOL;
+  await liveEmit(page, {
+    v,
+    type: 'started',
+    command,
+    user: { sequence: 1, text: 'Wie entlüfte ich?' },
+    answer: { sequence: 2 },
+  });
+  await liveEmit(page, { v, type: 'text', command, at: 0, delta: 'Erst das Ventil.', saved: 16 });
+  await liveEmit(page, { v, type: 'end', command, status: 'complete', failure: null, length: 16 });
+  await page.evaluate(() =>
+    window.uiContractKiTurn.resolve?.({
+      kind: 'refused',
+      message: 'WerkFlow KI ist gerade nicht erreichbar.',
+    }),
+  );
+  await expect(timeline(page).getByText('Erst das Ventil.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveCount(0);
 });

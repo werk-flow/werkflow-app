@@ -77,6 +77,7 @@ function handler(overrides: Partial<HealthDependencies> = {}, logs: unknown[] = 
     resendApiKey: resendKey,
     fromEmail: 'WerkFlow <noreply@example.test>',
     secretKeys: JSON.stringify({ default: 'sb_secret_synthetic' }),
+    localMailCapture: undefined,
     sendRequest: async () => Response.json([]),
     logError: (...values) => logs.push(values),
     ...overrides,
@@ -126,7 +127,12 @@ test('a valid token gets every check, and a send-only key counts as valid', asyn
     expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(await response.json()).toEqual({
       ok: true,
-      checks: { resend_api_key: 'ok', from_email: 'ok', supabase_secret_keys: 'ok' },
+      checks: {
+        resend_api_key: 'ok',
+        from_email: 'ok',
+        supabase_secret_keys: 'ok',
+        local_mail_capture: 'ok',
+      },
     });
   }
   expect(calls).toEqual([
@@ -152,17 +158,27 @@ test('a failing dependency is named, and neither the report nor the log carries 
     { overrides: { resendApiKey: '' }, failed: 'resend_api_key' },
     { overrides: { fromEmail: undefined }, failed: 'from_email' },
     { overrides: { secretKeys: '[]' }, failed: 'supabase_secret_keys' },
+    // The local stack's capture setting has no place on a hosted project: set, even empty, it fails.
+    { overrides: { localMailCapture: 'mailpit' }, failed: 'local_mail_capture' },
+    { overrides: { localMailCapture: '' }, failed: 'local_mail_capture' },
   ];
   for (const { overrides, failed } of cases) {
     const logs: unknown[] = [];
     const response = await handler(overrides, logs)(healthRequest());
     expect(response.status).toBe(503);
     const text = await response.text();
-    const checks = { resend_api_key: 'ok', from_email: 'ok', supabase_secret_keys: 'ok', [failed]: 'failed' };
+    const checks = {
+      resend_api_key: 'ok',
+      from_email: 'ok',
+      supabase_secret_keys: 'ok',
+      local_mail_capture: 'ok',
+      [failed]: 'failed',
+    };
     expect(JSON.parse(text)).toEqual({ ok: false, checks });
     for (const leaked of [text, JSON.stringify(logs)]) {
       expect(leaked).not.toContain('private provider detail');
       expect(leaked).not.toContain(resendKey);
+      expect(leaked).not.toContain('mailpit');
     }
   }
 });

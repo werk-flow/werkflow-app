@@ -35,6 +35,8 @@ import { z } from '@/lib/zod';
 
 /** How many earlier messages of the thread the model sees, newest first, within the input cap. */
 const HISTORY_MESSAGES = 20;
+/** A save refused for these says the author lost the thread: the live channel sends nothing more (KI-6). */
+const LOST_ACCESS = new Set(['ai_actor_without_access', 'ai_thread_not_found', 'ai_thread_item_not_found']);
 /** Saves of a streaming answer: at most one per interval (brief non-negotiable 4). */
 const PARTIAL_SAVE_INTERVAL_MS = 750;
 
@@ -80,8 +82,16 @@ export type AiTurnEnd =
   | { status: 'complete' }
   | { status: 'failed' | 'cancelled'; failure: AiTurnFailure; message: string };
 
-/** Receives the answer while it is written. */
-export type AiTurnSink = { text: (delta: string) => void };
+/**
+ * Receives the answer while it is written. The live channel also hears how
+ * much of it each partial save holds, and when a save says the author lost
+ * access to the thread.
+ */
+export type AiTurnSink = {
+  text: (delta: string) => void;
+  saved?: (length: number) => void;
+  revoked?: () => void;
+};
 
 type ItemRef = { id: string; sequence: number };
 
@@ -360,7 +370,10 @@ async function saveAnswer(
           p_body: body,
         })
         .abortSignal(signal),
-    (message) => message === 'ai_thread_item_finished',
+    (message) => {
+      if (LOST_ACCESS.has(message)) context.sink.revoked?.();
+      return message === 'ai_thread_item_finished';
+    },
   );
 }
 
@@ -568,7 +581,11 @@ function savePartial(context: RunContext, answer: Answer): void {
       })
       .abortSignal(AbortSignal.timeout(AI_TURN_LIMITS[context.command.entryPoint].answerSaveTimeoutMs));
     // A missed partial save costs only freshness; the final save follows.
-    if (error) logError('aiTurn: partial save failed', error);
+    if (!error) context.sink.saved?.(answer.savedText.length);
+    else {
+      logError('aiTurn: partial save failed', error);
+      if (LOST_ACCESS.has(error.message)) context.sink.revoked?.();
+    }
     answer.saving = null;
   })();
 }

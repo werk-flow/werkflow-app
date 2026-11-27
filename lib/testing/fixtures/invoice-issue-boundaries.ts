@@ -5,6 +5,10 @@
 // organization with the snapshot it was checked with, and the original
 // rendered under its number is stored and passed to the one issue call, which
 // registers and files it; „Beleg erstellen“ renders the same bytes again.
+// Each original's key is queued for the storage purge under the caller's
+// organization before its bytes are stored, so one no issue registers is
+// deleted after the purge's delay; a key that could not be queued is never
+// written.
 // The check runs under exactly the number and day the function then issues,
 // and again under the new number when another issue took that one first.
 // supabase/tests/invoice_issue.sql proves the functions.
@@ -28,6 +32,8 @@ const attemptKey = '99100000-0000-4000-8000-000000000001';
 const clientId = '97100000-0000-4000-8000-000000000001';
 
 const stored: Array<{ path: string; body: Uint8Array }> = [];
+// Each stored key that no queue_storage_purge call of the caller's organization had named before its bytes.
+const storedUnqueued: string[] = [];
 const discarded: string[] = [];
 // While set, the storage refuses every object.
 let storageDown = false;
@@ -36,6 +42,13 @@ mock.module('@/lib/storage/r2', () => ({
   ...realStorage,
   putStorageObject: async ({ path, body }: { path: string; body: Uint8Array }) => {
     if (storageDown) throw new Error('storage_unavailable');
+    const queued = world.rpcCalls.some(
+      (call) =>
+        call.name === 'queue_storage_purge' &&
+        call.args.p_organization_id === ORGANIZATION_A &&
+        JSON.stringify(call.args.p_paths) === JSON.stringify([path]),
+    );
+    if (!queued) storedUnqueued.push(path);
     stored.push({ path, body: new Uint8Array(body) });
     return { created: true };
   },
@@ -367,13 +380,20 @@ assert.deepEqual(
   [
     ['get_invoice_with_line_sources', ORGANIZATION_A, null],
     ['get_invoice_settings', ORGANIZATION_A, null],
+    ['queue_storage_purge', ORGANIZATION_A, null],
     ['issue_invoice', ORGANIZATION_A, CALLER_ID],
     ['get_invoice_settings', ORGANIZATION_A, null],
+    ['queue_storage_purge', ORGANIZATION_A, null],
     ['issue_invoice', ORGANIZATION_A, CALLER_ID],
     ['get_invoice_settings', ORGANIZATION_A, null],
+    ['queue_storage_purge', ORGANIZATION_A, null],
     ['issue_invoice', ORGANIZATION_A, CALLER_ID],
   ],
 );
+// Each original was queued for the purge before its bytes were stored, so the two no issue registered are
+// deleted after the purge's delay even where their discard below fails.
+assert.equal(stored.length, 3);
+assert.deepEqual(storedUnqueued, [], 'an original was stored before its key was queued for the purge');
 // The function issues exactly the number and day the draft was checked under; the original reads the same.
 assert.deepEqual(
   world.rpcCalls
@@ -387,7 +407,7 @@ assert.deepEqual(
 );
 // Each check read the number and Rechnungsdatum its issue_invoice call got.
 assert.deepEqual(checkedNumbers, ['RE-2037-001 20371120', 'RE-2037-002 20371120', 'RE-2037-003 20371120']);
-const issueArgs = world.rpcCalls[6]?.args;
+const issueArgs = world.rpcCalls.at(-1)?.args;
 assert.equal(issueArgs?.p_expected_version, 2);
 assert.equal(issueArgs?.p_attempt_key, attemptKey);
 assert.deepEqual(JSON.parse(JSON.stringify(issueArgs?.p_snapshot)).buyer, {
@@ -463,11 +483,29 @@ assert.deepEqual(await issueInvoice(issueInput), {
 assert.equal(world.rpcCalls.at(-1)?.args.p_original_document_id, undefined);
 storageDown = false;
 
+// Without its purge entry an original is never stored: the draft is issued with its original pending.
+issued = null;
+const queueing = world.rpc;
+world.rpc = (call) =>
+  call.name === 'queue_storage_purge'
+    ? { data: null, error: { code: '08006', message: 'connection failure' } }
+    : queueing(call);
+world.rpcCalls.length = 0;
+assert.deepEqual(await issueInvoice(issueInput), {
+  success: true,
+  invoiceNumber: 'RE-2037-003',
+  originalFiled: false,
+});
+assert.equal(stored.length, 0, 'an original was stored without its purge entry');
+assert.equal(world.rpcCalls.at(-1)?.args.p_original_document_id, undefined);
+world.rpc = queueing;
+
 // „Beleg erstellen“ renders the stored invoice to the bytes its number was checked with; a filed original is left alone.
 const again = await fileInvoiceOriginal({ invoiceId });
 assert.deepEqual(again, { success: true });
 assert.deepEqual(stored[0]?.body, issuedOriginal, 'a retry rendered other bytes');
 assert.deepEqual(world.rpcCalls.at(-1)?.name, 'register_invoice_original');
+assert.deepEqual(storedUnqueued, [], '„Beleg erstellen“ stored an original before queueing its key');
 issued = { ...(issued ?? {}), original: { documentId, filed: true } };
 world.rpcCalls.length = 0;
 assert.deepEqual(await fileInvoiceOriginal({ invoiceId }), { success: true });

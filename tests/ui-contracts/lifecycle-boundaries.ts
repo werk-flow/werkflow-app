@@ -65,6 +65,7 @@ declare global {
       | 'route-refresh'
       | 'customer'
       | 'customer-create'
+      | 'customer-menu-edit'
       | 'request-capture'
       | 'request-attach'
       | 'global-search'
@@ -85,6 +86,9 @@ declare global {
       | 'offers'
       | 'invoice-editor'
       | 'invoice-settings'
+      | 'invoice-deliveries-issued'
+      | 'invoice-deliveries-cancelled'
+      | 'service-report-delivery'
       | 'site-access-review'
       | 'site-access-proposal'
       | AuthUrlFixtureName
