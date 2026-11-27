@@ -113,6 +113,21 @@ describe('offerAmounts', () => {
     expect(amounts.totals).toEqual({ lineNetCents: 427_995, taxCents: 80_960, grossCents: 508_955 });
   });
 
+  test('Bedarfspositionen at the line bound each take their amount, as no VAT basis sums them', () => {
+    // 100.000 × 100.000,00 € is ten billion euros, the largest line amount.
+    const atBound = {
+      ...free('Fernwärmestation', '100000', 10_000_000),
+      positionType: { kind: 'bedarf' as const },
+    };
+    const amounts = offerAmounts([
+      { title: 'Optionen', positions: [atBound, atBound, atBound, free('Wartungsheft', '1', 2995)] },
+    ]);
+    expect(amounts.sections[0]?.positionCents).toEqual([
+      1_000_000_000_000, 1_000_000_000_000, 1_000_000_000_000, 2995,
+    ]);
+    expect(amounts.totals.lineNetCents).toBe(2995);
+  });
+
   test('an offer without priced positions totals zero', () => {
     expect(offerAmounts([]).totals).toEqual({ lineNetCents: 0, taxCents: 0, grossCents: 0 });
     const textOnly = offerAmounts([

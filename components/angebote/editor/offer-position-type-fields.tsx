@@ -13,11 +13,37 @@ const TYPE_LABELS: Record<PositionForm['positionType'], string> = {
   alternative: 'Alternativposition',
 };
 
-/** The normal priced Positions of the Titel an Alternativposition at `index` can stand for, nearest above first. */
-function basesFor(positions: readonly PositionForm[], index: number): PositionForm[] {
-  const candidates = positions.filter((candidate, at) => at !== index && isNormalPricedForm(candidate));
-  const above = candidates.filter((candidate) => positions.indexOf(candidate) < index).reverse();
-  return [...above, ...candidates.filter((candidate) => positions.indexOf(candidate) > index)];
+/**
+ * The places of the normal priced Positions of the Titel an Alternativposition
+ * at `index` can stand for, nearest above first. Built only for an
+ * Alternativposition, or once when the type changes to one.
+ */
+function basesFor(positions: readonly PositionForm[], index: number): number[] {
+  const above: number[] = [];
+  const below: number[] = [];
+  positions.forEach((candidate, at) => {
+    if (at === index || !isNormalPricedForm(candidate)) return;
+    (at < index ? above : below).push(at);
+  });
+  return [...above.reverse(), ...below];
+}
+
+/** „1.1 · Wandgerät 24 kW“ for each place in `bases`. */
+function alternativeOptions(
+  positions: readonly PositionForm[],
+  numbers: ReadonlyArray<string | null>,
+  bases: readonly number[],
+): Array<{ value: string; label: string }> {
+  return bases.flatMap((at) => {
+    const candidate = positions[at];
+    if (!candidate) return [];
+    return [
+      {
+        value: candidate.key,
+        label: `${numbers[at] ?? ''} · ${candidate.name.trim() || 'ohne Bezeichnung'}`,
+      },
+    ];
+  });
 }
 
 /**
@@ -51,11 +77,10 @@ export function PositionTypeFields({
   const position = positions[index];
   if (!position) return null;
   const typeId = `${alternativeId}-type`;
-  const bases = basesFor(positions, index);
+  const bases = position.positionType === 'alternative' ? basesFor(positions, index) : [];
   const baseIndex = positions.findIndex((candidate) => candidate.key === position.alternativeTo);
-  const baseForm = positions[baseIndex];
   // A Position since removed, or no longer a normal one, is no choice: the save names the field.
-  const base = baseForm && bases.includes(baseForm) ? baseIndex : null;
+  const base = bases.includes(baseIndex) ? baseIndex : null;
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <Field
@@ -73,7 +98,8 @@ export function PositionTypeFields({
             onChange({
               ...position,
               positionType: kind,
-              alternativeTo: kind === 'alternative' ? (bases[0]?.key ?? null) : null,
+              alternativeTo:
+                kind === 'alternative' ? (positions[basesFor(positions, index)[0] ?? -1]?.key ?? null) : null,
             });
           }}
           disabled={disabled}
@@ -94,10 +120,7 @@ export function PositionTypeFields({
         <AlternativeField
           id={alternativeId}
           value={base === null ? '' : (position.alternativeTo ?? '')}
-          options={bases.map((candidate) => ({
-            value: candidate.key,
-            label: `${numbers[positions.indexOf(candidate)] ?? ''} · ${candidate.name.trim() || 'ohne Bezeichnung'}`,
-          }))}
+          options={alternativeOptions(positions, numbers, bases)}
           onChange={(key) => onChange({ ...position, alternativeTo: key })}
           error={error}
           disabled={disabled}

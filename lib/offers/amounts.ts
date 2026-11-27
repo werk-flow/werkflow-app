@@ -39,10 +39,13 @@ export function offerAmounts<Section extends PricedSection>(sections: readonly S
     section.positions.flatMap((position) => (position.kind === 'free' ? [position] : [])),
   );
   const amounts = draftAmounts(priced.filter(countsInTotal));
-  // Outside the sums each one still takes its amount by the line rule, rounded once.
-  const outside = draftAmounts(priced.filter((position) => !countsInTotal(position)));
+  // Outside the sums each one still takes its amount by the line rule, rounded once, and
+  // within its own line bound: no VAT basis sums them.
+  const outsideCents = priced
+    .filter((position) => !countsInTotal(position))
+    .map((position) => draftAmounts([position]).lineNetCents[0])
+    .reverse();
   const countedCents = [...amounts.lineNetCents].reverse();
-  const outsideCents = [...outside.lineNetCents].reverse();
   return {
     ...amounts,
     sections: sections.map((section) => {

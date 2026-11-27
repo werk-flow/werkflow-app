@@ -12,12 +12,19 @@
 -- 3. save_offer_content as in 20270601100000; a priced Position may carry
 --    positionType {kind: 'normal' | 'bedarf' | 'alternative', alternativeTo},
 --    and a Titel's sum counts its normal Positions only. An Alternativposition
---    names a normal priced Position of its own Titel, else invalid_input.
+--    names a normal priced Position of its own Titel, else invalid_input. A
+--    caller older than the types names none: over an offer that holds a
+--    Bedarfs- or Alternativposition it is refused (offer_not_editable), so a
+--    rolled-back build never saves one as a normal Position.
 -- 4. get_offer as in 20270501090000, with positionType beside a Position of
 --    another type than „normal“.
 -- 5. send_offer as in 20270601090000; the frozen content names a Position's
 --    type beside one of another type than „normal“, and an Alternativposition
 --    the printed number of its Position (`alternativeTo`). It still holds no cost.
+--    A caller whose rendering knows the types says so in p_snapshot
+--    (`positionTypes: true`); an older one is refused for an offer that holds a
+--    Bedarfs- or Alternativposition (offer_not_editable), because its PDF
+--    counted them in the totals.
 --
 -- lib/offers/ computes every amount, an Alternativposition's difference too;
 -- no SQL here computes one.
@@ -146,6 +153,15 @@ begin
   end if;
   if v_old.status <> 'entwurf' then raise exception 'offer_not_editable'; end if;
   if v_old.content_version <> p_expected_content_version then raise exception 'offer_changed'; end if;
+  if exists (select 1 from jsonb_array_elements(p_sections) section,
+      jsonb_array_elements(section -> 'positions') line
+    where line ->> 'kind' = 'free' and not line ? 'positionType')
+    and exists (select 1 from public.offer_positions line
+      where line.organization_id = p_organization_id and line.offer_id = p_offer_id
+        and line.position_type <> 'normal')
+  then
+    raise exception 'offer_not_editable';
+  end if;
   if exists (select 1 from jsonb_array_elements(p_sections) section,
       jsonb_array_elements(section -> 'positions') line
     where line #>> '{source,kind}' = 'article' and not exists (
@@ -412,6 +428,13 @@ begin
     where line.organization_id = p_organization_id and line.offer_id = p_offer_id
   ) then
     raise exception 'offer_empty';
+  end if;
+  if p_snapshot ->> 'positionTypes' is distinct from 'true' and exists (
+    select 1 from public.offer_positions line
+    where line.organization_id = p_organization_id and line.offer_id = p_offer_id
+      and line.position_type <> 'normal'
+  ) then
+    raise exception 'offer_not_editable';
   end if;
 
   -- The content as stored, with each priced Position's printed number (a text line has none)

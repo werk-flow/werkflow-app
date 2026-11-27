@@ -362,9 +362,20 @@ export const OFFER_CONTENT_LIMITS = { sections: 100, positionsPerSection: 500, p
  */
 const MAX_CONTENT_BYTES = 900_000;
 
-/** Whether the content fits one save, counted in UTF-8 bytes; the editor and the save's schema both ask. */
+/**
+ * Whether the content fits one save, counted in UTF-8 bytes; the editor and the save's schema both ask.
+ * A normal Position's type is left out of the count, so a draft that fit before the types still fits:
+ * at most 1.000 of them add about 33 kB, inside the room the limit leaves below 1 MB.
+ */
 export function contentFitsOneSave(sections: readonly unknown[]): boolean {
-  return new TextEncoder().encode(JSON.stringify(sections)).length <= MAX_CONTENT_BYTES;
+  const counted = JSON.stringify(sections, (key, value: unknown) =>
+    key === 'positionType' && isNormalType(value) ? undefined : value,
+  );
+  return new TextEncoder().encode(counted).length <= MAX_CONTENT_BYTES;
+}
+
+function isNormalType(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'normal';
 }
 
 /**

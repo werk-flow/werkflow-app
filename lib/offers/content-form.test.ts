@@ -4,6 +4,7 @@ import {
   catalogPositionForm,
   contentFieldId,
   contentFormOf,
+  contentFitsOneSave,
   contentLimitSentence,
   emptyPosition,
   liveContentFigures,
@@ -41,6 +42,21 @@ describe('contentLimitSentence', () => {
 
   test('a Titel with 501 positions names the limit per Titel', () => {
     expect(contentLimitSentence(textLines(501, ''))).toContain('höchstens 500 Positionen');
+  });
+
+  test("a normal Position's type is left out of the count, so a draft that fit before the types still fits", () => {
+    const typed = (kind: 'normal' | 'bedarf') => [
+      {
+        title: 'Material',
+        positions: Array.from({ length: 450 }, () => ({
+          kind: 'free' as const,
+          positionType: { kind },
+          description: 'x'.repeat(1960),
+        })),
+      },
+    ];
+    expect(contentFitsOneSave(typed('normal'))).toBe(true);
+    expect(contentFitsOneSave(typed('bedarf'))).toBe(false);
   });
 
   test('101 Titel name the limit of Titel', () => {

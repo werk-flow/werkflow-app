@@ -84,11 +84,12 @@ grant execute on function pg_temp.content(bigint) to service_role;
 
 create function pg_temp.save(p_offer uuid, p_content jsonb, p_net bigint default 489000,
   p_organization uuid default '38580000-0000-4000-8000-000000000010',
-  p_actor uuid default '38580000-0000-4000-8000-000000000002') returns jsonb language sql as $$
-  select public.save_offer_content(p_actor, p_organization, p_offer, 1,
+  p_actor uuid default '38580000-0000-4000-8000-000000000002', p_version integer default 1)
+  returns jsonb language sql as $$
+  select public.save_offer_content(p_actor, p_organization, p_offer, p_version,
     gen_random_uuid(), p_content, jsonb_build_object('netCents', p_net, 'taxCents', 92910, 'grossCents', 581910));
 $$;
-grant execute on function pg_temp.save(uuid, jsonb, bigint, uuid, uuid) to service_role;
+grant execute on function pg_temp.save(uuid, jsonb, bigint, uuid, uuid, integer) to service_role;
 
 -- K8's foreign key from a Position to its customer condition is validated.
 do $$
@@ -209,12 +210,29 @@ $$;
 select pg_temp.positions_read_by('38580000-0000-4000-8000-000000000002');
 select pg_temp.positions_read_by('38580000-0000-4000-8000-000000000003');
 
+-- A build older than the types, after a rollback, neither saves a Bedarfs- or
+-- Alternativposition as a normal one nor files a PDF that counted it: both
+-- calls are refused for this offer. Its untyped offers save and send as
+-- before (offers.sql, offer_sending.sql).
+set local role service_role;
+select pg_temp.expect_refusal('a save without types', format(
+  'select pg_temp.save(%L, %L, 489000, %L, %L, 2)', pg_temp.id('offer'),
+  pg_temp.content() #- '{0,positions,0,positionType}'
+    #- '{0,positions,2,positionType}' #- '{0,positions,3,positionType}',
+  '38580000-0000-4000-8000-000000000010', '38580000-0000-4000-8000-000000000002'), 'offer_not_editable');
+select pg_temp.expect_refusal('a send whose rendering counted every Position', format(
+  'select public.send_offer(%L, %L, %L, 1, 2, gen_random_uuid(), %L, %L, %L, %L, %L, %L, %L, %L, 2048, %L)',
+  '38580000-0000-4000-8000-000000000002', '38580000-0000-4000-8000-000000000010', pg_temp.id('offer'), 'post',
+  (now() at time zone 'Europe/Berlin')::date, 'Hausverwaltung Lindenhof GmbH', 'Hofweg 1, 10117 Berlin',
+  '{"site": null}', '38580000-0000-4000-8000-000000000302',
+  '38580000-0000-4000-8000-000000000010/38580000-0000-4000-8000-000000000302/Angebot.pdf', 'Angebot.pdf',
+  repeat('b', 64)), 'offer_not_editable');
+
 -- Sending freezes each type, an Alternativposition's Position by its printed
 -- number, and no cost.
-set local role service_role;
 select public.send_offer('38580000-0000-4000-8000-000000000002', '38580000-0000-4000-8000-000000000010',
   pg_temp.id('offer'), 1, 2, gen_random_uuid(), 'post', (now() at time zone 'Europe/Berlin')::date,
-  'Hausverwaltung Lindenhof GmbH', 'Hofweg 1, 10117 Berlin', '{"site": null}',
+  'Hausverwaltung Lindenhof GmbH', 'Hofweg 1, 10117 Berlin', '{"site": null, "positionTypes": true}',
   '38580000-0000-4000-8000-000000000301',
   '38580000-0000-4000-8000-000000000010/38580000-0000-4000-8000-000000000301/Angebot.pdf', 'Angebot.pdf', 2048,
   repeat('b', 64));
