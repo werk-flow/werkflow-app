@@ -1,6 +1,5 @@
-import { afterEach, expect, mock, test } from 'bun:test';
+import { afterEach, expect, test } from 'bun:test';
 
-mock.module('server-only', () => ({}));
 const { isAiReleasedFor } = await import('./release-gate');
 
 const RELEASED = '0a000001-0000-4000-8000-000000000001';

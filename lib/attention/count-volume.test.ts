@@ -683,7 +683,6 @@ test.skipIf(ISOLATED)('the attention count volume cases pass in an isolated proc
 
 if (ISOLATED) {
   setSystemTime(NOW);
-  mock.module('server-only', () => ({}));
   mock.module('@/lib/logging', () => ({ logError: (...args: unknown[]) => failures.push(args) }));
   mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => client }));
   mock.module('@/lib/supabase/server', () => ({ createSupabaseServerClient: async () => client }));

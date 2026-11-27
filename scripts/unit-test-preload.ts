@@ -1,4 +1,4 @@
-import { beforeEach, setDefaultTimeout } from 'bun:test';
+import { beforeEach, mock, setDefaultTimeout } from 'bun:test';
 import fc from 'fast-check';
 import { openSync, writeSync } from 'node:fs';
 import { PROPERTY_SEED_VARIABLE, propertyRunSettings } from '../lib/testing/property-runs';
@@ -14,6 +14,16 @@ import { UNIT_TEST_TIMEOUT_MS } from './unit-test-timeout';
 // scripts/run-unit-tests.ts also passes the same bound as `--timeout` for
 // every file (a probe of three six-second tests failed two without it).
 setDefaultTimeout(UNIT_TEST_TIMEOUT_MS);
+
+// The 'server-only' package throws on load outside the React server build, so
+// every unit test needs it replaced before a server module loads. Mocked here
+// once, before any test file runs, a test cannot load a server module unmocked,
+// whether it imports statically, alone or after another file. Bun reads
+// bunfig.toml from the working directory only: `bun run test:unit <path>` runs
+// from the repository root wherever it starts, a bare `bun test` in a
+// subfolder gets no preload. A fixture that runs as a plain `bun <file>`
+// process gets none either and mocks it itself.
+mock.module('server-only', () => ({}));
 
 // Every property test draws from one seed and run count (lib/testing/property-runs.ts). A random
 // seed is printed up front, so a failure that fast-check reports by seed can be replayed.

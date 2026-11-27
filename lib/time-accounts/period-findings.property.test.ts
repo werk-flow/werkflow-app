@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 import { berlinMidnightMs, berlinOffsetMinutes } from '@/lib/testing/berlin-arbitraries';
 import {
@@ -17,8 +17,6 @@ import type { DailyTargetInput, TimeActivityInterval } from './types';
 // that proposes a time in the period blocks the close while it is open; „Zeit ohne Zuordnung“
 // lists each entry with its day, time, activity and minutes.
 
-// period-findings is server-only; the stub lets the unit tier import it.
-mock.module('server-only', () => ({}));
 const { pushEmployeeFindings } = await import('./period-findings');
 
 const EMPLOYEE = { id: 'record-1', user_id: null };

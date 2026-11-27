@@ -1,6 +1,5 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
-mock.module('server-only', () => ({}));
 const { resendWebhookSecret, verifyResendSignature } = await import('./resend-signature');
 
 // Svix's published example (docs.svix.com, "Verifying Webhooks Manually"): a
