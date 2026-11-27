@@ -27,6 +27,10 @@ import { listProductSources, parseProductSource } from './product-sources';
 // the amendment "the time outbox"; werk-flow/werkflow-planning#319). The check
 // loads lazily behind a gate that imports only the logging.
 //
+// The same modules call `clearKiDrafts`, so no WerkFlow KI draft of one person
+// stays in the tab for the next (werk-flow/werkflow-planning#530). It lives
+// apart from the chat's draft module, which only the chat page loads.
+//
 // The menu sign-out sits in a chunk every page loads at startup, so each clear
 // lives in a module that imports nothing. Importing the bridge's schemas there
 // added a startup script to every page (werk-flow/werkflow-app#232).
@@ -34,6 +38,8 @@ import { listProductSources, parseProductSource } from './product-sources';
 const CLEAR_CALL = 'clearManualEntryBridge';
 const CACHE_CLEAR_CALL = 'clearServiceWorkerCaches';
 const CLEAR_MODULE = 'lib/time-tracking/manual-entry-bridge-storage.ts';
+const DRAFT_CLEAR_CALL = 'clearKiDrafts';
+const DRAFT_CLEAR_MODULE = 'lib/ai/chat-draft-clear.ts';
 const TODAY_CLEAR_CALL = 'clearTodayOnDevice';
 const TODAY_CLEAR_MODULE = 'lib/field-sync/device/today-wipe.ts';
 const UNSENT_ASK_CALL = 'endSessionAfterCheck';
@@ -73,6 +79,7 @@ function signOutUse(
   clearsCaches: boolean;
   clearsToday: boolean;
   asksUnsentWork: boolean;
+  clearsDrafts: boolean;
 } {
   const source = parseProductSource(fileName, text);
   const use = {
@@ -81,6 +88,7 @@ function signOutUse(
     clearsCaches: false,
     clearsToday: false,
     asksUnsentWork: false,
+    clearsDrafts: false,
   };
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
@@ -89,6 +97,7 @@ function signOutUse(
       if (calls(node, CLEAR_CALL)) use.clears = true;
       if (calls(node, CACHE_CLEAR_CALL)) use.clearsCaches = true;
       if (calls(node, TODAY_CLEAR_CALL)) use.clearsToday = true;
+      if (calls(node, DRAFT_CLEAR_CALL)) use.clearsDrafts = true;
     }
     ts.forEachChild(node, visit);
   };
@@ -112,6 +121,7 @@ function signOutsWithoutClear(): string[] {
         ...(use.clearsCaches ? [] : [`${file}: ${CACHE_CLEAR_CALL}`]),
         ...(use.clearsToday ? [] : [`${file}: ${TODAY_CLEAR_CALL}`]),
         ...(use.asksUnsentWork ? [] : [`${file}: ${UNSENT_ASK_CALL}`]),
+        ...(use.clearsDrafts ? [] : [`${file}: ${DRAFT_CLEAR_CALL}`]),
       ];
     });
 }
@@ -151,6 +161,29 @@ describe('sign-out clears the tab state', () => {
     }
   });
 
+  test('the draft clear imports only the storage module every sign-out already loads', () => {
+    const source = parseProductSource(DRAFT_CLEAR_MODULE);
+    expect(
+      source.statements
+        .filter(ts.isImportDeclaration)
+        .map((statement) => statement.moduleSpecifier.getText(source)),
+    ).toEqual([`'@/${CLEAR_MODULE.replace(/\.ts$/, '')}'`]);
+    expect(source.text.includes('import('), DRAFT_CLEAR_MODULE).toBe(false);
+  });
+
+  // The chat's own draft module carries its memory copies and the sending hand-off. Imported by a
+  // sign-out, it sat in the start-up chunk and split a layout script in two for every page
+  // (werk-flow/werkflow-planning#530); the sign-outs import the clear module instead.
+  test('only the chat imports its draft module', () => {
+    const importers = listProductSources().filter((file) =>
+      parseProductSource(file)
+        .statements.filter(ts.isImportDeclaration)
+        .some((statement) => statement.moduleSpecifier.getText().slice(1, -1) === '@/lib/ai/chat-drafts'),
+    );
+    expect(importers.filter((file) => !file.startsWith('components/ki/'))).toEqual([]);
+    expect(importers.length).toBeGreaterThan(0);
+  });
+
   test('probes: a sign-out without a clear is reported, one with both or of other sessions is not', () => {
     const probe = (body: string) => `export async function probe() { ${body} }`;
     for (const body of [
@@ -165,13 +198,14 @@ describe('sign-out clears the tab state', () => {
         clearsCaches: false,
         clearsToday: false,
         asksUnsentWork: false,
+        clearsDrafts: false,
       });
     }
     expect(
       signOutUse(
         'components/probe.ts',
         probe(
-          "await endSessionAfterCheck(report, async () => { clearManualEntryBridge(); await clearServiceWorkerCaches(); await clearTodayOnDevice(); await supabase.auth.signOut({ scope: 'global' }); });",
+          "await endSessionAfterCheck(report, async () => { clearManualEntryBridge(); clearKiDrafts(); await clearServiceWorkerCaches(); await clearTodayOnDevice(); await supabase.auth.signOut({ scope: 'global' }); });",
         ),
       ),
     ).toEqual({
@@ -180,6 +214,7 @@ describe('sign-out clears the tab state', () => {
       clearsCaches: true,
       clearsToday: true,
       asksUnsentWork: true,
+      clearsDrafts: true,
     });
     expect(
       signOutUse('components/probe.ts', probe("await supabase.auth.signOut({ scope: 'others' });")),
@@ -189,6 +224,7 @@ describe('sign-out clears the tab state', () => {
       clearsCaches: false,
       clearsToday: false,
       asksUnsentWork: false,
+      clearsDrafts: false,
     });
   });
 });

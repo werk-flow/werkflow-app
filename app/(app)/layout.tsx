@@ -18,6 +18,8 @@ import { getCachedUser, getCachedMemberships, getCachedUserProfile } from '@/lib
 import type { UserProfile } from '@/lib/profile-reference';
 import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
 import { CURRENT_ORG_COOKIE, resolveActiveOrgId } from '@/lib/org/cookies';
+import { isAiReleasedFor } from '@/lib/ai/release-gate';
+import { aiNavEntry } from '@/components/sidebar/ai-nav-entry';
 
 // The profile reader logs its failure and caches nothing. The shell then
 // renders without the profile, and UserProfileProvider reads it once in the
@@ -50,6 +52,11 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
   const activeOrgCookieNeedsSync =
     activeOrgId !== null && cookieStore.get(CURRENT_ORG_COOKIE)?.value !== activeOrgId;
 
+  // Only a member of a released organization gets the WerkFlow KI entry; for everyone else the
+  // prop stays absent, so their start-up and route payloads carry nothing of it.
+  const aiOrganizationIds = memberships.map((membership) => membership.orgId).filter(isAiReleasedFor);
+  const shellNavEntry = aiOrganizationIds.length > 0 ? { serverNavEntry: aiNavEntry(aiOrganizationIds) } : {};
+
   return (
     <BannerProvider>
       <OrganizationProvider
@@ -64,7 +71,7 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
               {/* Optional runtime reads must not hold every route refresh. */}
               <ActiveJobsProvider>
                 <ClockStateProvider>
-                  <AppShell initialOrganizationId={activeOrgId}>
+                  <AppShell initialOrganizationId={activeOrgId} {...shellNavEntry}>
                     {/* The bottom reserve: the clock dock publishes its height, and the page column ends above it.
                         The fallback is the dock's one-row height (button, padding, border), so the first paint
                         already leaves it free and hydration moves nothing. */}

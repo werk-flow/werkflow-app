@@ -47,7 +47,7 @@ const DETAIL_REFRESH_TABLES: readonly RealtimeTable[] = [
 /** The live status and week cards of one member. */
 function MitarbeiterDetailLiveTimeCards(input: Parameters<typeof useMitarbeiterDetailLiveTime>[0]) {
   const liveTime = useMitarbeiterDetailLiveTime(input);
-  return <MitarbeiterDetailTimeCards liveTime={liveTime} breakPolicy={input.breakPolicy} />;
+  return <MitarbeiterDetailTimeCards liveTime={liveTime} />;
 }
 
 interface MitarbeiterDetailContentProps {
