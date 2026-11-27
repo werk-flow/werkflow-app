@@ -24,15 +24,18 @@ const JOB_KINDS: readonly TimeSegmentKind[] = ['work', 'callout', 'travel'];
 function TimelineJobField({
   row,
   number,
+  subjectUserId,
   onChange,
 }: {
   row: CorrectionTimelineRow;
   number: number;
+  subjectUserId: string | undefined;
   onChange: (jobId: string | null) => void;
 }) {
-  // Open jobs of the whole organization, as every correction offers them.
+  // Open jobs of the whole organization, as every correction offers them;
+  // the jobs of the person whose time is added stand out.
   const jobSearch = useJobEntityOptions(
-    { kind: 'jobs', purpose: 'time-correction' },
+    { kind: 'jobs', purpose: 'time-correction', ...(subjectUserId ? { subjectUserId } : {}) },
     row.jobId ? [row.jobId] : [],
   );
   return (
@@ -94,11 +97,13 @@ function TimelineRowFields({
   number,
   errors,
   timeline,
+  subjectUserId,
 }: {
   row: CorrectionTimelineRow;
   number: number;
   errors: TimelineRowErrors;
   timeline: CorrectionTimelineState;
+  subjectUserId: string | undefined;
 }) {
   const update = (patch: Partial<Omit<CorrectionTimelineRow, 'key'>>) => timeline.updateRow(row.key, patch);
   return (
@@ -139,7 +144,12 @@ function TimelineRowFields({
       </Field>
       <TimelineTimeFields row={row} errors={errors} onChange={update} />
       {JOB_KINDS.includes(row.kind) ? (
-        <TimelineJobField row={row} number={number} onChange={(jobId) => update({ jobId })} />
+        <TimelineJobField
+          row={row}
+          number={number}
+          subjectUserId={subjectUserId}
+          onChange={(jobId) => update({ jobId })}
+        />
       ) : null}
       <TimeActivityQualifierFields
         idPrefix={`correction-timeline-${row.key}-`}
@@ -166,10 +176,13 @@ function TimelineRowFields({
 export function CorrectionTimelineFields({
   timeline,
   showErrors,
+  subjectUserId,
 }: {
   timeline: CorrectionTimelineState;
   /** „Speichern“ was pressed: each row shows its errors. */
   showErrors: boolean;
+  /** The person whose time is added; the job pickers mark their jobs. The caller when absent. */
+  subjectUserId?: string;
 }) {
   return (
     <section
@@ -206,6 +219,7 @@ export function CorrectionTimelineFields({
             number={index + 1}
             errors={(showErrors ? timeline.errors[index] : undefined) ?? {}}
             timeline={timeline}
+            subjectUserId={subjectUserId}
           />
         ))}
       </ol>

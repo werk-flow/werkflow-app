@@ -1,7 +1,11 @@
 import { OfficeStartView, type OfficeStartRead } from '@/components/dashboard/office-start-sections';
 import type { AttentionTask } from '@/lib/attention/types';
 
-/** Five jobs past their last visit, behind a time approval and a vacation request the start page leaves out. */
+/**
+ * Five jobs past their last visit and four Wartungen due, two of them
+ * overdue, behind a time approval and a vacation request the start page
+ * leaves out.
+ */
 const TASKS: AttentionTask[] = [
   {
     sourceType: 'time_session_approval',
@@ -30,6 +34,24 @@ const TASKS: AttentionTask[] = [
       lastVisitDate: `2026-11-0${day}`,
     }),
   ),
+  ...(
+    [
+      ['2026-11-02', true, 'Heizzentrale Lindenhof'],
+      ['2026-11-12', true, null],
+      ['2026-11-30', false, 'Heizzentrale Lindenhof'],
+      ['2026-12-04', false, 'Heizzentrale Lindenhof'],
+    ] as const
+  ).map(
+    ([dueDate, overdue, siteName], index): AttentionTask => ({
+      sourceType: 'maintenance_due',
+      sourceId: `00000000-0000-4000-8000-00000000010${index}`,
+      equipmentLabel: index === 0 ? 'Gasbrennwertkessel, Speicher' : 'Enthärtungsanlage',
+      siteName,
+      dueDate,
+      overdue,
+      href: `/service/wartung?q=WPL-2026-000${index}`,
+    }),
+  ),
 ];
 
 const refresh = () => Promise.resolve();
@@ -44,23 +66,20 @@ function read<T>(state: 'current' | 'stale' | 'loading' | 'failed', data: T): Of
 }
 
 const CASES = [
-  ['filled', read('current', { tasks: TASKS }), read('current', 2)],
-  ['empty', read('current', { tasks: [] }), read('current', 0)],
-  ['maintenance-unknown', read('current', { tasks: [] }), read('loading', 0)],
-  ['maintenance-loading', read('current', { tasks: TASKS }), read('loading', 0)],
-  ['attention-failed', read('failed', { tasks: [] }), read('current', 2)],
-  ['attention-loading', read('loading', { tasks: [] }), read('current', 2)],
-  ['maintenance-stale', read('current', { tasks: TASKS }), read('stale', 2)],
-  ['attention-stale-empty', read('stale', { tasks: [] }), read('current', 0)],
-  ['maintenance-stale-empty', read('current', { tasks: [] }), read('stale', 0)],
+  ['filled', read('current', { tasks: TASKS })],
+  ['empty', read('current', { tasks: [] })],
+  ['attention-failed', read('failed', { tasks: [] })],
+  ['attention-loading', read('loading', { tasks: [] })],
+  ['attention-stale', read('stale', { tasks: TASKS })],
+  ['attention-stale-empty', read('stale', { tasks: [] })],
 ] as const;
 
 export function OfficeStartContractFixture() {
   return (
     <>
-      {CASES.map(([name, attention, maintenance]) => (
+      {CASES.map(([name, attention]) => (
         <div key={name} data-testid={`office-start-${name}`}>
-          <OfficeStartView attention={attention} maintenance={maintenance} />
+          <OfficeStartView attention={attention} />
         </div>
       ))}
     </>

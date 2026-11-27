@@ -1564,6 +1564,167 @@ export type Database = {
           },
         ];
       };
+      document_deliveries: {
+        Row: {
+          attachment_content_hash: string;
+          attempt_key: string;
+          attempts: number;
+          channel: string;
+          created_at: string;
+          created_by: string | null;
+          dispatched_at: string | null;
+          document_id: string;
+          email_subject: string | null;
+          failure_code: string | null;
+          from_header: string | null;
+          id: string;
+          invoice_id: string | null;
+          message_text: string | null;
+          note: string;
+          organization_id: string;
+          outcome_unknown_at: string | null;
+          provider_message_id: string | null;
+          recipient_email: string | null;
+          reply_to: string | null;
+          sender_name: string | null;
+          state: string;
+          subject_kind: string;
+          updated_at: string;
+        };
+        Insert: {
+          attachment_content_hash: string;
+          attempt_key: string;
+          attempts?: number;
+          channel: string;
+          created_at?: string;
+          created_by?: string | null;
+          dispatched_at?: string | null;
+          document_id: string;
+          email_subject?: string | null;
+          failure_code?: string | null;
+          from_header?: string | null;
+          id?: string;
+          invoice_id?: string | null;
+          message_text?: string | null;
+          note?: string;
+          organization_id: string;
+          outcome_unknown_at?: string | null;
+          provider_message_id?: string | null;
+          recipient_email?: string | null;
+          reply_to?: string | null;
+          sender_name?: string | null;
+          state: string;
+          subject_kind: string;
+          updated_at?: string;
+        };
+        Update: {
+          attachment_content_hash?: string;
+          attempt_key?: string;
+          attempts?: number;
+          channel?: string;
+          created_at?: string;
+          created_by?: string | null;
+          dispatched_at?: string | null;
+          document_id?: string;
+          email_subject?: string | null;
+          failure_code?: string | null;
+          from_header?: string | null;
+          id?: string;
+          invoice_id?: string | null;
+          message_text?: string | null;
+          note?: string;
+          organization_id?: string;
+          outcome_unknown_at?: string | null;
+          provider_message_id?: string | null;
+          recipient_email?: string | null;
+          reply_to?: string | null;
+          sender_name?: string | null;
+          state?: string;
+          subject_kind?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_deliveries_document_fk";
+            columns: ["document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "document_deliveries_document_fk";
+            columns: ["document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "document_deliveries_invoice_fk";
+            columns: ["invoice_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "document_deliveries_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      document_delivery_events: {
+        Row: {
+          actor_id: string | null;
+          attempt: number;
+          created_at: string;
+          delivery_id: string;
+          event_type: string;
+          failure_code: string | null;
+          id: string;
+          organization_id: string;
+          state: string;
+        };
+        Insert: {
+          actor_id?: string | null;
+          attempt: number;
+          created_at?: string;
+          delivery_id: string;
+          event_type: string;
+          failure_code?: string | null;
+          id?: string;
+          organization_id: string;
+          state: string;
+        };
+        Update: {
+          actor_id?: string | null;
+          attempt?: number;
+          created_at?: string;
+          delivery_id?: string;
+          event_type?: string;
+          failure_code?: string | null;
+          id?: string;
+          organization_id?: string;
+          state?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_delivery_events_delivery_fk";
+            columns: ["delivery_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "document_deliveries";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "document_delivery_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       document_folders: {
         Row: {
           created_at: string;
@@ -4257,8 +4418,11 @@ export type Database = {
       invoices: {
         Row: {
           buyer_reference: string;
+          cancellation_reason: string | null;
+          cancels_invoice_id: string | null;
           client_id: string;
           closing_text: string;
+          corrects_invoice_id: string | null;
           created_at: string;
           created_by: string | null;
           discount_basis_points: number | null;
@@ -4293,8 +4457,11 @@ export type Database = {
         };
         Insert: {
           buyer_reference?: string;
+          cancellation_reason?: string | null;
+          cancels_invoice_id?: string | null;
           client_id: string;
           closing_text?: string;
+          corrects_invoice_id?: string | null;
           created_at?: string;
           created_by?: string | null;
           discount_basis_points?: number | null;
@@ -4329,8 +4496,11 @@ export type Database = {
         };
         Update: {
           buyer_reference?: string;
+          cancellation_reason?: string | null;
+          cancels_invoice_id?: string | null;
           client_id?: string;
           closing_text?: string;
+          corrects_invoice_id?: string | null;
           created_at?: string;
           created_by?: string | null;
           discount_basis_points?: number | null;
@@ -4365,10 +4535,24 @@ export type Database = {
         };
         Relationships: [
           {
+            foreignKeyName: "invoices_cancels_fk";
+            columns: ["cancels_invoice_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
             foreignKeyName: "invoices_client_fk";
             columns: ["client_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "invoices_corrects_fk";
+            columns: ["corrects_invoice_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
             referencedColumns: ["id", "organization_id"];
           },
           {
@@ -6523,6 +6707,7 @@ export type Database = {
           id: string;
           item_id: string | null;
           kind: string;
+          leistung_id: string | null;
           name: string;
           offer_id: string;
           organization_id: string;
@@ -6543,6 +6728,7 @@ export type Database = {
           id?: string;
           item_id?: string | null;
           kind: string;
+          leistung_id?: string | null;
           name: string;
           offer_id: string;
           organization_id: string;
@@ -6563,6 +6749,7 @@ export type Database = {
           id?: string;
           item_id?: string | null;
           kind?: string;
+          leistung_id?: string | null;
           name?: string;
           offer_id?: string;
           organization_id?: string;
@@ -6583,6 +6770,13 @@ export type Database = {
             columns: ["item_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_positions_leistung_fk";
+            columns: ["leistung_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "leistungen";
             referencedColumns: ["id", "organization_id"];
           },
           {
@@ -8592,6 +8786,8 @@ export type Database = {
           employee_record_id: string;
           id: string;
           organization_id: string;
+          replaced_entry_date: string | null;
+          replaced_exit_date: string | null;
           scheduled_for: string | null;
           scheduled_state:
             | Database["public"]["Enums"]["personnel_employment_state"]
@@ -8608,6 +8804,8 @@ export type Database = {
           employee_record_id: string;
           id?: string;
           organization_id: string;
+          replaced_entry_date?: string | null;
+          replaced_exit_date?: string | null;
           scheduled_for?: string | null;
           scheduled_state?:
             | Database["public"]["Enums"]["personnel_employment_state"]
@@ -8624,6 +8822,8 @@ export type Database = {
           employee_record_id?: string;
           id?: string;
           organization_id?: string;
+          replaced_entry_date?: string | null;
+          replaced_exit_date?: string | null;
           scheduled_for?: string | null;
           scheduled_state?:
             | Database["public"]["Enums"]["personnel_employment_state"]
@@ -17243,6 +17443,24 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      cancel_invoice: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_correct: boolean;
+          p_expected_issue_date: string;
+          p_expected_number: string;
+          p_invoice_id: string;
+          p_organization_id: string;
+          p_original_content_hash?: string;
+          p_original_document_id?: string;
+          p_original_file_name?: string;
+          p_original_size_bytes?: number;
+          p_original_storage_path?: string;
+          p_reason: string;
+        };
+        Returns: Json;
+      };
       cancel_planning_dispatch: {
         Args: {
           p_actor_id: string;
@@ -19565,6 +19783,10 @@ export type Database = {
         Args: { p_offer_id: string; p_organization_id: string };
         Returns: Json;
       };
+      get_offer_with_costs: {
+        Args: { p_offer_id: string; p_organization_id: string };
+        Returns: Json;
+      };
       get_org_members_for_user: {
         Args: { p_org_id: string; p_user_id: string };
         Returns: {
@@ -20062,6 +20284,15 @@ export type Database = {
             };
             Returns: Json;
           };
+      list_document_deliveries: {
+        Args: {
+          p_limit: number;
+          p_organization_id: string;
+          p_subject_id: string;
+          p_subject_kind: string;
+        };
+        Returns: Json;
+      };
       list_document_page: {
         Args: { p_filters: Json; p_organization_id: string };
         Returns: Json;
@@ -20930,6 +21161,18 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      record_manual_delivery: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_document_id: string;
+          p_note: string;
+          p_organization_id: string;
+          p_subject_id: string;
+          p_subject_kind: string;
+        };
+        Returns: string;
+      };
       record_organization_export_download: {
         Args: {
           p_actor_id: string;
@@ -21590,6 +21833,23 @@ export type Database = {
         };
         Returns: undefined;
       };
+      request_document_delivery: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_document_id: string;
+          p_email_subject: string;
+          p_from_header: string;
+          p_message_text: string;
+          p_organization_id: string;
+          p_recipient_email: string;
+          p_reply_to: string;
+          p_sender_name: string;
+          p_subject_id: string;
+          p_subject_kind: string;
+        };
+        Returns: Json;
+      };
       reschedule_planning_series: {
         Args: {
           p_actor_id: string;
@@ -21669,6 +21929,15 @@ export type Database = {
           p_organization_id: string;
         };
         Returns: undefined;
+      };
+      retry_document_delivery: {
+        Args: {
+          p_actor_id: string;
+          p_delivery_id: string;
+          p_expected_attempt: number;
+          p_organization_id: string;
+        };
+        Returns: Json;
       };
       return_work_handover_for_correction: {
         Args: {
@@ -22700,6 +22969,17 @@ export type Database = {
           p_status: Database["public"]["Enums"]["ai_run_status"];
         };
         Returns: number;
+      };
+      settle_document_delivery: {
+        Args: {
+          p_attempt: number;
+          p_delivery_id: string;
+          p_failure_code?: string;
+          p_organization_id: string;
+          p_outcome: string;
+          p_provider_message_id?: string;
+        };
+        Returns: boolean;
       };
       settle_werkflow_billing_mail: {
         Args: {

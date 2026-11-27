@@ -15,7 +15,7 @@ import {
   invoiceLineSourceRefSchema,
   type InvoiceCatalogLine,
   type InvoiceLineSourceRef,
-  type OfferArticleLine,
+  type OfferCatalogLine,
 } from './line-sources';
 import { INVOICE_TAX_RATES, type InvoiceTaxRate } from './types';
 
@@ -24,11 +24,12 @@ import { INVOICE_TAX_RATES, type InvoiceTaxRate } from './types';
 // (Berlin) through the readers of E2a (readLeistungPrices) and E1
 // (readArticlePrices). The editor copies the answer into a new line, where
 // the office can still change every value before the save. An offer Position
-// from an article takes the same rule (readOfferArticleLine), so offers and
-// invoices price an article alike.
+// from an article or a Leistung takes the same rule (readOfferArticleLine,
+// readOfferLeistungLine), so offers and invoices price an entry alike; only
+// the offer's answer adds the entry's cost, for the office's calculation.
 
 type CatalogLineResult = ActionResult<{ line: InvoiceCatalogLine }>;
-type OfferArticleLineResult = ActionResult<{ line: OfferArticleLine }>;
+type OfferCatalogLineResult = ActionResult<{ line: OfferCatalogLine }>;
 /** A unit outside the list: an invoice refuses the entry, an offer asks the office for a unit. */
 type UnitOutsideList = 'refuse' | 'ask';
 
@@ -37,9 +38,12 @@ const NAME_MAX = 200;
 const DESCRIPTION_MAX = 2000;
 
 type SourceFacts = { number: string | null; name: string; description: string; archived: boolean };
+type SourceAmount = { amountCents: number; priceQuantity: PriceQuantity };
 type SourcePrice = {
   unit: InventoryUnitCode | null;
-  salePrice: { amountCents: number; priceQuantity: PriceQuantity } | null;
+  salePrice: SourceAmount | null;
+  /** An article's purchase price or a Leistung's cost rate on the day. */
+  cost: SourceAmount | null;
   taxRateBasisPoints: number;
 };
 
@@ -53,7 +57,7 @@ function catalogLine(
   facts: SourceFacts,
   price: SourcePrice,
   unitOutsideList: UnitOutsideList,
-): OfferArticleLineResult {
+): OfferCatalogLineResult {
   if (facts.archived) return { success: false, error: 'source_archived' };
   if (!price.salePrice) return { success: false, error: 'source_unpriced' };
   if (!price.unit && unitOutsideList === 'refuse') return { success: false, error: 'source_unit_unknown' };
@@ -69,6 +73,7 @@ function catalogLine(
       priceQuantity: price.salePrice.priceQuantity,
       taxRateBasisPoints,
       source: { ...ref, number: facts.number, name: facts.name, archived: facts.archived },
+      cost: price.cost && { amountCents: price.cost.amountCents, priceQuantity: price.cost.priceQuantity },
     },
   };
 }
@@ -114,11 +119,13 @@ async function sourcePrice(ref: InvoiceLineSourceRef, today: string): Promise<So
   if (ref.kind === 'leistung') {
     const read = await readLeistungPrices([ref.id], today);
     if (!read.success) return 'failed';
-    return read.prices.find((price) => price.leistungId === ref.id) ?? null;
+    const price = read.prices.find((entry) => entry.leistungId === ref.id);
+    return price ? { ...price, cost: price.costRate } : null;
   }
   const read = await readArticlePrices([ref.id], today);
   if (!read.success) return 'failed';
-  return read.prices.find((price) => price.articleId === ref.id) ?? null;
+  const price = read.prices.find((entry) => entry.articleId === ref.id);
+  return price ? { ...price, cost: price.purchaseCost } : null;
 }
 
 /** A new line from the source on today's Berlin date, for Admin and Büro of its organization. */
@@ -126,7 +133,7 @@ async function readCatalogLine(
   ref: InvoiceLineSourceRef,
   unitOutsideList: UnitOutsideList,
   action: string,
-): Promise<OfferArticleLineResult> {
+): Promise<OfferCatalogLineResult> {
   try {
     const caller = await resolveActionContext();
     if (!caller.success) return caller;
@@ -159,19 +166,39 @@ export async function readInvoiceLineSource(rawInput: InvoiceLineSourceRef): Pro
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const read = await readCatalogLine(parsed.data, 'refuse', 'readInvoiceLineSource');
   if (!read.success) return read;
-  const { unit, ...line } = read.line;
-  return unit ? { success: true, line: { ...line, unit } } : { success: false, error: 'source_unit_unknown' };
+  // An invoice line takes no cost: the answer stays as before offers kept one.
+  const { unit, name, description, unitPriceCents, priceQuantity, taxRateBasisPoints, source } = read.line;
+  return unit
+    ? {
+        success: true,
+        line: { name, description, unit, unitPriceCents, priceQuantity, taxRateBasisPoints, source },
+      }
+    : { success: false, error: 'source_unit_unknown' };
 }
 
 /**
  * A new offer Position from an article of the caller's organization, by the
  * rule of an invoice line and priced on today's Berlin date, the date a draft
- * offer carries. Admin and Büro only. Unlike an invoice line, an article
- * whose stored unit is outside the list answers with `unit: null`: the offer
- * editor asks the office for a unit before it saves.
+ * offer carries, with the article's purchase cost of that day. Admin and Büro
+ * only. Unlike an invoice line, an article whose stored unit is outside the
+ * list answers with `unit: null`: the offer editor asks the office for a unit
+ * before it saves.
  */
-export async function readOfferArticleLine(rawInput: { articleId: string }): Promise<OfferArticleLineResult> {
+export async function readOfferArticleLine(rawInput: { articleId: string }): Promise<OfferCatalogLineResult> {
   const parsed = z.object({ articleId: uuidSchema }).safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   return readCatalogLine({ kind: 'article', id: parsed.data.articleId }, 'ask', 'readOfferArticleLine');
+}
+
+/**
+ * A new offer Position from a Leistung of the caller's organization, as
+ * readOfferArticleLine reads an article, with the cost rate of the price
+ * version that applies today.
+ */
+export async function readOfferLeistungLine(rawInput: {
+  leistungId: string;
+}): Promise<OfferCatalogLineResult> {
+  const parsed = z.object({ leistungId: uuidSchema }).safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  return readCatalogLine({ kind: 'leistung', id: parsed.data.leistungId }, 'ask', 'readOfferLeistungLine');
 }

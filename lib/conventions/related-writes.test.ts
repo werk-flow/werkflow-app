@@ -38,6 +38,8 @@ const EMAIL_CHANGE_STATE_RECOVERY =
 
 // Reviewed actions, keyed `file::function`, with the reason their writes stay
 // separate by design. Shrink only; a stale entry fails the test.
+const DOCUMENT_MAIL_ORDER =
+  'Ordered around a mail: the rate-limit attempt persists when the send is refused; the delivery is recorded as sending in one transaction (request_document_delivery or retry_document_delivery) before the mail, and settle_document_delivery records the answer after it, because a mail cannot join a transaction.';
 const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
   'lib/time-tracking/clock-state-actions.ts::clockOutBeforeSignOut':
     'Independent by design: each organization’s open session is clocked out on its own, best effort before sign-out; one refusal must not keep the others running.',
@@ -47,6 +49,8 @@ const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
     'Independent housekeeping: the rate-limit attempt must persist when the join request is refused.',
   'lib/time-accounts/actions.ts::generatePayrollExport':
     'Documented recovery: the export is reserved, its file stored and the export finalized; a failed step marks the reservation failed, and recover_failed_payroll_exports resolves the rest.',
+  'lib/invoices/delivery-actions.ts::sendInvoiceEmail': DOCUMENT_MAIL_ORDER,
+  'lib/invoices/delivery-actions.ts::retryInvoiceDelivery': DOCUMENT_MAIL_ORDER,
   'lib/personnel/actions.ts::sendPersonnelInvite':
     'Ordered around a mail: the invite is written in one transaction before the mail, and the append-only „Einladung versendet“ history row only after the mail went out, because a mail cannot join a transaction.',
   'lib/invites/actions.ts::sendOrgInvite':

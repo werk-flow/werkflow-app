@@ -1,9 +1,11 @@
-// The owner's `approved: list growth` label reruns Fast, and with it Check, in the PR's own newest CI
-// run on its head (.github/workflows/list-growth.yml). Another PR on the same head has runs of its own.
+// The owner's growth labels, `approved: list growth` and `approved: context growth`, rerun Fast, and
+// with it Check, in the PR's own newest CI run on its head (.github/workflows/list-growth.yml).
+// Another PR on the same head has runs of its own.
 import { expect, test } from 'bun:test';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readWorkflow } from './ci-workflow';
+import { GROWTH_APPROVAL_LABELS } from './publication/shrink-only-lists';
 import { temporaryDirectory } from './temporary-directory';
 
 const listGrowth = readWorkflow('list-growth.yml');
@@ -50,4 +52,11 @@ test("the label reruns the PR's own newest run on its head, never another PR's",
   expect(result.output).toContain('Reran Fast and Check in CI run 10');
   expect(result.passed).toBe(true);
   expect(readFileSync(join(stub, 'gh.calls'), 'utf8')).toContain('run rerun 10 --job 77');
+});
+
+test('each of the owner’s growth labels reruns Fast, and so does no other label', () => {
+  const condition = listGrowth.text('jobs', 'rerun', 'if');
+  const named = [...condition.matchAll(/github\.event\.label\.name == '([^']+)'/g)].map((match) => match[1]);
+  expect(named.toSorted()).toEqual([...GROWTH_APPROVAL_LABELS].toSorted());
+  expect(listGrowth.text('concurrency', 'group')).toContain(condition.replace(/^\$\{\{\s*|\s*\}\}$/g, ''));
 });

@@ -1,9 +1,11 @@
 import { PRICE_QUANTITIES } from '@/lib/inventory/article-price-terms';
 import { isInventoryUnitCode } from '@/lib/inventory/units';
+import { invoiceLineSourceRefSchema, invoiceLineSourceSchema } from '@/lib/invoices/line-sources';
 import { INVOICE_TAX_RATES } from '@/lib/invoices/types';
 import { MAX_PRICE_CENTS } from '@/lib/price-catalog/money';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
+import { MAX_COST_CENTS } from './calculation';
 import { contentFitsOneSave, OFFER_CONTENT_LIMITS } from './content-form';
 import { OFFER_CHANNELS } from './types';
 
@@ -47,8 +49,11 @@ const positionTextSchema = {
   description: z.string().trim().max(4000),
 };
 
-/** The article a Position was taken from, inside the caller's organization (the save checks). */
-const articleRefSchema = z.object({ kind: z.literal('article'), id: uuidSchema });
+/** A Position's net cost per price quantity (OfferPositionCost), as the cost store keeps any article price. */
+export const positionCostSchema = z.object({
+  amountCents: z.number().int().min(0).max(MAX_COST_CENTS),
+  priceQuantity: z.literal(PRICE_QUANTITIES),
+});
 
 /** A priced position, with the limits of an invoice line; a negative quantity credits. */
 const freePositionSchema = z.object({
@@ -59,8 +64,13 @@ const freePositionSchema = z.object({
   unitPriceCents: z.number().int().min(0).max(MAX_PRICE_CENTS),
   priceQuantity: z.literal(PRICE_QUANTITIES),
   taxRateBasisPoints: z.literal(INVOICE_TAX_RATES),
-  /** Null for a position typed by hand. */
-  source: articleRefSchema.nullable().default(null),
+  /** The article or Leistung it was taken from, inside the caller's organization (the save checks); null for one typed by hand. */
+  source: invoiceLineSourceRefSchema.nullable().default(null),
+  /**
+   * Office-only; null while the office knows none. Required: a payload without
+   * the key, from a tab older than stored costs, would otherwise clear them.
+   */
+  cost: positionCostSchema.nullable(),
 });
 
 const textPositionSchema = z.object({ kind: z.literal('text'), ...positionTextSchema });
@@ -73,15 +83,11 @@ const offerSectionSchema = z.object({
     .max(OFFER_CONTENT_LIMITS.positionsPerSection),
 });
 
-/** A Titel as `get_offer` answers it: each Position's article with its number, name and archive state. */
+/** A Titel as `get_offer` answers it: each Position's article or Leistung with its number, name and archive state, and no cost. */
 export const storedSectionSchema = offerSectionSchema.extend({
   positions: z.array(
     z.discriminatedUnion('kind', [
-      freePositionSchema.extend({
-        source: articleRefSchema
-          .extend({ number: z.string().nullable(), name: z.string(), archived: z.boolean() })
-          .nullable(),
-      }),
+      freePositionSchema.omit({ cost: true }).extend({ source: invoiceLineSourceSchema.nullable() }),
       textPositionSchema,
     ]),
   ),

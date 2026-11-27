@@ -202,12 +202,12 @@ const forms = {
     form({ employeeRecordId, policyId, validFrom: '2026-11-01', reason: 'Teilzeitregel' }),
   correctOpening: (accountId: string) =>
     form({ accountId, openedOn: '2026-08-01', reason: 'Falsches Eröffnungsdatum' }),
-  adjust: (accountId: string) =>
+  adjust: (accountId: string, hours = '+1:00') =>
     form({
       accountId,
       expectedVersion: '1',
       adjustmentKind: 'manual_adjustment',
-      minutes: '60',
+      hours,
       effectiveDate: '2026-11-01',
       reason: 'Nachtrag',
     }),
@@ -388,7 +388,26 @@ assert.deepEqual(await openTimeAccounts({ ...openings([ownRecordId, '0:00']), op
   success: false,
   error: 'opening_date_too_old',
 });
-assert.equal(world.rpcCalls.length, 0, 'a refused balance, date or code reached the database');
+// An adjustment takes „±HH:MM“ like the opening balance: plain minutes are refused before any call.
+for (const hours of ['60', '750', '1:75', '12.5', '']) {
+  assert.deepEqual(
+    await submitTimeAccountAdjustment(forms.adjust(foreignAccountId, hours)),
+    { success: false, error: 'invalid_hours' },
+    `the adjustment hours „${hours}“ were not refused`,
+  );
+}
+assert.deepEqual(await submitTimeAccountAdjustment(forms.adjust(foreignAccountId, '+0:00')), {
+  success: false,
+  error: 'invalid_adjustment',
+});
+assert.equal(world.rpcCalls.length, 0, 'a refused balance, date, code or adjustment reached the database');
+// A valid „±HH:MM“ reaches the function as signed minutes.
+await submitTimeAccountAdjustment(forms.adjust(foreignAccountId, '−12:30 Std.'));
+assert.deepEqual(
+  world.rpcCalls.map((call) => [call.name, call.args.p_minutes]),
+  [['submit_time_account_adjustment', -750]],
+);
+world.rpcCalls.length = 0;
 assert.deepEqual(await openTimeAccounts(openings([ownRecordId, '+12:30'], [colleagueRecordId, '-3:15'])), {
   success: true,
 });

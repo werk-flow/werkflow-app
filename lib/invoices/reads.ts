@@ -11,6 +11,7 @@ import { issueSnapshotSchema, type IssueSnapshot } from './issue-model';
 import { invoiceLineSourceSchema } from './line-sources';
 import type { InvoiceListQuery, InvoicePage } from './list-page';
 import {
+  INVOICE_CHAIN_KINDS,
   INVOICE_STATUSES,
   INVOICE_TAX_RATES,
   INVOICE_WORK_LABELS,
@@ -36,6 +37,9 @@ const invoicePageSchema = z.object({
         recipientName: z.string().nullable(),
         grossCents: z.number().int(),
         updatedAt: z.string(),
+        refersTo: z
+          .object({ kind: z.enum(['storno', 'korrektur']), invoiceNumber: z.string().nullable() })
+          .nullable(),
       }),
     )
     .max(LIST_PAGE_SIZE),
@@ -93,6 +97,19 @@ const invoiceSchema = z.object({
   issueDate: z.iso.date().nullable(),
   issueSnapshot: z.unknown(),
   original: z.object({ documentId: uuidSchema, filed: z.boolean() }).nullable(),
+  cancels: z.object({ id: uuidSchema, invoiceNumber: z.string(), issueDate: z.iso.date() }).nullable(),
+  cancellationReason: z.string().nullable(),
+  chain: z
+    .array(
+      z.object({
+        id: uuidSchema,
+        invoiceNumber: z.string().nullable(),
+        status: z.string(),
+        kind: z.enum(INVOICE_CHAIN_KINDS),
+        issueDate: z.iso.date().nullable(),
+      }),
+    )
+    .min(1),
   client: z.object({ id: uuidSchema, name: z.string() }),
   recipient: z.object({ id: uuidSchema, name: z.string(), address: z.string().nullable() }),
   work: z
@@ -141,7 +158,7 @@ export async function readIssuedInvoice(
   if (selected.data === null) return null;
   const parsed = invoiceWithLineSourcesSchema.safeParse(selected.data);
   if (!parsed.success) throw new Error('invoice_read_failed');
-  const { work, issueSnapshot, ...invoice } = parsed.data;
+  const { work, issueSnapshot, chain, ...invoice } = parsed.data;
   let issue: IssueFacts | null = null;
   if (invoice.invoiceNumber !== null && invoice.issueDate !== null) {
     const snapshot = issueSnapshotSchema.safeParse(issueSnapshot);
@@ -152,6 +169,10 @@ export async function readIssuedInvoice(
     ...invoice,
     issue,
     status: constrainedValue(INVOICE_STATUSES, invoice.status, 'invoices.status'),
+    chain: chain.map((entry) => ({
+      ...entry,
+      status: constrainedValue(INVOICE_STATUSES, entry.status, 'invoices.status'),
+    })),
     work: work
       ? {
           kind: work.kind,

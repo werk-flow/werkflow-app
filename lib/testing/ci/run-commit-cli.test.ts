@@ -176,6 +176,8 @@ test('the scheduler never names a held run its run-commit holds; that run starts
     const answer = spawnSync(
       process.execPath,
       [
+        '--preload',
+        join(repository, 'lib/testing/fixtures/fixed-clock.ts'),
         join(repository, 'scripts/ci/schedule.ts'),
         'due',
         '--state',

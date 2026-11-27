@@ -4,7 +4,7 @@
 
 ## How to work
 
-Write each test at its boundary while you build the behavior.
+Write each test at its boundary while building the behavior.
 
 ### Choose the boundary for a rule
 
@@ -59,7 +59,7 @@ It needs a reachable thread. After your turn, one wake reports every unreported 
 
 ### Grow a shrink-only list
 
-CI refuses a new entry or a raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/testing/publication/shrink-only-lists.ts`). Fix the code. When an exception is right, open a PR naming the added entries and ask the owner for the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. Changing it reruns Fast (`list-growth.yml`); if that fails, push a commit.
+CI refuses a new entry or raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/testing/publication/shrink-only-lists.ts`). Fix the code. For a right exception, open a PR naming added entries and ask the owner for `approved: list growth` (agent context budget: `approved: context growth`). Never add one yourself: it waives the whole PR's growth. Changing one reruns Fast (`list-growth.yml`); if that fails, push a commit.
 
 ## When a proof is valid
 
@@ -105,7 +105,7 @@ After a failed release run, pass every failed group with `--group` before the ne
 - **Caps.** Target 9,000 job-minutes daily; `lib/testing/ci-caps.test.ts` checks PR cancelling, `max-parallel`, nightly skips, timeouts.
 - **Stand-in.** `scripts/ci/run-commit.ts` runs a commit (mirror: `CI_EXECUTOR=mirror`), `scripts/ci/queue.ts` the queue.
 - **Queue.** `health.yml`'s weekly `CI queue` job fails on a p90 runner wait over its ceiling (`.github/scripts/ci-queue.sh`).
-- **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
+- **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks. [Staging journeys](../../.claude/skills/staging-journey/SKILL.md) gate nothing.
 - **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`.
 
 ## Commands
@@ -204,7 +204,7 @@ Check these before classifying.
 - **Unstable order.** A list ordered by random UUID reorders between runs.
 - **Long tokens at 375 px.** An email address or generated token is one unbreakable word.
 - **Fixture race.** Read-then-insert fixtures race under two workers.
-- **Slow machine.** When every measured scenario slows at once, first replay `HEAD` there.
+- **Slow machine.** When every measured scenario slows, first replay `HEAD` there.
 
 ## Never
 

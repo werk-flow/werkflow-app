@@ -1,9 +1,9 @@
 name: List growth
 
-# Reruns the head commit's Fast job, and with it Check, when the owner adds or removes the label
-# `approved: list growth` (docs/technical/testing.md, "Grow a shrink-only list"). ci.yml starts
-# no run on a label event, and its Fast job reads the label at run time. Every other label skips
-# this job, so it never touches CI.
+# Reruns the head commit's Fast job, and with it Check, when the owner adds or removes a growth
+# label, `approved: list growth` or `approved: context growth` (docs/technical/testing.md, "Grow a
+# shrink-only list"). ci.yml starts no run on a label event, and its Fast job reads the labels at
+# run time. Every other label skips this job, so it never touches CI.
 on:
   # Any base, as ci.yml: a stacked PR's run reads the label too.
   pull_request:
@@ -11,16 +11,16 @@ on:
 
 permissions: {}
 
-# The newest change of this label wins and still waits for a rerun an older one started. Other
+# The newest change of a growth label wins and still waits for a rerun an older one started. Other
 # labels take their own group, so a queue relabel never cancels a waiting rerun.
 concurrency:
-  group: "list-growth-${{ github.event.pull_request.number }}-${{ github.event.label.name == 'approved: list growth' }}"
+  group: "list-growth-${{ github.event.pull_request.number }}-${{ github.event.label.name == 'approved: list growth' || github.event.label.name == 'approved: context growth' }}"
   cancel-in-progress: true
 
 jobs:
   rerun:
     name: Rerun Fast
-    if: "github.event.label.name == 'approved: list growth'"
+    if: "github.event.label.name == 'approved: list growth' || github.event.label.name == 'approved: context growth'"
     runs-on: ubuntu-24.04
     # A CI run in progress can take its own 45 min browser timeout after a runner queue.
     timeout-minutes: 90

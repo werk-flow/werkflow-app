@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { compareMigrationVersions, migrationVersionFromFileName } from './migration-history';
 import { LEDGER_QUERY, ledgerRowsSchema } from '../../security/production-inspection';
-import { requireEnv } from '../../../tests/golden/support/env';
+import { queryDevReadOnly } from '../../security/dev-management-api';
 
 const DEV_PROJECT_REF = 'mbkkzuqjbdvzelqvuzcn';
 
@@ -36,19 +36,9 @@ export function committedMigrationVersions(repositoryRoot = process.cwd()): stri
 }
 
 async function remoteDevMigrationVersions(): Promise<string[]> {
-  const response = await fetch(`https://api.supabase.com/v1/projects/${DEV_PROJECT_REF}/database/query`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${requireEnv('SUPABASE_ACCESS_TOKEN')}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query: LEDGER_QUERY }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (response.status !== 201) {
-    throw new Error(`DEV migration-history query returned HTTP ${response.status}.`);
-  }
-  return ledgerRowsSchema.parse(await response.json()).map((row) => row.version);
+  return ledgerRowsSchema
+    .parse(await queryDevReadOnly('migration-history', LEDGER_QUERY))
+    .map((row) => row.version);
 }
 
 export async function getDevMigrationHistoryProblems(repositoryRoot = process.cwd()): Promise<string[]> {

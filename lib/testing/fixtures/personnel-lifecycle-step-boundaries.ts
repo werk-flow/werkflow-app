@@ -3,8 +3,11 @@
 // before the database function, as is a stale version, a failed state read,
 // Büro, and an Admin's call for another organization's record. A step that
 // fits reaches the function. lib/personnel/lifecycle-steps.test.ts owns the
-// per-state rules; this proves the server holds to them.
+// per-state rules; this proves the server holds to them. An identical retry
+// sends the same request hash although the person's open work changed.
 import assert from 'node:assert/strict';
+import { mock } from 'bun:test';
+import type { OpenWorkJob } from '@/lib/personnel/open-work';
 import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
 
 const memberRecordId = '84000000-0000-4000-8000-000000000001';
@@ -94,6 +97,10 @@ world.rpc = ({ name }) =>
   name === 'set_personnel_access_transition' || name === 'set_personnel_employment_transition'
     ? { data: lifecycleId, error: null }
     : { data: [], error: null };
+
+// The open work a transition records; a step below changes it between a transition and its retry.
+let openWork: OpenWorkJob[] = [];
+mock.module('@/lib/personnel/open-work-reads', () => ({ readOpenWork: async () => openWork }));
 
 const { setPersonnelAccessTransition, setPersonnelEmploymentTransition } = await import(
   '@/lib/personnel/lifecycle-actions'
@@ -247,3 +254,36 @@ assert.deepEqual(transitionCalls(), [
 for (const call of world.rpcCalls.filter((entry) => entry.name.startsWith('set_personnel_'))) {
   assert.equal(call.args.p_organization_id, ORGANIZATION_A);
 }
+
+// An identical retry hashes only the caller's request (werk-flow/werkflow-planning#352): the leaver's
+// open work changed since the first call, and the function still answers with the stored result
+// instead of operation_id_conflict. The inventory stays a recorded fact of the first write.
+const recordedExit = {
+  employeeRecordId: exitedRecordId,
+  expectedVersion: 3,
+  transitionKind: 'exit',
+  effectiveOn: '2026-10-31',
+  reason: 'Schritt erfassen',
+  operationId: recordedEmploymentOperationId,
+};
+const employmentCalls = () =>
+  world.rpcCalls.filter((call) => call.name === 'set_personnel_employment_transition');
+openWork = [];
+await setPersonnelEmploymentTransition(recordedExit);
+openWork = [
+  { jobId: '84000000-0000-4000-8000-000000000051', label: 'A-1 · Heizung', parked: false, visits: [] },
+];
+await setPersonnelEmploymentTransition(recordedExit);
+await setPersonnelEmploymentTransition({ ...recordedExit, effectiveOn: '2026-10-30' });
+const [first, retry, changed] = employmentCalls().slice(-3);
+assert.notDeepEqual(retry?.args.p_unresolved_work, first?.args.p_unresolved_work, 'the open work changed');
+assert.equal(
+  retry?.args.p_request_hash,
+  first?.args.p_request_hash,
+  'an identical retry sends the same hash',
+);
+assert.notEqual(
+  changed?.args.p_request_hash,
+  first?.args.p_request_hash,
+  'a changed request sends another hash',
+);

@@ -11,9 +11,18 @@ import { type CiResult, resultFileName } from '../ci/results';
 export const repository = resolve(import.meta.dir, '../../..');
 export const RUN_URL = 'https://ci.example/runs/2';
 
-/** Runs `job` of scripts/ci/job.ts in `root` with only the variables given, and the path to find bun and git. */
-export function runJob(root: string, job: string, variables: Record<string, string>): number | null {
-  return spawnSync(process.execPath, ['scripts/ci/job.ts', job], {
+/**
+ * Runs `job` of scripts/ci/job.ts in `root` with only the variables given, and the path to find bun and
+ * git. `fixedClock` starts it on lib/testing/fixtures/fixed-clock.ts, for a job that decides by the time.
+ */
+export function runJob(
+  root: string,
+  job: string,
+  variables: Record<string, string>,
+  { fixedClock = false } = {},
+): number | null {
+  const preload = fixedClock ? ['--preload', join(repository, 'lib/testing/fixtures/fixed-clock.ts')] : [];
+  return spawnSync(process.execPath, [...preload, 'scripts/ci/job.ts', job], {
     cwd: root,
     env: { NODE_ENV: 'test', PATH: process.env.PATH, HOME: process.env.HOME, ...variables },
     encoding: 'utf8',

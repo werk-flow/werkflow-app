@@ -31,6 +31,8 @@ export function lifecycleFailureCode(error: { code?: string; message?: string } 
     'future_effective_at_required',
     'immediate_effective_at_required',
     'future_effective_date_required',
+    'immediate_effective_date_required',
+    'withdrawal_dates_conflict',
     'no_scheduled_transition',
     'access_requirements_incomplete',
     'document_not_released',

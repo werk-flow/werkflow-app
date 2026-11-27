@@ -112,3 +112,26 @@ function employeeSetupGapOrder(causes: readonly UncomputedResultCause[]): Uncomp
     hasAccount: !causes.includes('missing_opening_balance'),
   });
 }
+
+/**
+ * One person's outcome of each calculation, keyed by calculation id: the
+ * person's own Zeitkonto lists their months with the rule of the period page.
+ * A finding counts only for its own calculation.
+ */
+export function toPeriodOutcomesByCalculation(
+  results: ReadonlyArray<StoredResult & Pick<Tables<'time_period_employee_results'>, 'calculation_id'>>,
+  findings: ReadonlyArray<StoredFinding & Pick<Tables<'time_period_findings'>, 'calculation_id'>>,
+): Map<string, PeriodResultRow['outcome']> {
+  const findingsByCalculation = Map.groupBy(findings, (finding) => finding.calculation_id);
+  const outcomes = new Map<string, PeriodResultRow['outcome']>();
+  for (const result of results) {
+    const [row] = toPeriodResultRows(
+      [result],
+      findingsByCalculation.get(result.calculation_id) ?? [],
+      new Map(),
+      new Map(),
+    );
+    if (row) outcomes.set(result.calculation_id, row.outcome);
+  }
+  return outcomes;
+}

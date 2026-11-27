@@ -81,7 +81,7 @@ const pull: QueuedPull = {
   queuedAt: '2026-11-21T08:00:00Z',
   check: 'SUCCESS',
   mergeState: 'BLOCKED',
-  listGrowthApproved: false,
+  growthApprovals: [],
 };
 
 /**

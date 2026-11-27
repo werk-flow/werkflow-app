@@ -73,7 +73,8 @@ const submitTimeAccountAdjustmentFormSchema = z.object({
   accountId: id,
   expectedVersion: text(12),
   adjustmentKind: text(40),
-  minutes: text(12),
+  // „±HH:MM“ as typed (`balance-input.ts`).
+  hours: text(20),
   effectiveDate: text(10),
   reason: text(2000),
 });
@@ -350,13 +351,13 @@ export async function submitTimeAccountAdjustment(
   const expectedVersion = parseStrictInteger(formData.get('expectedVersion'));
   const adjustmentKind = String(formData.get('adjustmentKind') ?? '');
   const parsedAdjustmentKind = adjustmentKindSchema.safeParse(adjustmentKind);
-  const minutes = parseStrictInteger(formData.get('minutes'));
+  const minutes = parseSignedHoursMinutes(String(formData.get('hours') ?? ''));
   const effectiveDate = String(formData.get('effectiveDate') ?? '');
   const reason = String(formData.get('reason') ?? '');
+  if (minutes === null) return { success: false, error: 'invalid_hours' };
   if (
     !accountId ||
     expectedVersion === null ||
-    minutes === null ||
     minutes === 0 ||
     !parsedAdjustmentKind.success ||
     !isValidIsoDate(effectiveDate) ||
@@ -558,15 +559,18 @@ export async function reopenTimePeriod(formInput: FormData): Promise<TimeAccount
  * every export keeps the version it was built from. A table read from a
  * version that is no longer current is refused as stale.
  */
-export async function savePayrollMapping(input: unknown): Promise<TimeAccountActionResult<'createMapping'>> {
+export async function savePayrollMapping(
+  input: unknown,
+): Promise<TimeAccountActionResult<'createMapping', { version: number }>> {
   const parsed = savePayrollMappingInputSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const context = await requireAuth();
   if (context.role !== 'admin') return { success: false, error: 'forbidden' };
   const codeMappings = toPayrollCodeMappings(parsed.data.codes);
   if (!codeMappings) return { success: false, error: 'invalid_code' };
+  let version: number;
   try {
-    await savePayrollMappingVersion(
+    version = await savePayrollMappingVersion(
       createSupabaseAdminClient(),
       context,
       codeMappings,
@@ -580,7 +584,7 @@ export async function savePayrollMapping(input: unknown): Promise<TimeAccountAct
   }
   revalidatePath('/zeiterfassung/einstellungen');
   revalidatePath('/einstellungen/zeiterfassung');
-  return { success: true };
+  return { success: true, version };
 }
 
 // Stores the package, records its document, and finalizes the export; any

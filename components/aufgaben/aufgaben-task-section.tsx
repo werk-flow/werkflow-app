@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import {
   AlarmClock,
   CalendarClock,
+  CalendarCog,
   CalendarX,
   ClipboardCheck,
   PhoneCall,
@@ -56,6 +57,13 @@ export const SECTION_PRESENTATION: Record<
     icon: <AlarmClock className="size-4" />,
     title: 'Überfällige Aufträge',
     testId: 'attention-overdue-job-tasks',
+    previewRows: BACKLOG_PREVIEW_ROWS,
+  },
+  dueMaintenance: {
+    // Not the shell's Wrench: sharing it with these routes splits a shell chunk (lab.office.cold-start).
+    icon: <CalendarCog className="size-4" />,
+    title: 'Fällige Wartungen',
+    testId: 'attention-due-maintenance-tasks',
     previewRows: BACKLOG_PREVIEW_ROWS,
   },
   request: {

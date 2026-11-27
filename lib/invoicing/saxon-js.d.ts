@@ -1,5 +1,5 @@
 // The part of SaxonJS 2 (`saxon-js`, no bundled types) that check-en16931.ts
-// calls. Results are unknown and parsed at the call site.
+// and lib/testing/staging/original.ts call. Results are unknown and parsed at the call site.
 declare module 'saxon-js' {
   type SaxonJS = {
     transform(
@@ -10,7 +10,7 @@ declare module 'saxon-js' {
       evaluate(
         expression: string,
         contextItem: unknown,
-        options: { namespaceContext: Record<string, string> },
+        options: { namespaceContext: Record<string, string>; params?: Record<string, string> },
       ): unknown;
     };
   };

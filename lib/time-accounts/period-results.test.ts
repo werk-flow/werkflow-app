@@ -1,7 +1,7 @@
 // Rule test: not computed is not zero, and the Monatswerte keep one order (werk-flow/werkflow-planning#47, #89).
 import { describe, expect, test } from 'bun:test';
 
-import { employeeSetupGaps, toPeriodResultRows } from './period-results';
+import { employeeSetupGaps, toPeriodOutcomesByCalculation, toPeriodResultRows } from './period-results';
 
 const ANNA = 'a0000000-0000-4000-8000-000000000001';
 const BERND = 'b0000000-0000-4000-8000-000000000002';
@@ -72,5 +72,41 @@ describe('toPeriodResultRows', () => {
     const expected = [ANNA, BERND, BERND_TWIN];
     expect(order([stored(BERND_TWIN, 1), stored(BERND, 1), stored(ANNA, 1)])).toEqual(expected);
     expect(order([stored(BERND, 1), stored(ANNA, 1), stored(BERND_TWIN, 1)])).toEqual(expected);
+  });
+});
+
+describe("toPeriodOutcomesByCalculation: one person's months on the Zeitkonto page", () => {
+  const PREPARED = 'c0000000-0000-4000-8000-000000000001';
+  const CLOSED = 'c0000000-0000-4000-8000-000000000002';
+
+  test('a month prepared before the account opened shows no minutes, a calculated month shows its own', () => {
+    // The person's account was opened after the prepared month: the preparation
+    // stored placeholder zeros and a missing_opening_balance finding.
+    const outcomes = toPeriodOutcomesByCalculation(
+      [
+        { ...stored(ANNA, 0), calculation_id: PREPARED },
+        { ...stored(ANNA, 9_600), calculation_id: CLOSED },
+      ],
+      [
+        { employee_record_id: ANNA, finding_kind: 'missing_opening_balance', calculation_id: PREPARED },
+        { employee_record_id: ANNA, finding_kind: 'positive_overtime', calculation_id: CLOSED },
+      ],
+    );
+    expect(outcomes.get(PREPARED)).toEqual({ computed: false, causes: ['missing_opening_balance'] });
+    expect(outcomes.get(CLOSED)).toEqual({
+      computed: true,
+      targetMinutes: 9_600,
+      creditedMinutes: 9_600,
+      periodDeltaMinutes: 0,
+      closingBalanceMinutes: 9_600,
+    });
+  });
+
+  test('a gap of one month never marks another month', () => {
+    const outcomes = toPeriodOutcomesByCalculation(
+      [{ ...stored(ANNA, 480), calculation_id: CLOSED }],
+      [{ employee_record_id: ANNA, finding_kind: 'missing_policy', calculation_id: PREPARED }],
+    );
+    expect(outcomes.get(CLOSED)?.computed).toBe(true);
   });
 });

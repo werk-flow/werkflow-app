@@ -3,8 +3,8 @@
 // database, R2 and Resend. The ledger functions answer as the database does;
 // supabase/tests/werkflow_billing_mails.sql proves those. Each mail and each
 // alarm goes out once, a replayed signal or a second run sends nothing more,
-// every SEPA debit has a notice at least 2 days ahead or an alarm says it has
-// not, and no address or mail text reaches a log line.
+// every SEPA renewal has a notice 2 days ahead or an alarm, a first debit that
+// Checkout announced has none, and no address or mail text reaches a log line.
 import assert from 'node:assert/strict';
 import { mock, setSystemTime } from 'bun:test';
 import * as nextServer from 'next/server';
@@ -260,6 +260,7 @@ const invoiceDebit = (
   id,
   subscriptionId,
   renewsAt: NOW,
+  opensSubscription: false,
   status: 'open',
   amountPaidCents: 0,
   paidAt: null,
@@ -267,7 +268,8 @@ const invoiceDebit = (
   expectedDebitDate,
 });
 const invoiceDebits = {
-  in_test_first: invoiceDebit('in_test_first', dayIn(3)),
+  // The invoice Checkout opened the subscription with; Stripe debits it the same day, as in the sandbox.
+  in_test_first: { ...invoiceDebit('in_test_first', dayIn(0)), opensSubscription: true },
   in_test_sameday: invoiceDebit('in_test_sameday', dayIn(0)),
   in_test_pending: invoiceDebit('in_test_pending', null),
   in_test_quota: invoiceDebit('in_test_quota', dayIn(5)),
@@ -396,12 +398,13 @@ assert.equal(await deliver('invoice.upcoming', renewal('sub_test_card')), null);
 assert.equal(sent.length, beforeCard, 'a card renewal got a debit notice');
 assert.equal(await deliver('invoice.upcoming', renewal('sub_test_switch')), null);
 
-// The first invoice: its original issued, the mail goes once with the PDF and announces the debit.
+// The first invoice: the mail goes once with the PDF and names the debit, which Checkout announced.
 assert.equal(await deliver('invoice.finalized', { id: 'in_test_first' }), null);
 assert.equal(await deliver('invoice.finalized', { id: 'in_test_first' }), null);
 const invoiceMails = sent.filter((mail) => mail.subject === 'Deine WerkFlow-Rechnung MUSTER-first');
 assert.equal(invoiceMails.length, 1, 'the invoice mail did not go exactly once');
-assert.ok(invoiceMails[0]?.text.includes(dayIn(3).split('-').reverse().join('.')));
+assert.ok(invoiceMails[0]?.text.includes(dayIn(0).split('-').reverse().join('.')));
+assert.equal(alarms(LATE).length, 1, 'the first debit, announced in Checkout, raised the late-notice alarm');
 assert.deepEqual(invoiceMails[0]?.attachments, [
   {
     filename: 'WerkFlow-Rechnung-MUSTER-first.pdf',
@@ -409,7 +412,7 @@ assert.deepEqual(invoiceMails[0]?.attachments, [
     content_type: 'application/pdf',
   },
 ]);
-// A debit the same day as its only notice raises the alarm.
+// A renewal debited the same day as its only notice, the invoice mail, raises the alarm.
 assert.equal(await deliver('invoice.finalized', { id: 'in_test_sameday' }), null);
 assert.equal(alarms(LATE).length, 2);
 assert.ok(alarms(LATE).at(-1)?.text.includes('in_test_sameday'));
@@ -467,14 +470,15 @@ assert.equal(alarms(LATE).length, 6);
 assert.ok(alarms(LATE).at(-1)?.text.includes('in_test_switch'));
 setSystemTime(new Date(NOW * 1000));
 
-// The rule: every SEPA debit had a notice at least 2 days ahead, or an alarm for it went out.
+// The rule: every SEPA renewal had a notice at least 2 days ahead, or an alarm for it went out.
 const sentAt = (kind: string, id: string) =>
   mails().find((mail) => mail.kind === kind && mail.stripe_object_id === id && mail.state === 'sent')
     ?.sent_at;
-// The invoices of the alarm cases below are checked there, or after the comparison resends their alarms.
+// The alarm cases below are checked there or after the comparison resends them; a first debit above.
 for (const debit of Object.values(invoiceDebits)) {
   if (
     !debit.expectedDebitDate ||
+    debit.opensSubscription ||
     ['in_test_quota', 'in_test_alarmrefused', 'in_test_claimfail', 'in_test_lastslot'].includes(debit.id)
   )
     continue;

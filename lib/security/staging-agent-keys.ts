@@ -36,13 +36,19 @@ export const STAGING_AGENT_KEY_NAMES: readonly StagingAgentKeyName[] = [
 export type Verdict = 'ok' | 'failed' | 'missing';
 
 /**
- * Every value a file assigns to `name`, `export NAME=` included as Bun reads it: a loader may take
- * the first or the last, so each counts.
+ * Every value an env file assigns to `name`, `export NAME=` included as Bun reads it: a loader may
+ * take the first or the last, so each counts. A path that is no regular file assigns none; a file
+ * that cannot be stat'ed or read is `failed`, and the error, which may name the path, is dropped.
  */
-export function assignedValues(text: string, name: string): string[] {
-  return text
-    .split(/\r?\n/)
-    .flatMap((line) => parseEnvironmentFile(line.replace(/^\s*export\s+/, ''))[name] ?? []);
+export function envFileValues(path: string, name: string): string[] | 'failed' {
+  try {
+    if (!statSync(path, { throwIfNoEntry: false })?.isFile()) return [];
+    return readFileSync(path, 'utf8')
+      .split(/\r?\n/)
+      .flatMap((line) => parseEnvironmentFile(line.replace(/^\s*export\s+/, ''))[name] ?? []);
+  } catch {
+    return 'failed';
+  }
 }
 
 /** Whether a value has its key's shape: `missing` when empty or absent. */
@@ -156,12 +162,83 @@ export function devOnlyVerdict(devStatus: number, productionStatus: number): Ver
   return devStatus === 200 && [401, 403, 404].includes(productionStatus) ? 'ok' : 'failed';
 }
 
+/** The SQLSTATE in a query error's message, as Supabase spells it: `ERROR:  25006: cannot execute …`. */
+const SQLSTATE = /\bERROR:\s+([0-9A-Z]{5}):/;
+const queryErrorSchema = z.object({ message: z.string() });
+
+/** The SQLSTATE a Management API query error names, and nothing else of its body. */
+export function queryErrorSqlState(body: unknown): string | undefined {
+  const parsed = queryErrorSchema.safeParse(body);
+  return parsed.success ? SQLSTATE.exec(parsed.data.message)?.[1] : undefined;
+}
+
+/** A check's outcome: `ok`, or `failed` with the condition that failed. A reason never quotes a body. */
+export type Outcome = { verdict: 'ok' } | { verdict: 'failed'; reason: string };
+
+const failedOutcome = (reason: string): Outcome => ({ verdict: 'failed', reason });
+
+const readOnlyStateSchema = z.object({
+  enabled: z.unknown().optional(),
+  override_enabled: z.unknown().optional(),
+});
+
 /**
- * A write the token must be refused: only Supabase's permission denial (403) proves it. A refused
- * sign-in (401), a write that ran, or any other answer fails.
+ * Whether DEV is out of Supabase's read-only mode, from `GET /v1/projects/{ref}/readonly`: only 200
+ * with `enabled: false` and `override_enabled: false` proves it. Any other answer fails, and its
+ * reason names the status or the field, never a value of another field.
  */
-export function writeRefusedVerdict(status: number): Verdict {
-  return status === 403 ? 'ok' : 'failed';
+export function readOnlyModeOffOutcome(status: number, body: unknown): Outcome {
+  if (status !== 200) return failedOutcome(`DEV's read-only state answered ${status}, not 200`);
+  const parsed = readOnlyStateSchema.safeParse(body);
+  if (!parsed.success) return failedOutcome("DEV's read-only state is no JSON object");
+  for (const field of ['enabled', 'override_enabled'] as const) {
+    const value = parsed.data[field];
+    if (value !== false)
+      return failedOutcome(
+        `DEV's read-only state has ${field} ${value === true ? 'true' : 'missing or not a boolean'}`,
+      );
+  }
+  return { verdict: 'ok' };
+}
+
+/**
+ * A write the token must be refused. Supabase denies a token without Database write either with 403,
+ * or by running its query in a read-only transaction, which answers 400 with SQLSTATE 25006
+ * (`read_only_sql_transaction`). DEV's own read-only mode answers 25006 to any token, so 25006 passes
+ * only while the same token reads that mode as off (`readOnlyModeOffOutcome`) both before and after
+ * the write: one read beside the write could miss the mode ending in between. A refused sign-in
+ * (401), a write that ran, another query error, or any other answer fails.
+ */
+export function writeRefusedOutcome(
+  status: number,
+  sqlState: string | undefined,
+  readOnlyModeOff: { before: Outcome; after: Outcome },
+): Outcome {
+  if (status === 403) return { verdict: 'ok' };
+  if (status === 400 && sqlState === '25006') {
+    for (const when of ['before', 'after'] as const) {
+      const observed = readOnlyModeOff[when];
+      if (observed.verdict === 'failed')
+        return failedOutcome(`a read-only transaction refused the write, but ${when} it ${observed.reason}`);
+    }
+    return { verdict: 'ok' };
+  }
+  const answer = sqlState === undefined ? `${status}` : `${status} with SQLSTATE ${sqlState}`;
+  return failedOutcome(`the write answered ${answer}, not 403 or 400 with SQLSTATE 25006`);
+}
+
+/**
+ * The token a DEV Management API script sends: `SUPABASE_ACCESS_TOKEN` where the environment sets
+ * it (CI, an older `.env.local`), else the machine's agent token from the key file, so no
+ * workstation keeps a token in `.env.local`. Undefined when neither holds one.
+ */
+export function devAccessToken(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  home = homedir(),
+): string | undefined {
+  if (env.SUPABASE_ACCESS_TOKEN) return env.SUPABASE_ACCESS_TOKEN;
+  const keys = readStagingAgentKeys(home);
+  return keys.file === 'present' ? keys.values.get('SUPABASE_DEV_ACCESS_TOKEN') : undefined;
 }
 
 const livemodeSchema = z.object({ livemode: z.boolean() });

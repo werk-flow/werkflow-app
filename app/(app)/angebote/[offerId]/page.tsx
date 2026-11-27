@@ -15,7 +15,7 @@ import { RouteRedirect } from '@/components/shared/route-redirect';
 import { SubpageHeader } from '@/components/shared/subpage-header';
 import { logError } from '@/lib/logging';
 import { getManagerAssigneeOptions } from '@/lib/members/profile-name';
-import { readOffer, readOfferRevisions } from '@/lib/offers/reads';
+import { readOfferRevisions, readOfferWithCosts } from '@/lib/offers/reads';
 import { resolvePageMembership } from '@/lib/org/page-context';
 import { isManagerRole } from '@/lib/roles';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -28,7 +28,7 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
   const offerId = uuidSchema.safeParse((await params).offerId);
   const offer = !offerId.success
     ? null
-    : await readOffer(membership.orgId, offerId.data).catch((error: unknown) => {
+    : await readOfferWithCosts(membership.orgId, offerId.data).catch((error: unknown) => {
         logError('angebot.read_failed', error);
         return 'failed' as const;
       });

@@ -35,7 +35,7 @@ test('a batch takes at most four queued PRs by queue place; drafts, unqueued, un
 });
 
 test('a PR with list-growth approval runs alone, so no batch borrows its waiver for another PR', () => {
-  const approved = { listGrowthApproved: true };
+  const approved = { growthApprovals: ['approved: list growth'] };
   const numbers = (pulls: QueuedPull[]) => pickBatch(pulls, { maxBatch: 4 }).map((entry) => entry.number);
   expect(numbers([pull(1), pull(2), pull(3, approved), pull(4)])).toEqual([1, 2]);
   expect(numbers([pull(1, approved), pull(2), pull(3)])).toEqual([1]);
@@ -194,9 +194,16 @@ test('a PR that went back to draft or left the queue is superseded; one that was
   expect(supersession(pull(2), now)).toBe('#2 left the queue');
   expect(supersession(pull(3, { queuedAt: null }), now)).toBe(undefined);
   expect(supersession(pull(4), [pull(4, { queuedAt: '2026-11-21T10:00:00Z' })])).toBe('#4 was queued again');
-  expect(supersession(pull(5, { listGrowthApproved: true }), [pull(5)])).toBe(
-    "#5's list-growth approval changed",
+  expect(supersession(pull(5, { growthApprovals: ['approved: list growth'] }), [pull(5)])).toBe(
+    "#5's growth approval changed",
   );
+  // A PR with both labels that loses one is no longer the PR the run tested.
+  const both = ['approved: context growth', 'approved: list growth'];
+  expect(
+    supersession(pull(7, { growthApprovals: both }), [
+      pull(7, { growthApprovals: ['approved: list growth'] }),
+    ]),
+  ).toBe("#7's growth approval changed");
   expect(supersession(pull(6), [pull(6, { check: 'FAILURE' })])).toBe(
     `#6's Check on ${sha('head-6')} is FAILURE`,
   );

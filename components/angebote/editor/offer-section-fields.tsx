@@ -14,17 +14,20 @@ import { Textarea } from '@/components/ui/textarea';
 import { formatEuroCents, formatTaxRate } from '@/lib/document-rendering/format';
 import { INVENTORY_UNITS } from '@/lib/inventory/units';
 import { INVOICE_TAX_RATES } from '@/lib/invoices/types';
-import type { OfferAmounts } from '@/lib/offers/amounts';
+import type { InvoiceLineSourceKind } from '@/lib/invoices/line-sources';
+import type { OfferCalculation, PositionFigures } from '@/lib/offers/calculation';
 import {
-  articlePositionForm,
+  catalogPositionForm,
   contentFieldId,
   emptyPosition,
+  withUnit,
   type PositionForm,
   type SectionForm,
 } from '@/lib/offers/content-form';
 import { positionNumbers } from '@/lib/offers/numbering';
 import type { OfferPosition } from '@/lib/offers/types';
-import { OfferArticlePicker } from './offer-article-picker';
+import { OfferCatalogPicker } from './offer-article-picker';
+import { PositionCostFields } from './offer-position-cost-fields';
 
 type Errors = Record<string, string | undefined>;
 
@@ -85,11 +88,11 @@ export function OfferSectionFields({
   index,
   count,
   section,
-  amounts,
+  figures,
   onChange,
   onMove,
   onRemove,
-  onAddArticle,
+  onAddCatalog,
   newKey,
   errors,
   disabled,
@@ -97,12 +100,13 @@ export function OfferSectionFields({
   index: number;
   count: number;
   section: SectionForm;
-  amounts: OfferAmounts['sections'][number] | null;
+  /** The Titel's amounts and calculation, or null while a position cannot be read. */
+  figures: OfferCalculation['sections'][number] | null;
   onChange: (section: SectionForm) => void;
   onMove: (direction: -1 | 1) => void;
   onRemove: () => void;
-  /** Appends a Position to this Titel as it is when the article's price arrives. */
-  onAddArticle: (position: PositionForm) => void;
+  /** Appends a Position to this Titel as it is when the article's or Leistung's price arrives. */
+  onAddCatalog: (position: PositionForm) => void;
   newKey: () => string;
   errors: Errors;
   disabled: boolean;
@@ -142,7 +146,7 @@ export function OfferSectionFields({
         sectionIndex={index}
         number={number}
         positions={section.positions}
-        positionCents={amounts?.positionCents ?? null}
+        figures={figures?.positions ?? null}
         onChange={setPositions}
         errors={errors}
         disabled={disabled}
@@ -150,10 +154,10 @@ export function OfferSectionFields({
       <SectionFooter
         sectionIndex={index}
         number={number}
-        netCents={amounts?.netCents ?? null}
+        netCents={figures?.saleCents ?? null}
         onAdd={(kind) => setPositions([...section.positions, emptyPosition(newKey(), kind)])}
-        onPickArticle={() => onChange(section)}
-        onAddArticle={onAddArticle}
+        onPickCatalog={() => onChange(section)}
+        onAddCatalog={onAddCatalog}
         disabled={disabled}
       />
     </li>
@@ -165,7 +169,7 @@ function PositionList({
   sectionIndex,
   number,
   positions,
-  positionCents,
+  figures,
   onChange,
   errors,
   disabled,
@@ -173,7 +177,7 @@ function PositionList({
   sectionIndex: number;
   number: string;
   positions: PositionForm[];
-  positionCents: Array<number | null> | null;
+  figures: Array<PositionFigures | null> | null;
   onChange: (positions: PositionForm[]) => void;
   errors: Errors;
   disabled: boolean;
@@ -188,7 +192,7 @@ function PositionList({
           fieldId={(field) => contentFieldId(sectionIndex, { position: index, field })}
           number={numbers[index] ?? null}
           position={position}
-          amountCents={positionCents?.[index] ?? null}
+          figures={figures?.[index] ?? null}
           onChange={(next) => onChange(positions.map((current, at) => (at === index ? next : current)))}
           order={{
             index,
@@ -210,18 +214,29 @@ function SectionFooter({
   number,
   netCents,
   onAdd,
-  onPickArticle,
-  onAddArticle,
+  onPickCatalog,
+  onAddCatalog,
   disabled,
 }: {
   sectionIndex: number;
   number: string;
   netCents: number | null;
   onAdd: (kind: OfferPosition['kind']) => void;
-  onPickArticle: () => void;
-  onAddArticle: (position: PositionForm) => void;
+  onPickCatalog: () => void;
+  onAddCatalog: (position: PositionForm) => void;
   disabled: boolean;
 }) {
+  const picker = (kind: InvoiceLineSourceKind, label: string) => (
+    <OfferCatalogPicker
+      kind={kind}
+      id={`offer-section-${sectionIndex}-${kind}`}
+      label={`${label} zu Titel ${number} hinzufügen`}
+      onPick={onPickCatalog}
+      // The answer arrives after other edits may have changed the Titel: the editor appends it to the current one.
+      onAdd={(line) => onAddCatalog(catalogPositionForm(`${kind}-${crypto.randomUUID()}`, line))}
+      disabled={disabled}
+    />
+  );
   return (
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="flex min-w-0 flex-wrap items-start gap-2">
@@ -233,14 +248,8 @@ function SectionFooter({
           <Plus className="size-4" />
           Text
         </Button>
-        <OfferArticlePicker
-          id={`offer-section-${sectionIndex}-article`}
-          label={`Artikel zu Titel ${number} hinzufügen`}
-          onPick={onPickArticle}
-          // The answer arrives after other edits may have changed the Titel: the editor appends it to the current one.
-          onAdd={(line) => onAddArticle(articlePositionForm(`article-${crypto.randomUUID()}`, line))}
-          disabled={disabled}
-        />
+        {picker('leistung', 'Leistung')}
+        {picker('article', 'Artikel')}
       </div>
       <p className="text-sm font-medium tabular-nums">
         {`Summe Titel ${number}: `}
@@ -251,12 +260,12 @@ function SectionFooter({
 }
 
 type PositionProps = {
-  fieldId: (field: 'name' | 'quantity' | 'unit' | 'price') => string;
+  fieldId: (field: 'name' | 'quantity' | 'unit' | 'price' | 'cost' | 'markup') => string;
   /** As printed, for example `1.2`; null for a text line. */
   number: string | null;
   position: PositionForm;
-  /** The position's amount, or null while it cannot be read or for a text line. */
-  amountCents: number | null;
+  /** The position's amount, cost and margin, or null while it cannot be read or for a text line. */
+  figures: PositionFigures | null;
   onChange: (position: PositionForm) => void;
   order: { index: number; count: number; onMove: (direction: -1 | 1) => void; onRemove: () => void };
   errors: Errors;
@@ -267,7 +276,7 @@ function PositionFields({
   fieldId,
   number,
   position,
-  amountCents,
+  figures,
   onChange,
   order,
   errors,
@@ -305,14 +314,25 @@ function PositionFields({
         </Field>
       </div>
       {position.kind === 'free' && (
-        <PositionAmountFields
-          fieldId={fieldId}
-          position={position}
-          amountCents={amountCents}
-          onChange={onChange}
-          errors={errors}
-          disabled={disabled}
-        />
+        <>
+          <PositionAmountFields
+            fieldId={fieldId}
+            position={position}
+            figures={figures}
+            onChange={onChange}
+            errors={errors}
+            disabled={disabled}
+          />
+          <PositionCostFields
+            costId={fieldId('cost')}
+            markupId={fieldId('markup')}
+            position={position}
+            figures={figures}
+            onChange={onChange}
+            errors={errors}
+            disabled={disabled}
+          />
+        </>
       )}
     </li>
   );
@@ -322,7 +342,7 @@ function PositionFields({
 function PositionAmountFields({
   fieldId,
   position,
-  amountCents,
+  figures,
   onChange,
   errors,
   disabled,
@@ -357,7 +377,8 @@ function PositionAmountFields({
           inputMode="decimal"
           autoComplete="off"
           value={position.price}
-          onChange={(event) => onChange({ ...position, price: event.target.value })}
+          // A typed price is the office's own: the markup that set the last one no longer applies.
+          onChange={(event) => onChange({ ...position, price: event.target.value, markup: '' })}
           placeholder="0,00"
           disabled={disabled}
         />
@@ -385,7 +406,7 @@ function PositionAmountFields({
       </Field>
       <p className="col-span-2 text-right text-sm font-medium tabular-nums sm:col-span-1 sm:min-w-28 sm:pb-2">
         <span className="sr-only">Betrag netto: </span>
-        {amountCents === null ? '–' : formatEuroCents(amountCents)}
+        {figures === null ? '–' : formatEuroCents(figures.saleCents)}
       </p>
     </div>
   );
@@ -417,7 +438,7 @@ function PositionUnitField({
       <SearchableSelect
         id={id}
         value={position.unit}
-        onChange={(unit) => onChange({ ...position, unit })}
+        onChange={(unit) => onChange(withUnit(position, unit))}
         placeholder="Einheit wählen…"
         // Every unit in use, and a retired one the position already has.
         options={INVENTORY_UNITS.flatMap((unit) =>

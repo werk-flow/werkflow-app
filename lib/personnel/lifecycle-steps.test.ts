@@ -10,6 +10,7 @@ import {
 import {
   allowedAccessSteps,
   allowedEmploymentSteps,
+  employmentDateRefusal,
   hasOpenAccessBlocker,
   OPEN_REQUIREMENT_STATES,
 } from './lifecycle-steps';
@@ -212,5 +213,29 @@ describe('access blockers', () => {
     }
     for (const state of settled)
       expect(hasOpenAccessBlocker([{ blocksAccess: true, state }]), state).toBe(false);
+  });
+});
+
+describe('employment step dates', () => {
+  test('a step that acts at once takes today or an earlier date, never a later one', () => {
+    for (const kind of ['start', 'mark_inactive', 'exit', 'reactivate'] as const) {
+      expect(employmentDateRefusal(kind, '2026-11-11', today)).toBe('immediate_effective_date_required');
+      expect(employmentDateRefusal(kind, today, today)).toBeNull();
+      expect(employmentDateRefusal(kind, '2026-10-31', today)).toBeNull();
+    }
+  });
+
+  test('a planned step takes only a later date', () => {
+    for (const kind of ['plan_start', 'plan_exit'] as const) {
+      expect(employmentDateRefusal(kind, today, today)).toBe('future_effective_date_required');
+      expect(employmentDateRefusal(kind, '2026-11-11', today)).toBeNull();
+    }
+  });
+
+  test('notice, reversal and withdrawal take any date', () => {
+    for (const kind of ['record_notice', 'reverse', 'cancel_scheduled'] as const) {
+      expect(employmentDateRefusal(kind, '2026-12-31', today)).toBeNull();
+      expect(employmentDateRefusal(kind, '2026-01-01', today)).toBeNull();
+    }
   });
 });

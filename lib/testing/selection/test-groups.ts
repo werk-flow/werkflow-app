@@ -198,7 +198,6 @@ export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = 
     'components/loading-states/maintenance-page-skeleton.tsx',
     'components/loading-states/service-cases-page-skeleton.tsx',
   ],
-  // The screens outside the app shell (standalone-route-inventory.ts).
   standalone: [
     'app/(auth)/',
     'app/onboarding/',
@@ -268,6 +267,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['wave-2:p1-24', 'wave-2/p1-24.spec.ts', ['personnel', 'documents', 'time', 'work', 'attention']],
   ['wave-3:p1-24a', 'wave-3/p1-24a.spec.ts', ['planning', 'time', 'personnel', 'work', 'attention']],
   ['wave-3:document-pdfs', 'wave-3/document-pdfs.spec.ts', ['commercial', 'documents', 'service']],
+  ['wave-3:e2c-invoice-cancel', 'wave-3/e2c-invoice-cancel.spec.ts', ['commercial', 'documents']],
   // Every list page at 375 px; the detail pages, aliases and wide widths in layout:viewports (about four minutes each).
   ['layout', 'layout/mobile-viewport.spec.ts', ['*']],
   ['layout:viewports', 'layout/viewport-details.spec.ts', ['*']],
@@ -323,11 +323,9 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
     'security/offline-visit.spec.ts',
     ['standalone', 'work', 'time', 'documents', 'planning'],
   ],
-  // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
+  // Problem reports: the screenshot redraw (problem-report-scrubbing.md), a redacted report, support's queue.
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
-  // Reporting a problem from the app shell, with a redacted screenshot, to „Meine Meldungen“.
   ['problem-reports:report', 'problem-reports/report-a-problem.spec.ts', ['*']],
-  // Support triages a report and answers, the reporter reads it live; support files a report for a caller.
   ['problem-reports:support', 'problem-reports/support-queue.spec.ts', ['*']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
   // Measured navigation and view switches against the typical data profile (Step 2).
@@ -445,6 +443,8 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['offers', ['offers.sql', 'offers_concurrency.sql', 'offer_sending.sql'], ['commercial', 'customers']],
   ['invoice-drafts', ['invoice_drafts.sql', 'invoice_line_sources.sql'], ['commercial', 'customers']],
   ['invoice-issue', ['invoice_issue.sql', 'invoice_issue_concurrency.sql'], ['commercial', 'documents']],
+  ['document-deliveries', ['document_deliveries.sql'], ['commercial', 'documents']],
+  ['invoice-cancel', ['invoice_cancel.sql'], ['commercial', 'documents']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
   ['own-time-entry-changes', ['own_time_entry_changes.sql', 'pending_entry_withdrawals.sql'], ['time']],

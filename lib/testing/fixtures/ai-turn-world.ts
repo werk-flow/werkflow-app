@@ -31,6 +31,8 @@ export type AiTurnWorld = ActionWorld & {
   pending: Promise<unknown>[];
   /** The abort signal of each provider request, in order: whether the harness stopped it. */
   streamSignals: (AbortSignal | undefined)[];
+  /** Each provider request as the model received it, in order: what the context builder sent. */
+  streamRequests: Parameters<AiModel['doStream']>[0][];
 };
 
 export async function installAiTurnWorld(): Promise<AiTurnWorld> {
@@ -39,7 +41,12 @@ export async function installAiTurnWorld(): Promise<AiTurnWorld> {
   delete process.env.WERKFLOW_KI_ANTHROPIC_KEY;
   process.env.AI_ORGANIZATION_IDS = `${ORGANIZATION_A},${ORGANIZATION_B}`;
   const base = installActionWorld({});
-  const world: AiTurnWorld = Object.assign(base, { afterAttempt: null, pending: [], streamSignals: [] });
+  const world: AiTurnWorld = Object.assign(base, {
+    afterAttempt: null,
+    pending: [],
+    streamSignals: [],
+    streamRequests: [],
+  });
   mock.module('next/server', () => ({ after: (task: Promise<unknown>) => world.pending.push(task) }));
   // The real replay model, watched: each request's abort signal is kept for the fixture to read.
   const { AI_REPLAY_PROVIDER, createReplayModel } = await import('@/lib/ai/replay');
@@ -51,6 +58,7 @@ export async function installAiTurnWorld(): Promise<AiTurnWorld> {
         ...model,
         doStream: (options) => {
           world.streamSignals.push(options.abortSignal);
+          world.streamRequests.push(options);
           return model.doStream(options);
         },
       };
@@ -79,6 +87,7 @@ export function resetAiTables(world: AiTurnWorld, settings: Row = {}): void {
   world.afterAttempt = null;
   world.pending = [];
   world.streamSignals = [];
+  world.streamRequests = [];
   world.failingTables.clear();
   signInAs(world, 'employee');
 }

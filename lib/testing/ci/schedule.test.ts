@@ -18,6 +18,7 @@ import { clockSlot, heldUntil, type ScheduleAnswer, scheduleDue, type ScheduleSt
 import { workflowsFolder } from '../ci-workflow';
 
 const repository = resolve(import.meta.dir, '../../..');
+const fixedClock = join(repository, 'lib/testing/fixtures/fixed-clock.ts');
 const at = (iso: string): Date => new Date(iso);
 const MINUTE = 60_000;
 
@@ -280,7 +281,7 @@ function schedulerFixture(folder: string): {
   return {
     root,
     run: (...args) =>
-      spawnSync(process.execPath, ['scripts/ci/schedule.ts', ...args], {
+      spawnSync(process.execPath, ['--preload', fixedClock, 'scripts/ci/schedule.ts', ...args], {
         cwd: root,
         encoding: 'utf8',
         env: {
@@ -367,11 +368,15 @@ test('the CLI exits 1 on an unreadable state, and after its answer when the full
     const state = join(folder, 'state.json');
     writeFileSync(state, '{"release":"yesterday"}');
     const run = (env: Record<string, string>) =>
-      spawnSync(process.execPath, ['scripts/ci/schedule.ts', 'due', '--state', state], {
-        cwd: root,
-        encoding: 'utf8',
-        env: { NODE_ENV: 'test', PATH: process.env.PATH, HOME: process.env.HOME, ...env },
-      });
+      spawnSync(
+        process.execPath,
+        ['--preload', fixedClock, 'scripts/ci/schedule.ts', 'due', '--state', state],
+        {
+          cwd: root,
+          encoding: 'utf8',
+          env: { NODE_ENV: 'test', PATH: process.env.PATH, HOME: process.env.HOME, ...env },
+        },
+      );
     const corrupt = run({});
     expect([corrupt.status, corrupt.stdout]).toEqual([1, '']);
     writeFileSync(state, '{"release":"2100-01-01T00:00:00.000Z","nightly":"2100-01-01T00:00:00.000Z"}');
