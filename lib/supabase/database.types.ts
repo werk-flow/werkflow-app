@@ -2500,6 +2500,45 @@ export type Database = {
           },
         ];
       };
+      employment_target_signals: {
+        Row: {
+          employee_record_id: string;
+          id: string;
+          organization_id: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          employee_record_id: string;
+          id?: string;
+          organization_id: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          employee_record_id?: string;
+          id?: string;
+          organization_id?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "employment_target_signals_employee_record_id_fkey";
+            columns: ["employee_record_id"];
+            isOneToOne: true;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "employment_target_signals_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       entry_change_requests: {
         Row: {
           change_type: Database["public"]["Enums"]["entry_change_type"];

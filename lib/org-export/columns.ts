@@ -38,6 +38,8 @@ type ExcludedTable =
   | 'problem_report_files'
   // The reporter's live signal of a changed report: a timestamp, no record.
   | 'problem_report_signals'
+  // A person's live signal that their target inputs changed: ids and a timestamp, no record.
+  | 'employment_target_signals'
   // The paying account's billing state, not the organization's records.
   | 'subscriptions'
   // The file plan and part state of earlier exports, whose archives are gone
