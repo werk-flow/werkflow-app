@@ -10,18 +10,21 @@
 -- Realtime delivers it to nobody else, and the views then read again through
 -- the reads the employee already has (weekly-targets, own-vacation-overview).
 
--- 1. The signal: one row per personnel record that has a login.
+-- 1. The signal: one row per personnel record that has a login. user_id has
+-- no foreign key: the record's own login does, and clearing it retires the
+-- signal (section 3). A key here would make a signal write wait for the
+-- account while the account's deletion waits for the record, a deadlock.
 create table public.employment_target_signals (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations (id) on delete cascade,
   employee_record_id uuid not null references public.employee_records (id) on delete cascade,
-  user_id uuid not null references auth.users (id) on delete cascade,
+  user_id uuid not null,
   updated_at timestamptz not null default now(),
   constraint employment_target_signals_record_unique unique (employee_record_id)
 );
 create index employment_target_signals_organization_id_fk_idx
   on public.employment_target_signals (organization_id);
-create index employment_target_signals_user_id_fk_idx
+create index employment_target_signals_user_id_idx
   on public.employment_target_signals (user_id);
 
 alter table public.employment_target_signals enable row level security;
@@ -45,7 +48,7 @@ alter table public.employment_target_signals
   replica identity using index employment_target_signals_replident_idx;
 -- No deletion notice: a notice reaches every member of the organization, and
 -- a signal row belongs to one person. A row leaves only with its record, its
--- person's login or its organization, and no open view needs to hear of that.
+-- record's login or its organization, and no open view needs to hear of that.
 -- lib/realtime/tables.ts lists the table as own-user, and realtime:check
 -- refuses the deletion trigger on it.
 alter publication supabase_realtime add table public.employment_target_signals;

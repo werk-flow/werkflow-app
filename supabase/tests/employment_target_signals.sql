@@ -3,7 +3,8 @@
 -- werk-flow/werkflow-planning#589). A change of a person's entry or exit
 -- date, login or employment conditions moves their own signal row and no
 -- other; a change of anything else on the record or the conditions, and the
--- author's account leaving, move nothing. A new login gets a new row, so no
+-- author's account leaving, move nothing. A login's account leaving retires
+-- its signal. A new login gets a new row, so no
 -- event of the old row's key reaches it. The row
 -- holds ids and a timestamp, never a column of the personnel tables. Only
 -- its own person selects it, while a member of its organization; Realtime
@@ -284,12 +285,22 @@ begin
     raise exception 'a relinked record kept the old login''s signal key';
   end if;
 
+  -- The login's account leaving clears the record's login and retires its signal.
+  delete from auth.users where id = '58900000-0000-0000-0000-000000000006';
+  if exists (select 1 from public.employment_target_signals where employee_record_id = v_employee_record) then
+    raise exception 'a deleted account kept its signal';
+  end if;
+
   -- Deleting a record takes its conditions and its signal, and signals nobody.
+  update public.employee_records set user_id = '58900000-0000-0000-0000-000000000002' where id = v_employee_record;
+  insert into public.employment_conditions (organization_id, employee_record_id, valid_from, employment_type, weekly_hours)
+  values ('58900000-0000-0000-0000-000000000010', v_employee_record, '2026-02-01', 'teilzeit', 25);
   perform pg_temp.age_signals();
   delete from public.employee_records where id = v_employee_record;
-  if exists (select 1 from public.employment_target_signals where employee_record_id = v_employee_record)
+  if exists (select 1 from public.employment_conditions where employee_record_id = v_employee_record)
+    or exists (select 1 from public.employment_target_signals where employee_record_id = v_employee_record)
     or pg_temp.moved() is distinct from array[]::uuid[] then
-    raise exception 'a deleted record left or moved a signal';
+    raise exception 'a deleted record left its conditions or signal, or moved a signal';
   end if;
 end;
 $$;
