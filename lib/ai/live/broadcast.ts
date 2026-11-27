@@ -84,6 +84,16 @@ export type KiLiveBroadcast = {
   end: (end: AiTurnEnd) => Promise<void>;
 };
 
+function endMessage(command: string, end: AiTurnEnd, length: number): KiLiveMessage {
+  return {
+    type: 'end',
+    command,
+    status: end.status,
+    failure: end.status === 'complete' ? null : end.message,
+    length,
+  };
+}
+
 /**
  * One turn's live messages on its thread's channel, in order and throttled.
  * Text that waits for a send joins the next message, so a slow send never
@@ -139,6 +149,13 @@ export function createKiLiveBroadcast(
     cancelPump ??= schedule(pump, KI_LIVE_INTERVAL_MS);
   }
 
+  /** No text leaves after this; a send on its way still lands. */
+  const stop = (): void => {
+    ended = true;
+    cancelPump?.();
+    cancelPump = null;
+  };
+
   return {
     start(started) {
       dispatch([started]);
@@ -155,32 +172,16 @@ export function createKiLiveBroadcast(
       revoked() {
         // The author lost access mid-turn: Realtime may still hold their join, so nothing more is sent.
         revoked = true;
-        ended = true;
-        cancelPump?.();
-        cancelPump = null;
+        stop();
       },
     },
     async end(end) {
-      ended = true;
-      cancelPump?.();
-      cancelPump = null;
+      stop();
       await inFlight;
       if (revoked) return;
       const length = sent + pending.length;
       const last = takeText();
-      await post(
-        [
-          ...(last ? [last] : []),
-          {
-            type: 'end',
-            command: input.commandId,
-            status: end.status,
-            failure: end.status === 'complete' ? null : end.message,
-            length,
-          },
-        ],
-        2,
-      );
+      await post([...(last ? [last] : []), endMessage(input.commandId, end, length)], 2);
     },
   };
 }

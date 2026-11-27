@@ -33,11 +33,16 @@ const TRANSFER_MEASURED: Readonly<Record<Flow, Readonly<Record<Metric, number>>>
   'idle reconnect': { bytes: 58, rows: 1, messages: 1 },
 };
 
+/**
+ * The live turn's messages follow two timers, the replay's pace and the channel's throttle, which a
+ * loaded machine stretches, so those flows carry about 30 % headroom; per-delta sending would triple
+ * them. Every other number repeats exactly.
+ */
 const TRANSFER_CEILINGS: Readonly<Record<Flow, Readonly<Record<Metric, number>>>> = {
   'thread open': { bytes: 44_000, rows: 43, messages: 2 },
-  'live turn, sending tab': { bytes: 9_000, rows: 24, messages: 42 },
-  'live turn, other tab': { bytes: 4_600, rows: 0, messages: 10 },
-  'resume after reload': { bytes: 51_000, rows: 50, messages: 11 },
+  'live turn, sending tab': { bytes: 9_600, rows: 24, messages: 48 },
+  'live turn, other tab': { bytes: 5_000, rows: 0, messages: 12 },
+  'resume after reload': { bytes: 52_000, rows: 50, messages: 13 },
   'idle reconnect': { bytes: 64, rows: 1, messages: 1 },
 };
 

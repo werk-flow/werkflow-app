@@ -346,17 +346,19 @@ function useLiveFollow(
    */
   const catchUp = useCallback(
     async (id: string): Promise<void> => {
-      const window = viewsRef.current[id]?.window;
-      if (!window || filling.current.has(id)) {
+      if (!viewsRef.current[id]?.window || filling.current.has(id)) {
         wanted.current.add(id);
         return;
       }
       filling.current.add(id);
-      wanted.current.delete(id);
-      await read(id, { after: kiLiveCursor(window) });
+      do {
+        wanted.current.delete(id);
+        const window = viewsRef.current[id]?.window;
+        if (!window) break;
+        await read(id, { after: kiLiveCursor(window) });
+        apply(id, []);
+      } while (wanted.current.has(id));
       filling.current.delete(id);
-      apply(id, []);
-      if (wanted.current.has(id)) void catchUp(id);
     },
     [viewsRef, read, apply],
   );
