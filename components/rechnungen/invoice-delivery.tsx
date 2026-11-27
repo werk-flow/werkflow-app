@@ -12,7 +12,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorText } from '@/components/ui/error-text';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { useServerAction } from '@/hooks/use-server-action';
-import { useWallClockTick } from '@/hooks/use-wall-clock-tick';
+import { useMountedWallClockTick, useWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { describeFailure } from '@/lib/action-messages';
 import {
   DELIVERY_STATE_LABELS,
@@ -21,11 +21,7 @@ import {
   type DeliveryMailDefaults,
   type DeliveryState,
 } from '@/lib/delivery/delivery-types';
-import {
-  deliveryFailureAdvice,
-  deliveryFailureSentence,
-  priorEmailAdvice,
-} from '@/lib/delivery/failure-advice';
+import { deliveryFailureAdvice, pastDeliveryOutcome, priorEmailAdvice } from '@/lib/delivery/failure-advice';
 import { retryWindowAt, retryWindowEnd } from '@/lib/delivery/retry-window';
 import { retryInvoiceDelivery } from '@/lib/invoices/delivery-actions';
 import { formatBerlinDateTime } from '@/lib/utils';
@@ -81,17 +77,17 @@ function DeliveryFacts({ entry, children }: { entry: DeliveryEntry; children: Re
  */
 function PastDeliveryRow({ entry }: { entry: DeliveryEntry }) {
   const unansweredFrom = entry.state === 'sending' && entry.retryFrom ? Date.parse(entry.retryFrom) : null;
-  const { unanswered } = retryWindowAt(
-    entry,
-    useWallClockTick(60_000, unansweredFrom !== null, unansweredFrom),
-  );
-  const unclear = unanswered || (entry.state === 'failed' && entry.outcomeUnknown);
+  // The server and the hydrating render show no clock-driven text, so both render the same.
+  const now = useMountedWallClockTick(60_000, unansweredFrom !== null, unansweredFrom);
+  const unanswered = now !== null && retryWindowAt(entry, now).unanswered;
   return (
     <li className="py-3">
       <DeliveryFacts entry={entry}>
         {(entry.state === 'failed' || unanswered) && (
           <p className="text-sm text-destructive">
-            {deliveryFailureSentence(unclear ? 'email_provider_unreachable' : entry.failureCode)}
+            {unanswered
+              ? pastDeliveryOutcome({ failureCode: 'email_provider_unreachable', outcomeUnknown: true })
+              : pastDeliveryOutcome(entry)}
           </p>
         )}
       </DeliveryFacts>

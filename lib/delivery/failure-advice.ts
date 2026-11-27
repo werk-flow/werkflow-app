@@ -26,7 +26,7 @@ function notConfigured(code: string | null): boolean {
  * Why a delivery failed, from its stored code, without a next step; the code
  * itself never reaches the screen.
  */
-export function deliveryFailureSentence(code: string | null): string {
+function deliveryFailureSentence(code: string | null): string {
   if (notConfigured(code)) return 'Der E-Mail-Versand war nicht eingerichtet.';
   if (outcomeUnknown(code)) {
     return 'Der Mailanbieter hat nicht geantwortet. Ob die E-Mail rausging, ist unklar.';
@@ -45,6 +45,17 @@ function nextStep(code: string | null, retryStep: string): string {
   }
   if (notConfigured(code)) return ['Versuche es später erneut.', retryStep].filter(Boolean).join(' ');
   return retryStep;
+}
+
+/**
+ * What became of a delivery that takes no further step, as on a cancelled
+ * invoice: the last attempt's reason, and whether an earlier attempt without
+ * the provider's answer may have reached the customer.
+ */
+export function pastDeliveryOutcome(entry: Pick<DeliveryEntry, 'failureCode' | 'outcomeUnknown'>): string {
+  const reason = deliveryFailureSentence(entry.failureCode);
+  if (!entry.outcomeUnknown || outcomeUnknown(entry.failureCode)) return reason;
+  return `${reason} Ob die E-Mail bei einem früheren Versuch rausging, ist unklar.`;
 }
 
 /** Why a delivery failed and what helps. */
