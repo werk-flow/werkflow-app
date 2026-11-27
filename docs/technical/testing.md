@@ -98,7 +98,7 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 `.github/workflows/ci.yml` runs on new PR heads, queue entries and pushes; `Check` is its required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). Jobs: `lib/testing/ci/dag.ts`, `scripts/ci/job.ts`.
 
-- **Tiers.** A PR's run is the fast tier: Fast, SQL, Component contracts and E-invoices, skipped on empty selections. Integration adds browser shards.
+- **Tiers.** A PR's run is the fast tier: Fast, SQL and E-invoices, skipped on empty selections. Integration adds Component contracts and browser shards.
 - **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules against the run's base. Every group runs on an unreadable diff, a full run or an every-group input (`toolingClass`); tooling changes run a sample.
 - **Reuse and Check.** A push of an integration-tested landing skips jobs; a CI runner's pass stands for its job on an identical tree and base (`lib/testing/ci/reuse.ts`). `Check` fails closed (`lib/testing/ci/check.ts`).
 - **Full run and release gate.** A full run (`ci.yml` with `full`) runs nightly, in the release, and on `main` when `bun scripts/ci/full-run.ts due` says so. `release.yml` ships a commit only after its newest `Full run / Check` passed, or runs one.

@@ -284,3 +284,7 @@ Under the amendment of 2026-11-26, a commit that added a new shrink-only list co
 ## Amendment 2026-11-27: full runs on main every 6 hours
 
 The owner chose to reduce full-run cost on `main` in werk-flow/werkflow-planning#503. This replaces the 3-hour cadence and immediate tooling trigger of the amendment "a tooling change runs a sample, then a full run of `main`": daytime slots run at most every 6 hours in the same 06:00 to 20:00 Berlin window. Tooling landings share the next slot instead of each starting a full run. When the next six-hour interval falls outside the window, even a daytime landing waits for the nightly. The accepted cost is that a break no plan selected waits for the next daytime slot or nightly, and tooling no longer triggers an immediate run. No test is removed. The documentation-only exception, nightly, release gate, alert issue and serialized decision stay unchanged. `scripts/ci/full-run.ts` calls the rule in `lib/testing/ci/full-run.ts` for every runner.
+
+## Amendment 2026-11-27: component contracts run in the queue
+
+The owner decided that PR runs, draft or ready, skip Component contracts to keep Actions under about 9,000 job-minutes a day (werk-flow/werkflow-planning#503). The integration run keeps the same component selection and runs it before merge, alongside the browser groups. A contract failure therefore surfaces in the queue run. Main and full runs, including the nightly run and release gate, keep their existing component selection. No test is removed. [testing.md](../technical/testing.md#ci) owns the run tiers.

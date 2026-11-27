@@ -5,12 +5,12 @@ name: CI
 # scripts/ci/job.ts, the same on any runner, and runs its groups through scripts/verify.ts, the
 # engine of a local run. This file adds only what GitHub owns: triggers, runners, caches, tokens
 # and artifacts. The required check is `Check` at the end of this file.
-# - A pull request's run, draft or ready, is the fast tier: Fast, SQL, Component contracts and
+# - A pull request's run, draft or ready, is the fast tier: Fast, SQL and
 #   E-invoices, each running only the groups the plan selects for the diff
 #   (lib/testing/selection/fast-tier.ts, e-invoice-selection.ts). A job whose selection is empty is
 #   skipped with the plan's reason.
-# - The merge queue's run (`integration`) adds the plan's browser shards: browser groups run once
-#   per PR, on the PR on top of main and of every PR ahead of it (owner decision D1,
+# - The merge queue's run (`integration`) adds Component contracts and the plan's browser shards.
+#   These run once per PR, on the PR on top of main and of every PR ahead of it (owner decision D1,
 #   werk-flow/werkflow-planning#503).
 # - A push to main runs the same, unless a green queue run passed its exact tree: then Check cites
 #   that run and no other job runs.
