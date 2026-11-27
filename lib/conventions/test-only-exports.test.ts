@@ -21,6 +21,7 @@ const KNOWN_TEST_SEAMS: readonly string[] = [
   'lib/personnel/targets.ts#resolveHolidayRegionOnDate',
   'lib/qualifications/resolution.ts#resolveApprenticeWarning',
   'lib/qualifications/resolution.ts#resolveRequirementCoverage',
+  'lib/responsibilities/server.ts#ResponsibilityRuntimeState',
   'lib/security/csp-report.ts#buildContentSecurityPolicy',
   'lib/security/csp-report.ts#buildReportOnlyContentSecurityPolicy',
   'lib/storage/r2.ts#assertOrganizationStorageKey',
