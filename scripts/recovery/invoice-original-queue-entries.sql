@@ -3,7 +3,9 @@
 -- original filed after the backup: lib/invoices/original.ts queues an
 -- original's key before its issue, Storno or filing commits, so a backup taken
 -- in between restores the entry without the document row. Run it on the
--- restored database while the purge is paused, with the backup time:
+-- restored database while the purge is paused, with the backup time, then
+-- keep each listed object for review and delete its entry before the purge
+-- restarts:
 --   psql -v backup_at="'<backup timestamp with offset>'" -f <this file>
 --
 -- Every entry it leaves out keeps its purge:
