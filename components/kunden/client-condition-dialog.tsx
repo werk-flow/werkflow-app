@@ -1,7 +1,7 @@
 'use client';
 
 import { Plus, Trash2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -19,6 +19,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
+import { usePayloadAttemptKey } from '@/hooks/use-payload-attempt-key';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionResult } from '@/lib/action-result';
@@ -241,19 +242,6 @@ function OwnPriceFields({
 }
 
 /**
- * One retry key per payload: a retry of the same values answers the first
- * save, whose answer may have been lost; changed values are a new version.
- */
-function usePayloadAttemptKey(): (payload: ConditionInput) => string {
-  const attempt = useRef<{ key: string; payload: string } | null>(null);
-  return (payload) => {
-    const text = JSON.stringify(payload);
-    if (attempt.current?.payload !== text) attempt.current = { key: crypto.randomUUID(), payload: text };
-    return attempt.current.key;
-  };
-}
-
-/**
  * Records a new version of a customer's conditions, filled from the newest
  * one: its first day, a discount per kind of line and own Leistung prices.
  * The version it was filled from goes with the save, so another session's
@@ -281,7 +269,7 @@ export function ClientConditionDialog({
   const [form, setForm] = useState<ConditionForm>(() => conditionFormOf(newest, today));
   // The page's newer version waits while the dialog is open: a refusal names it instead.
   const [expectedVersion, setExpectedVersion] = useState(() => newest?.version ?? 0);
-  const attemptKeyFor = usePayloadAttemptKey();
+  const attempt = usePayloadAttemptKey();
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { run, isPending: pending } = usePendingTask();
@@ -297,7 +285,9 @@ export function ClientConditionDialog({
     }
     void run(async () => {
       setError(null);
-      const key = attemptKeyFor(parsed.input);
+      // One key per payload: a retry of the same values answers the first save, whose answer may
+      // have been lost; changed values are a new version. A refusal commits nothing, so its key stays.
+      const key = attempt.keyFor(JSON.stringify(parsed.input));
       const result = await onRecord(parsed.input, expectedVersion, key).catch(() => null);
       if (result?.success) {
         onClose();
