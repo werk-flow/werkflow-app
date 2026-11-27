@@ -11,14 +11,17 @@ test('focus stays in the customer edit dialog the row menu opened, and Escape re
   page,
 }) => {
   await openContractFixture(page, 'customer-menu-edit');
-  const trigger = page.getByRole('button', { name: 'Aktionen öffnen' });
+  const trigger = page
+    .getByRole('region', { name: 'Kundenzeile' })
+    .getByRole('button', { name: 'Aktionen öffnen' });
   await trigger.click();
   await page.getByRole('menuitem', { name: 'Bearbeiten' }).click();
   const dialog = page.getByRole('dialog', { name: 'Kunde bearbeiten' });
   await expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveValue('Heizungsbau Weber');
   await expect(dialog.getByRole('textbox', { name: 'Name' })).toBeFocused();
-  // The menu's close animation ends after the dialog opened; its focus return lands then.
+  // The menu's close animation ends after the dialog opened; its focus return runs in a later task.
   await expect(page.getByRole('menu', { includeHidden: true })).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.uiContractFocusReturns)).toBe(1);
   expect(
     await page.evaluate(() => window.uiContractDialogFocusLeaks),
     'focus never left the dialog the menu item opened',
@@ -31,10 +34,27 @@ test('focus stays in the customer edit dialog the row menu opened, and Escape re
 
 test('the customer row menu closed without a choice returns focus to its trigger', async ({ page }) => {
   await openContractFixture(page, 'customer-menu-edit');
-  const trigger = page.getByRole('button', { name: 'Aktionen öffnen' });
+  const trigger = page
+    .getByRole('region', { name: 'Kundenzeile' })
+    .getByRole('button', { name: 'Aktionen öffnen' });
   await trigger.click();
   await expect(page.getByRole('menuitem', { name: 'Bearbeiten' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu')).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+});
+
+test('a row menu inside an open dialog closed without a choice returns focus to its trigger there', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'customer-menu-edit');
+  await page.getByRole('button', { name: 'Auswahl öffnen' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Kunde auswählen' });
+  const trigger = dialog.getByRole('button', { name: 'Aktionen öffnen' });
+  await trigger.click();
+  await expect(page.getByRole('menuitem', { name: 'Bearbeiten' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  await expect(dialog).toBeVisible();
   await expect(trigger).toBeFocused();
 });

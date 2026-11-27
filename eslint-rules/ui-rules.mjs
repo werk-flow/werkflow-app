@@ -571,16 +571,26 @@ const iconButtonNeedsNameRule = {
  */
 const TEXT_INPUT_TYPES = new Set(['text', 'search', 'email', 'tel', 'url', 'password']);
 
+/** A static attribute value, a template literal without expressions included; null when it is built at runtime. */
+function staticControlValue(attribute) {
+  const expression = attribute?.value?.type === 'JSXExpressionContainer' ? attribute.value.expression : null;
+  if (expression?.type === 'TemplateLiteral' && expression.expressions.length === 0)
+    return expression.quasis[0]?.value.cooked ?? null;
+  return staticAttributeValue(attribute);
+}
+
 /**
  * A file input on screen shows the browser's own „Choose File No file chosen“
  * in the browser's language. A picker hidden behind a button proves it by a
- * static `hidden` or `sr-only` class or the `hidden` attribute: a class built
- * at runtime or a responsive `md:hidden` may show it. `aria-hidden` hides it
- * from assistive technology only, not from the eye, so it does not count.
+ * static `hidden` or `sr-only` class or a `hidden` attribute that is always
+ * on: a class built at runtime, a responsive `md:hidden` or `hidden={open}`
+ * may show it. `aria-hidden` hides it from assistive technology only, not
+ * from the eye, so it does not count.
  */
 function isHiddenFileInput(node) {
-  if (jsxAttribute(node, 'hidden')) return true;
-  const classes = staticAttributeValue(jsxAttribute(node, 'className'));
+  const hidden = jsxAttribute(node, 'hidden');
+  if (hidden && (hidden.value === null || staticControlValue(hidden) === 'true')) return true;
+  const classes = staticControlValue(jsxAttribute(node, 'className'));
   return classes !== null && classes.split(/\s+/).some((token) => token === 'hidden' || token === 'sr-only');
 }
 
@@ -608,7 +618,8 @@ const noRawControlsRule = {
         // The other native types (date, number, checkbox, ...) have their own
         // registry bans; a dynamic type is left to review.
         const typeAttribute = jsxAttribute(node, 'type');
-        const type = staticAttributeValue(typeAttribute);
+        // The browser reads the type case-insensitively.
+        const type = staticControlValue(typeAttribute)?.toLowerCase() ?? null;
         if (type === 'file') {
           // The registry Input always renders a visible box.
           if (node.name.name === 'Input' || !isHiddenFileInput(node))

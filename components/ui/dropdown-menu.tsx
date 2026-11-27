@@ -22,6 +22,18 @@ function DropdownMenuTrigger({ ...props }: React.ComponentProps<typeof DropdownM
 const LAYER_SELECTOR = '[role="dialog"], [role="alertdialog"]';
 
 /**
+ * The dialogs open when the menu opened. It renders inside the presence-gated
+ * content, so it records anew on each opening; the content's wrapper stays
+ * mounted while the menu is closed.
+ */
+function RecordLayersAtOpen({ layersRef }: { layersRef: React.RefObject<Element[]> }): null {
+  React.useLayoutEffect(() => {
+    layersRef.current = Array.from(document.querySelectorAll(LAYER_SELECTOR));
+  }, [layersRef]);
+  return null;
+}
+
+/**
  * Keeps focus in a dialog an item opened. The menu's close animation ends
  * after that dialog took focus, and Radix's menu then returns focus to its
  * trigger: focus left the modal dialog, whose trap took it back with the
@@ -30,21 +42,6 @@ const LAYER_SELECTOR = '[role="dialog"], [role="alertdialog"]';
  * the menu opened; the dialog returns focus to the trigger when it closes. A
  * menu closed without a choice, or inside a dialog, still returns focus.
  */
-function useKeepFocusInOpenedDialog(
-  onCloseAutoFocus: ((event: Event) => void) | undefined,
-): (event: Event) => void {
-  // The menu content mounts on opening; the dialogs on the page then were there before.
-  const [layersAtOpen] = React.useState(() =>
-    typeof document === 'undefined' ? [] : Array.from(document.querySelectorAll(LAYER_SELECTOR)),
-  );
-  return (event) => {
-    onCloseAutoFocus?.(event);
-    if (event.defaultPrevented) return;
-    const layer = document.activeElement?.closest(LAYER_SELECTOR);
-    if (layer && !layersAtOpen.includes(layer)) event.preventDefault();
-  };
-}
-
 function DropdownMenuContent({
   className,
   sideOffset = 4,
@@ -52,13 +49,18 @@ function DropdownMenuContent({
   onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
-  const keepFocusInOpenedDialog = useKeepFocusInOpenedDialog(onCloseAutoFocus);
+  const layersAtOpen = React.useRef<Element[]>([]);
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
-        onCloseAutoFocus={keepFocusInOpenedDialog}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
+          if (event.defaultPrevented) return;
+          const layer = document.activeElement?.closest(LAYER_SELECTOR);
+          if (layer && !layersAtOpen.current.includes(layer)) event.preventDefault();
+        }}
         className={cn(
           'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md',
           className,
@@ -70,6 +72,7 @@ function DropdownMenuContent({
             under the user's cursor (A2-06, 2026-09-13). Presence-gated content
             only, as in dialog.tsx. */}
         <RegisterOpenDialog />
+        <RecordLayersAtOpen layersRef={layersAtOpen} />
         {children}
       </DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Portal>
