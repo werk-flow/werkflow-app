@@ -24,7 +24,7 @@ type CanonicalEntryParams = {
 };
 
 /** A canonical segment with the row timestamps its projected entries carry. */
-export type CanonicalSegment = {
+type CanonicalSegment = {
   row: Pick<Tables<'time_segments'>, 'created_at' | 'updated_at'>;
   segment: TimeSegmentFact;
 };

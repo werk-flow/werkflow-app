@@ -242,8 +242,16 @@ function useClockServerView(activeOrgId: string | null) {
   // When the newest failed read started: with network it ends the shown clock's wait (shown-clock.ts).
   const [failedFrom, setFailedFrom] = useState(-1);
   const view = useLiveView<ServerClock | null>({
-    // An approved correction changes today's totals: its approval updates the request.
-    tables: ['time_entries', 'time_sessions', 'time_segments', 'time_correction_requests', 'jobs'],
+    // An approved correction changes today's totals (its approval updates the
+    // request), and a saved break rule the running day's.
+    tables: [
+      'time_entries',
+      'time_sessions',
+      'time_segments',
+      'time_correction_requests',
+      'organization_settings',
+      'jobs',
+    ],
     eventFilter: (event) => isClockStateEventRelevant(event, activeJobIdRef.current),
     read: async ({ signal }) => {
       if (!activeOrgId) return { ok: true, data: null };

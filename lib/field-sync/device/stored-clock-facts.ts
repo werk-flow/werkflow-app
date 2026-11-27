@@ -9,21 +9,27 @@ import type { StoredClockFacts } from './stored-clock';
 /** The version of the stored formats this code writes. */
 export const STORED_RECORD_VERSION = 1;
 
+/** A break rule as a phone stores it, field by field. */
+function storedBreakPolicy(policy: LiveClockState['breakPolicy']): StoredClockFacts['breakPolicy'] {
+  return {
+    breakMode: policy.breakMode,
+    autoBreakThresholdMinutes: policy.autoBreakThresholdMinutes,
+    autoBreakDurationMinutes: policy.autoBreakDurationMinutes,
+    secondStep: policy.secondStep
+      ? {
+          thresholdMinutes: policy.secondStep.thresholdMinutes,
+          durationMinutes: policy.secondStep.durationMinutes,
+        }
+      : null,
+  };
+}
+
 /** The live clock as a phone stores it, field by field: a new live field is never stored by accident. */
 export function storedClockFacts(live: LiveClockState): StoredClockFacts {
   return {
     organizationId: live.organizationId,
-    breakPolicy: {
-      breakMode: live.breakPolicy.breakMode,
-      autoBreakThresholdMinutes: live.breakPolicy.autoBreakThresholdMinutes,
-      autoBreakDurationMinutes: live.breakPolicy.autoBreakDurationMinutes,
-      secondStep: live.breakPolicy.secondStep
-        ? {
-            thresholdMinutes: live.breakPolicy.secondStep.thresholdMinutes,
-            durationMinutes: live.breakPolicy.secondStep.durationMinutes,
-          }
-        : null,
-    },
+    breakPolicy: storedBreakPolicy(live.breakPolicy),
+    dayBreakPolicy: live.dayBreakPolicy && storedBreakPolicy(live.dayBreakPolicy),
     status: live.status,
     isClockedIn: live.isClockedIn,
     isOnBreak: live.isOnBreak,
@@ -33,6 +39,7 @@ export function storedClockFacts(live: LiveClockState): StoredClockFacts {
     todayMinutes: live.todayMinutes,
     workMinutes: live.workMinutes,
     breakMinutes: live.breakMinutes,
+    trackedBreakMinutes: live.trackedBreakMinutes,
     standbyMinutes: live.standbyMinutes,
     travelMinutes: live.travelMinutes,
     calloutMinutes: live.calloutMinutes,

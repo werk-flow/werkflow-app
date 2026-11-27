@@ -10,6 +10,7 @@ import {
 } from '@/lib/testing/live-day-arbitraries';
 import { applyApprovedTimeCorrections, correctedEntriesInWindow } from '@/lib/time-corrections/projection';
 import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
+import { applyTransitionEcho } from './clock-echo';
 import { liveMinutes } from './helpers';
 import { computeZeiterfassungLiveTotals } from './live-totals';
 import { memberLiveDay, memberStatusOf } from './member-day';
@@ -325,6 +326,36 @@ describe('today’s totals after a change the week sees', () => {
     expect(todaysSplits(sixHours, policy, 480, AFTER_THE_DAY)).toEqual({
       dashboard: manualSplit,
       mitarbeiter: manualSplit,
+    });
+  });
+
+  test('count a clock-in after the change by the current rule, before the server answers too', () => {
+    const policy = changedAfterClockOut(STANDBY_POLICY, { ...STANDBY_POLICY, breakMode: 'manual' });
+    const sixHours = sixHoursAndStandby.slice(0, 1);
+    setSystemTime(new Date(AFTER_THE_DAY));
+    const closed = clockStateOf(sixHours, policy, AFTER_THE_DAY, []);
+    expect(computeZeiterfassungLiveTotals(closed, closed.todayMinutes, 480, AFTER_THE_DAY).breakdown).toEqual(
+      {
+        workMinutes: 330,
+        breakMinutes: 30,
+        overtimeMinutes: 0,
+      },
+    );
+
+    // Clocked in again at 17:00 Berlin; an hour later the server has not answered yet.
+    const echo = applyTransitionEcho(
+      closed,
+      createActivitySelection('work'),
+      { outcome: 'active', sessionId: 'session-2', segmentId: 'segment-2', version: 1, recoveryReason: null },
+      new Date(AFTER_THE_DAY),
+    );
+    const anHourLater = AFTER_THE_DAY + 60 * 60_000;
+    const presence = liveMinutes(echo.todayMinutes, echo.statusStartedAt, anHourLater);
+
+    expect(computeZeiterfassungLiveTotals(echo, presence, 480, anHourLater).breakdown).toEqual({
+      workMinutes: 420,
+      breakMinutes: 0,
+      overtimeMinutes: 0,
     });
   });
 

@@ -14,7 +14,7 @@ import {
   UNUSUALLY_LONG_SESSION_MS,
   type TimeSegmentFact,
 } from './segments';
-import { computeDayBreakdown, type BreakPolicy } from './settings';
+import { computeDayBreakdown, currentBreakPolicy, type BreakPolicy } from './settings';
 import type { ClockJobInfo, LiveClockState, TimeActivitySelection, TimeEntry } from './types';
 import { dayBreakPolicy } from './weekly';
 
@@ -240,9 +240,11 @@ function sessionRecoveryReason(session: OpenSession, now: Date): string | null {
 export type ClockTotalsState = Pick<
   LiveClockState,
   | 'breakPolicy'
+  | 'dayBreakPolicy'
   | 'todayMinutes'
   | 'workMinutes'
   | 'breakMinutes'
+  | 'trackedBreakMinutes'
   | 'timelineSegments'
   | 'travelMinutes'
   | 'standbyMinutes'
@@ -251,10 +253,11 @@ export type ClockTotalsState = Pick<
 >;
 
 /**
- * Today's totals of a clock state and the rule they count by, from the day's
+ * Today's totals of a clock state and the rules they count by, from the day's
  * entries with the approved corrections applied, as the week reads the day:
  * the rule at the day's last entry once clocked out, the current one while
- * the clock runs (`dayBreakPolicy`).
+ * the clock runs (`dayBreakPolicy`). The current rule stays beside it for the
+ * clock's controls and the next clock action.
  */
 export function clockTotalsState(
   dayEntries: TimeEntry[],
@@ -263,7 +266,7 @@ export function clockTotalsState(
   now: Date,
 ): ClockTotalsState {
   const totals = clockDayTotals(dayEntries, now);
-  const breakPolicy = dayBreakPolicy(settings, dayEntries, running);
+  const dayRule = dayBreakPolicy(settings, dayEntries, running);
   // The state carries no target: its work minutes owe no overtime.
   const breakdown = computeDayBreakdown(
     {
@@ -271,14 +274,16 @@ export function clockTotalsState(
       standbyMinutes: totals.standbyMinutes,
       trackedBreakMinutes: totals.breakMinutes,
     },
-    breakPolicy,
+    dayRule,
     undefined,
   );
   return {
-    breakPolicy,
+    breakPolicy: currentBreakPolicy(settings),
+    dayBreakPolicy: running ? null : dayRule,
     todayMinutes: totals.presenceMinutes,
     workMinutes: breakdown.workMinutes,
     breakMinutes: breakdown.breakMinutes,
+    trackedBreakMinutes: totals.breakMinutes,
     timelineSegments: totals.timelineSegments,
     travelMinutes: totals.travelMinutes,
     standbyMinutes: totals.standbyMinutes,

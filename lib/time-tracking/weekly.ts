@@ -118,6 +118,8 @@ export function buildWeeklyTimeData(
     const target = weekTargets?.[i];
     const breakdown = computeDayBreakdown(
       { presenceMinutes: totalMinutes, standbyMinutes: activityMinutes.standbyMinutes, trackedBreakMinutes },
+      // The snapshot counts every day by its last entry, today too; the live
+      // views lay today's running split over it (`computeZeiterfassungLiveTotals`, `memberLiveDay`).
       dayBreakPolicy(settings, dayEntries, false),
       target?.targetMinutes,
     );

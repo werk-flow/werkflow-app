@@ -35,6 +35,9 @@ export function applyTransitionEcho(
     todayMinutes: previous.todayMinutes + elapsedMinutes,
     workMinutes: previous.workMinutes + (wasBreak ? 0 : elapsedMinutes),
     breakMinutes: previous.breakMinutes + (wasBreak ? elapsedMinutes : 0),
+    trackedBreakMinutes: previous.trackedBreakMinutes + (wasBreak ? elapsedMinutes : 0),
+    // After a clock action today's last entry is now: the day counts by the current rule.
+    dayBreakPolicy: null,
     travelMinutes: previous.travelMinutes + countIf('travel'),
     standbyMinutes: previous.standbyMinutes + countIf('standby'),
     calloutMinutes: previous.calloutMinutes + countIf('callout'),

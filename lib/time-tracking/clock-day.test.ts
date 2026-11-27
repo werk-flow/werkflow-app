@@ -238,7 +238,12 @@ async function runFixture(): Promise<void> {
     buildBreakPolicyHistoryEntry(settings, todayAt(600)),
   ];
   const ruleChanged = await readState();
-  assert.equal(ruleChanged.breakPolicy.breakMode, 'manual', 'the day counts by its last entry’s rule');
+  assert.equal(ruleChanged.dayBreakPolicy?.breakMode, 'manual', 'the day counts by its last entry’s rule');
+  assert.equal(
+    ruleChanged.breakPolicy.breakMode,
+    'automatic',
+    'the next clock action counts by the current rule',
+  );
   assert.equal(ruleChanged.breakMinutes, 0);
   assert.equal(ruleChanged.workMinutes, 420);
 

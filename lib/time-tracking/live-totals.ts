@@ -42,14 +42,13 @@ export function computeZeiterfassungLiveTotals(
     return segments;
   })();
 
-  const trackedLiveBreakMinutes =
-    effectiveState.breakPolicy.breakMode === 'manual'
-      ? liveMinutes(
-          effectiveState.breakMinutes,
-          effectiveState.status === 'on_break' ? runningSince : null,
-          nowMs ?? 0,
-        )
-      : effectiveState.breakMinutes;
+  // A closed day counts by the rule at its last entry, a running one by the current rule.
+  const dayRule = effectiveState.dayBreakPolicy ?? effectiveState.breakPolicy;
+  const trackedLiveBreakMinutes = liveMinutes(
+    effectiveState.trackedBreakMinutes,
+    effectiveState.status === 'on_break' ? runningSince : null,
+    nowMs ?? 0,
+  );
 
   const liveStandbyMinutes =
     effectiveState.standbyMinutes +
@@ -61,7 +60,7 @@ export function computeZeiterfassungLiveTotals(
       standbyMinutes: liveStandbyMinutes,
       trackedBreakMinutes: trackedLiveBreakMinutes,
     },
-    effectiveState.breakPolicy,
+    dayRule,
     todayTargetMinutes,
   );
   const liveWorkMinutes = breakdown.workMinutes;
@@ -69,8 +68,7 @@ export function computeZeiterfassungLiveTotals(
     todayTargetMinutes !== undefined && todayTargetMinutes > 0
       ? Math.min(Math.round((liveWorkMinutes / todayTargetMinutes) * 100), 100)
       : null;
-  const ringTimelineSegments =
-    effectiveState.breakPolicy.breakMode === 'manual' ? liveTimelineSegments : undefined;
+  const ringTimelineSegments = dayRule.breakMode === 'manual' ? liveTimelineSegments : undefined;
   const liveTravelMinutes =
     effectiveState.travelMinutes +
     (effectiveState.currentActivity?.kind === 'travel' ? currentActivityMinutes : 0);
