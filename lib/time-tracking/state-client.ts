@@ -17,48 +17,59 @@ const clockJobInfoSchema = z.object({
   projectName: nullableText,
   clientName: nullableText,
 });
+// Inline, not imported from ./settings: that module in the layout's client
+// bundle grows every route's payload by about 500 bytes (lab counts).
+const breakPolicySchema = z.object({
+  breakMode: z.enum(['manual', 'automatic']),
+  autoBreakThresholdMinutes: z.number(),
+  autoBreakDurationMinutes: z.number(),
+  // The previous release's server sends none during a deploy: it reads as one step.
+  secondStep: z
+    .object({ thresholdMinutes: z.number(), durationMinutes: z.number() })
+    .nullish()
+    .transform((step) => step ?? null),
+});
+
 /** The clock state as the server answers it; the phone parses what it kept without signal with it too. */
-const clockStateSchema = z.object({
-  organizationId: text,
-  // Inline, not imported from ./settings: that module in the layout's client
-  // bundle grows every route's payload by about 500 bytes (lab counts).
-  breakPolicy: z.object({
-    breakMode: z.enum(['manual', 'automatic']),
-    autoBreakThresholdMinutes: z.number(),
-    autoBreakDurationMinutes: z.number(),
-    // The previous release's server sends none during a deploy: it reads as one step.
-    secondStep: z
-      .object({ thresholdMinutes: z.number(), durationMinutes: z.number() })
-      .nullish()
-      .transform((step) => step ?? null),
-  }),
-  status: z.enum(['clocked_out', 'working', 'on_break']),
-  isClockedIn: z.boolean(),
-  isOnBreak: z.boolean(),
-  clockInTime: nullableText,
-  statusStartedAt: nullableText,
-  breakStartTime: nullableText,
-  todayMinutes: z.number(),
-  workMinutes: z.number(),
-  breakMinutes: z.number(),
-  timelineSegments: z.array(z.object({ type: z.enum(['work', 'break']), minutes: z.number() })),
-  activeJobId: nullableText,
-  activeJobInfo: clockJobInfoSchema.nullable(),
-  captureModel: z.enum(['canonical', 'legacy', 'none']),
-  sessionId: nullableText,
-  sessionVersion: z.number().nullable(),
-  currentSegmentId: nullableText,
-  currentActivity: timeActivitySelectionSchema.nullable(),
-  resumeActivity: timeActivitySelectionSchema.nullable(),
-  resumeJobInfo: clockJobInfoSchema.nullable(),
-  recoveryReason: nullableText,
-  legacyOpen: z.boolean(),
-  standbyMinutes: z.number(),
-  travelMinutes: z.number(),
-  calloutMinutes: z.number(),
-  internalMinutes: z.number(),
-  fetchedAt: text,
-}) satisfies z.ZodType<LiveClockState>;
+const clockStateSchema = z
+  .object({
+    organizationId: text,
+    breakPolicy: breakPolicySchema,
+    // The previous release's server sends none during a deploy: its day counts by its current rule.
+    dayBreakPolicy: breakPolicySchema.nullish().transform((policy) => policy ?? null),
+    status: z.enum(['clocked_out', 'working', 'on_break']),
+    isClockedIn: z.boolean(),
+    isOnBreak: z.boolean(),
+    clockInTime: nullableText,
+    statusStartedAt: nullableText,
+    breakStartTime: nullableText,
+    todayMinutes: z.number(),
+    workMinutes: z.number(),
+    breakMinutes: z.number(),
+    // The previous release's server sends none: its break is the tracked one wherever a manual rule reads it.
+    trackedBreakMinutes: z.number().optional(),
+    timelineSegments: z.array(z.object({ type: z.enum(['work', 'break']), minutes: z.number() })),
+    activeJobId: nullableText,
+    activeJobInfo: clockJobInfoSchema.nullable(),
+    captureModel: z.enum(['canonical', 'legacy', 'none']),
+    sessionId: nullableText,
+    sessionVersion: z.number().nullable(),
+    currentSegmentId: nullableText,
+    currentActivity: timeActivitySelectionSchema.nullable(),
+    resumeActivity: timeActivitySelectionSchema.nullable(),
+    resumeJobInfo: clockJobInfoSchema.nullable(),
+    recoveryReason: nullableText,
+    legacyOpen: z.boolean(),
+    standbyMinutes: z.number(),
+    travelMinutes: z.number(),
+    calloutMinutes: z.number(),
+    internalMinutes: z.number(),
+    fetchedAt: text,
+  })
+  .transform(({ trackedBreakMinutes, ...state }) => ({
+    ...state,
+    trackedBreakMinutes: trackedBreakMinutes ?? state.breakMinutes,
+  })) satisfies z.ZodType<LiveClockState>;
 const failure = z.object({ success: z.literal(false), error: text });
 const clockResponse = z.discriminatedUnion('success', [
   failure,

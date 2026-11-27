@@ -9,7 +9,8 @@
 -- the delivery for good, past a later failure of another kind; the history
 -- and that mark refuse changes; an email without its From header is refused;
 -- a retry reads its window and stamps its attempt at the claim, not at the
--- start of its transaction; a settlement names the attempt's own sender.
+-- start of its transaction; a settlement names the attempt's own sender; an
+-- offer revision sends its own PDF while no later revision replaced it.
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
 
@@ -492,6 +493,173 @@ begin
 end;
 $$;
 
+-- An offer revision (20270602090000): only the named revision's own filed
+-- PDF is attached; another organization, a field worker, a document that is
+-- not the revision's and a subject of another kind are refused; once
+-- revision 2 is sent, revision 1 is neither requested nor retried, and
+-- revision 2 is a delivery of its own with its own PDF. No screen starts
+-- revision 2 yet (werk-flow/werkflow-planning#582), so it is seeded beside
+-- send_offer's revision 1.
+insert into ids
+select 'offer', public.create_offer('38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010',
+  gen_random_uuid(), 'Heizungstausch', '38070000-0000-4000-8000-000000000020', null, null, null, null);
+select public.save_offer_content('38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010',
+  pg_temp.id('offer'), 1, gen_random_uuid(),
+  '[{"title": "Heizung", "netCents": 20000, "positions": [
+    {"kind": "free", "name": "Monteurstunde", "description": "", "quantity": "2", "unit": "hour",
+     "unitLabel": "Std.", "unitPriceCents": 10000, "priceQuantity": 1, "taxRateBasisPoints": 1900,
+     "amountCents": 20000}]}]',
+  '{"netCents": 20000, "taxCents": 3800, "grossCents": 23800}');
+select public.send_offer('38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010',
+  pg_temp.id('offer'), 1, 2, gen_random_uuid(), 'post', (now() at time zone 'Europe/Berlin')::date,
+  'Hausverwaltung Lindenhof GmbH', 'Hofweg 1, 10117 Berlin', '{}', '38070000-0000-4000-8000-000000000701',
+  '38070000-0000-4000-8000-000000000010/38070000-0000-4000-8000-000000000701/Angebot.pdf', 'Angebot.pdf', 2048,
+  repeat('c', 64));
+insert into ids
+select 'revision 1', revision.id from public.offer_revisions revision
+where revision.offer_id = pg_temp.id('offer') and revision.revision = 1;
+
+-- Requests an email delivery of offer revision p_revision with document p_document under attempt p_attempt.
+create function pg_temp.request_offer(p_actor uuid, p_org uuid, p_revision uuid, p_document uuid, p_attempt uuid,
+  p_kind text default 'offer_revision')
+returns jsonb language sql as $$
+  select public.request_document_delivery(p_actor, p_org, p_attempt, p_kind, p_revision, p_document,
+    'erika.musterfrau@example.com', 'Angebot ANG-1', 'Guten Tag, anbei unser Angebot.',
+    'Haustechnik Sonnenberg GmbH', '"Haustechnik Sonnenberg GmbH" <angebot@werkflow.example>', null)
+$$;
+
+select pg_temp.expect_refusal(label, format('select pg_temp.request_offer(%L, %L, %L, %L, gen_random_uuid(), %L)',
+  actor, org, revision, document, kind), refusal)
+from (values
+  ('an offer by a field worker', '38070000-0000-4000-8000-000000000003', '38070000-0000-4000-8000-000000000010',
+   pg_temp.id('revision 1'), '38070000-0000-4000-8000-000000000701', 'offer_revision', 'not_authorized'),
+  ('an offer by another organization''s Admin', '38070000-0000-4000-8000-000000000004',
+   '38070000-0000-4000-8000-000000000011', pg_temp.id('revision 1'), '38070000-0000-4000-8000-000000000701',
+   'offer_revision', 'offer_revision_not_found'),
+  ('a document that is not the revision''s PDF', '38070000-0000-4000-8000-000000000002',
+   '38070000-0000-4000-8000-000000000010', pg_temp.id('revision 1'), '38070000-0000-4000-8000-000000000310',
+   'offer_revision', 'document_not_found'),
+  ('an invoice named as an offer revision', '38070000-0000-4000-8000-000000000002',
+   '38070000-0000-4000-8000-000000000010', pg_temp.id('invoice'), '38070000-0000-4000-8000-000000000301',
+   'offer_revision', 'offer_revision_not_found'),
+  ('an offer revision named as an invoice', '38070000-0000-4000-8000-000000000002',
+   '38070000-0000-4000-8000-000000000010', pg_temp.id('revision 1'), '38070000-0000-4000-8000-000000000701',
+   'invoice', 'invoice_not_found')
+) as cases(label, actor, org, revision, document, kind, refusal);
+
+-- Revision 1 is requested once, with its PDF's hash, and fails before the provider.
+do $$
+declare
+  v_first jsonb := pg_temp.request_offer('38070000-0000-4000-8000-000000000002',
+    '38070000-0000-4000-8000-000000000010', pg_temp.id('revision 1'), '38070000-0000-4000-8000-000000000701',
+    '38070000-0000-4000-8000-000000000711');
+  v_again jsonb := pg_temp.request_offer('38070000-0000-4000-8000-000000000002',
+    '38070000-0000-4000-8000-000000000010', pg_temp.id('revision 1'), '38070000-0000-4000-8000-000000000701',
+    '38070000-0000-4000-8000-000000000711');
+begin
+  insert into ids values ('offer delivery 1', (v_first ->> 'deliveryId')::uuid);
+  if (v_first ->> 'claimed')::boolean is distinct from true or v_first ->> 'contentHash' is distinct from repeat('c', 64)
+    or v_first ->> 'storagePath' is distinct from
+      '38070000-0000-4000-8000-000000000010/38070000-0000-4000-8000-000000000701/Angebot.pdf'
+    or (v_again ->> 'claimed')::boolean is distinct from false
+    or v_again ->> 'deliveryId' is distinct from v_first ->> 'deliveryId' then
+    raise exception 'the offer request answered % and then %', v_first, v_again;
+  end if;
+  if (select (subject_kind, offer_revision_id, invoice_id, service_report_id, document_id)
+      from public.document_deliveries where id = pg_temp.id('offer delivery 1'))
+    is distinct from ('offer_revision'::text, pg_temp.id('revision 1'), null::uuid, null::uuid,
+      '38070000-0000-4000-8000-000000000701'::uuid) then
+    raise exception 'the offer delivery names the wrong subject';
+  end if;
+  if not public.settle_document_delivery('38070000-0000-4000-8000-000000000010', pg_temp.id('offer delivery 1'), 1,
+      'failed', null, 'email_provider_503') then
+    raise exception 'the offer delivery''s failure was not settled';
+  end if;
+end;
+$$;
+
+-- Revision 2 is sent with its own filed PDF.
+reset role;
+insert into public.documents (
+  id, organization_id, storage_path, original_file_name, display_name, category, size_bytes, uploaded_by,
+  metadata, filed_at, filed_by
+) values
+('38070000-0000-4000-8000-000000000702', '38070000-0000-4000-8000-000000000010',
+ '38070000-0000-4000-8000-000000000010/38070000-0000-4000-8000-000000000702/Angebot.pdf', 'Angebot.pdf',
+ 'Angebot (2).pdf', 'offer', 2048, '38070000-0000-4000-8000-000000000002',
+ jsonb_build_object('offerId', pg_temp.id('offer'), 'revision', 2, 'contentHash', repeat('d', 64)),
+ now(), '38070000-0000-4000-8000-000000000002');
+insert into public.offer_revisions (
+  organization_id, offer_id, revision, offer_number, title, valid_until, sent_on, channel, client_id,
+  recipient_client_id, recipient_name, recipient_address, snapshot, content, net_cents, tax_cents, gross_cents,
+  document_id, sent_by
+)
+select organization_id, offer_id, 2, offer_number, title, valid_until, sent_on, 'download', client_id,
+  recipient_client_id, recipient_name, recipient_address, snapshot, content, net_cents, tax_cents, gross_cents,
+  '38070000-0000-4000-8000-000000000702', sent_by
+from public.offer_revisions where id = pg_temp.id('revision 1');
+insert into ids
+select 'revision 2', revision.id from public.offer_revisions revision
+where revision.offer_id = pg_temp.id('offer') and revision.revision = 2;
+set local role service_role;
+
+-- Revision 1 is replaced: neither a new request nor a retry of its failure
+-- is claimed, and revision 2 does not take revision 1's PDF.
+select pg_temp.expect_refusal(label, statement, refusal)
+from (values
+  ('a request of the replaced revision', format('select pg_temp.request_offer(%L, %L, %L, %L, gen_random_uuid())',
+    '38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010', pg_temp.id('revision 1'),
+    '38070000-0000-4000-8000-000000000701'), 'offer_revision_superseded'),
+  ('a retry of the replaced revision', format('select public.retry_document_delivery(%L, %L, %L, 1)',
+    '38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010',
+    pg_temp.id('offer delivery 1')), 'offer_revision_superseded'),
+  ('revision 2 with revision 1''s PDF', format('select pg_temp.request_offer(%L, %L, %L, %L, gen_random_uuid())',
+    '38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010', pg_temp.id('revision 2'),
+    '38070000-0000-4000-8000-000000000701'), 'document_not_found')
+) as cases(label, statement, refusal);
+
+-- Revision 2 is a new delivery with its own PDF; each revision lists only its own.
+do $$
+declare
+  v_second jsonb := pg_temp.request_offer('38070000-0000-4000-8000-000000000002',
+    '38070000-0000-4000-8000-000000000010', pg_temp.id('revision 2'), '38070000-0000-4000-8000-000000000702',
+    '38070000-0000-4000-8000-000000000712');
+begin
+  if (v_second ->> 'claimed')::boolean is distinct from true
+    or (v_second ->> 'deliveryId')::uuid = pg_temp.id('offer delivery 1')
+    or v_second ->> 'contentHash' is distinct from repeat('d', 64)
+    or v_second ->> 'storagePath' is distinct from
+      '38070000-0000-4000-8000-000000000010/38070000-0000-4000-8000-000000000702/Angebot.pdf' then
+    raise exception 'revision 2''s request answered %', v_second;
+  end if;
+  if (select array_agg(row_data ->> 'id') from jsonb_array_elements(public.list_document_deliveries(
+        '38070000-0000-4000-8000-000000000010', 'offer_revision', pg_temp.id('revision 1'), 50) -> 'rows') row_data)
+      is distinct from array[pg_temp.id('offer delivery 1')::text]
+    or (select array_agg(row_data ->> 'id') from jsonb_array_elements(public.list_document_deliveries(
+        '38070000-0000-4000-8000-000000000010', 'offer_revision', pg_temp.id('revision 2'), 50) -> 'rows') row_data)
+      is distinct from array[v_second ->> 'deliveryId']
+    or (public.list_document_deliveries('38070000-0000-4000-8000-000000000011', 'offer_revision',
+        pg_temp.id('revision 2'), 50) ->> 'total')::integer is distinct from 0 then
+    raise exception 'the revisions list each other''s deliveries, or another organization reads them';
+  end if;
+end;
+$$;
+
+-- An offer revision takes no manual delivery: „Als gesendet festhalten“ records how it went out.
+select pg_temp.expect_refusal('a manual delivery of an offer revision', format(
+  'select public.record_manual_delivery(%L, %L, gen_random_uuid(), ''offer_revision'', %L, %L, ''per Post'')',
+  '38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010', pg_temp.id('revision 2'),
+  '38070000-0000-4000-8000-000000000702'), 'invalid_input');
+
+-- Each row names exactly one subject.
+select pg_temp.expect_refusal('an offer delivery that names an invoice too', format($sql$
+  insert into public.document_deliveries (organization_id, subject_kind, invoice_id, offer_revision_id, document_id,
+    attachment_content_hash, channel, state, attempt_key, dispatched_at)
+  values (%L, 'offer_revision', %L, %L, %L, repeat('c', 64), 'manual', 'sent', gen_random_uuid(), now())
+$sql$, '38070000-0000-4000-8000-000000000010', pg_temp.id('invoice'), pg_temp.id('revision 1'),
+  '38070000-0000-4000-8000-000000000701'),
+  'new row for relation "document_deliveries" violates check constraint "document_deliveries_subject_check"');
+
 reset role;
 
 -- The history and an unknown outcome refuse changes, also to the table owner,
@@ -546,7 +714,8 @@ end;
 $$;
 do $$
 begin
-  if pg_temp.deliveries_seen_by('38070000-0000-4000-8000-000000000002') is distinct from 6::bigint
+  -- Six invoice deliveries and the two of the offer's revisions.
+  if pg_temp.deliveries_seen_by('38070000-0000-4000-8000-000000000002') is distinct from 8::bigint
     or pg_temp.deliveries_seen_by('38070000-0000-4000-8000-000000000003') is distinct from 0::bigint
     or pg_temp.deliveries_seen_by('38070000-0000-4000-8000-000000000004') is distinct from 0::bigint then
     raise exception 'a delivery read crossed a role or an organization';

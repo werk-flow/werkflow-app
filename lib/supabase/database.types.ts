@@ -1681,6 +1681,7 @@ export type Database = {
           invoice_id: string | null;
           message_text: string | null;
           note: string;
+          offer_revision_id: string | null;
           organization_id: string;
           outcome_unknown_at: string | null;
           provider_message_id: string | null;
@@ -1708,6 +1709,7 @@ export type Database = {
           invoice_id?: string | null;
           message_text?: string | null;
           note?: string;
+          offer_revision_id?: string | null;
           organization_id: string;
           outcome_unknown_at?: string | null;
           provider_message_id?: string | null;
@@ -1735,6 +1737,7 @@ export type Database = {
           invoice_id?: string | null;
           message_text?: string | null;
           note?: string;
+          offer_revision_id?: string | null;
           organization_id?: string;
           outcome_unknown_at?: string | null;
           provider_message_id?: string | null;
@@ -1766,6 +1769,13 @@ export type Database = {
             columns: ["invoice_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "invoices";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "document_deliveries_offer_revision_fk";
+            columns: ["offer_revision_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offer_revisions";
             referencedColumns: ["id", "organization_id"];
           },
           {

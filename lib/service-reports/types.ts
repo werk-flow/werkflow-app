@@ -1,4 +1,4 @@
-import type { DeliveryList, DeliveryMailDefaults } from '@/lib/delivery/delivery-types';
+import type { DeliveryView } from '@/lib/delivery/delivery-types';
 import type { MaintenanceScopeOutcome } from '@/lib/maintenance/types';
 
 // Types and the page parameter only, so the client list imports no server code.
@@ -32,5 +32,5 @@ export type CompletedVisitPage = {
   pageSize: number;
 };
 
-/** „Versand“ of one Servicebericht: its deliveries and what the email form proposes, null when that read failed. */
-export type ServiceReportDelivery = { list: DeliveryList; defaults: DeliveryMailDefaults | null };
+/** „Versand“ of one Servicebericht. */
+export type ServiceReportDelivery = DeliveryView;

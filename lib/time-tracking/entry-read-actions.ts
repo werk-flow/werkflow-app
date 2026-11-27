@@ -25,12 +25,14 @@ import {
 import { canViewEntries } from './helpers';
 import { jobIntervalEntries } from './activity-intervals';
 import { uuidSchema } from '@/lib/validation/uuid';
-import { formatBerlinLocalDate, getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
+import { getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
+import { entryBusinessDate } from './closed-period-dates';
+import { windowReadEnd } from './work-sessions';
 import { getCanonicalTimeEntries } from './canonical-entries';
 import { readWindowProjections } from './entry-window-projections';
 import type { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/actions';
 import { loadApprovedCorrectionProjection } from '@/lib/time-corrections/approved-projection';
-import { applyApprovedTimeCorrections } from '@/lib/time-corrections/projection';
+import { applyApprovedTimeCorrections, correctedEntriesInWindow } from '@/lib/time-corrections/projection';
 import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
 import { verifyCurrentMembership } from './action-access';
 import { isManagerRole, type OrgRole } from '@/lib/roles';
@@ -102,20 +104,17 @@ function visibleWindowEntries(input: {
   const visibleCanonicalEntries = input.canonicalEntries.filter((entry) =>
     canViewEntries(callerRole, entry.userId, callerId),
   );
-  const projectedEntries = applyApprovedTimeCorrections(
+  const projectedEntries = correctedEntriesInWindow(
     [...toTimeEntries(visibleEntries), ...visibleCanonicalEntries],
     input.applications,
     input.organizationId,
-  ).filter((entry) => {
-    const timestamp = Date.parse(entry.timestamp);
-    return (
+    { fromMs: fromTimestamp, toMs: toTimestamp },
+  ).filter(
+    (entry) =>
       canViewEntries(callerRole, entry.userId, callerId) &&
-      timestamp >= fromTimestamp &&
-      timestamp <= toTimestamp &&
       (!userId || entry.userId === userId) &&
-      (!status || entry.status === status)
-    );
-  });
+      (!status || entry.status === status),
+  );
   const officialEntries = markPendingCorrections(projectedEntries, input.pendingSources);
   return officialEntries.sort(
     (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
@@ -139,6 +138,8 @@ export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<G
     }
     const normalizedFrom = new Date(fromTimestamp).toISOString();
     const normalizedTo = new Date(toTimestamp).toISOString();
+    // The read reaches the events that close the window's last day at the next midnight.
+    const readTo = new Date(windowReadEnd(toTimestamp)).toISOString();
 
     const callerRole = await verifyCurrentMembership(organizationId);
     if (!callerRole) {
@@ -156,7 +157,7 @@ export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<G
       .select('*')
       .eq('organization_id', organizationId)
       .gte('timestamp', normalizedFrom)
-      .lte('timestamp', normalizedTo)
+      .lte('timestamp', readTo)
       .order('timestamp', { ascending: true })
       .order('created_at', { ascending: true })
       .order('id');
@@ -176,6 +177,7 @@ export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<G
         organizationId,
         from: normalizedFrom,
         to: normalizedTo,
+        readTo,
         status,
         subjectUserId: userId ?? (callerRole === 'employee' ? user.id : undefined),
         effectiveUserId,
@@ -244,9 +246,9 @@ async function loadJobParticipants(
   }));
 }
 
-/** The key of one person's local day in one organization. */
+/** The key of one person's local day in one organization, the day a midnight end closes included. */
 function userDayKey(entry: TimeEntry): string {
-  return `${entry.userId}:${entry.organizationId}:${formatBerlinLocalDate(new Date(entry.timestamp))}`;
+  return `${entry.userId}:${entry.organizationId}:${entryBusinessDate(entry)}`;
 }
 
 /** What one job's time read needs: the caller and the approved corrections the caller loaded once. */
@@ -359,7 +361,7 @@ async function readSpanDayEntries(
           .in('user_id', [...batch])
           .eq('organization_id', organizationId)
           .gte('timestamp', new Date(span.start).toISOString())
-          .lte('timestamp', new Date(span.end).toISOString())
+          .lte('timestamp', new Date(windowReadEnd(span.end)).toISOString())
           .neq('status', 'rejected')
           .order('timestamp', { ascending: true })
           .order('created_at', { ascending: true })

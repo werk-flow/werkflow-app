@@ -60,11 +60,31 @@ test("every reuse key names the base the run's Plan diffed against", () => {
 
 test("a pull request's run plans no browser shard and no midnight wait, and says why", () => {
   const pr = plan('pr', { outputs: { ...OUTPUTS, midnight_until: '2026-11-20T23:10:00.000Z' } });
-  expect(pr.jobs).toEqual(['plan', 'fast', 'sql', 'components', 'check']);
+  expect(pr.jobs).toEqual(['plan', 'fast', 'sql', 'check']);
   expect(pr.shards).toEqual([]);
   expect(pr.outputs).toMatchObject({ browser: 'false', shards: '[]', midnight_until: '' });
   expect(pr.skips.browser).toContain('owner decision D1');
   expect(pr.skips.midnight).toContain('owner decision D1');
+});
+
+test('a PR defers component contracts to integration without changing the selected areas', () => {
+  const pr = plan('pr');
+  const integration = plan('integration');
+  expect({
+    prJobs: pr.jobs,
+    prShards: jobShards('components', pr),
+    prWork: plannedWork('pr', OUTPUTS).filter((entry) => entry.startsWith('components:')),
+    deferred: pr.skips.components?.includes('before merge'),
+    integrationRunsComponents: integration.jobs.includes('components'),
+    integrationShards: jobShards('components', integration),
+  }).toEqual({
+    prJobs: ['plan', 'fast', 'sql', 'check'],
+    prShards: [],
+    prWork: [],
+    deferred: true,
+    integrationRunsComponents: true,
+    integrationShards: COMPONENT_SHARDS,
+  });
 });
 
 test('the integration, main and full runs run the selected shards and the midnight hold', () => {
@@ -300,22 +320,24 @@ test("Fast runs exactly the plan's selected lint, static gates and unit groups, 
 test("SQL runs the selected SQL groups and its steps, and an empty selection skips it with the plan's reason", () => {
   expect(plannedGroups('sql', OUTPUTS)).toEqual(['sql:grants', 'sql:history', 'step:types', 'step:seed']);
   const none = plan('pr', { outputs: { ...OUTPUTS, selected_sql: '' } });
-  expect(none.jobs).toEqual(['plan', 'fast', 'components', 'check']);
+  expect(none.jobs).toEqual(['plan', 'fast', 'check']);
   expect(none.skips.sql).toContain('selects no SQL group');
 });
 
 test('Components runs one job per component shard of the plan, and an empty selection skips it with the reason', () => {
-  const run = plan('pr');
+  const run = plan('integration');
   expect(run.jobs).toContain('components');
   expect(jobShards('components', run)).toEqual(COMPONENT_SHARDS);
   expect(plannedGroups('components', OUTPUTS, COMPONENT_SHARDS[1]?.groups)).toEqual([
     'ui:contracts:reports',
     'ui:contracts:shell',
   ]);
-  const none = plan('pr', { outputs: { ...OUTPUTS, selected_components: '', component_shards: '[]' } });
+  const none = plan('integration', {
+    outputs: { ...OUTPUTS, browser: 'false', shards: '[]', selected_components: '', component_shards: '[]' },
+  });
   expect(none.jobs).toEqual(['plan', 'fast', 'sql', 'check']);
   expect(none.skips.components).toContain('selects no component area');
-  const reused = plan('pr', {
+  const reused = plan('integration', {
     reused: (key) => (key.job === 'components' ? 'https://ci.example/runs/5' : undefined),
   });
   expect(reused.jobs).not.toContain('components');

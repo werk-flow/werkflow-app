@@ -116,7 +116,11 @@ function tableQuery(table: string): Record<string, unknown> {
   return query;
 }
 mock.module('@/lib/supabase/admin', () => ({
-  createSupabaseAdminClient: () => ({ from: (table: string) => tableQuery(table) }),
+  createSupabaseAdminClient: () => ({
+    from: (table: string) => tableQuery(table),
+    // A database function answers like a table read of its name: no rows unless it fails.
+    rpc: (name: string) => tableQuery(`rpc:${name}`),
+  }),
 }));
 
 const cached = await import('@/lib/data/cached');

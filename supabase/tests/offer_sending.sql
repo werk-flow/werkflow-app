@@ -361,7 +361,7 @@ end;
 $$;
 
 -- Editing a sent offer starts revision n+1 (migration
--- 20270601130000_start_the_next_revision_of_a_sent_offer.sql): revision 1 and
+-- 20270701090000_start_the_next_revision_of_a_sent_offer.sql): revision 1 and
 -- the Positionen with their costs before the start.
 create temporary table before_revision as
 select (select to_jsonb(sent) from public.offer_revisions sent

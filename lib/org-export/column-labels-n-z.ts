@@ -32,6 +32,7 @@ export const COLUMN_LABELS_N_TO_Z = {
   offer_id: 'Angebot (ID)',
   offer_number: 'Angebotsnummer',
   offer_opening_text: 'Angebot Einleitung',
+  offer_revision_id: 'Angebotsrevision (ID)',
   offer_validity_days: 'Angebot gültig (Tage)',
   old_value: 'Alter Wert',
   opened_by: 'Eröffnet von (ID)',

@@ -68,7 +68,7 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
           </RegionLoadError>
         )}
         <OfferHeaderFacts offer={offer} />
-        <OfferRevisions revisions={revisions} editing={offer.status === 'entwurf'} />
+        <OfferRevisions offerId={offer.id} revisions={revisions} editing={offer.status === 'entwurf'} />
         {/* Only a draft's content changes; a sent offer is edited as the draft of its next revision. */}
         {offer.status === 'entwurf' && <OfferContentEditor key={offer.id} offer={offer} />}
       </div>

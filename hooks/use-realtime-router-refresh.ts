@@ -40,7 +40,7 @@ export function useRealtimeRouterRefresh({
   tables,
   enabled = true,
   eventFilter,
-}: UseRealtimeRouterRefreshOptions): void {
+}: UseRealtimeRouterRefreshOptions): () => void {
   const { refresh, isPending } = useRouterRefresh();
   const subscribe = useRealtimeSubscribe();
   const schedulerRef = useRef<TrailingScheduler | null>(null);
@@ -125,4 +125,5 @@ export function useRealtimeRouterRefresh({
 
   // Server-rendered surfaces always show server data.
   useRealtimeTables({ subscribe, tables, enabled, serverData: true, onEvent: scheduleRefresh });
+  return scheduleRefresh;
 }

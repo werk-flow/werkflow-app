@@ -27,7 +27,7 @@ import { writeOfferContent } from './content-writes';
 // organization and writes the history in the same call
 // (supabase/migrations/20261210130000_keep_offers_for_the_right_customer_and_recipient.sql,
 // 20261230110000_change_the_header_of_a_draft_offer.sql,
-// 20270601130000_start_the_next_revision_of_a_sent_offer.sql).
+// 20270701090000_start_the_next_revision_of_a_sent_offer.sql).
 
 const createRefusal = writeRefusalFor(
   new Set(['not_authorized', 'client_not_found', 'client_archived', 'site_not_found', 'contact_not_found']),

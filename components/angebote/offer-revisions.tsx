@@ -1,6 +1,7 @@
 import { FileCheck2 } from 'lucide-react';
 import Link from 'next/link';
 
+import { OfferRevisionDelivery } from '@/components/angebote/offer-revision-delivery';
 import { SectionTitle } from '@/components/shared/section-title';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,11 +14,14 @@ import { formatGermanDate } from '@/lib/utils';
  * channel the office named and its filed PDF in the library. An older
  * revision stays readable, marked as replaced by the next. While the offer is
  * the draft of its next revision, the list says so above the newest sent one.
+ * „Versenden“ emails the newest through E2c's delivery; a replaced one lists its sends.
  */
 export function OfferRevisions({
+  offerId,
   revisions,
   editing,
 }: {
+  offerId: string;
   revisions: readonly OfferRevision[];
   /** The offer is a draft again: the draft of the revision after the newest sent one. */
   editing: boolean;
@@ -60,9 +64,17 @@ export function OfferRevisions({
                   </p>
                 </div>
               </div>
-              <Button asChild variant="outline" size="sm" className="self-start sm:self-auto">
-                <Link href={`/dokumente?document=${revision.documentId}`}>PDF öffnen</Link>
-              </Button>
+              <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+                <OfferRevisionDelivery
+                  offerId={offerId}
+                  revision={revision.revision}
+                  recipientName={revision.recipientName}
+                  replacedBy={replacedBy}
+                />
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/dokumente?document=${revision.documentId}`}>PDF öffnen</Link>
+                </Button>
+              </div>
             </li>
           );
         })}

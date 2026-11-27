@@ -324,8 +324,14 @@ export type ClockTimelineSegment = {
 
 export type LiveClockState = {
   organizationId: string;
-  /** Today's rule: the live totals need no earlier versions. */
+  /** The organization's current rule: the clock's controls and a running day count by it. */
   breakPolicy: BreakPolicyValues;
+  /**
+   * The rule today's closed day counts by while nothing runs: the version in
+   * force at its last entry (`dayBreakPolicy`). Null while the clock runs,
+   * and after any clock action, whose day counts by the current rule.
+   */
+  dayBreakPolicy: BreakPolicyValues | null;
   status: ClockStatus;
   isClockedIn: boolean;
   isOnBreak: boolean;
@@ -333,8 +339,11 @@ export type LiveClockState = {
   statusStartedAt: string | null;
   breakStartTime: string | null;
   todayMinutes: number;
+  /** Today's work and break, split by the rule the day counts by. */
   workMinutes: number;
   breakMinutes: number;
+  /** Today's closed tracked break before any rule: what a manual rule deducts. */
+  trackedBreakMinutes: number;
   timelineSegments: ClockTimelineSegment[];
   activeJobId: string | null;
   activeJobInfo: ClockJobInfo | null;

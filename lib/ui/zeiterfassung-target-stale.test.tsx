@@ -33,6 +33,9 @@ const breakPolicy = {
 const idle: LiveClockState = {
   organizationId: 'org-1',
   breakPolicy,
+  // A day without time: no closed day's rule, no tracked break.
+  dayBreakPolicy: null,
+  trackedBreakMinutes: 0,
   status: 'clocked_out',
   isClockedIn: false,
   isOnBreak: false,

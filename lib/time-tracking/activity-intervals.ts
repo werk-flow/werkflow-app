@@ -1,6 +1,7 @@
 import { isSameLocalDay } from '@/lib/date-time/berlin';
 import { getEffectiveTimeEntries, sortTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
+import { entryBusinessDate } from './closed-period-dates';
 import type { TimeEntry, TimeEntryStatus, TimeSegmentKind } from './types';
 
 // Recorded time as activity intervals: each start paired with the next event
@@ -78,7 +79,7 @@ function pairPersonEntries(entries: TimeEntry[], status: TimeEntryStatus, now: D
   };
 
   for (const [index, entry] of entries.entries()) {
-    if (open && !isSameLocalDay(new Date(open.timestamp), new Date(entry.timestamp))) {
+    if (open && entryBusinessDate(open) !== entryBusinessDate(entry)) {
       leaveOpen(open, null, true);
       open = null;
     }
