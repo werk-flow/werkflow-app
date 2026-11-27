@@ -17,14 +17,18 @@
 -- identity, the manager role and the organization and passes them; the
 -- function checks the actor again under the access lock.
 --
--- Expand-only: one new function.
+-- get_offer_with_revisions reads the offer with its costs and its sent revisions in one
+-- statement, so the page never pairs a draft with a revision sent after it.
+--
+-- Expand-only: two new functions.
 --
 -- Prevention: Tier 1 (the status and version checks under the row lock, no
 -- client grant), Tier 2 supabase/tests/offer_sending.sql.
 
 -- Starts revision n+1 of the sent offer p_offer_id, which is still at
--- p_expected_version. The answer is {revision, version, replay}: the draft's
--- revision number and the offer's version after the call. A call under the
+-- p_expected_version. The answer is {revision, version, updatedAt, replay}:
+-- the draft's revision number, the offer's version after the call and its
+-- transaction stamp, so the starting tab knows the Realtime echo of its start. A call under the
 -- attempt key of an earlier start, or a start of the same sent version from
 -- another tab, answers that start with replay true and writes nothing.
 -- Refusals: invalid_input, not_authorized, offer_not_found, offer_not_sent
@@ -46,6 +50,7 @@ declare
   v_offer public.offers;
   v_earlier public.offer_events;
   v_sent integer;
+  v_updated_at timestamptz;
 begin
   if p_actor_id is null or p_organization_id is null or p_offer_id is null or p_attempt_key is null
     or p_expected_version is null
@@ -75,7 +80,7 @@ begin
   end if;
   if found then
     return jsonb_build_object('revision', (v_earlier.payload ->> 'revision')::integer,
-      'version', v_earlier.version, 'replay', true);
+      'version', v_earlier.version, 'updatedAt', v_offer.updated_at, 'replay', true);
   end if;
 
   if v_offer.status <> 'gesendet' then raise exception 'offer_not_sent'; end if;
@@ -89,7 +94,8 @@ begin
     version = offer.version + 1,
     content_version = offer.content_version + 1,
     updated_by = p_actor_id
-  where offer.organization_id = p_organization_id and offer.id = p_offer_id;
+  where offer.organization_id = p_organization_id and offer.id = p_offer_id
+  returning offer.updated_at into v_updated_at;
   insert into public.offer_events (
     organization_id, offer_id, event_type, status, version, payload, actor_id, attempt_key
   ) values (
@@ -98,9 +104,22 @@ begin
       'fromVersion', v_offer.version, 'contentVersion', v_offer.content_version + 1),
     p_actor_id, p_attempt_key
   );
-  return jsonb_build_object('revision', v_sent + 1, 'version', v_offer.version + 1, 'replay', false);
+  return jsonb_build_object('revision', v_sent + 1, 'version', v_offer.version + 1,
+    'updatedAt', v_updated_at, 'replay', false);
 end;
 $$;
 revoke all on function public.start_offer_revision(uuid, uuid, uuid, integer, uuid)
   from public, anon, authenticated;
 grant execute on function public.start_offer_revision(uuid, uuid, uuid, integer, uuid) to service_role;
+
+-- The office page's read of one offer: {offer, costs} as get_offer_with_costs
+-- answers it, or null, and its sent revisions as list_offer_revisions answers
+-- them. Both are stable and run in this one statement, so they read one snapshot.
+create function public.get_offer_with_revisions(p_organization_id uuid, p_offer_id uuid)
+returns jsonb language sql stable security invoker set search_path = '' as $$
+  select jsonb_build_object(
+    'offer', public.get_offer_with_costs(p_organization_id, p_offer_id),
+    'revisions', public.list_offer_revisions(p_organization_id, p_offer_id));
+$$;
+revoke all on function public.get_offer_with_revisions(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.get_offer_with_revisions(uuid, uuid) to service_role;

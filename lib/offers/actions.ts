@@ -165,6 +165,7 @@ const startRevisionRefusal = writeRefusalFor(
 const startedRevisionSchema = z.object({
   revision: z.number().int().min(2),
   version: z.number().int().positive(),
+  updatedAt: z.string(),
   replay: z.boolean(),
 });
 
@@ -172,11 +173,12 @@ const startedRevisionSchema = z.object({
  * „Bearbeiten“ of a sent offer that is still at the version the page showed:
  * the offer becomes the draft of its next revision, with the Positionen as
  * sent. The sent revisions stay as they were. A press repeated after a lost
- * answer, or from another tab, answers the first start.
+ * answer, or from another tab, answers the first start. The answer names the
+ * offer's transaction stamp, so the starting tab knows the Realtime echo.
  */
 export async function startOfferRevision(
   rawInput: StartOfferRevisionInput,
-): Promise<ActionResult<{ offerId: string; revision: number; version: number }>> {
+): Promise<ActionResult<{ offerId: string; revision: number; version: number; updatedAt: string }>> {
   const parsed = startOfferRevisionSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
@@ -203,6 +205,7 @@ export async function startOfferRevision(
       offerId: input.offerId,
       revision: started.data.revision,
       version: started.data.version,
+      updatedAt: started.data.updatedAt,
     };
   } catch (error) {
     logError('startOfferRevision: unexpected error', error);

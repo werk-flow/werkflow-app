@@ -19787,6 +19787,10 @@ export type Database = {
         Args: { p_offer_id: string; p_organization_id: string };
         Returns: Json;
       };
+      get_offer_with_revisions: {
+        Args: { p_offer_id: string; p_organization_id: string };
+        Returns: Json;
+      };
       get_org_members_for_user: {
         Args: { p_org_id: string; p_user_id: string };
         Returns: {

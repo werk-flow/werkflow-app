@@ -16,7 +16,7 @@ import { RouteRedirect } from '@/components/shared/route-redirect';
 import { SubpageHeader } from '@/components/shared/subpage-header';
 import { logError } from '@/lib/logging';
 import { getManagerAssigneeOptions } from '@/lib/members/profile-name';
-import { readOfferRevisions, readOfferWithCosts } from '@/lib/offers/reads';
+import { readOfferWithRevisions } from '@/lib/offers/reads';
 import type { OfferRevision, OfferWithCosts } from '@/lib/offers/types';
 import { resolvePageMembership } from '@/lib/org/page-context';
 import { isManagerRole } from '@/lib/roles';
@@ -28,25 +28,14 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
   const { membership } = await resolvePageMembership();
   if (!membership || !isManagerRole(membership.role)) redirect('/dashboard');
   const offerId = uuidSchema.safeParse((await params).offerId);
-  const offer = !offerId.success
+  // The offer and its sent revisions come from one snapshot.
+  const page = !offerId.success
     ? null
-    : await readOfferWithCosts(membership.orgId, offerId.data).catch((error: unknown) => {
+    : await readOfferWithRevisions(membership.orgId, offerId.data).catch((error: unknown) => {
         logError('angebot.read_failed', error);
         return 'failed' as const;
       });
-  // Only a draft's header changes; its picker offers the office's members as responsible.
-  const owners =
-    offer && offer !== 'failed' && offer.status === 'entwurf'
-      ? await getManagerAssigneeOptions(createSupabaseAdminClient(), membership.orgId)
-      : null;
-  const revisions =
-    offer && offer !== 'failed'
-      ? await readOfferRevisions(membership.orgId, offer.id).catch((error: unknown) => {
-          logError('angebot.revisions_read_failed', error);
-          return 'failed' as const;
-        })
-      : [];
-  if (offer === 'failed') {
+  if (page === 'failed') {
     return (
       <RegionLoadError title="Das Angebot konnte nicht geladen werden">
         Das Angebot ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
@@ -54,13 +43,19 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
     );
   }
   // No offer id, another organization's offer, or one that is gone: back to the list.
-  if (!offer) {
+  if (!page) {
     return (
       <RouteRedirect href="/angebote">
         <OfferDetailSkeleton />
       </RouteRedirect>
     );
   }
+  const { offer, revisions } = page;
+  // Only a draft's header changes; its picker offers the office's members as responsible.
+  const owners =
+    offer.status === 'entwurf'
+      ? await getManagerAssigneeOptions(createSupabaseAdminClient(), membership.orgId)
+      : null;
 
   return (
     <OfferUnsavedProvider>
@@ -73,13 +68,7 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
           </RegionLoadError>
         )}
         <OfferHeaderFacts offer={offer} />
-        {revisions === 'failed' ? (
-          <RegionLoadError title="Die gesendeten Revisionen konnten nicht geladen werden">
-            Versuche es in einem Moment erneut.
-          </RegionLoadError>
-        ) : (
-          <OfferRevisions revisions={revisions} editing={offer.status === 'entwurf'} />
-        )}
+        <OfferRevisions revisions={revisions} editing={offer.status === 'entwurf'} />
         {/* Only a draft's content changes; a sent offer is edited as the draft of its next revision. */}
         {offer.status === 'entwurf' && <OfferContentEditor key={offer.id} offer={offer} />}
       </div>
@@ -87,10 +76,7 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
   );
 }
 
-/**
- * The way back, the title, the number with the revision the page shows and
- * the actions of the offer's state. The revision stays out while its read failed.
- */
+/** The way back, the title, the number with the revision the page shows and the actions of the offer's state. */
 function OfferPageHeader({
   offer,
   owners,
@@ -98,12 +84,11 @@ function OfferPageHeader({
 }: {
   offer: OfferWithCosts;
   owners: Awaited<ReturnType<typeof getManagerAssigneeOptions>> | null;
-  revisions: OfferRevision[] | 'failed';
+  revisions: OfferRevision[];
 }) {
-  // The newest sent revision; a draft after one is the next revision.
-  const sentRevision = revisions === 'failed' ? null : (revisions[0]?.revision ?? 0);
-  const shownRevision =
-    sentRevision === null ? null : offer.status === 'entwurf' ? sentRevision + 1 : sentRevision;
+  // The newest sent revision; a draft is the one after it.
+  const sentRevision = revisions[0]?.revision ?? 0;
+  const shownRevision = offer.status === 'entwurf' ? sentRevision + 1 : sentRevision;
   return (
     <div className="space-y-2">
       <Link

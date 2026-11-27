@@ -12,6 +12,7 @@ import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { describeFailure } from '@/lib/action-messages';
 import { startOfferRevision } from '@/lib/offers/actions';
 import type { OfferDetail } from '@/lib/offers/types';
+import { ownWrites } from '@/lib/realtime/own-writes';
 
 const START_FAILED = 'Die neue Revision konnte nicht angelegt werden. Versuche es erneut.';
 const START_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
@@ -61,21 +62,20 @@ export function StartOfferRevisionButton({
       confirmLabel={`Revision ${next} bearbeiten`}
       onConfirm={async () => {
         const since = settle.markChange();
-        const result = await start
-          .run({
-            offerId: offer.id,
-            expectedVersion: offer.version,
-            attemptKey: attempt.key,
-          })
+        // Recorded, so this tab skips the Realtime echo of its own start (lib/realtime/own-writes.ts).
+        const result = await ownWrites
+          .track(start.run({ offerId: offer.id, expectedVersion: offer.version, attemptKey: attempt.key }))
           .catch(() => null);
         if (!result?.success) {
           return result ? describeFailure(result.error, START_FAILURE_MESSAGES, START_FAILED) : START_FAILED;
         }
-        await settle(since);
+        // True also when another tab has sent that revision since; a page that does not follow
+        // within the wait reports it after this, so the last banner names what is open.
         showBanner({
           variant: 'success',
-          message: `${offer.offerNumber} ist ein Entwurf für Revision ${result.revision}. Revision ${result.revision - 1} bleibt die zuletzt gesendete, bis du ihn als gesendet festhältst.`,
+          message: `Revision ${result.revision} von ${offer.offerNumber} ist als Entwurf angelegt.`,
         });
+        await settle(since);
         return null;
       }}
     />

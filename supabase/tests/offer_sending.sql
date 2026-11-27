@@ -399,7 +399,9 @@ declare
   v_answer jsonb := pg_temp.start(pg_temp.id('first'), 2, '38070000-0000-4000-8000-000000000111');
   v_event public.offer_events;
 begin
-  if v_answer is distinct from '{"revision": 2, "version": 3, "replay": false}'::jsonb then
+  if v_answer - 'updatedAt' is distinct from '{"revision": 2, "version": 3, "replay": false}'::jsonb
+    or (v_answer ->> 'updatedAt')::timestamptz is distinct from (select updated_at from public.offers
+      where organization_id = '38070000-0000-4000-8000-000000000010' and id = pg_temp.id('first')) then
     raise exception 'the start of revision 2 answered %', v_answer;
   end if;
   if (select status || ':' || version || ':' || content_version from public.offers
@@ -434,9 +436,9 @@ $$;
 -- another tab, answer the first start and write nothing.
 do $$
 begin
-  if pg_temp.start(pg_temp.id('first'), 2, '38070000-0000-4000-8000-000000000111')
+  if pg_temp.start(pg_temp.id('first'), 2, '38070000-0000-4000-8000-000000000111') - 'updatedAt'
       is distinct from '{"revision": 2, "version": 3, "replay": true}'::jsonb
-    or pg_temp.start(pg_temp.id('first'), 2, '38070000-0000-4000-8000-000000000112')
+    or pg_temp.start(pg_temp.id('first'), 2, '38070000-0000-4000-8000-000000000112') - 'updatedAt'
       is distinct from '{"revision": 2, "version": 3, "replay": true}'::jsonb then
     raise exception 'a repeated start did not answer the first one';
   end if;
@@ -558,14 +560,32 @@ begin
 end;
 $$;
 
+-- The office page's read answers the offer with its costs and its revisions together, and
+-- another organization's offer as none.
+do $$
+begin
+  if public.get_offer_with_revisions('38070000-0000-4000-8000-000000000010', pg_temp.id('first'))
+      is distinct from jsonb_build_object(
+        'offer', public.get_offer_with_costs('38070000-0000-4000-8000-000000000010', pg_temp.id('first')),
+        'revisions', public.list_offer_revisions('38070000-0000-4000-8000-000000000010', pg_temp.id('first')))
+    or public.get_offer_with_revisions('38070000-0000-4000-8000-000000000010', pg_temp.id('first'))
+      #>> '{revisions,0,revision}' is distinct from '3'
+    or public.get_offer_with_revisions('38070000-0000-4000-8000-000000000011', pg_temp.id('first'))
+      is distinct from '{"offer": null, "revisions": []}'::jsonb then
+    raise exception 'the offer page read is not the offer with its revisions';
+  end if;
+end;
+$$;
+
 reset role;
 do $$
 declare
   v_role text;
 begin
   foreach v_role in array array['anon', 'authenticated'] loop
-    if has_function_privilege(v_role, 'public.start_offer_revision(uuid,uuid,uuid,integer,uuid)', 'EXECUTE') then
-      raise exception '% may start a revision', v_role;
+    if has_function_privilege(v_role, 'public.start_offer_revision(uuid,uuid,uuid,integer,uuid)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.get_offer_with_revisions(uuid,uuid)', 'EXECUTE') then
+      raise exception '% may start a revision or read an offer with its costs', v_role;
     end if;
   end loop;
 end;

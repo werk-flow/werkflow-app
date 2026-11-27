@@ -114,12 +114,19 @@ export async function readOfferArticleLine(): Promise<
 export async function startOfferRevision(
   input: unknown,
 ): Promise<
-  { success: true; offerId: string; revision: number; version: number } | { success: false; error: string }
+  | { success: true; offerId: string; revision: number; version: number; updatedAt: string }
+  | { success: false; error: string }
 > {
   const refusal = await holdWrite('start-offer-revision', input);
   return refusal
     ? { success: false, error: refusal }
-    : { success: true, offerId: 'contract-offer', revision: 2, version: 2 };
+    : {
+        success: true,
+        offerId: 'contract-offer',
+        revision: 2,
+        version: 2,
+        updatedAt: '2026-11-27T08:00:00.000000+00:00',
+      };
 }
 
 /** „Als gesendet festhalten“ is not part of these contracts. */

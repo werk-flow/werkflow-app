@@ -39,9 +39,9 @@ async function readPdf(
 /**
  * The PDF at `path` as a blob: URL while `enabled`; a change of `deps`
  * renders it anew. Every URL a read made is recorded as it is made: the one on
- * screen stays, the others are revoked once the shown one changes, among them
- * one whose read the hook dropped because it was aborted after the URL was
- * made, and all are revoked on unmount.
+ * screen stays, the others are revoked once no read runs, among them one whose
+ * read the hook dropped because it was aborted after the URL was made, and all
+ * are revoked on unmount.
  */
 export function usePdfRead({
   path,
@@ -67,13 +67,17 @@ export function usePdfRead({
     failureMessage,
   });
   const url = read.data?.url;
+  const settled = !read.loading;
+  // Once no read of the current deps runs, every URL but the shown one is off screen for good:
+  // replaced, or made by a read the hook dropped, also when the read after it failed.
   useEffect(() => {
+    if (!settled) return;
     for (const other of made.current) {
       if (other === url) continue;
       URL.revokeObjectURL(other);
       made.current.delete(other);
     }
-  }, [url]);
+  }, [url, settled]);
   useEffect(() => {
     const urls = made.current;
     return () => {
