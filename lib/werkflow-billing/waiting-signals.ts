@@ -125,7 +125,7 @@ export async function runSignalsWaitingForOrganization(
       });
     }
   } catch (error) {
-    // best-effort: the organization exists; Stripe's next delivery and the daily comparison still cover each signal.
+    // best-effort: each signal stays pending; Stripe's next delivery runs it, and the daily comparison raises an alarm for an invoice still without its original.
     logError('runSignalsWaitingForOrganization: failed', error);
   }
 }
