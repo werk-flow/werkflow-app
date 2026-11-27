@@ -34,7 +34,7 @@ values (
 insert into public.organization_members (organization_id, user_id, role)
 values ('34800000-0000-4000-8000-000000000010', '34800000-0000-4000-8000-000000000002', 'employee');
 -- The job's execution has started, so the transition never reaches
--- transition_work_execution, whose own FOR UPDATE would hide a missing lock.
+-- transition_work_execution, whose own job lock would hide a missing one.
 insert into public.jobs (
   id, organization_id, title, job_number, status, execution_state, created_by
 ) values (
@@ -127,30 +127,31 @@ $$;
 
 rollback;
 
--- werk-flow/werkflow-planning#361: a time entry written onto a job takes the
--- same order. Before migration
--- 20270503090000_lock_the_timeline_revision_before_a_time_entry_references_a_job.sql
--- its foreign key check took a key-share lock on the job first and then
--- waited for the revision row. A first writer that held the revision row and
--- then locked the job FOR UPDATE (a clock-in on the job, or the clock starting
--- work on it) waited for that key share: `deadlock detected`.
+-- werk-flow/werkflow-planning#361: a time write that holds the revision row
+-- can lock a job that a second time entry references. A time entry takes a
+-- key-share lock on its job (the foreign key check) and then waits for the
+-- revision row. Before migration
+-- 20270503090000_let_a_time_entry_reference_a_job_while_its_work_starts.sql a
+-- clock-in on the job (transition_work_on_time_start) and the clock starting
+-- work on a job (transition_work_execution_p1_15) locked it FOR UPDATE, which
+-- waits for that key share: `deadlock detected`. FOR NO KEY UPDATE does not.
 --
--- Two sessions show it. The first holds the revision row through a time entry
--- without a job; the second writes an entry onto the job (an insert, then an
--- update that moves an entry onto it) and must wait for the revision row while
--- holding no lock on the job row. The first then clocks in on the job, which
--- must not wait, and the second goes through once the first rolls back.
+-- Two sessions force the overlap. The first holds the revision row through a
+-- time write without a job; the second writes an entry onto the job and waits
+-- for the revision row. The first then locks the job, which must go through,
+-- and the second must go through once the first rolls back. Cases: a manual
+-- clock-in and an entry edit against a clock-in on a running job, and a manual
+-- clock-in against the clock switching onto a job that has not started.
 --
 -- The sessions need committed rows, so this part writes one synthetic
 -- organization through dblink connections and deletes it at the start (a run
 -- that broke off) and at the end. Its one committed time entry, the one the
--- update moves, is deleted before the organization, which refuses deletion
+-- edit moves, is deleted before the organization, which refuses deletion
 -- while it holds time. Both sessions roll back every time write. The main
 -- session only orchestrates and rolls back.
 begin;
 set local search_path = public, extensions, pg_temp;
 create extension if not exists dblink with schema extensions;
-create extension if not exists pgrowlocks with schema extensions;
 select dblink_connect('entry_lock_setup', 'dbname=postgres user=postgres');
 select dblink_connect('entry_lock_first', 'dbname=postgres user=postgres');
 select dblink_connect('entry_lock_second', 'dbname=postgres user=postgres');
@@ -184,16 +185,21 @@ insert into public.organizations (id, name, admin_id, unique_code) values
 insert into public.organization_members (organization_id, user_id, role) values
 ('36100000-0000-4000-8000-000000000010', '36100000-0000-4000-8000-000000000002', 'employee'),
 ('36100000-0000-4000-8000-000000000010', '36100000-0000-4000-8000-000000000003', 'employee');
+-- A running job, and one whose work has not started.
 insert into public.jobs (id, organization_id, title, job_number, status, execution_state, created_by) values
 ('36100000-0000-4000-8000-000000000020', '36100000-0000-4000-8000-000000000010',
  'Heizungswartung Lindenhof', 'ENTRYLK-1', 'in_bearbeitung', 'in_progress',
+ '36100000-0000-4000-8000-000000000001'),
+('36100000-0000-4000-8000-000000000021', '36100000-0000-4000-8000-000000000010',
+ 'Badsanierung Kastanienweg', 'ENTRYLK-2', 'nicht_bearbeitet', 'not_started',
  '36100000-0000-4000-8000-000000000001');
 insert into public.job_assignments (organization_id, job_id, user_id, assigned_by)
-select '36100000-0000-4000-8000-000000000010', '36100000-0000-4000-8000-000000000020', worker,
-  '36100000-0000-4000-8000-000000000001'
-from unnest(array['36100000-0000-4000-8000-000000000002',
+select '36100000-0000-4000-8000-000000000010', job, worker, '36100000-0000-4000-8000-000000000001'
+from unnest(array['36100000-0000-4000-8000-000000000020',
+  '36100000-0000-4000-8000-000000000021']::uuid[]) job,
+  unnest(array['36100000-0000-4000-8000-000000000002',
   '36100000-0000-4000-8000-000000000003']::uuid[]) worker;
--- The entry the update case moves onto the job.
+-- The entry the edit case moves onto the job.
 insert into public.time_entries (id, user_id, organization_id, entry_type, timestamp, is_manual, status)
 values ('36100000-0000-4000-8000-000000000030', '36100000-0000-4000-8000-000000000003',
   '36100000-0000-4000-8000-000000000010', 'clock_in', date_trunc('day', now()) - interval '1 day' + interval '6 hours',
@@ -213,11 +219,12 @@ returns text language sql as $$
     p_user, p_type, p_hour || ' hours', p_job);
 $$;
 
--- Runs p_second in the second session while the first holds the revision row,
--- checks that it waits for the first holding nothing on the job, then clocks
--- the first in on the job and lets the second finish.
-create function pg_temp.check_order(p_case text, p_second text) returns void
-language plpgsql as $$
+-- The first session runs p_hold (a time write without a job, which holds the
+-- revision row), the second p_second (a write onto the job), which must wait
+-- for it. The first then runs p_lock_job, which locks the job; both must go
+-- through.
+create function pg_temp.check_overlap(p_case text, p_hold text, p_second text, p_lock_job text)
+returns void language plpgsql as $$
 declare
   v_pid integer := (select pid from entry_lock_second_pid);
   v_deadline timestamptz := clock_timestamp() + interval '10 seconds';
@@ -225,9 +232,7 @@ declare
 begin
   perform dblink_exec('entry_lock_first', 'begin');
   perform dblink_exec('entry_lock_first', 'set local role service_role');
-  -- A time write without a job: it holds the revision row and nothing on the job.
-  perform dblink_exec('entry_lock_first',
-    pg_temp.entry_insert('36100000-0000-4000-8000-000000000002', 'clock_in', 6));
+  perform * from dblink('entry_lock_first', p_hold) as held(result text);
 
   perform dblink_exec('entry_lock_second', 'begin');
   perform dblink_exec('entry_lock_second', 'set local role service_role');
@@ -238,25 +243,10 @@ begin
     end if;
   end loop;
 
-  if exists (
-    select 1
-    from extensions.pgrowlocks('public.jobs') row_lock
-    join public.jobs job on job.ctid = row_lock.locked_row
-    where job.id = '36100000-0000-4000-8000-000000000020'
-      and v_pid = any(row_lock.pids)
-  ) then
-    raise exception '%: the time entry locked the job row before the timeline revision row, '
-      'so a writer that holds the revision and locks the job deadlocks with it', p_case;
-  end if;
-
-  -- The first clocks in on the job: transition_work_on_time_start locks the
-  -- job FOR UPDATE, which waits for no one.
   begin
-    perform dblink_exec('entry_lock_first',
-      pg_temp.entry_insert('36100000-0000-4000-8000-000000000002', 'break_end', 7,
-        '36100000-0000-4000-8000-000000000020'));
+    perform * from dblink('entry_lock_first', p_lock_job) as locked(result text);
   exception when others then
-    raise exception '%: the first session''s clock-in on the job failed while the second waited: %',
+    raise exception '%: the first session failed to lock the job while the second waited: %',
       p_case, sqlerrm;
   end;
   perform dblink_exec('entry_lock_first', 'rollback');
@@ -271,15 +261,46 @@ begin
 end;
 $$;
 
-select pg_temp.check_order('a manual clock-in on the job',
+select pg_temp.check_overlap('a manual clock-in against a clock-in on a running job',
+  pg_temp.entry_insert('36100000-0000-4000-8000-000000000002', 'clock_in', 6),
   pg_temp.entry_insert('36100000-0000-4000-8000-000000000003', 'clock_in', 8,
+    '36100000-0000-4000-8000-000000000020'),
+  pg_temp.entry_insert('36100000-0000-4000-8000-000000000002', 'break_end', 7,
     '36100000-0000-4000-8000-000000000020'));
 
-select pg_temp.check_order('an entry edit that moves an entry onto the job', $update$
-  select public.update_time_entry('36100000-0000-4000-8000-000000000001',
-    '36100000-0000-4000-8000-000000000010', '36100000-0000-4000-8000-000000000030',
-    '{"job_id":"36100000-0000-4000-8000-000000000020"}'::jsonb)
-$update$);
+select pg_temp.check_overlap('an entry edit onto a running job against a clock-in on it',
+  pg_temp.entry_insert('36100000-0000-4000-8000-000000000002', 'clock_in', 6),
+  $edit$
+    select public.update_time_entry('36100000-0000-4000-8000-000000000001',
+      '36100000-0000-4000-8000-000000000010', '36100000-0000-4000-8000-000000000030',
+      '{"job_id":"36100000-0000-4000-8000-000000000020"}'::jsonb)
+  $edit$,
+  pg_temp.entry_insert('36100000-0000-4000-8000-000000000002', 'break_end', 7,
+    '36100000-0000-4000-8000-000000000020'));
+
+select pg_temp.check_overlap('a manual clock-in against the clock starting work on the job',
+  $start$
+    select public.transition_time_activity(
+      p_organization_id => '36100000-0000-4000-8000-000000000010',
+      p_actor_id => '36100000-0000-4000-8000-000000000002',
+      p_operation_id => '36100000-0000-4000-8000-000000000041',
+      p_request_hash => repeat('a', 64), p_action => 'start',
+      p_segment_kind => 'work', p_allocation_kind => 'unallocated')
+  $start$,
+  pg_temp.entry_insert('36100000-0000-4000-8000-000000000003', 'clock_in', 8,
+    '36100000-0000-4000-8000-000000000021'),
+  $switch$
+    select public.transition_time_activity(
+      p_organization_id => '36100000-0000-4000-8000-000000000010',
+      p_actor_id => '36100000-0000-4000-8000-000000000002',
+      p_operation_id => '36100000-0000-4000-8000-000000000042',
+      p_request_hash => repeat('b', 64), p_action => 'switch',
+      p_expected_session_id => session.id, p_expected_version => session.version,
+      p_segment_kind => 'work', p_allocation_kind => 'job',
+      p_job_id => '36100000-0000-4000-8000-000000000021')
+    from public.time_sessions session
+    where session.user_id = '36100000-0000-4000-8000-000000000002' and session.ended_at is null
+  $switch$);
 
 select dblink_exec('entry_lock_setup', statement) from entry_lock_cleanup;
 
