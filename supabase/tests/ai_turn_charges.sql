@@ -65,12 +65,15 @@ do $$
 declare
   first_start record;
   repeated record;
+  -- Each start runs in its own statement: a read in the same statement would not see what it wrote.
+  verdict text;
 begin
   -- Organization B has not switched WerkFlow KI on: the message stays, nothing else is written.
-  if (select verdict from public.start_ai_turn('af000000-0000-4000-8000-000000000011',
-      'af000000-0000-4000-8000-000000000002', 'af000000-0000-4000-8000-000000000021', 'Aus',
-      'af000000-0000-4000-8000-000000000030', 'Hallo B', 1000000)) is distinct from 'disabled' then
-    raise exception 'A turn started in an organization that is off';
+  verdict := (select started.verdict from public.start_ai_turn('af000000-0000-4000-8000-000000000011',
+    'af000000-0000-4000-8000-000000000002', 'af000000-0000-4000-8000-000000000021', 'Aus',
+    'af000000-0000-4000-8000-000000000030', 'Hallo B', 1000000) started);
+  if verdict is distinct from 'disabled' then
+    raise exception 'A turn started in an organization that is off: %', verdict;
   end if;
   if (select string_agg(item.kind::text, ',') from public.ai_thread_items item
       where item.thread_id = 'af000000-0000-4000-8000-000000000021') is distinct from 'user_message'
@@ -107,9 +110,10 @@ begin
     raise exception 'A replayed turn start wrote again: %', repeated.verdict;
   end if;
   -- The command id names one message: other text is refused and changes nothing.
-  if (select verdict from public.start_ai_turn('af000000-0000-4000-8000-000000000010',
-      'af000000-0000-4000-8000-000000000002', 'af000000-0000-4000-8000-000000000020', 'Lieferschein',
-      'af000000-0000-4000-8000-000000000031', 'Etwas anderes', 1000000)) is distinct from 'command_conflict'
+  verdict := (select started.verdict from public.start_ai_turn('af000000-0000-4000-8000-000000000010',
+    'af000000-0000-4000-8000-000000000002', 'af000000-0000-4000-8000-000000000020', 'Lieferschein',
+    'af000000-0000-4000-8000-000000000031', 'Etwas anderes', 1000000) started);
+  if verdict is distinct from 'command_conflict'
     or (select body ->> 'text' from public.ai_thread_items where id = first_start.user_item_id)
       is distinct from 'Lies den Lieferschein.' then
     raise exception 'A reused command id with other text was not refused, or changed the saved message';
@@ -118,9 +122,10 @@ begin
   -- One open run per person, also across organizations: the new message stays, no run starts.
   perform public.set_ai_organization_enabled('af000000-0000-4000-8000-000000000011',
     'af000000-0000-4000-8000-000000000003', true);
-  if (select verdict from public.start_ai_turn('af000000-0000-4000-8000-000000000011',
-      'af000000-0000-4000-8000-000000000002', 'af000000-0000-4000-8000-000000000021', 'Aus',
-      'af000000-0000-4000-8000-000000000032', 'Zweite Frage', 1000000)) is distinct from 'run_active'
+  verdict := (select started.verdict from public.start_ai_turn('af000000-0000-4000-8000-000000000011',
+    'af000000-0000-4000-8000-000000000002', 'af000000-0000-4000-8000-000000000021', 'Aus',
+    'af000000-0000-4000-8000-000000000032', 'Zweite Frage', 1000000) started);
+  if verdict is distinct from 'run_active'
     or exists (select 1 from public.ai_runs where organization_id = 'af000000-0000-4000-8000-000000000011') then
     raise exception 'A person''s open run in another organization did not block a second run';
   end if;
@@ -149,9 +154,10 @@ begin
   perform public.update_ai_thread_item('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000002',
     first_start.answer_item_id, 'streaming', '{"text":"Ich lese"}');
   perform public.settle_ai_run('af000000-0000-4000-8000-000000000010', first_start.run_id, 'failed');
-  if (select verdict from public.start_ai_turn('af000000-0000-4000-8000-000000000010',
-      'af000000-0000-4000-8000-000000000002', 'af000000-0000-4000-8000-000000000020', 'Lieferschein',
-      'af000000-0000-4000-8000-000000000031', 'Lies den Lieferschein.', 1000000)) is distinct from 'answered'
+  verdict := (select started.verdict from public.start_ai_turn('af000000-0000-4000-8000-000000000010',
+    'af000000-0000-4000-8000-000000000002', 'af000000-0000-4000-8000-000000000020', 'Lieferschein',
+    'af000000-0000-4000-8000-000000000031', 'Lies den Lieferschein.', 1000000) started);
+  if verdict is distinct from 'answered'
     or (select status::text || body::text from public.ai_thread_items where id = first_start.answer_item_id)
       is distinct from 'failed{"text": "Ich lese", "failure": "interrupted"}' then
     raise exception 'An answer its run left streaming was not finished as interrupted with its text';
