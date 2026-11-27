@@ -4,7 +4,10 @@
 // issued; a checked one is issued under the caller's own organization, and
 // its original, rendered as a corrected invoice (384) naming the cancelled
 // one, is stored and passed to the one cancel call, which registers and files
-// it. An original no cancel registered is discarded. A cancel that went
+// it. Its key is queued for the storage purge under the caller's organization
+// before its bytes are stored, so an original no cancel registers is deleted
+// after the purge's delay; one that could not be queued is never written. An
+// original no cancel registered is discarded at once. A cancel that went
 // through revalidates the cancelled invoice's route, so Back after
 // „Korrigieren“ shows it Storniert without Realtime; a refusal revalidates
 // nothing.
@@ -25,11 +28,20 @@ const attemptKey = '99200000-0000-4000-8000-000000000001';
 const clientId = '97200000-0000-4000-8000-000000000001';
 
 const stored: Array<{ path: string; body: Uint8Array }> = [];
+// Each stored key that no queue_storage_purge call of the caller's organization had named before its bytes.
+const storedUnqueued: string[] = [];
 const discarded: string[] = [];
 const realStorage = await import('@/lib/storage/r2');
 mock.module('@/lib/storage/r2', () => ({
   ...realStorage,
   putStorageObject: async ({ path, body }: { path: string; body: Uint8Array }) => {
+    const queued = world.rpcCalls.some(
+      (call) =>
+        call.name === 'queue_storage_purge' &&
+        call.args.p_organization_id === ORGANIZATION_A &&
+        JSON.stringify(call.args.p_paths) === JSON.stringify([path]),
+    );
+    if (!queued) storedUnqueued.push(path);
     stored.push({ path, body: new Uint8Array(body) });
     return { created: true };
   },
@@ -286,12 +298,13 @@ assert.deepEqual(
   [
     ['get_invoice_with_line_sources', ORGANIZATION_A, null],
     ['get_invoice_settings', ORGANIZATION_A, null],
+    ['queue_storage_purge', ORGANIZATION_A, null],
     ['cancel_invoice', ORGANIZATION_A, CALLER_ID],
   ],
 );
 // The cancelled invoice's route renders again, Storniert.
 assert.deepEqual(revalidatedPaths, [`/rechnungen/${invoiceId}`]);
-const cancelArgs = world.rpcCalls[2]?.args;
+const cancelArgs = world.rpcCalls[3]?.args;
 assert.equal(cancelArgs?.p_invoice_id, invoiceId);
 assert.equal(cancelArgs?.p_attempt_key, attemptKey);
 assert.equal(cancelArgs?.p_reason, 'Falscher Rechnungsempfänger');
@@ -310,6 +323,7 @@ assert.equal(cancelArgs?.p_original_storage_path, first.path);
 assert.equal(first.path.split('/')[1], cancelArgs?.p_original_document_id);
 assert.equal(cancelArgs?.p_original_size_bytes, first.body.byteLength);
 assert.deepEqual(discarded, []);
+assert.deepEqual(storedUnqueued, [], 'the original was stored before its key was queued for the purge');
 const xml = await readEmbeddedInvoiceXml(first.body);
 for (const part of [
   '<ram:TypeCode>384</ram:TypeCode>',
@@ -349,8 +363,11 @@ const moved = await cancelInvoice({ ...input, attemptKey: crypto.randomUUID() })
 assert.equal(moved.success, true, JSON.stringify(moved));
 assert.equal(world.rpcCalls.filter((call) => call.name === 'get_invoice_settings').length, 3);
 assert.equal(world.rpcCalls.filter((call) => call.name === 'cancel_invoice').length, 3);
-// The originals of the two moved numbers are discarded; the cancel registers the third.
+// The originals of the two moved numbers are discarded; the cancel registers the third. Each was queued for the
+// purge first, so the discarded two go after its delay even where their discard fails.
 assert.deepEqual(discarded, [stored[0]?.path, stored[1]?.path]);
+assert.equal(stored.length, 3);
+assert.deepEqual(storedUnqueued, [], 'an original was stored before its key was queued for the purge');
 stored.length = 0;
 discarded.length = 0;
 // A third move is answered, not retried for ever, and revalidates nothing.
@@ -390,6 +407,25 @@ assert.deepEqual(
   [''],
 );
 assert.deepEqual([stored, discarded, revalidatedPaths], [[], [], []]);
+world.rpc = checkedRpc;
+
+// Without its purge entry an original is never stored: the Stornorechnung is issued with its original pending.
+cancelled = false;
+world.rpc = (call) =>
+  call.name === 'queue_storage_purge'
+    ? { data: null, error: { code: '08006', message: 'connection failure' } }
+    : checkedRpc(call);
+world.rpcCalls.length = 0;
+assert.deepEqual(await cancelInvoice({ ...input, attemptKey: crypto.randomUUID() }), {
+  success: true,
+  stornoNumber: 'RE-2037-002',
+  originalFiled: false,
+  correctionId: null,
+});
+assert.equal(stored.length, 0, 'an original was stored without its purge entry');
+assert.equal(world.rpcCalls.at(-1)?.args.p_original_document_id, undefined);
+assert.deepEqual(revalidatedPaths, [`/rechnungen/${invoiceId}`]);
+revalidatedPaths.length = 0;
 world.rpc = checkedRpc;
 
 // „Korrigieren“ answers the new draft.
