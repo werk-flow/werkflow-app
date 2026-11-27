@@ -185,6 +185,7 @@ const position = (
 ) => ({
   kind: 'free' as const,
   name: 'Kupferrohr 15 mm',
+  positionType: { kind: 'normal' as const },
   description: '',
   quantity: '2.5',
   unit: 'meter',

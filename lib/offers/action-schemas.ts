@@ -59,10 +59,25 @@ const priceCents = z.number().int().min(0).max(MAX_PRICE_CENTS);
 /** A base64url HMAC-SHA256 (lib/price-catalog/price-source-proof.ts). */
 const proofSchema = z.string().regex(/^[\w-]{43}$/);
 
+/** A priced Position's type (OfferPositionType); an Alternativposition names a place in its Titel. */
+const positionTypeSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('normal') }),
+  z.object({ kind: z.literal('bedarf') }),
+  z.object({
+    kind: z.literal('alternative'),
+    alternativeTo: z.number().int().min(1).max(OFFER_CONTENT_LIMITS.positionsPerSection),
+  }),
+]);
+
 /** A priced position, with the limits of an invoice line; a negative quantity credits. */
 const freePositionSchema = z.object({
   kind: z.literal('free'),
   ...positionTextSchema,
+  /**
+   * Required like the cost: a payload without the key, from a tab older than
+   * the types, would otherwise count a Bedarfs- or Alternativposition in the sums.
+   */
+  positionType: positionTypeSchema,
   quantity: z.string().regex(/^-?\d{1,9}(?:\.\d{1,3})?$/),
   unit: z.string().refine(isInventoryUnitCode),
   unitPriceCents: priceCents,
@@ -88,21 +103,46 @@ const freePositionSchema = z.object({
 
 const textPositionSchema = z.object({ kind: z.literal('text'), ...positionTextSchema });
 
-/** A Titel with its positions, as the save takes it. */
+const sectionFields = { title: z.string().trim().min(1).max(200) };
+
+/** Whether an Alternativposition's place names a normal priced Position of the same Titel. */
+function namesNormalPosition(
+  positions: ReadonlyArray<{ kind: 'text' } | { kind: 'free'; positionType: { kind: string } }>,
+  place: number,
+): boolean {
+  const base = positions[place - 1];
+  return base?.kind === 'free' && base.positionType.kind === 'normal';
+}
+
+/** A Titel with its positions, as the save takes it; an Alternativposition names a normal Position of it. */
 const offerSectionSchema = z.object({
-  title: z.string().trim().min(1).max(200),
+  ...sectionFields,
   positions: z
     .array(z.discriminatedUnion('kind', [freePositionSchema, textPositionSchema]))
-    .max(OFFER_CONTENT_LIMITS.positionsPerSection),
+    .max(OFFER_CONTENT_LIMITS.positionsPerSection)
+    .refine((positions) =>
+      positions.every(
+        (position) =>
+          position.kind === 'text' ||
+          position.positionType.kind !== 'alternative' ||
+          namesNormalPosition(positions, position.positionType.alternativeTo),
+      ),
+    ),
 });
 
-/** A Titel as `get_offer` answers it: each Position's article or Leistung with its number, name and archive state, and no cost or price source. */
-export const storedSectionSchema = offerSectionSchema.extend({
+/**
+ * A Titel as `get_offer` answers it: each Position's article or Leistung with
+ * its number, name and archive state, its type („normal“ when absent), and no
+ * cost or price source.
+ */
+export const storedSectionSchema = z.object({
+  ...sectionFields,
   positions: z.array(
     z.discriminatedUnion('kind', [
-      freePositionSchema
-        .omit({ cost: true, priceSource: true })
-        .extend({ source: invoiceLineSourceSchema.nullable() }),
+      freePositionSchema.omit({ cost: true, priceSource: true }).extend({
+        source: invoiceLineSourceSchema.nullable(),
+        positionType: positionTypeSchema.default({ kind: 'normal' }),
+      }),
       textPositionSchema,
     ]),
   ),

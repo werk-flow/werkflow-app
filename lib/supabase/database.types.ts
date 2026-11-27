@@ -6861,6 +6861,7 @@ export type Database = {
       };
       offer_positions: {
         Row: {
+          alternative_to: number | null;
           amount_cents: number | null;
           description: string;
           id: string;
@@ -6871,6 +6872,7 @@ export type Database = {
           offer_id: string;
           organization_id: string;
           position: number;
+          position_type: string;
           price_condition_id: string | null;
           price_quantity: number | null;
           price_source: string | null;
@@ -6884,6 +6886,7 @@ export type Database = {
           unit_price_cents: number | null;
         };
         Insert: {
+          alternative_to?: number | null;
           amount_cents?: number | null;
           description?: string;
           id?: string;
@@ -6894,6 +6897,7 @@ export type Database = {
           offer_id: string;
           organization_id: string;
           position: number;
+          position_type?: string;
           price_condition_id?: string | null;
           price_quantity?: number | null;
           price_source?: string | null;
@@ -6907,6 +6911,7 @@ export type Database = {
           unit_price_cents?: number | null;
         };
         Update: {
+          alternative_to?: number | null;
           amount_cents?: number | null;
           description?: string;
           id?: string;
@@ -6917,6 +6922,7 @@ export type Database = {
           offer_id?: string;
           organization_id?: string;
           position?: number;
+          position_type?: string;
           price_condition_id?: string | null;
           price_quantity?: number | null;
           price_source?: string | null;
@@ -6930,6 +6936,13 @@ export type Database = {
           unit_price_cents?: number | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "offer_positions_alternative_to_fk";
+            columns: ["section_id", "alternative_to"];
+            isOneToOne: false;
+            referencedRelation: "offer_positions";
+            referencedColumns: ["section_id", "position"];
+          },
           {
             foreignKeyName: "offer_positions_item_fk";
             columns: ["item_id", "organization_id"];

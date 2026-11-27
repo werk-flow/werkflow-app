@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 
+import { formatAlternativeMark } from '@/lib/document-rendering/format';
 import type { DocumentPosition } from '@/lib/document-rendering/model';
 import { offerDocument, type PrintedOffer } from './document';
 import type { OfferCostedSection, OfferPriceSource } from './types';
@@ -12,6 +13,7 @@ const values = {
   unitPriceCents: 12900,
   priceQuantity: 1,
   taxRateBasisPoints: 1900,
+  positionType: { kind: 'normal' as const },
 } satisfies Partial<OfferCostedSection['positions'][number]>;
 // The price source is the editor's; the document never carries it.
 const priceSource: OfferPriceSource = { kind: 'manuell' };
@@ -65,6 +67,60 @@ const letterhead = {
   footerColumns: [],
   stationery: null,
 };
+
+test('a Bedarfsposition prints in parentheses and an Alternativposition names its Position and difference, outside every sum', () => {
+  const sections: OfferCostedSection[] = [
+    {
+      title: 'Heizung',
+      positions: [
+        { kind: 'free', ...values, unitPriceCents: 489_000, source: null, cost, priceSource },
+        { kind: 'text', name: 'Hinweis', description: '' },
+        {
+          kind: 'free',
+          ...values,
+          unitPriceCents: 18_500,
+          positionType: { kind: 'bedarf' },
+          source: null,
+          cost,
+          priceSource,
+        },
+        {
+          kind: 'free',
+          ...values,
+          unitPriceCents: 452_000,
+          positionType: { kind: 'alternative', alternativeTo: 1 },
+          source: null,
+          cost,
+          priceSource,
+        },
+      ],
+    },
+  ];
+  const document = offerDocument({ ...offer, sections }, letterhead, { issuedOn: '2037-11-20', revision: 1 });
+  expect(
+    document.sections[0]?.positions.map((position) =>
+      position.kind === 'text'
+        ? 'text'
+        : [position.number, position.kind, position.amountCents, position.alternativeTo ?? null],
+    ),
+  ).toEqual([
+    ['1.1', 'standard', 489_000, null],
+    'text',
+    ['1.2', 'bedarf', 18_500, null],
+    ['1.3', 'alternative', 452_000, { number: '1.1', differenceCents: -37_000 }],
+  ]);
+  expect(document.sections[0]?.subtotalCents).toBe(489_000);
+  expect(document.totals).toMatchObject({ netCents: 489_000, vatCents: 92_910, grossCents: 581_910 });
+  expect(formatAlternativeMark({ number: '1.1', differenceCents: -37_000 })).toBe(
+    'Alternativposition zu 1.1, Minderpreis 370,00 €',
+  );
+  expect(formatAlternativeMark({ number: '1.1', differenceCents: 1 })).toBe(
+    'Alternativposition zu 1.1, Mehrpreis 0,01 €',
+  );
+  expect(formatAlternativeMark({ number: '1.1', differenceCents: 0 })).toBe(
+    'Alternativposition zu 1.1, gleicher Preis',
+  );
+});
 
 function keysOf(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(keysOf);

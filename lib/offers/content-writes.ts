@@ -101,7 +101,8 @@ export async function writeOfferContent(
       p_expected_content_version: input.expectedContentVersion,
       p_attempt_key: input.attemptKey,
       p_sections: sections,
-      p_totals: content.totals,
+      // The save knows Bedarfs- and Alternativpositionen; save_offer_content refuses an older caller's save of an offer holding one.
+      p_totals: { ...content.totals, positionTypes: true },
     }),
   );
   const saved = savedContentSchema.safeParse(data);
