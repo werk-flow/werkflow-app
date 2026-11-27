@@ -579,16 +579,40 @@ function staticControlValue(attribute) {
   return staticAttributeValue(attribute);
 }
 
+const HIDING_PROPS = new Set(['className', 'hidden', 'style']);
+
+/** A spread of an object literal whose fixed keys leave the hiding props alone, such as `{...{ webkitdirectory: '' }}`. */
+function isInertSpread(attribute) {
+  const argument = attribute.argument;
+  return (
+    argument.type === 'ObjectExpression' &&
+    argument.properties.every(
+      (property) =>
+        property.type === 'Property' &&
+        !property.computed &&
+        !HIDING_PROPS.has(
+          property.key.type === 'Identifier' ? property.key.name : String(property.key.value),
+        ),
+    )
+  );
+}
+
 /**
  * A file input on screen shows the browser's own „Choose File No file chosen“
  * in the browser's language. A picker hidden behind a button proves it by a
  * class that is exactly `hidden` or `sr-only`, or a `hidden` attribute that
  * is always on. Any other class may show it again (`hidden md:block`,
- * `sr-only focus:not-sr-only`), as may a class built at runtime or
- * `hidden={open}`. `aria-hidden` hides it from assistive technology only, not
- * from the eye, so it does not count.
+ * `sr-only focus:not-sr-only`), as may a class built at runtime,
+ * `hidden={open}`, an inline `style` or a spread that can override them.
+ * `aria-hidden` hides it from assistive technology only, not from the eye, so
+ * it does not count.
  */
 function isHiddenFileInput(node) {
+  if (jsxAttribute(node, 'style')) return false;
+  if (
+    node.attributes.some((attribute) => attribute.type === 'JSXSpreadAttribute' && !isInertSpread(attribute))
+  )
+    return false;
   const hidden = jsxAttribute(node, 'hidden');
   if (hidden && (hidden.value === null || staticControlValue(hidden) === 'true')) return true;
   const classes = staticControlValue(jsxAttribute(node, 'className'))?.trim();
