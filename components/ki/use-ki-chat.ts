@@ -53,7 +53,12 @@ export type LiveTurn = {
   answerSequence: number;
   started: boolean;
   end: { status: 'complete' | 'failed' | 'cancelled'; message: string | null } | null;
+  /** A tapped answer to a question: a refusal keeps it out of the typed draft. */
+  tap: boolean;
 };
+
+/** Where a refused message waits for its unchanged retry: a tapped answer apart from the typed draft. */
+const retryKey = (draft: string, tap: boolean): string => (tap ? `${draft}#tap` : draft);
 
 type WindowRead = 'found' | 'missing' | 'failed';
 
@@ -491,6 +496,7 @@ function newTurn(
   text: string,
   draft: string,
   provisional: boolean,
+  tap: boolean,
 ): LiveTurn {
   const user = userMessage(commandId, text, 0, true);
   return {
@@ -503,6 +509,7 @@ function newTurn(
     answerSequence: 0,
     started: false,
     end: null,
+    tap,
   };
 }
 
@@ -520,8 +527,9 @@ function settleRefused(
   refused: Map<string, Refused>,
 ): void {
   const commandId = outcome.kind === 'refused' && outcome.spent ? crypto.randomUUID() : turn.commandId;
-  refused.set(turn.draft, { threadId: turn.threadId, commandId, text: turn.user.text });
-  restoreDraft(turn.draft, turn.user.text);
+  refused.set(retryKey(turn.draft, turn.tap), { threadId: turn.threadId, commandId, text: turn.user.text });
+  // A tapped answer is tapped again; only typed text goes back into the draft.
+  if (!turn.tap) restoreDraft(turn.draft, turn.user.text);
   if (turn.provisional && host.shownRef.current === turn.threadId) host.showOnly(null);
   void host.readWindow(turn.threadId).then((read) => {
     if (read === 'found') host.touch(turn.threadId, turn.user.text);
@@ -606,20 +614,20 @@ function useLiveTurn(host: TurnHost) {
   );
 
   const send = useCallback(
-    (text: string, draft: string) => {
+    (text: string, draft: string, tap = false) => {
       const host = hostRef.current;
       setError(null);
       if (liveRef.current) {
-        restoreDraft(draft, text);
+        if (!tap) restoreDraft(draft, text);
         return setError({ draft, message: describeTurnRefusal('run_active') });
       }
-      const { target, commandId } = commandFor(text, host, refusedRef.current.get(draft));
-      refusedRef.current.delete(draft);
-      holdSending({ draft, threadId: target, commandId, text });
+      const { target, commandId } = commandFor(text, host, refusedRef.current.get(retryKey(draft, tap)));
+      refusedRef.current.delete(retryKey(draft, tap));
+      if (!tap) holdSending({ draft, threadId: target, commandId, text });
       host.supersedeReads(target);
       const controller = new AbortController();
       abortRef.current = controller;
-      const turn = newTurn(target, commandId, text, draft, host.threadId === null);
+      const turn = newTurn(target, commandId, text, draft, host.threadId === null, tap);
       liveRef.current = turn;
       setLive(turn);
       if (!host.threadId) host.showOnly(target);

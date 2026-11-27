@@ -158,7 +158,7 @@ export function KiChat(props: {
                 onBack={() => openThread(null)}
                 onRetry={show}
                 onLoadOlder={readWindow}
-                onAnswer={(text) => turn.send(text, draft)}
+                onAnswer={(text) => turn.send(text, draft, true)}
               />
             )}
           </div>

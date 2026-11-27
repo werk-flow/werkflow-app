@@ -248,3 +248,39 @@ test('a to-do list ticks off in place, and a saved thread opens with its rows', 
   expect(await placeOf(page, 'Wer ist Müller?')).toBeLessThan(await placeOf(page, TOOL));
   expect(await detailReads(page), 'a thread opens without its rows’ results').toBe(0);
 });
+
+test('a refused tap leaves the typed draft alone, shows why, and a second tap sends the same command', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'ki-chat');
+  const saved: AiThreadWindow = {
+    messages: [
+      { key: 'q:user', sequence: 1, role: 'user', status: 'complete', text: 'Was steht an?', failure: null },
+      { key: 'q:assistant', sequence: 2, role: 'assistant', status: 'complete', text: '', failure: null },
+      question('q'),
+    ],
+    hasOlder: false,
+  };
+  await page.evaluate(
+    ([id, value]) => {
+      window.uiContractKiWindows[id] = value;
+    },
+    [THREAD_A, saved] as const,
+  );
+  await page
+    .getByRole('complementary', { name: 'Chats' })
+    .getByRole('link', { name: 'Material für die Heizung' })
+    .click();
+  await composer(page).fill('Meine eigene Notiz');
+  const options = timeline(page).getByRole('group', { name: 'Antworten' });
+  await options.getByRole('button', { name: 'Müller Bau' }).click();
+  const refusal = 'Eine andere Antwort wird gerade noch geschrieben. Warte, bis sie fertig ist.';
+  await page.evaluate((message) => window.uiContractKiTurn.resolve?.({ kind: 'refused', message }), refusal);
+  await expect(page.getByRole('main').getByText(refusal, { exact: true })).toBeVisible();
+  await expect(composer(page)).toHaveValue('Meine eigene Notiz');
+  await options.getByRole('button', { name: 'Müller Bau' }).click();
+  const calls = await page.evaluate(() => window.uiContractKiTurn.calls);
+  expect(calls.map((call) => call.text)).toEqual(['Müller Bau', 'Müller Bau']);
+  expect(calls[1]?.commandId, 'the second tap is the same command').toBe(calls[0]?.commandId);
+  await expect(composer(page)).toHaveValue('Meine eigene Notiz');
+});

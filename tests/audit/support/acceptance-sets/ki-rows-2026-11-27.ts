@@ -1,28 +1,14 @@
-import { expect, type Locator } from '@playwright/test';
-import { KI_SEEDED_CUSTOMER, kiOrganizationFor, seedKiTurnWithRows } from '../../../golden/support/db/ki';
+import { kiOrganizationFor, kiThreadWithRows } from '../../../golden/support/db/ki';
 import type { TestWorld } from '../../../golden/support/world';
 import { acceptanceSet, type OpenSet } from '../acceptance-sets';
 
 /**
  * werk-flow/werkflow-planning#533 of 2026-11-27: the rows of the agent's work
  * in a WerkFlow KI thread, in the run's KI organization: a ticked plan, a
- * customer search collapsed and opened, the answer and a question with its
- * answers. The new chat's changed first-contact copy is in the `/ki` visual
- * reference.
+ * customer search, the answer and a question with its answers. The opened
+ * search is its own set, ki-row-open-2026-11-27; the new chat's copy is in
+ * ki-chat-2026-11-26.
  */
-async function threadWithRows(world: TestWorld): Promise<{ route: string }> {
-  const ki = await kiOrganizationFor(world);
-  const threadId = await seedKiTurnWithRows(ki, 'admin', 'Welche Kunden heißen Müller?');
-  return { route: `/ki?chat=${threadId}` };
-}
-
-/** Opens the customer search row, which reads its result only now; it runs once per width on the same page. */
-async function openedToolRow(scope: Locator): Promise<void> {
-  const row = scope.getByRole('button', { name: 'Kunden und Einsatzorte finden', exact: true });
-  if ((await row.getAttribute('aria-expanded')) !== 'true') await row.click();
-  // Postgres orders a result's keys, so the customer's number follows its address.
-  await expect(scope.getByText(new RegExp(`^${KI_SEEDED_CUSTOMER} · .* · K-1001$`))).toBeVisible();
-}
 
 function kiRowCaptures(): OpenSet {
   const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
@@ -30,7 +16,7 @@ function kiRowCaptures(): OpenSet {
     role: 'admin',
     route: '/ki',
     view: { kind: 'page' },
-    destination: threadWithRows,
+    destination: kiThreadWithRows,
     account: async (world: TestWorld) => {
       const ki = await kiOrganizationFor(world);
       return { user: ki.users.admin, organizationId: ki.organizationId };
@@ -39,10 +25,7 @@ function kiRowCaptures(): OpenSet {
   } as const;
   return {
     id: 'ki-rows-2026-11-27',
-    captures: [
-      { ...base, id: 'admin-ki-zeilen' },
-      { ...base, id: 'admin-ki-zeile-geoeffnet', act: openedToolRow },
-    ],
+    captures: [{ ...base, id: 'admin-ki-zeilen' }],
     standalone: [],
   };
 }

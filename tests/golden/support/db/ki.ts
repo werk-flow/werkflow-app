@@ -150,7 +150,7 @@ export const KI_SEEDED_CUSTOMER = 'Müller Haustechnik';
  * the database calls a live turn makes. A repeat finds the turn answered and
  * writes nothing.
  */
-export async function seedKiTurnWithRows(ki: KiOrganization, role: KiRole, text: string): Promise<string> {
+async function seedKiTurnWithRows(ki: KiOrganization, role: KiRole, text: string): Promise<string> {
   const admin = createAdminClient();
   const threadId = seededUuid(`${ki.users[role].id}:rows:${text}`);
   const command = seededUuid(`${threadId}:command`);
@@ -266,4 +266,11 @@ export async function seedKiTurnWithRows(ki: KiOrganization, role: KiRole, text:
     })
     .throwOnError();
   return threadId;
+}
+
+/** The admin's thread of `seedKiTurnWithRows` in the run's KI organization, as a capture's destination. */
+export async function kiThreadWithRows(world: TestWorld): Promise<{ route: string }> {
+  const ki = await kiOrganizationFor(world);
+  const threadId = await seedKiTurnWithRows(ki, 'admin', 'Welche Kunden heißen Müller?');
+  return { route: `/ki?chat=${threadId}` };
 }
