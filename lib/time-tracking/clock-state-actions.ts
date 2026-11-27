@@ -223,14 +223,15 @@ export async function getCurrentClockState(
 
     const legacyEntries = toTimeEntries(todayRows);
     const legacyState = deriveCurrentClockState(legacyEntries);
-    // Today's closed minutes from the records the week reads; the running
-    // activity comes from the open session or legacy stream below.
+    // Today's closed minutes from the records the week reads, the caller's
+    // own only: a reassignment's facts name the person who now holds the
+    // time. The running activity comes from the open session or legacy stream below.
     const dayEntries = correctedEntriesInWindow(
       [...legacyEntries, ...canonicalDay.entries],
       applications,
       organizationId,
       { fromMs: dayStart.getTime(), toMs: dayEnd.getTime() },
-    );
+    ).filter((entry) => entry.userId === userId);
     const running = canonicalDay.openSession !== null || legacyState.isClockedIn;
     const totals = clockTotalsState(dayEntries, settings, running, now);
     const result = canonicalDay.openSession

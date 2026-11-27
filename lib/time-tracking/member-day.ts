@@ -6,7 +6,6 @@ import {
   deriveCurrentClockState,
   liveMinutes,
 } from './helpers';
-import { isEffectiveEntry } from './effective-entries';
 import {
   computeDayBreakdown,
   type BreakPolicy,
@@ -32,8 +31,8 @@ export type MemberStatus = {
   standbyMinutes: number;
   /** Whether the running activity is standby: its minutes grow the standby too. Never during a break. */
   isOnStandby: boolean;
-  workMinutes: number;
-  breakMinutes: number;
+  /** Today's closed tracked break, part of `todayMinutes`; only a manual rule deducts it. */
+  trackedBreakMinutes: number;
   /** The rule the day counts by (`dayBreakPolicy`): the current one while the clock runs. */
   breakPolicy: BreakPolicyValues;
 };
@@ -41,7 +40,7 @@ export type MemberStatus = {
 /** The member's most recent clock-in that still counts: pending included, rejected and pending_delete excluded. */
 function latestClockInEntry(memberEntries: TimeEntry[]): TimeEntry | undefined {
   return memberEntries
-    .filter((e) => e.entryType === 'clock_in' && isEffectiveEntry(e))
+    .filter((e) => e.entryType === 'clock_in' && e.status !== 'rejected' && e.status !== 'pending_delete')
     .sort((a, b) => {
       const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       if (diff !== 0) return diff;
@@ -63,12 +62,6 @@ export function memberStatusOf(memberEntries: TimeEntry[], settings: BreakPolicy
   const standbyMinutes = calculateTotalMinutes(workSessions.filter(isStandby));
   const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
   const todayMinutes = trackedWorkMinutes + trackedBreakMinutes;
-  // The status carries no target: its work minutes owe no overtime.
-  const breakdown = computeDayBreakdown(
-    { presenceMinutes: todayMinutes, standbyMinutes, trackedBreakMinutes },
-    breakPolicy,
-    undefined,
-  );
   // The latest open session is the running one; an earlier unpaired start does not run.
   const runningSession = workSessions.findLast((session) => session.clockOut === null && !session.isOrphan);
 
@@ -93,19 +86,18 @@ export function memberStatusOf(memberEntries: TimeEntry[], settings: BreakPolicy
     standbyMinutes,
     isOnStandby:
       currentState.status === 'working' && runningSession !== undefined && isStandby(runningSession),
-    workMinutes: breakdown.workMinutes,
-    breakMinutes: breakdown.breakMinutes,
+    trackedBreakMinutes,
     breakPolicy,
   };
 }
 
 /**
  * A member's day at `nowMs`: the recorded minutes and the running activity,
- * split under the status's rule as the week splits the day. A running standby grows the
- * standby, a running break the tracked break (which only a manual rule
- * reads: under the automatic one the status carries the deducted break). An unknown target
- * (`undefined`) owes no overtime. Before the client knows the time (`nowMs`
- * null) the day holds the recorded minutes only.
+ * split under the status's rule as the week splits the day. A running
+ * standby grows the standby, a running break the tracked break, which only a
+ * manual rule deducts. An unknown target (`undefined`) owes no overtime.
+ * Before the client knows the time (`nowMs` null) the day holds the recorded
+ * minutes only.
  */
 export function memberLiveDay(
   status: MemberStatus | undefined,
@@ -121,7 +113,11 @@ export function memberLiveDay(
     {
       presenceMinutes,
       standbyMinutes: liveMinutes(status.standbyMinutes, runningAs(status.isOnStandby), atMs),
-      trackedBreakMinutes: liveMinutes(status.breakMinutes, runningAs(status.status === 'on_break'), atMs),
+      trackedBreakMinutes: liveMinutes(
+        status.trackedBreakMinutes,
+        runningAs(status.status === 'on_break'),
+        atMs,
+      ),
     },
     status.breakPolicy,
     targetMinutes,

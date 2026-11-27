@@ -16,7 +16,14 @@ import { memberLiveDay, memberStatusOf } from './member-day';
 import { createActivitySelection, type TimeSegmentFact } from './segments';
 import { buildBreakPolicyHistoryEntry, type BreakPolicy, type TimeBreakdown } from './settings';
 import type { LiveClockState, TimeEntry } from './types';
-import { buildWeeklyTimeData, computeWeekLabel, getTodayIndex, getWeekBounds, targetsOfWeek } from './weekly';
+import {
+  buildWeeklyTimeData,
+  computeWeekLabel,
+  dayBreakPolicy,
+  getTodayIndex,
+  getWeekBounds,
+  targetsOfWeek,
+} from './weekly';
 
 const { clockTotalsState } = await import('./canonical-clock-state');
 
@@ -319,6 +326,20 @@ describe('today’s totals after a change the week sees', () => {
       dashboard: manualSplit,
       mitarbeiter: manualSplit,
     });
+  });
+
+  test('choose the rule by the entries the totals count, not by an entry still ahead', () => {
+    const policy = changedAfterClockOut({ ...STANDBY_POLICY, breakMode: 'manual' }, STANDBY_POLICY);
+    setSystemTime(new Date(AFTER_THE_DAY));
+    const sixHours = liveDayEntriesOf(sixHoursAndStandby.slice(0, 1));
+    // An entry added for 18:00 Berlin, read at 17:00 Berlin: its minutes do not count yet.
+    const ahead = sixHours.map((entry) => ({
+      ...entry,
+      id: `ahead-${entry.id}`,
+      timestamp: '2026-09-07T16:00:00.000Z',
+    }));
+
+    expect(dayBreakPolicy(policy, [...sixHours, ...ahead], false).breakMode).toBe('manual');
   });
 
   test('count a same-day reclassification of standby as work like the corrected week', () => {

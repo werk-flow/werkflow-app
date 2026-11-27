@@ -70,14 +70,24 @@ const WEEK_ENTRIES: TimeEntry[] = [
   entry('30000000-0000-4000-8000-000000000005', 'clock_in', '2026-09-09T02:00:00.000Z'),
 ];
 
-/** The `time-entries` read: the recorded entries inside the requested range. */
+/** An approved correction that ends Wednesday's shift at 10:00 Berlin, after six hours. */
+const WEDNESDAY_CORRECTED_END = entry(
+  '30000000-0000-4000-8000-000000000006',
+  'clock_out',
+  '2026-09-09T08:00:00.000Z',
+);
+
+/** The `time-entries` read: the recorded entries inside the requested range, corrected once the contract says so. */
 export function readBreakRuleWeekEntries(input: unknown): { success: true; entries: TimeEntry[] } {
   const range = input && typeof input === 'object' && 'from' in input && 'to' in input ? input : null;
   const from = range ? new Date(String(range.from)).getTime() : Number.NEGATIVE_INFINITY;
   const to = range ? new Date(String(range.to)).getTime() : Number.POSITIVE_INFINITY;
   return {
     success: true,
-    entries: WEEK_ENTRIES.filter((row) => {
+    entries: [
+      ...WEEK_ENTRIES,
+      ...(window.breakRuleWeekContract.correctionApproved ? [WEDNESDAY_CORRECTED_END] : []),
+    ].filter((row) => {
       const at = new Date(row.timestamp).getTime();
       return at >= from && at <= to;
     }),
@@ -141,11 +151,14 @@ const SAVED_ON_TUESDAY: BreakPolicy = {
 
 declare global {
   interface Window {
-    /** What the `break-policy` read answers: the saved rule, or `null` for a failed read. */
-    breakRuleWeekContract: { policy: BreakPolicy | null; policyReads: number };
+    /**
+     * What the `break-policy` read answers: the saved rule, or `null` for a failed read; and
+     * whether the office approved the correction that ends Wednesday's shift.
+     */
+    breakRuleWeekContract: { policy: BreakPolicy | null; policyReads: number; correctionApproved: boolean };
   }
 }
-window.breakRuleWeekContract = { policy: MANUAL_WITHOUT_VERSIONS, policyReads: 0 };
+window.breakRuleWeekContract = { policy: MANUAL_WITHOUT_VERSIONS, policyReads: 0, correctionApproved: false };
 
 /** The `break-policy` read: the rule the contract set, or a failure. */
 export function readBreakRuleWeekPolicy():

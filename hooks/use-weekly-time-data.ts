@@ -94,6 +94,8 @@ export function useWeeklyTimeData({
       'time_entries',
       'time_sessions',
       'time_segments',
+      // An approved correction changes its days: its approval updates the request.
+      'time_correction_requests',
       // Every source of a daily target, approved vacation and sickness and the
       // entry and exit dates included. A saved break rule also reads the week
       // again through the policy view.

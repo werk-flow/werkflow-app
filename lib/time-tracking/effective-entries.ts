@@ -12,17 +12,12 @@ export function sortTimeEntries(entries: TimeEntry[]): TimeEntry[] {
   return [...entries].sort(compareTimeEntries);
 }
 
-/** Whether an entry counts: a rejected entry, or one waiting for its deletion, does not. */
-export function isEffectiveEntry(entry: TimeEntry): boolean {
-  return entry.status !== 'rejected' && entry.status !== 'pending_delete';
-}
-
 export function getEffectiveTimeEntries(entries: TimeEntry[], options?: EffectiveEntryOptions): TimeEntry[] {
   const referenceDate = options?.referenceDate ?? new Date();
 
   return sortTimeEntries(
     entries.filter((entry) => {
-      if (!isEffectiveEntry(entry)) {
+      if (entry.status === 'rejected' || entry.status === 'pending_delete') {
         return false;
       }
 

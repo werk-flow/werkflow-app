@@ -6,7 +6,7 @@ import {
   groupEntriesByDate,
   sessionActivityMinutes,
 } from './helpers';
-import { isEffectiveEntry, sortTimeEntries } from './effective-entries';
+import { getEffectiveTimeEntries } from './effective-entries';
 import {
   computeDayBreakdown,
   currentBreakPolicy,
@@ -89,7 +89,8 @@ export function dayBreakPolicy(
   running: boolean,
 ): BreakPolicyValues {
   if (running) return currentBreakPolicy(settings);
-  const lastEntry = sortTimeEntries(dayEntries.filter(isEffectiveEntry)).at(-1);
+  // The entries the totals count: none rejected, waiting for deletion or still ahead.
+  const lastEntry = getEffectiveTimeEntries(dayEntries).at(-1);
   return resolveBreakPolicyAtTimestamp(settings, lastEntry?.timestamp ?? null);
 }
 

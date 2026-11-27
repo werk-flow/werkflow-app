@@ -42,7 +42,14 @@ export function useMemberStatus({
   refetch: () => Promise<void>;
 } {
   const view = useLiveView<MemberStatusMap>({
-    tables: ['time_entries', 'time_sessions', 'time_segments', 'organization_settings'],
+    // An approved correction changes the day: its approval updates the request.
+    tables: [
+      'time_entries',
+      'time_sessions',
+      'time_segments',
+      'time_correction_requests',
+      'organization_settings',
+    ],
     read: async ({ signal }): Promise<LiveViewResult<MemberStatusMap>> => {
       if (!organizationId || memberIds.length === 0) {
         return { ok: true, data: EMPTY_STATUS_MAP };

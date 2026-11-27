@@ -133,8 +133,7 @@ function clockedOut(workMinutes: number): MemberStatus {
     todayMinutes: workMinutes,
     standbyMinutes: 0,
     isOnStandby: false,
-    workMinutes,
-    breakMinutes: 0,
+    trackedBreakMinutes: 0,
     breakPolicy: {
       breakMode: 'manual',
       autoBreakThresholdMinutes: 360,

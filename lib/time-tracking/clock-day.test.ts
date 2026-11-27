@@ -17,6 +17,8 @@ const FIXTURE_FLAG = 'CLOCK_DAY_FIXTURE';
 const organization = '10000000-0000-4000-8000-000000000001';
 const employee = '20000000-0000-4000-8000-000000000001';
 const employeeRecord = '30000000-0000-4000-8000-000000000001';
+const colleague = '20000000-0000-4000-8000-000000000002';
+const colleagueRecord = '30000000-0000-4000-8000-000000000002';
 const job = '40000000-0000-4000-8000-000000000001';
 const morningSession = '50000000-0000-4000-8000-000000000001';
 const afternoonSession = '50000000-0000-4000-8000-000000000002';
@@ -63,24 +65,28 @@ function sessionRow(id: string, from: number, to: number | null, segments: Segme
   };
 }
 
-/** An approved correction that makes a closed work segment standby, at the same times. */
-function reclassifyAsStandby(
+/**
+ * An approved correction that replaces a closed work segment at the same
+ * times: as standby of the same person, or as work of `holder` (a reassignment).
+ */
+function correctSegment(
   segmentId: string,
   from: number,
   to: number,
+  holder: { userId: string; recordId: string; kind: 'standby' | 'work' },
 ): TimeCorrectionApplicationProjection {
   const fact = (entryType: 'clock_in' | 'clock_out', minutes: number) => ({
     factId: `${segmentId}-${entryType}`,
-    employeeRecordId: employeeRecord,
-    userId: employee,
+    employeeRecordId: holder.recordId,
+    userId: holder.userId,
     entryType,
     timestamp: todayAt(minutes),
     jobId: job,
-    activityKind: 'standby' as const,
+    activityKind: holder.kind,
     isManual: false,
   });
   return {
-    applicationId: `reclassify-${segmentId}`,
+    applicationId: `correct-${segmentId}`,
     requestId: `request-${segmentId}`,
     appliedAt: todayAt(to),
     appliedBy: employee,
@@ -92,6 +98,7 @@ function reclassifyAsStandby(
 
 async function runFixture(): Promise<void> {
   setSystemTime(NOW);
+  let caller = employee;
   const settings: BreakPolicy = {
     breakMode: 'manual',
     autoBreakThresholdMinutes: 360,
@@ -122,7 +129,7 @@ async function runFixture(): Promise<void> {
   }));
   mock.module('@/lib/data/cached', () => ({
     CACHE_TAGS: {},
-    getAuthenticatedUser: async () => ({ id: employee }),
+    getAuthenticatedUser: async () => ({ id: caller }),
     getCachedMemberships: async () => [{ orgId: organization, role: 'employee' }],
     getCachedOrganizationSettings: async () => settings,
     getCachedOrganizationCalendar: async () => null,
@@ -215,7 +222,9 @@ async function runFixture(): Promise<void> {
       { id: 'late', kind: 'work', from: 420, to: 540 },
     ]),
   ];
-  applications = [reclassifyAsStandby('late', 420, 540)];
+  applications = [
+    correctSegment('late', 420, 540, { userId: employee, recordId: employeeRecord, kind: 'standby' }),
+  ];
   const corrected = await readState();
   assert.equal(corrected.standbyMinutes, 120, 'the clock counts the corrected standby');
   assert.equal(corrected.breakMinutes, 0, 'the standby stays out of the six-hour step');
@@ -232,6 +241,17 @@ async function runFixture(): Promise<void> {
   assert.equal(ruleChanged.breakPolicy.breakMode, 'manual', 'the day counts by its last entry’s rule');
   assert.equal(ruleChanged.breakMinutes, 0);
   assert.equal(ruleChanged.workMinutes, 420);
+
+  // The office reassigned the last two hours to a colleague: they leave this
+  // clock and count on the colleague's, never on both.
+  applications = [
+    correctSegment('late', 420, 540, { userId: colleague, recordId: colleagueRecord, kind: 'work' }),
+  ];
+  const givenAway = await readState();
+  assert.equal(givenAway.todayMinutes, 300, 'the reassigned hours leave the original clock');
+  caller = colleague;
+  const received = await readState();
+  assert.equal(received.todayMinutes, 120, 'the colleague’s clock counts the reassigned hours only');
 }
 
 if (process.env[FIXTURE_FLAG] === '1') {

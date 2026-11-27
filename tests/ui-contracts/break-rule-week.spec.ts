@@ -59,6 +59,25 @@ test('Mitarbeiter: the list deducts the automatic break from a running shift, as
   ).toHaveAttribute('aria-label', 'Tagesfortschritt: 94%');
 });
 
+test('Mitarbeiter: a correction approved in another session reaches the open list and detail', async ({
+  page,
+}) => {
+  await mountBreakRuleWeek(page);
+  const list = page.getByRole('region', { name: 'Mitarbeiter-Liste', exact: true }).getByRole('progressbar');
+  await expect(list).toHaveAttribute('aria-label', 'Tagesfortschritt: 94%');
+
+  // The approval updates the request; the corrected entries end the shift after six hours.
+  await page.evaluate(() => {
+    window.breakRuleWeekContract.correctionApproved = true;
+    window.calendarContract.emit('time_correction_requests', { organization_id: 'org-a' });
+  });
+
+  await expect(list).toHaveAttribute('aria-label', 'Tagesfortschritt: 69%');
+  await expect(page.getByRole('region', { name: 'Mitarbeiter', exact: true })).toContainText(
+    `${formatDuration(330)} / ${formatDuration(480)} (69%)`,
+  );
+});
+
 test('Zeiterfassung: a rule saved in another session rebuilds the open week, also without earlier versions', async ({
   page,
 }) => {
