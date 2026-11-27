@@ -12591,6 +12591,45 @@ export type Database = {
           },
         ];
       };
+      time_correction_application_spans: {
+        Row: {
+          application_id: string;
+          organization_id: string;
+          snapshot: string;
+          span: unknown;
+          user_id: string;
+        };
+        Insert: {
+          application_id: string;
+          organization_id: string;
+          snapshot: string;
+          span: unknown;
+          user_id: string;
+        };
+        Update: {
+          application_id?: string;
+          organization_id?: string;
+          snapshot?: string;
+          span?: unknown;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_correction_application_spans_application_id_fkey";
+            columns: ["application_id"];
+            isOneToOne: false;
+            referencedRelation: "time_correction_applications";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_correction_application_spans_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       time_correction_applications: {
         Row: {
           applied_at: string;

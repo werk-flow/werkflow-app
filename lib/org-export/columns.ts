@@ -40,6 +40,9 @@ type ExcludedTable =
   | 'problem_report_signals'
   // A person's live signal that their target inputs changed: ids and a timestamp, no record.
   | 'employment_target_signals'
+  // The read index of each approved correction: the span of each person's
+  // facts, derived from the snapshots `time_correction_applications` exports.
+  | 'time_correction_application_spans'
   // The paying account's billing state, not the organization's records.
   | 'subscriptions'
   // The file plan and part state of earlier exports, whose archives are gone
