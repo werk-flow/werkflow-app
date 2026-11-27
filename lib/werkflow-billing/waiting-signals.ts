@@ -4,7 +4,7 @@ import type Stripe from 'stripe';
 
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { readCompleteRows } from '@/lib/supabase/query-batches';
+import { ROW_PAGE_SIZE } from '@/lib/supabase/query-batches';
 import { billingFailure } from '@/lib/werkflow-billing/failure';
 import { receiveSignal, type SignalReceipt } from '@/lib/werkflow-billing/signals/receive';
 import { resolveStripeGateway, type StripeGateway } from '@/lib/werkflow-billing/stripe';
@@ -33,8 +33,12 @@ const MINUTE_MS = 60_000;
 const CLOCK_SKEW_MS = 10 * MINUTE_MS;
 /** Stripe keeps events 30 days; an older one cannot be read back. */
 const EVENT_MS = 30 * 24 * 60 * MINUTE_MS;
-/** More signals waiting for an organization than this is an outage, not WerkFlow's volume. */
-const WAITING_SIGNALS_CAP = 1_000;
+/**
+ * More signals waiting for an organization than this is an outage, not
+ * WerkFlow's volume. One response under PostgREST's row cap holds them and the
+ * row that shows an overflow.
+ */
+const WAITING_SIGNALS_CAP = ROW_PAGE_SIZE - 1;
 
 const waitingSignalSchema = z.object({ stripe_event_id: z.string() });
 const subscriptionSchema = z.object({ stripe_customer_id: z.string(), created_at: z.string() });
@@ -49,28 +53,24 @@ function customerOf(event: Stripe.Event): string | null {
 
 /**
  * The ids of the signals that wait for an organization since `since`, oldest
- * first; more than the cap fails the read instead of leaving any out.
+ * first, in one read; more than the cap fails the read instead of leaving any out.
  */
 async function readWaitingSignals(since: string): Promise<string[]> {
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await readCompleteRows(
-    (from, to) =>
-      admin
-        .from('werkflow_billing_signals')
-        .select('stripe_event_id')
-        .eq('state', 'pending')
-        .eq('last_failure_code', WAITING_CODE)
-        .gte('stripe_created_at', since)
-        .order('stripe_created_at')
-        .order('stripe_event_id')
-        .range(from, to),
-    WAITING_SIGNALS_CAP,
-  );
+  const { data, error } = await createSupabaseAdminClient()
+    .from('werkflow_billing_signals')
+    .select('stripe_event_id')
+    .eq('state', 'pending')
+    .eq('last_failure_code', WAITING_CODE)
+    .gte('stripe_created_at', since)
+    .order('stripe_created_at')
+    .order('stripe_event_id')
+    .limit(WAITING_SIGNALS_CAP + 1);
   const rows = waitingSignalSchema.array().safeParse(data);
   if (error || !rows.success) {
     logError('runSignalsWaitingForOrganization: werkflow_billing_signals read failed', error);
     throw billingFailure('waiting_signals_read_failed');
   }
+  if (rows.data.length > WAITING_SIGNALS_CAP) throw billingFailure('waiting_signals_overflow');
   return rows.data.map((row) => row.stripe_event_id);
 }
 

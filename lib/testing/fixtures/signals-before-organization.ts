@@ -14,7 +14,8 @@
 // The ledger functions answer as supabase/tests/werkflow_billing_signals.sql proves.
 import assert from 'node:assert/strict';
 import { mock, setSystemTime } from 'bun:test';
-import type Stripe from 'stripe';
+import * as nextServer from 'next/server';
+import Stripe from 'stripe';
 
 import { CALLER_ID, installActionWorld, signInAs, tableRows } from './action-boundary-world';
 import type { FakeStripeRequests } from './fake-stripe-gateway';
@@ -124,6 +125,7 @@ mock.module('next/headers', () => ({
 // Work after the answer runs when the fixture says, as Vercel runs it after the response.
 const afterAnswer: Array<() => Promise<unknown>> = [];
 mock.module('next/server', () => ({
+  ...nextServer,
   after: (task: () => Promise<unknown>) => {
     afterAnswer.push(task);
   },
@@ -188,15 +190,25 @@ const storedEvents = {
 const answers: Record<string, unknown> = { ...storedEvents };
 const requests: FakeStripeRequests = [];
 const { createFakeStripeGateway } = await import('./fake-stripe-gateway');
-const gateway = createFakeStripeGateway('whsec_fixture_only', { answers, requests });
+const WEBHOOK_SECRET = 'whsec_fixture_only';
+const gateway = createFakeStripeGateway(WEBHOOK_SECRET, { answers, requests });
 mock.module('@/lib/werkflow-billing/stripe', () => ({ resolveStripeGateway: () => ({ ok: true, gateway }) }));
 
 const { createOrganization } = await import('@/lib/org/actions');
-const { runAgainOnceItsOrganizationExists } = await import('@/lib/werkflow-billing/waiting-signals');
-const { receiveSignal } = await import('@/lib/werkflow-billing/signals/receive');
-/** One delivery as the webhook route makes it. */
-const deliver = async (event: Stripe.Event) =>
-  runAgainOnceItsOrganizationExists(event, gateway, await receiveSignal(event, gateway));
+const { POST } = await import('../../../app/api/stripe/webhook/route');
+/** One signed delivery to the real webhook route; answers its status. */
+const deliver = async (event: Stripe.Event): Promise<number> => {
+  const payload = JSON.stringify(event);
+  const signature = await Stripe.webhooks.generateTestHeaderStringAsync({ payload, secret: WEBHOOK_SECRET });
+  const response = await POST(
+    new Request('https://app.example.test/api/stripe/webhook', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'stripe-signature': signature },
+      body: payload,
+    }),
+  );
+  return response.status;
+};
 const ledger = () => tableRows(world, 'werkflow_billing_signals');
 const paid = await gateway.readEvent('evt_test_card_paid');
 // Unreachable until the fixture says: every read fails.
@@ -207,7 +219,7 @@ const reachStripe = (reachable: boolean) => {
 reachStripe(false);
 
 // Before the organization exists, the payment signal fails and waits; nothing runs it again.
-assert.equal(await deliver(paid), 'failed');
+assert.equal(await deliver(paid), 500, 'a signal without its organization was acknowledged');
 assert.deepEqual(handled, []);
 assert.deepEqual(signalRow('evt_test_card_paid'), {
   stripe_event_id: 'evt_test_card_paid',
@@ -254,8 +266,8 @@ duringNextAttempt = async () => {
   ]);
 };
 const untouched = structuredClone(ledger());
-// The in-flight attempt fails for want of its organization, then runs once more because it exists now.
-assert.equal(await deliver(paid), 'settled');
+// The in-flight attempt fails for want of its organization; the route runs it once more because it exists now.
+assert.equal(await deliver(paid), 200, 'the delivery did not run again once its organization existed');
 assert.equal(duringNextAttempt, null, 'the organization was never created');
 assert.deepEqual(handled, ['evt_test_card_finalized', 'evt_test_card_paid']);
 assert.equal(signalRow('evt_test_card_paid')?.state, 'handled', 'the payment signal stayed open');
