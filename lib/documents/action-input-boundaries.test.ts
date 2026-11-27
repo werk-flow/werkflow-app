@@ -35,6 +35,7 @@ async function runScenario(): Promise<void> {
     getCachedMemberships: async () => [{ orgId: ownOrganization, role: 'admin' }],
     getCachedOrganizationSettings: async () => null,
     getCachedOrganizationCalendar: async () => null,
+    getOwnEmployeeRecordId: async () => null,
   }));
   const documents = {
     ...(await import('@/lib/documents/actions')),

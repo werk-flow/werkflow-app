@@ -116,6 +116,8 @@ mock.module('@/lib/data/cached', () => ({
   getCachedMemberships: async () => [{ orgId: organizationId, role }],
   getCachedOrganizationSettings: async () => ({}),
   getCachedOrganizationCalendar: async () => ({}),
+  // The facts below name each person's record by their user id.
+  getOwnEmployeeRecordId: async () => callerId,
 }));
 mock.module('@/lib/time-corrections/approved-projection', () => ({
   loadApprovedCorrectionProjection: async () => {

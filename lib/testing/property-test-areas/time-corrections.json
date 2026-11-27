@@ -20,6 +20,7 @@
     "lib/time-corrections/calendar-draft.ts": "Maps a calendar drag to correction boundaries one to one and passes the times through; calendar-proposal.ts moves them.",
     "lib/time-corrections/history-visibility.ts": "Which correction requests a role sees: a permission rule, no time or money.",
     "lib/time-corrections/messages.ts": "German failure sentences; no rule.",
+    "lib/time-corrections/person-corrections.ts": "Keeps the correction facts of a person's effective employee record: a permission filter, no time arithmetic; projection.ts applies the facts.",
     "lib/time-corrections/pending-projection.ts": "Reads the pending requests a caller may see: a visibility rule, no time arithmetic.",
     "lib/time-corrections/planned-visit-reads.ts": "Server Action that reads a day's planned visits to prefill a timeline; it records no time.",
     "lib/time-corrections/read-actions.ts": "Server Action readers of corrections; the pending sum they return comes from provisional-summary.ts.",
