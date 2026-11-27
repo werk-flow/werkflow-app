@@ -234,6 +234,19 @@ describe('today’s totals and the week', () => {
     });
   });
 
+  test('reach a step at its exact threshold, whatever the standby’s milliseconds', () => {
+    // Six hours of work, then standby that ends 7 ms past the full minute.
+    const sixHoursAndStandby = [
+      segment('work', 'work', '2026-09-07T05:00:00.000Z', '2026-09-07T11:00:00.000Z'),
+      segment('standby', 'standby', '2026-09-07T11:00:00.000Z', '2026-09-07T14:00:00.007Z'),
+    ];
+    const [weekDay] = buildWeeklyTimeData(weekEntriesOf(sixHoursAndStandby), MONDAY, STANDBY_POLICY, [
+      mondayTarget(DAY_OF_SEVEN_HOURS),
+    ]);
+
+    expect(weekDay?.breakMinutes).toBe(30);
+  });
+
   test('keep a standby that is still running out of the break steps', () => {
     const running = workThenStandby(null);
     const threeHoursOfStandby = Date.parse('2026-09-07T13:00:00.000Z');
@@ -242,6 +255,30 @@ describe('today’s totals and the week', () => {
       dashboard: WEEK_SPLIT,
       mitarbeiter: WEEK_SPLIT,
     });
+  });
+
+  test('find the running standby behind an earlier start that was never closed', () => {
+    setSystemTime(new Date('2026-09-07T12:00:00.000Z'));
+    const unclosedLegacyStart: TimeEntry = {
+      id: 'legacy',
+      userId: 'user',
+      organizationId: 'org',
+      entryType: 'clock_in',
+      timestamp: '2026-09-07T04:00:00.000Z',
+      isManual: false,
+      jobId: null,
+      status: 'approved',
+      reviewedBy: null,
+      reviewedAt: null,
+      createdAt: '2026-09-07T04:00:00.000Z',
+      updatedAt: '2026-09-07T04:00:00.000Z',
+    };
+    const status = memberStatusOf(
+      [unclosedLegacyStart, ...weekEntriesOf(workThenStandby(null))],
+      STANDBY_POLICY,
+    );
+
+    expect(status.isOnStandby).toBe(true);
   });
 
   test('owe no overtime when today’s target is unknown', () => {

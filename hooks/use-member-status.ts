@@ -1,5 +1,6 @@
 'use client';
 
+import { getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
 import { memberStatusOf, type MemberStatus } from '@/lib/time-tracking/member-day';
 import { readInBackground, type BackgroundReadFailure } from '@/lib/data/background-read-client';
@@ -48,11 +49,8 @@ export function useMemberStatus({
       }
 
       try {
-        // Get today's date range
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        // Today's Berlin day, wherever the browser's clock is set.
+        const now = new Date();
 
         // Fetch all entries for today
         // A route handler keeps this live client read independent from the
@@ -61,8 +59,8 @@ export function useMemberStatus({
         const result = await fetchTimeEntries(
           {
             organizationId,
-            from: today.toISOString(),
-            to: tomorrow.toISOString(),
+            from: getLocalDayStart(now).toISOString(),
+            to: getLocalDayEnd(now).toISOString(),
           },
           signal,
         );

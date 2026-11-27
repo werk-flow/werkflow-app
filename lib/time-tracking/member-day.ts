@@ -56,7 +56,8 @@ export function memberStatusOf(memberEntries: TimeEntry[], breakPolicy: BreakPol
     breakPolicy,
     undefined,
   );
-  const runningSession = workSessions.find((session) => session.clockOut === null && !session.isOrphan);
+  // The latest open session is the running one; an earlier unpaired start does not run.
+  const runningSession = workSessions.findLast((session) => session.clockOut === null && !session.isOrphan);
 
   // If clocked in, find the last clock_in timestamp and check if it's pending
   let clockInTime: string | null = null;
