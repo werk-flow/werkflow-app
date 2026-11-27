@@ -23,7 +23,9 @@ mock.module('next/cache', () => ({
   revalidateTag: () => {},
 }));
 
-const { createOffer, saveOfferContent, startOfferRevision, updateOffer } = await import('@/lib/offers/actions');
+const { createOffer, saveOfferContent, startOfferRevision, updateOffer } = await import(
+  '@/lib/offers/actions'
+);
 const { default: OffersPage } = await import('@/app/(app)/angebote/page');
 const { default: OfferPage } = await import('@/app/(app)/angebote/[offerId]/page');
 

@@ -466,9 +466,7 @@ test('an article read that ends after „Neu laden“ adds no Position', async (
 test('an article pick that finds no price leaves the editor unchanged', async ({ page }) => {
   await openContractFixture(page, 'offers');
   const editor = page.getByRole('form', { name: 'Titel und Positionen' });
-  await page.evaluate(() =>
-    window.uiContractOfferContentRender?.(2, [{ title: 'Material', positions: [] }]),
-  );
+  await page.evaluate(() => window.uiContractOfferContentRender?.(2, [{ title: 'Material', positions: [] }]));
   await page.evaluate(() => {
     window.uiContractHoldArticleRead = true;
     window.uiContractArticleUnpriced = true;
@@ -493,50 +491,61 @@ test('an article pick that finds no price leaves the editor unchanged', async ({
   await expect(editor.getByText(/inzwischen geändert/)).toHaveCount(0);
 });
 
+type PdfUrls = { created: string[]; revoked: string[]; held: Array<() => void>; digested: number };
+
+declare global {
+  interface Window {
+    uiContractPdfUrls: PdfUrls;
+  }
+}
+
 /**
- * Before the bundle loads: counts every blob: URL created and revoked, and
- * holds each SHA-256 digest until the spec releases it.
+ * Before the bundle loads: counts every blob: URL created and revoked, holds
+ * each SHA-256 digest until the spec releases it, and counts the digests that
+ * ended. The reader's steps after a digest are microtasks, so they have run
+ * when the next evaluation reads the count.
  */
 async function watchPdfUrls(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    const created: string[] = [];
-    const revoked: string[] = [];
-    const held: Array<() => void> = [];
+    const urls: PdfUrls = { created: [], revoked: [], held: [], digested: 0 };
     const create = URL.createObjectURL.bind(URL);
     const revoke = URL.revokeObjectURL.bind(URL);
     URL.createObjectURL = (object) => {
       const url = create(object);
-      created.push(url);
+      urls.created.push(url);
       return url;
     };
     URL.revokeObjectURL = (url) => {
-      revoked.push(url);
+      urls.revoked.push(url);
       revoke(url);
     };
     const digest = crypto.subtle.digest.bind(crypto.subtle);
     Object.defineProperty(crypto.subtle, 'digest', {
       value: (algorithm: AlgorithmIdentifier, data: BufferSource) =>
         new Promise<ArrayBuffer>((resolve, reject) => {
-          held.push(() => digest(algorithm, data).then(resolve, reject));
+          urls.held.push(() =>
+            digest(algorithm, data).then((bytes) => {
+              urls.digested += 1;
+              resolve(bytes);
+            }, reject),
+          );
         }),
     });
-    Object.assign(window, { uiContractPdfUrls: { created, revoked, held } });
+    window.uiContractPdfUrls = urls;
   });
   await page.route('http://localhost/api/angebote/vorschau**', (route) =>
     route.fulfill({ contentType: 'application/pdf', body: '%PDF-1.4\n' }),
   );
 }
 
-type PdfUrls = { created: string[]; revoked: string[]; held: Array<() => void> };
 const pdfUrls = (page: Page) =>
   page.evaluate(() => {
-    const { created, revoked, held } = (window as unknown as { uiContractPdfUrls: PdfUrls }).uiContractPdfUrls;
-    return { created: [...created], revoked: [...revoked], held: held.length };
+    const { created, revoked, held, digested } = window.uiContractPdfUrls;
+    return { created: [...created], revoked: [...revoked], held: held.length, digested };
   });
 const releaseDigests = (page: Page) =>
   page.evaluate(() => {
-    const { held } = (window as unknown as { uiContractPdfUrls: PdfUrls }).uiContractPdfUrls;
-    for (const release of held.splice(0)) release();
+    for (const release of window.uiContractPdfUrls.held.splice(0)) release();
   });
 
 // The preview reads the PDF as bytes and shows it through a blob: URL. Closed
@@ -553,8 +562,7 @@ test('a preview closed during its digest or after it showed leaves no blob URL b
   await expect(preview).toHaveCount(0);
   await releaseDigests(page);
   // The read ends after the close: whatever it allocated is revoked again.
-  await expect.poll(async () => (await pdfUrls(page)).held).toBe(0);
-  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  await expect.poll(async () => (await pdfUrls(page)).digested).toBe(1);
   const closedEarly = await pdfUrls(page);
   expect(closedEarly.revoked).toEqual(expect.arrayContaining(closedEarly.created));
 

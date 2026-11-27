@@ -17,6 +17,7 @@ import { SubpageHeader } from '@/components/shared/subpage-header';
 import { logError } from '@/lib/logging';
 import { getManagerAssigneeOptions } from '@/lib/members/profile-name';
 import { readOfferRevisions, readOfferWithCosts } from '@/lib/offers/reads';
+import type { OfferRevision, OfferWithCosts } from '@/lib/offers/types';
 import { resolvePageMembership } from '@/lib/org/page-context';
 import { isManagerRole } from '@/lib/roles';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -61,41 +62,10 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
     );
   }
 
-  // The newest sent revision; the draft after one is the next revision. Unknown while its read failed.
-  const sentRevision = revisions === 'failed' ? null : (revisions[0]?.revision ?? 0);
-  const shownRevision =
-    sentRevision === null ? null : offer.status === 'entwurf' ? sentRevision + 1 : sentRevision;
   return (
     <OfferUnsavedProvider>
       <div className="space-y-6">
-        <div className="space-y-2">
-          <Link
-            href="/angebote"
-            className="inline-flex items-center gap-1 rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-          >
-            <ArrowLeft className="size-4" />
-            Alle Angebote
-          </Link>
-          <SubpageHeader
-            // A title or customer name can hold a word wider than a phone.
-            title={<span className="wrap-anywhere">{offer.title}</span>}
-            description={
-              <span className="wrap-anywhere">
-                {`${offer.offerNumber}${shownRevision ? `, Revision ${shownRevision}` : ''} · für ${offer.client.name}`}
-              </span>
-            }
-            actions={
-              <div className="flex flex-wrap items-center gap-2">
-                <OfferStatusBadge status={offer.status} validUntil={offer.validUntil} />
-                {owners?.success && <EditOfferHeaderButton offer={offer} owners={owners.options} />}
-                {offer.status === 'entwurf' && <OfferSendActions offer={offer} />}
-                {offer.status === 'gesendet' && sentRevision ? (
-                  <StartOfferRevisionButton offer={offer} sentRevision={sentRevision} />
-                ) : null}
-              </div>
-            }
-          />
-        </div>
+        <OfferPageHeader offer={offer} owners={owners} revisions={revisions} />
         {owners && !owners.success && (
           // The offer stays on screen; only its editing waits for the office's members.
           <RegionLoadError title="Bearbeiten ist gerade nicht möglich">
@@ -114,5 +84,54 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
         {offer.status === 'entwurf' && <OfferContentEditor key={offer.id} offer={offer} />}
       </div>
     </OfferUnsavedProvider>
+  );
+}
+
+/**
+ * The way back, the title, the number with the revision the page shows and
+ * the actions of the offer's state. The revision stays out while its read failed.
+ */
+function OfferPageHeader({
+  offer,
+  owners,
+  revisions,
+}: {
+  offer: OfferWithCosts;
+  owners: Awaited<ReturnType<typeof getManagerAssigneeOptions>> | null;
+  revisions: OfferRevision[] | 'failed';
+}) {
+  // The newest sent revision; a draft after one is the next revision.
+  const sentRevision = revisions === 'failed' ? null : (revisions[0]?.revision ?? 0);
+  const shownRevision =
+    sentRevision === null ? null : offer.status === 'entwurf' ? sentRevision + 1 : sentRevision;
+  return (
+    <div className="space-y-2">
+      <Link
+        href="/angebote"
+        className="inline-flex items-center gap-1 rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        <ArrowLeft className="size-4" />
+        Alle Angebote
+      </Link>
+      <SubpageHeader
+        // A title or customer name can hold a word wider than a phone.
+        title={<span className="wrap-anywhere">{offer.title}</span>}
+        description={
+          <span className="wrap-anywhere">
+            {`${offer.offerNumber}${shownRevision ? `, Revision ${shownRevision}` : ''} · für ${offer.client.name}`}
+          </span>
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <OfferStatusBadge status={offer.status} validUntil={offer.validUntil} />
+            {owners?.success && <EditOfferHeaderButton offer={offer} owners={owners.options} />}
+            {offer.status === 'entwurf' && <OfferSendActions offer={offer} />}
+            {offer.status === 'gesendet' && sentRevision ? (
+              <StartOfferRevisionButton offer={offer} sentRevision={sentRevision} />
+            ) : null}
+          </div>
+        }
+      />
+    </div>
   );
 }
