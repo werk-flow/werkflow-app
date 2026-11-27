@@ -30,8 +30,8 @@ const HEAVY_NODE_HEAP_MB = 4096;
  * Node's default heap scales with the machine's memory (about 2 GiB in a 6 GiB container), so
  * without it the same tree passes on a large runner and runs out of memory on a small one.
  */
-export function withHeavyNodeHeap(nodeOptions: string | undefined): string {
-  return `${nodeOptions ?? ''} --max-old-space-size=${HEAVY_NODE_HEAP_MB}`.trim();
+export function withHeavyNodeHeap(nodeOptions: string | undefined, heapMb = HEAVY_NODE_HEAP_MB): string {
+  return `${nodeOptions ?? ''} --max-old-space-size=${heapMb}`.trim();
 }
 const LINTED = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 
@@ -161,6 +161,38 @@ const ESLINT_VALUE_FLAGS = new Set([
 export function eslintTargets(args: readonly string[]): string[] {
   const targets = operands(args, ESLINT_VALUE_FLAGS);
   return targets.length ? targets : ['.'];
+}
+
+/**
+ * The parts of a whole-repository lint, one eslint process each. A type-aware lint keeps what it
+ * learned about each linted file until its process exits: the checker's types and the token nodes
+ * typescript-estree caches on every source file. Each process starts from the whole program, about
+ * 1.7 GiB live, and grows by 0.4 to 0.8 MiB per linted file, most under lib/. One process over the
+ * repository's 4,200 files reached 3.8 GiB live of its 4 GiB heap. Every file falls into a part:
+ * the `lib/[a-m]*` and `lib/[n-z]*` halves only ignore each other.
+ */
+const WHOLE_LINT_PARTS: readonly (readonly string[])[] = [
+  ['lib', '--ignore-pattern', 'lib/[n-z]*'],
+  ['lib', '--ignore-pattern', 'lib/[a-m]*', '--ignore-pattern', 'lib/testing'],
+  ['lib/testing', 'tests'],
+  ['.', '--ignore-pattern', 'lib', '--ignore-pattern', 'tests'],
+];
+
+/**
+ * The heap ceiling, in MiB, of each part. Each part stays under 2.6 GiB live, so the next growth
+ * fails here, with room left, before it reaches the 4 GiB a heavy slot counts. A part that runs
+ * out of heap is split in WHOLE_LINT_PARTS; its heap is never raised.
+ */
+const LINT_PART_HEAP_MB = 3072;
+
+/**
+ * The eslint argument lists `bun run lint` runs one after another, and the heap each gets. A lint
+ * that names no path lints the whole repository in WHOLE_LINT_PARTS; a lint of named paths runs as
+ * one process with the heavy heap.
+ */
+export function lintRuns(args: readonly string[]): { runs: string[][]; heapMb: number } {
+  if (operands(args, ESLINT_VALUE_FLAGS).length) return { runs: [[...args]], heapMb: HEAVY_NODE_HEAP_MB };
+  return { runs: WHOLE_LINT_PARTS.map((part) => [...args, ...part]), heapMb: LINT_PART_HEAP_MB };
 }
 
 const TSC_VALUE_FLAGS = new Set([

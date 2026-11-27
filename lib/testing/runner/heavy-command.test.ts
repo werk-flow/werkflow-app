@@ -5,7 +5,13 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import { BROAD_LINT_FILES, heavyCommandRefusal, lintedFileCount, withHeavyNodeHeap } from './heavy-command';
+import {
+  BROAD_LINT_FILES,
+  heavyCommandRefusal,
+  lintedFileCount,
+  lintRuns,
+  withHeavyNodeHeap,
+} from './heavy-command';
 import { temporaryDirectory } from '../temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
@@ -190,7 +196,24 @@ test('lint and build fix their Node heap instead of inheriting the machine defau
     expect([
       script,
       readFileSync(resolve(repositoryRoot, script), 'utf8').includes(
-        'withHeavyNodeHeap(process.env.NODE_OPTIONS)',
+        'withHeavyNodeHeap(process.env.NODE_OPTIONS',
       ),
     ]).toEqual([script, true]);
+});
+
+// One type-aware eslint process over the whole repository reached 3.8 GiB live of its 4 GiB heap.
+test('a whole-repository lint runs in parts under a lower heap ceiling, and a named lint runs once', () => {
+  const whole = lintRuns(['--fix']);
+  expect(whole.heapMb).toBe(3072);
+  expect(whole.runs).toEqual([
+    ['--fix', 'lib', '--ignore-pattern', 'lib/[n-z]*'],
+    ['--fix', 'lib', '--ignore-pattern', 'lib/[a-m]*', '--ignore-pattern', 'lib/testing'],
+    ['--fix', 'lib/testing', 'tests'],
+    ['--fix', '.', '--ignore-pattern', 'lib', '--ignore-pattern', 'tests'],
+  ]);
+  expect(lintRuns(['components', '--rule', 'x: off'])).toEqual({
+    runs: [['components', '--rule', 'x: off']],
+    heapMb: 4096,
+  });
+  expect(lintRuns(['.']).runs).toEqual([['.']]);
 });
