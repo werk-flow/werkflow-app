@@ -15,7 +15,6 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ciBrowserHoldUntil } from '../runner/group-schedule';
 import { clockSlot, heldUntil, type ScheduleAnswer, scheduleDue, type ScheduleState } from './schedule';
-import { workflowsFolder } from '../ci-workflow';
 
 const repository = resolve(import.meta.dir, '../../..');
 const fixedClock = join(repository, 'lib/testing/fixtures/fixed-clock.ts');
@@ -450,9 +449,9 @@ test("the CLI reads release.yml's cron: with one it never names the release", ()
   const folder = mkdtempSync(join(tmpdir(), 'ci-schedule-'));
   try {
     const { root, run } = schedulerFixture(folder);
-    copyFileSync(
-      join(repository, workflowsFolder(), 'release.yml'),
+    writeFileSync(
       join(root, '.github/workflows/release.yml'),
+      "on:\n  schedule:\n    - cron: '0 17 * * 0-4'\n  workflow_dispatch:\n",
     );
     // No state: every clock work has a missed slot, and only the nightly may be named.
     const answer = run('due', '--state', join(folder, 'state.json'));

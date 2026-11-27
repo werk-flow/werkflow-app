@@ -6,7 +6,8 @@ name: Date look-ahead
 # Supabase stack together. It only reports: nothing reads this workflow, so it gates no pull request
 # and no release. A red run on main opens or updates the issue "CI alert: date look-ahead"; a failed
 # job's name carries the date, and the next green run closes the issue. Started by hand, `date` runs
-# one date, to reproduce a failure; that run reports nothing.
+# one date, to reproduce a failure; that run reports nothing. Window suites run at 1, 2, 3, 7 and
+# 14 days out, keeping the first and last checks with fewer repeats. Other legs keep their cadence.
 on:
   schedule:
     # GitHub starts this hours late, so it arrives in the afternoon, clear of the nightly (22:30 Berlin).

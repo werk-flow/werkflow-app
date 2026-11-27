@@ -1,18 +1,25 @@
 // Today's totals of the clock state keep every minute recorded today: the
 // closed segments of every session of the day, open or ended, and the legacy
-// entries beside them. A clock-out never resets the day to zero. The file
-// spawns itself: module mocks stay in the child.
+// entries beside them, with the day's approved corrections applied and under
+// the rule of the day's last entry, as the week counts the day. A clock-out
+// never resets the day to zero. The file spawns itself: module mocks stay in
+// the child.
 import assert from 'node:assert/strict';
 import { expect, mock, setSystemTime, test } from 'bun:test';
 import { getLocalDayStart } from '@/lib/date-time/berlin';
 import { isJsonRecord } from '@/lib/supabase/json';
 import { createInMemoryAdmin, type InMemoryTables } from '@/lib/testing/fixtures/in-memory-admin';
+import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
+import { buildBreakPolicyHistoryEntry, type BreakPolicy } from './settings';
 
 const FIXTURE_FLAG = 'CLOCK_DAY_FIXTURE';
 
 const organization = '10000000-0000-4000-8000-000000000001';
 const employee = '20000000-0000-4000-8000-000000000001';
 const employeeRecord = '30000000-0000-4000-8000-000000000001';
+const colleague = '20000000-0000-4000-8000-000000000002';
+const colleagueRecord = '30000000-0000-4000-8000-000000000002';
+const rejoinedRecord = '30000000-0000-4000-8000-000000000003';
 const job = '40000000-0000-4000-8000-000000000001';
 const morningSession = '50000000-0000-4000-8000-000000000001';
 const afternoonSession = '50000000-0000-4000-8000-000000000002';
@@ -59,8 +66,53 @@ function sessionRow(id: string, from: number, to: number | null, segments: Segme
   };
 }
 
+/**
+ * An approved correction that replaces a closed work segment at the same
+ * times: as standby of the same person, or as work of `holder` (a reassignment).
+ */
+function correctSegment(
+  segmentId: string,
+  from: number,
+  to: number,
+  holder: { userId: string; recordId: string; kind: 'standby' | 'work' },
+): TimeCorrectionApplicationProjection {
+  const fact = (entryType: 'clock_in' | 'clock_out', minutes: number) => ({
+    factId: `${segmentId}-${entryType}`,
+    employeeRecordId: holder.recordId,
+    userId: holder.userId,
+    entryType,
+    timestamp: todayAt(minutes),
+    jobId: job,
+    activityKind: holder.kind,
+    isManual: false,
+  });
+  return {
+    applicationId: `correct-${segmentId}`,
+    requestId: `request-${segmentId}`,
+    appliedAt: todayAt(to),
+    appliedBy: employee,
+    sourceFingerprint: segmentId,
+    snapshot: { schemaVersion: 1, facts: [fact('clock_in', from), fact('clock_out', to)] },
+    sources: [{ kind: 'canonical_segment', id: segmentId, version: segmentId }],
+  };
+}
+
 async function runFixture(): Promise<void> {
   setSystemTime(NOW);
+  let caller = employee;
+  const settings: BreakPolicy = {
+    breakMode: 'manual',
+    autoBreakThresholdMinutes: 360,
+    autoBreakDurationMinutes: 30,
+    secondStep: null,
+    breakPolicyHistory: [],
+  };
+  let applications: TimeCorrectionApplicationProjection[] = [];
+  // Each person's effective employee record in the organization.
+  const recordOf = new Map([
+    [employee, employeeRecord],
+    [colleague, colleagueRecord],
+  ]);
   const tables: InMemoryTables = {
     time_sessions: [],
     time_entries: [],
@@ -83,14 +135,14 @@ async function runFixture(): Promise<void> {
   }));
   mock.module('@/lib/data/cached', () => ({
     CACHE_TAGS: {},
-    getAuthenticatedUser: async () => ({ id: employee }),
+    getAuthenticatedUser: async () => ({ id: caller }),
     getCachedMemberships: async () => [{ orgId: organization, role: 'employee' }],
-    getCachedOrganizationSettings: async () => ({
-      breakMode: 'manual',
-      autoBreakThresholdMinutes: 360,
-      autoBreakDurationMinutes: 30,
-    }),
+    getOwnEmployeeRecordId: async (userId: string) => recordOf.get(userId) ?? null,
+    getCachedOrganizationSettings: async () => settings,
     getCachedOrganizationCalendar: async () => null,
+  }));
+  mock.module('@/lib/time-corrections/approved-projection', () => ({
+    loadApprovedCorrectionProjection: async () => applications,
   }));
   const { getCurrentClockState } = await import('./clock-state-actions');
   // The segments also stand as their own table, for the reads that name it.
@@ -166,6 +218,67 @@ async function runFixture(): Promise<void> {
   assert.equal(second.todayMinutes, 15 + 3 + 10, 'the day counts every session and the manual entry');
   assert.equal(second.travelMinutes, 1);
   assert.equal(second.resumeActivity?.kind, 'work');
+
+  // A closed seven-hour day whose last two hours an approved correction made
+  // standby: five hours reach no six-hour step, as in the corrected week.
+  settings.breakMode = 'automatic';
+  tables.time_entries = [];
+  tables.time_sessions = [
+    sessionRow(morningSession, 120, 540, [
+      { id: 'early', kind: 'work', from: 120, to: 420 },
+      { id: 'late', kind: 'work', from: 420, to: 540 },
+    ]),
+  ];
+  applications = [
+    correctSegment('late', 420, 540, { userId: employee, recordId: employeeRecord, kind: 'standby' }),
+  ];
+  const corrected = await readState();
+  assert.equal(corrected.standbyMinutes, 120, 'the clock counts the corrected standby');
+  assert.equal(corrected.breakMinutes, 0, 'the standby stays out of the six-hour step');
+  assert.equal(corrected.workMinutes, 420);
+
+  // The same day without the correction, under manual breaks until the
+  // automatic rule was saved after its clock-out: the day keeps manual breaks.
+  applications = [];
+  settings.breakPolicyHistory = [
+    buildBreakPolicyHistoryEntry({ ...settings, breakMode: 'manual' }, new Date(0).toISOString()),
+    buildBreakPolicyHistoryEntry(settings, todayAt(600)),
+  ];
+  const ruleChanged = await readState();
+  assert.equal(ruleChanged.dayBreakPolicy?.breakMode, 'manual', 'the day counts by its last entry’s rule');
+  assert.equal(
+    ruleChanged.breakPolicy.breakMode,
+    'automatic',
+    'the next clock action counts by the current rule',
+  );
+  assert.equal(ruleChanged.breakMinutes, 0);
+  assert.equal(ruleChanged.workMinutes, 420);
+
+  // The office reassigned the last two hours to a colleague: they leave this
+  // clock and count on the colleague's, never on both.
+  applications = [
+    correctSegment('late', 420, 540, { userId: colleague, recordId: colleagueRecord, kind: 'work' }),
+  ];
+  const givenAway = await readState();
+  assert.equal(givenAway.todayMinutes, 300, 'the reassigned hours leave the original clock');
+  caller = colleague;
+  const received = await readState();
+  assert.equal(received.todayMinutes, 120, 'the colleague’s clock counts the reassigned hours only');
+
+  // The caller's employee record was removed and they hold a new one. The
+  // standby correction names their user on the removed record: it is retained
+  // data of the removed employee, so none of its facts reach the new clock.
+  caller = employee;
+  applications = [
+    correctSegment('late', 420, 540, { userId: employee, recordId: employeeRecord, kind: 'standby' }),
+  ];
+  recordOf.set(employee, rejoinedRecord);
+  const rejoined = await readState();
+  assert.equal(rejoined.standbyMinutes, 0, 'no fact of the removed record counts');
+  assert.equal(rejoined.todayMinutes, 300, 'the replaced segment stays replaced');
+  recordOf.delete(employee);
+  const withoutRecord = await readState();
+  assert.equal(withoutRecord.standbyMinutes, 0, 'without an effective record no correction fact counts');
 }
 
 if (process.env[FIXTURE_FLAG] === '1') {

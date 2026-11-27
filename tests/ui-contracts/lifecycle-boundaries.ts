@@ -83,6 +83,8 @@ declare global {
       | 'supplier-catalog'
       | 'inventory-movements'
       | 'leistungen'
+      | 'customer-conditions'
+      | 'customer-conditions-section'
       | 'offers'
       | 'invoice-editor'
       | 'invoice-settings'
@@ -91,6 +93,7 @@ declare global {
       | 'invoice-deliveries-retry'
       | 'invoice-deliveries-stale-retry'
       | 'service-report-delivery'
+      | 'offer-delivery'
       | 'site-access-review'
       | 'site-access-proposal'
       | AuthUrlFixtureName

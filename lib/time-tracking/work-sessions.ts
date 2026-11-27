@@ -1,5 +1,6 @@
 import type { BreakSession, TimeEntry, WorkSession } from './types';
-import { isSameLocalDay } from '@/lib/date-time/berlin';
+import { formatBerlinLocalDate, isSameLocalDay } from '@/lib/date-time/berlin';
+import { entryBusinessDate } from './closed-period-dates';
 import { getEffectiveTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
 
@@ -28,6 +29,37 @@ function determinePendingState(
   if (clockInPending && clockOutPending) return 'full';
   if (clockInPending || clockOutPending) return 'partial';
   return 'none';
+}
+
+/**
+ * The instant a read of a window has to reach: a window that ends on a Berlin
+ * day's last instant also holds the events at the next midnight that close
+ * that day (`entryBusinessDate`).
+ */
+export function windowReadEnd(toMs: number): number {
+  const endsADay = formatBerlinLocalDate(new Date(toMs)) !== formatBerlinLocalDate(new Date(toMs + 1));
+  return endsADay ? toMs + 1 : toMs;
+}
+
+/**
+ * Whether an entry belongs to a window, its ends included. An event that
+ * closes a day at the next midnight (`entryBusinessDate`) counts at the
+ * instant before it: it belongs to a window that ends with that day, never to
+ * one that starts with the next.
+ */
+export function isInEntryWindow(
+  entry: Pick<TimeEntry, 'entryType' | 'timestamp'>,
+  window: { fromMs: number; toMs: number },
+): boolean {
+  const instant = Date.parse(entry.timestamp);
+  const closesDayBefore = entryBusinessDate(entry) !== formatBerlinLocalDate(new Date(instant));
+  const countedAt = closesDayBefore ? instant - 1 : instant;
+  return countedAt >= window.fromMs && countedAt <= window.toMs;
+}
+
+/** Whether an end counts on the same Berlin day as the start it would close. */
+function closesOnStartDay(start: TimeEntry, end: TimeEntry): boolean {
+  return entryBusinessDate(start) === entryBusinessDate(end);
 }
 
 /** A work start that no end closes on its own day: open while it is today's, otherwise an orphan. */
@@ -73,10 +105,7 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
   for (let index = 0; index < activeEntries.length; index += 1) {
     const entry = activeEntries[index];
     if (!entry) continue;
-    if (
-      currentWorkStart &&
-      !isSameLocalDay(new Date(currentWorkStart.timestamp), new Date(entry.timestamp))
-    ) {
+    if (currentWorkStart && !closesOnStartDay(currentWorkStart, entry)) {
       sessions.push(unpairedWorkStartSession(currentWorkStart, true));
       currentWorkStart = null;
     }
@@ -91,10 +120,8 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
       }
       currentWorkStart = entry;
     } else if (entry.entryType === 'clock_out' || entry.entryType === 'break_start') {
-      if (
-        currentWorkStart &&
-        isSameLocalDay(new Date(currentWorkStart.timestamp), new Date(entry.timestamp))
-      ) {
+      // A start of another day was left unpaired above.
+      if (currentWorkStart) {
         const startTime = new Date(currentWorkStart.timestamp).getTime();
         const endTime = new Date(entry.timestamp).getTime();
         const durationMinutes = (endTime - startTime) / 60000;
@@ -109,24 +136,17 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
           pendingState: determinePendingState(currentWorkStart, entry),
         });
         currentWorkStart = null;
-      } else {
-        if (currentWorkStart) {
-          pushUnpairedWorkStart(currentWorkStart);
-          currentWorkStart = null;
-        }
-
-        if (entry.entryType === 'clock_out') {
-          sessions.push({
-            clockIn: null,
-            clockOut: entry,
-            durationMinutes: null,
-            jobId: entry.jobId,
-            startEntryType: null,
-            endEntryType: 'clock_out',
-            isOrphan: true,
-            pendingState: determinePendingState(null, entry),
-          });
-        }
+      } else if (entry.entryType === 'clock_out') {
+        sessions.push({
+          clockIn: null,
+          clockOut: entry,
+          durationMinutes: null,
+          jobId: entry.jobId,
+          startEntryType: null,
+          endEntryType: 'clock_out',
+          isOrphan: true,
+          pendingState: determinePendingState(null, entry),
+        });
       }
     }
   }
@@ -145,10 +165,7 @@ export function calculateBreakSessions(entries: TimeEntry[]): BreakSession[] {
   let currentBreakStart: TimeEntry | null = null;
 
   for (const entry of activeEntries) {
-    if (
-      currentBreakStart &&
-      !isSameLocalDay(new Date(currentBreakStart.timestamp), new Date(entry.timestamp))
-    ) {
+    if (currentBreakStart && !closesOnStartDay(currentBreakStart, entry)) {
       sessions.push({
         breakStart: currentBreakStart,
         breakEnd: null,

@@ -20,7 +20,7 @@ function renderStatus(visibility: StatusVisibility): string {
   return renderToStaticMarkup(
     <>
       <StatusBadge isClockedIn visibility={visibility} />
-      <HoursDisplay isClockedIn statusStartedAt={null} workMinutes={60} visibility={visibility} />
+      <HoursDisplay visibility={visibility} />
     </>,
   );
 }

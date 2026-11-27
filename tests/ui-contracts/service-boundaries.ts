@@ -109,6 +109,15 @@ export function initializeServiceBoundaries(): void {
       ) {
         return browserFetch(input, init);
       }
+      // The offer contract answers the preview PDF at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'offers' &&
+        typeof input === 'string' &&
+        input.startsWith('/api/angebote/vorschau?') &&
+        (init?.method ?? 'GET') === 'GET'
+      ) {
+        return browserFetch(input, init);
+      }
       // The offline retry's contract answers its connection check at Playwright's network boundary.
       if (
         window.uiContractFixture === 'offline-retry' &&

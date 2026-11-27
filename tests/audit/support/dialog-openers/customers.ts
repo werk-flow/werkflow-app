@@ -13,6 +13,7 @@ import {
   communicationPreferenceDialog,
   communicationSettingsButton,
   communicationSettingsDialog,
+  conditionsDialog,
   contactWarningDialog,
   createFollowUpButton,
   customerContactDialog,
@@ -31,6 +32,7 @@ import {
   customerRowEditItem,
   customerSiteDialog,
   followUpDialog,
+  setConditionsButton,
   siteRolesButton,
   siteRolesDialog,
 } from '../../../golden/support/steps/customers';
@@ -127,6 +129,10 @@ export const CUSTOMERS_OPENERS = {
   'customers.site-roles': {
     trigger: async ({ page }) => siteRolesButton(page),
     layer: siteRolesDialog,
+  },
+  'customers.conditions': {
+    trigger: async ({ page }) => setConditionsButton(page),
+    layer: conditionsDialog,
   },
   'customers.communication-settings': {
     trigger: async ({ page }) => communicationSettingsButton(page),

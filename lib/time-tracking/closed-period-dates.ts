@@ -32,8 +32,8 @@ export function isDateInClosedPeriod(date: string, closedPeriods: readonly Close
 /**
  * The Europe/Berlin date a recorded entry belongs to. A closing entry at
  * exactly midnight still closes the day before, as the database's
- * closed-period guard counts it. The unit test pins the midnight cases here.
- * @internal
+ * closed-period guard counts it, and every pairing and day of the time
+ * views counts it so too. The unit test pins the midnight cases here.
  */
 export function entryBusinessDate(entry: Pick<TimeEntry, 'timestamp' | 'entryType'>): string {
   const instant = new Date(entry.timestamp);

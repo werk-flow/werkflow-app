@@ -55,13 +55,17 @@ export const positionCostSchema = z.object({
   priceQuantity: z.literal(PRICE_QUANTITIES),
 });
 
+const priceCents = z.number().int().min(0).max(MAX_PRICE_CENTS);
+/** A base64url HMAC-SHA256 (lib/price-catalog/price-source-proof.ts). */
+const proofSchema = z.string().regex(/^[\w-]{43}$/);
+
 /** A priced position, with the limits of an invoice line; a negative quantity credits. */
 const freePositionSchema = z.object({
   kind: z.literal('free'),
   ...positionTextSchema,
   quantity: z.string().regex(/^-?\d{1,9}(?:\.\d{1,3})?$/),
   unit: z.string().refine(isInventoryUnitCode),
-  unitPriceCents: z.number().int().min(0).max(MAX_PRICE_CENTS),
+  unitPriceCents: priceCents,
   priceQuantity: z.literal(PRICE_QUANTITIES),
   taxRateBasisPoints: z.literal(INVOICE_TAX_RATES),
   /** The article or Leistung it was taken from, inside the caller's organization (the save checks); null for one typed by hand. */
@@ -71,6 +75,15 @@ const freePositionSchema = z.object({
    * the key, from a tab older than stored costs, would otherwise clear them.
    */
   cost: positionCostSchema.nullable(),
+  /**
+   * Where the price came from, with the server's proof; the save stores
+   * „manuell“ for a source it did not prove (content-writes.ts). Required like the cost.
+   */
+  priceSource: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('manuell') }),
+    z.object({ kind: z.literal('listenpreis'), proof: proofSchema }),
+    z.object({ kind: z.literal('kundenkondition'), conditionId: uuidSchema, proof: proofSchema }),
+  ]),
 });
 
 const textPositionSchema = z.object({ kind: z.literal('text'), ...positionTextSchema });
@@ -83,11 +96,13 @@ const offerSectionSchema = z.object({
     .max(OFFER_CONTENT_LIMITS.positionsPerSection),
 });
 
-/** A Titel as `get_offer` answers it: each Position's article or Leistung with its number, name and archive state, and no cost. */
+/** A Titel as `get_offer` answers it: each Position's article or Leistung with its number, name and archive state, and no cost or price source. */
 export const storedSectionSchema = offerSectionSchema.extend({
   positions: z.array(
     z.discriminatedUnion('kind', [
-      freePositionSchema.omit({ cost: true }).extend({ source: invoiceLineSourceSchema.nullable() }),
+      freePositionSchema
+        .omit({ cost: true, priceSource: true })
+        .extend({ source: invoiceLineSourceSchema.nullable() }),
       textPositionSchema,
     ]),
   ),
@@ -127,3 +142,14 @@ export const sendOfferSchema = z.object({
 });
 
 export type SendOfferInput = z.input<typeof sendOfferSchema>;
+
+/** „Bearbeiten“ of a sent offer: starts its next revision as a draft. */
+export const startOfferRevisionSchema = z.object({
+  offerId: uuidSchema,
+  /** The version the page showed as sent: a change since refuses the start. */
+  expectedVersion: z.number().int().positive(),
+  /** One key per confirmation: a press repeated after a lost answer gets the first start. */
+  attemptKey: uuidSchema,
+});
+
+export type StartOfferRevisionInput = z.input<typeof startOfferRevisionSchema>;

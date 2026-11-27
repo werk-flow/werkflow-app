@@ -64,7 +64,11 @@ export async function getCanonicalTimeEntries(
     }));
   const entries = params.jobId
     ? jobSliceEntries(canonicalRows, userByEmployee, params)
-    : projectedTransitionEntries(canonicalRows, userByEmployee, params);
+    : projectedTransitionEntries(canonicalRows, userByEmployee, {
+        from: new Date(params.from),
+        to: new Date(params.to),
+        now: params.referenceTime ? new Date(params.referenceTime) : new Date(),
+      });
   return { success: true, entries };
 }
 
@@ -113,11 +117,14 @@ function readCanonicalSegments(
   });
 }
 
-/** The day's transitions projected from the segments, for an unfiltered window. */
-function projectedTransitionEntries(
-  canonicalRows: CanonicalSegment[],
+/**
+ * The window's transitions projected from the segments, as the time entries
+ * the week and the clock read; a segment of an employee without a user has none.
+ */
+export function projectedTransitionEntries(
+  canonicalRows: readonly CanonicalSegment[],
   userByEmployee: ReadonlyMap<string, string>,
-  params: CanonicalEntryParams,
+  window: { from: Date; to: Date; now: Date },
 ): TimeEntry[] {
   const entryContextBySegmentId = new Map(
     canonicalRows.map(({ row, segment }) => [segment.id, { row, segment }]),
@@ -125,9 +132,9 @@ function projectedTransitionEntries(
   const entries: TimeEntry[] = [];
   const points = projectTimeSegmentsToLegacyTransitions(
     canonicalRows.map(({ segment }) => segment),
-    new Date(params.from),
-    new Date(params.to),
-    params.referenceTime ? new Date(params.referenceTime) : new Date(),
+    window.from,
+    window.to,
+    window.now,
   );
   for (const [pointIndex, point] of points.entries()) {
     const context = entryContextBySegmentId.get(point.segmentId);

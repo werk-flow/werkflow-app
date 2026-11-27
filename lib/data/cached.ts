@@ -96,6 +96,7 @@ export async function getCachedUser(): Promise<{ data: { user: User | null } }> 
  * Share the read only within a GET scope or React render.
  */
 type MembershipCandidate = UserOrg & {
+  employeeRecordId: string | null;
   hasAccessBlocker: boolean;
   accessLifecycle: {
     state: Database['public']['Enums']['personnel_access_state'];
@@ -183,6 +184,7 @@ const loadMembershipCandidates = memoizeRequestRead(
           uniqueCode: organization.unique_code,
           role: membership.role,
           joinedAt: membership.joined_at,
+          employeeRecordId: employee?.id ?? null,
           hasAccessBlocker: (employee?.personnel_onboarding_requirements.length ?? 0) > 0,
           accessLifecycle: lifecycle
             ? {
@@ -214,6 +216,22 @@ export const getCachedMemberships = memoizeRequestRead(async (userId: string): P
     .filter((membership) => getMembershipAccessMode(membership, now) === 'operational')
     .map(toUserOrg);
 });
+
+/**
+ * The caller's employee record in an organization where their access is
+ * operational, from the same membership read; null without one. A removed
+ * member has no membership and a leaver no operational access, so neither
+ * names a record (docs/technical/security.md, "Revocation boundaries").
+ */
+export async function getOwnEmployeeRecordId(userId: string, organizationId: string): Promise<string | null> {
+  const candidates = await loadMembershipCandidates(userId);
+  const now = Date.now();
+  const membership = candidates.find(
+    (candidate) =>
+      candidate.orgId === organizationId && getMembershipAccessMode(candidate, now) === 'operational',
+  );
+  return membership?.employeeRecordId ?? null;
+}
 
 export const getCachedPrestartMemberships = memoizeRequestRead(async (userId: string): Promise<UserOrg[]> => {
   const candidates = await loadMembershipCandidates(userId);

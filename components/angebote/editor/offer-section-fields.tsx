@@ -20,6 +20,7 @@ import {
   catalogPositionForm,
   contentFieldId,
   emptyPosition,
+  withTypedPrice,
   withUnit,
   type PositionForm,
   type SectionForm,
@@ -28,6 +29,7 @@ import { positionNumbers } from '@/lib/offers/numbering';
 import type { OfferPosition } from '@/lib/offers/types';
 import { OfferCatalogPicker } from './offer-article-picker';
 import { PositionCostFields } from './offer-position-cost-fields';
+import { PositionPriceSourceNote } from './offer-price-source-note';
 
 type Errors = Record<string, string | undefined>;
 
@@ -83,20 +85,9 @@ function OrderButtons({
   );
 }
 
-/** One Titel: its name, its positions in order, its subtotal, and adding a position, an article or a text line. */
-export function OfferSectionFields({
-  index,
-  count,
-  section,
-  figures,
-  onChange,
-  onMove,
-  onRemove,
-  onAddCatalog,
-  newKey,
-  errors,
-  disabled,
-}: {
+type OfferSectionFieldsProps = {
+  /** The offer whose customer's conditions price a Position from an article or a Leistung. */
+  offerId: string;
   index: number;
   count: number;
   section: SectionForm;
@@ -105,12 +96,31 @@ export function OfferSectionFields({
   onChange: (section: SectionForm) => void;
   onMove: (direction: -1 | 1) => void;
   onRemove: () => void;
+  /** Holds the editor's text while a picked article's or Leistung's price is read; answers its release. */
+  onPickCatalog: () => () => void;
   /** Appends a Position to this Titel as it is when the article's or Leistung's price arrives. */
   onAddCatalog: (position: PositionForm) => void;
   newKey: () => string;
   errors: Errors;
   disabled: boolean;
-}) {
+};
+
+/** One Titel: its name, its positions in order, its subtotal, and adding a position, an article or a text line. */
+export function OfferSectionFields({
+  offerId,
+  index,
+  count,
+  section,
+  figures,
+  onChange,
+  onMove,
+  onRemove,
+  onPickCatalog,
+  onAddCatalog,
+  newKey,
+  errors,
+  disabled,
+}: OfferSectionFieldsProps) {
   const number = String(index + 1);
   const titleId = contentFieldId(index, 'title');
   const setPositions = (positions: PositionForm[]) => onChange({ ...section, positions });
@@ -152,11 +162,12 @@ export function OfferSectionFields({
         disabled={disabled}
       />
       <SectionFooter
+        offerId={offerId}
         sectionIndex={index}
         number={number}
         netCents={figures?.saleCents ?? null}
         onAdd={(kind) => setPositions([...section.positions, emptyPosition(newKey(), kind)])}
-        onPickCatalog={() => onChange(section)}
+        onPickCatalog={onPickCatalog}
         onAddCatalog={onAddCatalog}
         disabled={disabled}
       />
@@ -210,6 +221,7 @@ function PositionList({
 
 /** Adding a position, an article or a text line, and the Titel's subtotal. */
 function SectionFooter({
+  offerId,
   sectionIndex,
   number,
   netCents,
@@ -218,16 +230,18 @@ function SectionFooter({
   onAddCatalog,
   disabled,
 }: {
+  offerId: string;
   sectionIndex: number;
   number: string;
   netCents: number | null;
   onAdd: (kind: OfferPosition['kind']) => void;
-  onPickCatalog: () => void;
+  onPickCatalog: () => () => void;
   onAddCatalog: (position: PositionForm) => void;
   disabled: boolean;
 }) {
   const picker = (kind: InvoiceLineSourceKind, label: string) => (
     <OfferCatalogPicker
+      offerId={offerId}
       kind={kind}
       id={`offer-section-${sectionIndex}-${kind}`}
       label={`${label} zu Titel ${number} hinzufügen`}
@@ -293,6 +307,7 @@ function PositionFields({
         <OrderButtons label={label} {...order} disabled={disabled} />
       </div>
       {position.kind === 'free' && position.source && <InvoiceLineSourceNote source={position.source} />}
+      {position.kind === 'free' && <PositionPriceSourceNote priceSource={position.priceSource} />}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Bezeichnung" htmlFor={fieldId('name')} required error={errors[fieldId('name')]}>
           <Input
@@ -377,8 +392,7 @@ function PositionAmountFields({
           inputMode="decimal"
           autoComplete="off"
           value={position.price}
-          // A typed price is the office's own: the markup that set the last one no longer applies.
-          onChange={(event) => onChange({ ...position, price: event.target.value, markup: '' })}
+          onChange={(event) => onChange(withTypedPrice(position, event.target.value))}
           placeholder="0,00"
           disabled={disabled}
         />

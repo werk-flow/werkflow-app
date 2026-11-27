@@ -26,16 +26,6 @@ export type TimeSegmentFact = TimeActivitySelection & {
   endedAt: string | null;
 };
 
-export type TimeActivityTotals = {
-  presenceMinutes: number;
-  workMinutes: number;
-  breakMinutes: number;
-  travelMinutes: number;
-  standbyMinutes: number;
-  calloutMinutes: number;
-  internalMinutes: number;
-};
-
 export type TimeSegmentProjectionPoint = {
   segmentId: string;
   sliceIndex: number;
@@ -133,66 +123,6 @@ export function toTimeSegmentFact(row: SegmentRow): TimeSegmentFact {
 
 function invalidSegmentShape(row: SegmentRow): never {
   throw new Error(`Invalid canonical time segment shape: ${row.id}`);
-}
-
-/**
- * Minutes of a segment inside a range. The unit test pins the clamping here instead of
- * through the activity totals.
- * @internal
- */
-export function getSegmentDurationMinutes(
-  segment: Pick<TimeSegmentFact, 'startedAt' | 'endedAt'>,
-  rangeStart: Date,
-  rangeEnd: Date,
-  now = new Date(),
-): number {
-  const startMs = Math.max(new Date(segment.startedAt).getTime(), rangeStart.getTime());
-  const endMs = Math.min(new Date(segment.endedAt ?? now.toISOString()).getTime(), rangeEnd.getTime());
-  return Math.max(0, (endMs - startMs) / 60_000);
-}
-
-export function calculateTimeActivityTotals(
-  segments: readonly TimeSegmentFact[],
-  rangeStart: Date,
-  rangeEnd: Date,
-  now = new Date(),
-): TimeActivityTotals {
-  const totals: TimeActivityTotals = {
-    presenceMinutes: 0,
-    workMinutes: 0,
-    breakMinutes: 0,
-    travelMinutes: 0,
-    standbyMinutes: 0,
-    calloutMinutes: 0,
-    internalMinutes: 0,
-  };
-
-  for (const segment of segments) {
-    const minutes = getSegmentDurationMinutes(segment, rangeStart, rangeEnd, now);
-    totals.presenceMinutes += minutes;
-    switch (segment.kind) {
-      case 'work':
-        totals.workMinutes += minutes;
-        break;
-      case 'break':
-        totals.breakMinutes += minutes;
-        break;
-      case 'travel':
-        totals.travelMinutes += minutes;
-        break;
-      case 'standby':
-        totals.standbyMinutes += minutes;
-        break;
-      case 'callout':
-        totals.calloutMinutes += minutes;
-        break;
-      case 'internal_activity':
-        totals.internalMinutes += minutes;
-        break;
-    }
-  }
-
-  return totals;
 }
 
 export function createActivitySelection(

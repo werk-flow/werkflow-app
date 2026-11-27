@@ -94,7 +94,10 @@ export async function POST(
         live.sink.text(delta);
       },
       saved: live.sink.saved,
-      revoked: live.sink.revoked,
+      revoked: () => {
+        stream.sink.revoked?.();
+        live.sink.revoked();
+      },
       row: (row: AiThreadRow) => {
         stream.sink.row?.(row);
         live.sink.row(row);

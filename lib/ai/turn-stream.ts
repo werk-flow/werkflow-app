@@ -26,6 +26,7 @@ type TurnEvent =
  * The turn's answer as newline-delimited JSON. Deltas are batched, so a fast
  * model sends one line per batch instead of one per token. A client that
  * leaves stops receiving; the run itself goes on and saves the answer.
+ * An author who lost the thread receives no more text.
  */
 export function createTurnEventStream(schedule: Schedule = timerSchedule): {
   readable: ReadableStream<Uint8Array>;
@@ -37,6 +38,7 @@ export function createTurnEventStream(schedule: Schedule = timerSchedule): {
   let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
   let pending = '';
   let cancelFlush: (() => void) | null = null;
+  let revoked = false;
 
   const readable = new ReadableStream<Uint8Array>({
     start(streamController) {
@@ -67,14 +69,21 @@ export function createTurnEventStream(schedule: Schedule = timerSchedule): {
     send,
     sink: {
       text(delta) {
+        if (revoked) return;
         pending += delta;
         cancelFlush ??= schedule(flush, DELTA_BATCH_MS);
       },
       // A row follows the text written before it at once.
       row(row) {
+        if (revoked) return;
         cancelFlush?.();
         flush();
         send({ type: 'row', row });
+      },
+      revoked() {
+        // The author lost the thread: no more of its answer reaches them, only the turn's end.
+        revoked = true;
+        pending = '';
       },
     },
     end(end) {

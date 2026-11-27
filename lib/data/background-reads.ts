@@ -65,6 +65,8 @@ import { getSchoolDaysForRecord } from '@/lib/personnel/school-day-actions';
 import { getMaintenanceEvidenceOptions, getMaintenanceWorkspace } from '@/lib/maintenance/actions';
 import { getOnCallOverview } from '@/lib/on-call/actions';
 import { getCompletedVisitPage, getServiceReportDelivery } from '@/lib/service-reports/page-actions';
+import { getOfferRevisionDelivery } from '@/lib/offers/delivery-read';
+import { offerRevisionRefSchema } from '@/lib/offers/delivery-types';
 import { maintenanceWorkspaceQuerySchema } from '@/lib/maintenance/workspace-page';
 import { getAssignmentTeamOptions } from '@/lib/qualifications/actions';
 import {
@@ -312,6 +314,7 @@ export const BACKGROUND_READS = {
   'service-report-delivery': defineRead(z.object({ reportId: uuidSchema }), (input) =>
     getServiceReportDelivery(input),
   ),
+  'offer-revision-delivery': defineRead(offerRevisionRefSchema, (input) => getOfferRevisionDelivery(input)),
   'work-templates': defineRead(noInput, () => getWorkTemplates()),
   'work-template-detail': defineRead(z.object({ templateId: uuidSchema }), (input) =>
     getWorkTemplate(input.templateId),

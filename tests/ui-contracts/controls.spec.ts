@@ -757,13 +757,25 @@ async function chooseFileInGerman(
   buttonText: string,
   file: { name: string; mimeType: string; buffer: Buffer },
 ): Promise<void> {
-  const button = dialog.getByRole('button', { name: 'Datei', exact: true });
+  const button = dialog.getByRole('button', { name: `Datei ${buttonText}`, exact: true });
   await expect(button).toHaveText(buttonText);
   const chooser = page.waitForEvent('filechooser');
   await button.click();
   await (await chooser).setFiles(file);
   await expect(dialog.getByText(file.name, { exact: true })).toBeVisible();
 }
+
+test(
+  'a file picker accessible name includes its field label and visible button text',
+  { annotation: { type: 'fixture', description: 'personnel' } },
+  async ({ page }) => {
+    await page.getByTestId('personnel-lifecycle').getByRole('button', { name: 'Datei', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Geschützte Personalunterlage', exact: true });
+    await expect(dialog.getByRole('button').filter({ hasText: 'Datei auswählen' })).toHaveAccessibleName(
+      'Datei Datei auswählen',
+    );
+  },
+);
 
 async function uploadPersonnelContractFile(page: Page): Promise<void> {
   const section = page.getByRole('main').getByTestId('personnel-lifecycle');

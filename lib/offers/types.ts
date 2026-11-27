@@ -1,6 +1,7 @@
 import type { PriceQuantity } from '@/lib/inventory/line-amount';
 import type { InvoiceLineSource, InvoiceLineSourceRef } from '@/lib/invoices/line-sources';
 import type { InvoiceLineValues } from '@/lib/invoices/types';
+import type { CatalogPriceSource, PriceSourceClaim } from '@/lib/price-catalog/customer-conditions';
 import { z } from '@/lib/zod';
 
 // An Angebot: number, title, customer, recipient, validity, texts and the
@@ -9,7 +10,8 @@ import { z } from '@/lib/zod';
 // its header changes in 20261230110000_change_the_header_of_a_draft_offer.sql,
 // its content in 20270201090000_write_titel_and_positionen_into_an_offer.sql,
 // a Position's article in 20270301090000_take_offer_positions_from_articles.sql,
-// its Leistung and its cost in 20270501090000_calculate_offers_with_leistungen_and_costs.sql).
+// its Leistung and its cost in 20270501090000_calculate_offers_with_leistungen_and_costs.sql,
+// its price source in 20270601100000_price_new_offer_positions_by_customer_conditions.sql).
 
 /** Every status the database check allows; this release writes `entwurf` and `gesendet`. */
 export const OFFER_STATUSES = ['entwurf', 'gesendet', 'angenommen', 'abgelehnt', 'zurueckgezogen'] as const;
@@ -51,14 +53,23 @@ type OfferParty = { id: string; name: string };
 export type OfferPositionCost = { amountCents: number; priceQuantity: PriceQuantity };
 
 /**
+ * Where a priced Position's price came from, as the office's editor shows it:
+ * the office's own („manuell“), or the list price or a customer's condition
+ * with the server's proof that it priced this Position. Office-only.
+ */
+export type OfferPriceSource = { kind: 'manuell' } | (CatalogPriceSource & { proof: string });
+
+/**
  * A priced Position: Bezeichnung, Beschreibung, quantity in a unit of the
  * inventory list, a net price per price quantity and a VAT rate, the fields
  * of a priced invoice line. Typed by hand, or taken from an article or a
- * Leistung (`source`), whose values it keeps as its own, its cost included.
+ * Leistung (`source`), whose values it keeps as its own, its cost and where
+ * its price came from included.
  */
 export type OfferFreePosition = { kind: 'free' } & InvoiceLineValues & {
     source: InvoiceLineSourceRef | null;
     cost: OfferPositionCost | null;
+    priceSource: PriceSourceClaim;
   };
 /** A text line: a note between the positions, without an amount. */
 type OfferTextPosition = { kind: 'text'; name: string; description: string };
@@ -68,17 +79,20 @@ export type OfferSection = { title: string; positions: OfferPosition[] };
 
 /**
  * As stored and as a document may show it: a Position's article or Leistung
- * with its number, name and whether it is archived now, and no cost.
+ * with its number, name and whether it is archived now, and no cost or price source.
  */
 type OfferStoredPosition =
   | OfferTextPosition
-  | (Omit<OfferFreePosition, 'source' | 'cost'> & { source: InvoiceLineSource | null });
+  | (Omit<OfferFreePosition, 'source' | 'cost' | 'priceSource'> & { source: InvoiceLineSource | null });
 type OfferStoredSection = { title: string; positions: OfferStoredPosition[] };
 
-/** As the office's editor reads it: each priced Position with its cost. */
+/** As the office's editor reads it: each priced Position with its cost and price source. */
 type OfferCostedPosition =
   | OfferTextPosition
-  | (Omit<OfferFreePosition, 'source'> & { source: InvoiceLineSource | null });
+  | (Omit<OfferFreePosition, 'source' | 'priceSource'> & {
+      source: InvoiceLineSource | null;
+      priceSource: OfferPriceSource;
+    });
 export type OfferCostedSection = { title: string; positions: OfferCostedPosition[] };
 
 export type OfferDetail = {
@@ -103,7 +117,7 @@ export type OfferDetail = {
   sections: OfferStoredSection[];
 };
 
-/** An offer as the office's editor reads it (readOfferWithCosts): the same, each priced Position with its cost. */
+/** An offer as the office's editor reads it (readOfferWithRevisions): each priced Position with its cost and price source. */
 export type OfferWithCosts = Omit<OfferDetail, 'sections'> & { sections: OfferCostedSection[] };
 
 /** How the office says it sent a revision; WerkFlow itself sends nothing. */

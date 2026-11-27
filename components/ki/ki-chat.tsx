@@ -166,6 +166,7 @@ export function KiChat(props: {
         <KiComposer
           draft={draft}
           running={turn.live !== null && turn.live.threadId === threadId}
+          stopping={turn.live !== null && turn.live.stoppedAt !== null}
           error={error}
           onSend={turn.send}
           onStop={turn.stop}

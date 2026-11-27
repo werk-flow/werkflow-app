@@ -62,6 +62,9 @@ export const DIALOG_INVENTORY = {
   'components/angebote/offer-sending.tsx#OfferPreviewDialog|Vorschau {offer.offerNumber}': {
     audits: [{ route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-preview' }],
   },
+  'components/angebote/offer-revision-start.tsx#StartOfferRevisionButton|{`Revision ${next} bearbeiten?`}': {
+    audits: [{ route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-revision' }],
+  },
   'components/rechnungen/create-invoice-dialog.tsx#CreateInvoiceDialog|Rechnung erstellen': {
     audits: [{ route: '/rechnungen', role: 'admin', opener: 'commercial.invoice' }],
   },
@@ -321,6 +324,10 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.site' }],
     },
+  "components/kunden/client-condition-dialog.tsx#ClientConditionDialog|{newest ? 'Konditionen ändern' : 'Konditionen festlegen'}":
+    {
+      audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.conditions' }],
+    },
   'components/kunden/client-site-roles-dialog.tsx#ClientSiteRolesDialog|Rollen am Einsatzort': {
     audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.site-roles' }],
   },
@@ -524,13 +531,14 @@ export const DIALOG_INVENTORY = {
       { route: '/service/wartung', role: 'admin', opener: 'service.due-completion' },
     ],
   },
-  'components/service/service-report-delivery-dialog.tsx#ServiceReportDeliveryDialog|Servicebericht versenden':
-    {
-      audits: [
-        { route: '/service/wartung', role: 'admin', opener: 'service.report-delivery' },
-        { route: '/service/wartung', role: 'admin', opener: 'service.report-delivery-email' },
-      ],
-    },
+  'components/delivery/document-delivery-dialog.tsx#DocumentDeliveryDialog|{host.title}': {
+    audits: [
+      { route: '/service/wartung', role: 'admin', opener: 'service.report-delivery' },
+      { route: '/service/wartung', role: 'admin', opener: 'service.report-delivery-email' },
+      { route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-delivery' },
+      { route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-delivery-email' },
+    ],
+  },
   'components/service/maintenance-plan-action-dialog.tsx#MaintenancePlanActionDialog|{title}': {
     audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.plan-action' }],
   },

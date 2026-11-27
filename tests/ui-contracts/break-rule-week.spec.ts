@@ -46,6 +46,43 @@ for (const region of ['Zeiterfassung', 'Mitarbeiter']) {
   });
 }
 
+test('Mitarbeiter: the list deducts the automatic break from a running shift, as the detail does', async ({
+  page,
+}) => {
+  await mountBreakRuleWeek(page);
+
+  // Six hours past the first step, eight running without a break: 7 h 30 of an 8 h day.
+  const detail = page.getByRole('region', { name: 'Mitarbeiter', exact: true });
+  await expect(detail).toContainText(`${formatDuration(450)} / ${formatDuration(480)} (94%)`);
+  await expect(
+    page.getByRole('region', { name: 'Mitarbeiter-Liste', exact: true }).getByRole('progressbar'),
+  ).toHaveAttribute('aria-label', 'Tagesfortschritt: 94%');
+});
+
+test('Mitarbeiter: a correction approved in another session reaches the open list and detail', async ({
+  page,
+}) => {
+  await mountBreakRuleWeek(page);
+  const list = page.getByRole('region', { name: 'Mitarbeiter-Liste', exact: true }).getByRole('progressbar');
+  await expect(list).toHaveAttribute('aria-label', 'Tagesfortschritt: 94%');
+
+  // The approval updates the request; the corrected entries end the shift after six hours.
+  await page.evaluate(() => {
+    window.breakRuleWeekContract.correctionApproved = true;
+    // The approved request names the shown member as its subject.
+    window.calendarContract.emit('time_correction_requests', {
+      organization_id: 'org-a',
+      subject_user_id: '20000000-0000-4000-8000-000000000161',
+      requested_by: '20000000-0000-4000-8000-000000000161',
+    });
+  });
+
+  await expect(list).toHaveAttribute('aria-label', 'Tagesfortschritt: 69%');
+  await expect(page.getByRole('region', { name: 'Mitarbeiter', exact: true })).toContainText(
+    `${formatDuration(330)} / ${formatDuration(480)} (69%)`,
+  );
+});
+
 test('Zeiterfassung: a rule saved in another session rebuilds the open week, also without earlier versions', async ({
   page,
 }) => {

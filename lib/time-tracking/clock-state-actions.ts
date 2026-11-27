@@ -5,30 +5,26 @@ import { logError } from '@/lib/logging';
 import { resolveActionContextFor, type ActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
-import { getAuthenticatedUser } from '@/lib/data/cached';
+import { getAuthenticatedUser, getOwnEmployeeRecordId } from '@/lib/data/cached';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { readOrganizationSettings } from './organization-settings-read';
-import { type LiveClockState, type TimeActivitySelection, type TimeEntry, toTimeEntries } from './types';
+import { type LiveClockState, type TimeActivitySelection, toTimeEntries } from './types';
 import { deriveCurrentClockState } from './helpers';
+import { loadApprovedCorrectionProjection } from '@/lib/time-corrections/approved-projection';
+import { correctedEntriesInWindow } from '@/lib/time-corrections/projection';
+import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
 import {
   buildCanonicalClockState,
   clockTotalsState,
   readCanonicalClockDay,
   readClockJobs,
+  type ClockTotalsState,
 } from './canonical-clock-state';
-import {
-  canonicalDayTotals,
-  combineClockDayTotals,
-  legacyDayTotals,
-  type ClockDayTotals,
-} from './clock-day-totals';
 import { endSessionBeforeSignOut } from './sign-out-session-end';
 import { createActivitySelection } from './segments';
 import { collectActiveJobIds } from './active-jobs';
 import { getOpenSessionOrgsForUserOnDay } from './open-session-orgs';
 import { getDayBounds, getUserEntriesForDay } from './action-access';
-
-type OrganizationClockSettings = NonNullable<Awaited<ReturnType<typeof readOrganizationSettings>>>;
 
 // The clock Server Actions: the caller's live clock state, the jobs someone
 // works on right now, and the clock-out before sign-out.
@@ -139,14 +135,12 @@ async function buildLegacyClockState(
   admin: AdminClient,
   input: {
     organizationId: string;
-    settings: OrganizationClockSettings;
-    entries: TimeEntry[];
-    totals: ClockDayTotals;
+    currentState: LegacyClockState;
+    totals: ClockTotalsState;
     now: Date;
   },
 ): Promise<ActionResult<{ state: LiveClockState }>> {
-  const { organizationId } = input;
-  const currentState = deriveCurrentClockState(input.entries);
+  const { organizationId, currentState } = input;
   // Legacy events know only work and breaks, so the resumable activity is
   // work on the job the break interrupted (or unallocated work).
   const resumeActivity: TimeActivitySelection | null = currentState.isClockedIn
@@ -157,7 +151,7 @@ async function buildLegacyClockState(
   return {
     success: true,
     state: {
-      ...clockTotalsState(input.totals, input.settings),
+      ...input.totals,
       organizationId,
       status: currentState.status,
       isClockedIn: currentState.isClockedIn,
@@ -182,6 +176,42 @@ async function buildLegacyClockState(
 }
 
 /**
+ * The approved corrections of the caller's day, as the week reads them; null
+ * when a read fails. Each keeps every source it replaces, and only the facts
+ * of the caller's effective employee record: a fact that names the caller's
+ * user on a record they no longer hold is retained data of a removed
+ * employee (docs/technical/security.md, "Calendar correction input boundary").
+ */
+async function readTodaysCorrections(
+  admin: AdminClient,
+  input: { organizationId: string; userId: string; dayStart: Date; dayEnd: Date },
+): Promise<TimeCorrectionApplicationProjection[] | null> {
+  try {
+    const [employeeRecordId, applications] = await Promise.all([
+      getOwnEmployeeRecordId(input.userId, input.organizationId),
+      loadApprovedCorrectionProjection(admin, {
+        organizationId: input.organizationId,
+        userIds: [input.userId],
+        from: input.dayStart.toISOString(),
+        to: input.dayEnd.toISOString(),
+      }),
+    ]);
+    return applications.map((application) => ({
+      ...application,
+      snapshot: {
+        ...application.snapshot,
+        facts: application.snapshot.facts.filter(
+          (fact) => fact.employeeRecordId === employeeRecordId && fact.userId === input.userId,
+        ),
+      },
+    }));
+  } catch (error) {
+    logReadFailure('getCurrentClockState: approved corrections read failed', error);
+    return null;
+  }
+}
+
+/**
  * Get the caller's current clock state together with active job info.
  * Used by the shared client clock state and Zeiterfassung overview prefetch.
  */
@@ -199,36 +229,38 @@ export async function getCurrentClockState(
     const admin = createSupabaseAdminClient();
     const now = new Date();
     const { start: dayStart, end: dayEnd } = getDayBounds(now);
-    const [canonicalDay, todayRows, settings] = await Promise.all([
-      readCanonicalClockDay(admin, { organizationId, userId, dayStart, dayEnd }),
+    const [canonicalDay, todayRows, settings, applications] = await Promise.all([
+      readCanonicalClockDay(admin, { organizationId, userId, dayStart, dayEnd, now }),
       getUserEntriesForDay(admin, userId, organizationId, now),
       readOrganizationSettings(organizationId),
+      readTodaysCorrections(admin, { organizationId, userId, dayStart, dayEnd }),
     ]);
-    if (!canonicalDay || !todayRows || !settings) return { success: false, error: 'fetch_failed' };
+    if (!canonicalDay || !todayRows || !settings || !applications) {
+      return { success: false, error: 'fetch_failed' };
+    }
 
-    const entries = toTimeEntries(todayRows);
-    const legacyTotals = legacyDayTotals(entries, now);
+    const legacyEntries = toTimeEntries(todayRows);
+    const legacyState = deriveCurrentClockState(legacyEntries);
+    // Today's closed minutes from the records the week reads, the caller's
+    // own only: a reassignment's facts name the person who now holds the
+    // time. The running activity comes from the open session or legacy stream below.
+    const dayEntries = correctedEntriesInWindow(
+      [...legacyEntries, ...canonicalDay.entries],
+      applications,
+      organizationId,
+      { fromMs: dayStart.getTime(), toMs: dayEnd.getTime() },
+    ).filter((entry) => entry.userId === userId);
+    const running = canonicalDay.openSession !== null || legacyState.isClockedIn;
+    const totals = clockTotalsState(dayEntries, settings, running, now);
     const result = canonicalDay.openSession
       ? await buildCanonicalClockState(admin, {
           organizationId,
-          settings,
+          totals,
           session: canonicalDay.openSession,
           day: canonicalDay,
-          legacyTotals,
           now,
-          dayStart,
-          dayEnd,
         })
-      : await buildLegacyClockState(admin, {
-          organizationId,
-          settings,
-          entries,
-          totals: combineClockDayTotals(
-            legacyTotals,
-            canonicalDayTotals(canonicalDay.segments, dayStart, dayEnd),
-          ),
-          now,
-        });
+      : await buildLegacyClockState(admin, { organizationId, currentState: legacyState, totals, now });
     return result.success ? { success: true, state: result.state } : result;
   } catch (error) {
     logError('Unexpected error in getCurrentClockState:', error);

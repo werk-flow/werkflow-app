@@ -48,6 +48,8 @@ test('every hook is either registered under one feature scope or listed as share
     'use-live-view.ts',
     'use-optimistic-channel.ts',
     'use-optimistic-list.ts',
+    // One retry key per payload for the Servicebericht delivery and the customer conditions dialogs: two features, no single owner.
+    'use-payload-attempt-key.ts',
     'use-realtime-router-refresh.ts',
     'use-realtime-tables.ts',
     'use-report-pending.ts',

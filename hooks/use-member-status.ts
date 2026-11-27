@@ -2,10 +2,11 @@
 
 import { getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
+import { isCorrectionEventFor } from '@/lib/time-tracking/clock-state-events';
 import { memberStatusOf, type MemberStatus } from '@/lib/time-tracking/member-day';
 import { readInBackground, type BackgroundReadFailure } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import { breakPolicyKey, type BreakPolicyValues } from '@/lib/time-tracking/settings';
+import { breakPolicyKey, type BreakPolicy } from '@/lib/time-tracking/settings';
 import type { GetTimeEntriesParams, GetTimeEntriesResult } from '@/lib/time-tracking/types';
 
 type MemberStatusMap = Record<string, MemberStatus>;
@@ -22,8 +23,8 @@ function fetchTimeEntries(
 interface UseMemberStatusOptions {
   organizationId: string;
   memberIds: string[];
-  /** Today's break rule: a member's status counts today only. */
-  breakPolicy: BreakPolicyValues;
+  /** The break rule with its earlier versions: a day after clock-out counts by the one at its last entry. */
+  breakPolicy: BreakPolicy;
   /** Enable or disable fetching. Default: true */
   enabled?: boolean;
 }
@@ -42,7 +43,16 @@ export function useMemberStatus({
   refetch: () => Promise<void>;
 } {
   const view = useLiveView<MemberStatusMap>({
-    tables: ['time_entries', 'time_sessions', 'time_segments', 'organization_settings'],
+    // An approved correction changes the day: its approval updates the request.
+    // The filter below reads only for the shown members' requests.
+    tables: [
+      'time_entries',
+      'time_sessions',
+      'time_segments',
+      'time_correction_requests',
+      'organization_settings',
+    ],
+    eventFilter: (event) => isCorrectionEventFor(event, memberIds),
     read: async ({ signal }): Promise<LiveViewResult<MemberStatusMap>> => {
       if (!organizationId || memberIds.length === 0) {
         return { ok: true, data: EMPTY_STATUS_MAP };

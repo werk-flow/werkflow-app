@@ -1,5 +1,5 @@
-// Main gets a full run when something untested landed: at once after a tooling change, otherwise in
-// a daytime slot every 3 hours. Requests for one commit, or while one runs, start none
+// Main gets a full run when something untested landed, including tooling, in
+// a daytime slot every 6 hours. Requests for one commit, or while one runs, start none
 // (lib/testing/ci/full-run.ts).
 import { expect, test } from 'bun:test';
 import {
@@ -19,9 +19,8 @@ const HISTORY = ['c3', 'c2', 'c1', 'c0'];
 const NOON = new Date('2026-11-21T11:00:00Z');
 const hoursBefore = (at: Date, hours: number): Date => new Date(at.getTime() - hours * 3600_000);
 const ended = (commit: string, startedAt: Date): FullRun => ({ commit, startedAt, ended: true });
-const landed = (files: string[], tooling?: string): Landed => ({
+const landed = (files: string[]): Landed => ({
   files,
-  tooling: () => tooling,
   isDocs: (file) => file.endsWith('.md'),
 });
 const decide = (
@@ -41,13 +40,13 @@ test('requests for a commit that has a full run, or while the newest one runs, s
     reason: 'c3 already has a full run.',
   });
   const running = decide([{ commit: 'c1', startedAt: hoursBefore(NOON, 5), ended: false }], {
-    landed: landed(['scripts/ci/job.ts'], 'Tooling input changed: scripts/ci/job.ts'),
+    landed: landed(['scripts/ci/job.ts']),
   });
   expect(running.run).toBe(false);
   expect(running.reason).toContain('still running');
   // A full run still running on an older commit holds the next back too, whatever ended since.
   const older = decide([
-    ended('c2', hoursBefore(NOON, 4)),
+    ended('c2', hoursBefore(NOON, 6)),
     { commit: 'c0', startedAt: hoursBefore(NOON, 1), ended: false },
   ]);
   expect(older).toEqual({
@@ -57,7 +56,7 @@ test('requests for a commit that has a full run, or while the newest one runs, s
   // One on a commit outside main's history is none of main's.
   expect(
     decide([
-      ended('c2', hoursBefore(NOON, 4)),
+      ended('c2', hoursBefore(NOON, 6)),
       { commit: 'x9', startedAt: hoursBefore(NOON, 1), ended: false },
     ]).run,
   ).toBe(true);
@@ -75,19 +74,32 @@ test('a slot starts no full run when only documentation, or nothing, landed sinc
   expect(decide(stale).run).toBe(true);
 });
 
-test('a daytime slot starts a full run 3 hours after the last one, and never at night', () => {
-  expect(decide([ended('c1', hoursBefore(NOON, 3))])).toEqual({
+test('a daytime slot starts a full run 6 hours after the last one, and never at night', () => {
+  expect(decide([ended('c1', hoursBefore(NOON, 6))])).toEqual({
     run: true,
     reason: 'main moved 2 commits since the full run on c1.',
   });
-  expect(decide([ended('c1', hoursBefore(NOON, 2))])).toEqual({
+  expect(decide([ended('c1', hoursBefore(NOON, 5))])).toEqual({
     run: false,
-    reason: 'The full run on c1 started 120 min ago; the next slot is at 13:00 Berlin time.',
+    reason: 'The full run on c1 started 300 min ago; the next slot is at 13:00 Berlin time.',
   });
   const night = new Date('2026-11-21T21:30:00Z');
   expect(decide([ended('c1', hoursBefore(night, 9))], { now: night }).reason).toBe(
     'It is 22:30 in Berlin; daytime full runs start from 06:00 to 20:00.',
   );
+});
+
+test('a daytime landing waits for the nightly when the next interval is outside the window', () => {
+  const started = new Date('2026-11-21T13:30:00Z'); // 14:30 Berlin.
+  const runs = [ended('c1', started)];
+  const change = landed(['scripts/ci/job.ts']);
+  const afternoon = decide(runs, { now: new Date('2026-11-21T14:00:00Z'), landed: change });
+  expect(afternoon).toEqual({
+    run: false,
+    reason:
+      'The next interval after the full run on c1 falls outside the daytime window; changes wait for the nightly.',
+  });
+  expect(decide(runs, { now: new Date('2026-11-21T19:30:00Z'), landed: change }).run).toBe(false);
 });
 
 test("a slot follows Berlin's clock in winter and in summer", () => {
@@ -101,23 +113,36 @@ test("a slot follows Berlin's clock in winter and in summer", () => {
   expect(at('2026-07-15T18:30:00Z')).toBe(false);
 });
 
-test('a tooling change starts a full run right after it landed, by day or night, and an unreadable diff counts as one', () => {
-  const recent = [ended('c1', hoursBefore(NOON, 1))];
-  const tooling = landed(['scripts/ci/job.ts'], 'Tooling input changed: scripts/ci/job.ts');
-  expect(decide(recent, { landed: tooling })).toEqual({
-    run: true,
-    reason: 'A tooling change landed since the full run on c1: Tooling input changed: scripts/ci/job.ts.',
+test('two tooling landings inside one slot share its next full run', () => {
+  const runs = [ended('c0', hoursBefore(NOON, 6))];
+  const firstLanding = fullRunDue({
+    now: hoursBefore(NOON, 2),
+    history: ['c1', 'c0'],
+    runs,
+    landedSince: () => landed(['scripts/ci/job.ts']),
   });
-  const night = new Date('2026-11-21T01:00:00Z');
-  expect(decide([ended('c1', hoursBefore(night, 1))], { now: night, landed: tooling }).run).toBe(true);
-  expect(decide(recent, { landed: undefined }).reason).toBe(
-    'A tooling change landed since the full run on c1: the diff since that run cannot be read.',
-  );
-  // A due slot never asks the planner.
-  let asked = 0;
-  const counted: Landed = { ...tooling, tooling: () => `asked ${++asked}` };
-  expect(decide([ended('c1', hoursBefore(NOON, 4))], { landed: counted }).run).toBe(true);
-  expect(asked).toBe(0);
+  expect(firstLanding.run).toBe(false);
+  const secondLanding = fullRunDue({
+    now: hoursBefore(NOON, 1),
+    history: ['c2', 'c1', 'c0'],
+    runs,
+    landedSince: () => landed(['scripts/ci/job.ts', 'scripts/ci/prepare.ts']),
+  });
+  expect(secondLanding.run).toBe(false);
+  const both = landed(['scripts/ci/job.ts', 'scripts/ci/prepare.ts']);
+  expect(decide(runs, { landed: both }).run).toBe(true);
+  expect(
+    decide([...runs, ended('c2', NOON)], { now: new Date(NOON.getTime() + 3600_000), landed: both }).run,
+  ).toBe(false);
+});
+
+test('tooling and unreadable diffs wait for the next daytime slot, with no immediate run at night', () => {
+  for (const change of [landed(['scripts/ci/job.ts']), undefined]) {
+    expect(decide([ended('c1', hoursBefore(NOON, 1))], { landed: change }).run).toBe(false);
+    expect(decide([ended('c1', hoursBefore(NOON, 6))], { landed: change }).run).toBe(true);
+    const night = new Date('2026-11-21T01:00:00Z');
+    expect(decide([ended('c1', hoursBefore(night, 9))], { now: night, landed: change }).run).toBe(false);
+  }
 });
 
 const RUN = (n: number): string => `https://ci.example/runs/${n}`;

@@ -95,6 +95,19 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
   // resumes them.
   langsam: [() => [...textParts(...slowSteps(60)), finish('stop', 900, 900)]],
   'sehr-langsam': [() => [...textParts(...slowSteps(80)), finish('stop', 900, 1200)]],
+  // The model thinks for about three seconds before it writes: a stop while it thinks ends the request too.
+  gruebeln: [
+    () => [
+      { type: 'reasoning-start', id: 'denken' },
+      ...Array.from(
+        { length: 30 },
+        (): StreamPart => ({ type: 'reasoning-delta', id: 'denken', delta: 'Hm. ' }),
+      ),
+      { type: 'reasoning-end', id: 'denken' },
+      ...textParts('Erst das Ventil öffnen.'),
+      finish('stop', 900, 900),
+    ],
+  ],
   // Injection case (B21): a document told the model to end the answer early on every tab, force a
   // reload and write into another thread, so it writes the live channel's own message shapes.
   'live-falle': [
@@ -212,6 +225,14 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
       finish('tool-calls', 1100, 60),
     ],
   ],
+  // Writes for about a second, then calls the tool the message names: a stop can land while it reads.
+  'langsam-werkzeug': [
+    (userText) => {
+      const call = requestedToolCall(userText);
+      return [...textParts(...slowSteps(40)), ...(call ? [call] : []), finish('tool-calls', 1100, 600)];
+    },
+    () => [...textParts('Erledigt.'), finish('stop', 1300, 20)],
+  ],
   // Calls the named tool in two steps, so a change between them reaches the second call.
   zweimal: [1, 2]
     .map(
@@ -311,7 +332,12 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
 };
 
 /** Transcripts whose parts arrive one at a time, this far apart; every other one arrives at once. */
-const PACED_PART_MS: Readonly<Record<string, number>> = { langsam: 25, 'sehr-langsam': 100 };
+const PACED_PART_MS: Readonly<Record<string, number>> = {
+  langsam: 25,
+  'langsam-werkzeug': 25,
+  'sehr-langsam': 100,
+  gruebeln: 100,
+};
 
 /** The parts as a stream; a paced one waits between parts and stops when the request is aborted. */
 function replayStream(

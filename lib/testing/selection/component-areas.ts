@@ -46,6 +46,7 @@ const COMPONENT_AREAS: readonly (readonly [string, readonly string[], readonly s
       'inventory-',
       'invoice-editor',
       'leistungen',
+      'offer-delivery',
       'offers',
       'supplier-catalog',
       'wholesaler-import',

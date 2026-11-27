@@ -96,6 +96,28 @@ test("a clock-out during the job's break ends the job's day", () => {
   expect(jobIntervalEntries(day, jobX, NOW).map((jobEntry) => jobEntry.id)).toEqual(['in', 'pause', 'out']);
 });
 
+test('a clock-out without a job id at midnight closes the job time of the day before', () => {
+  const night = [
+    entry('in', 'clock_in', '2026-09-16T22:00', jobX),
+    entry('out', 'clock_out', '2026-09-17T00:00', null),
+  ];
+  // The Verlauf shows one closed activity on its start's day, as the week counts it.
+  expect(activityDays(night, NOW).map((day) => day.date)).toEqual(['2026-09-16']);
+  expect(activities(night).map((interval) => [interval.state, intervalDurationLabel(interval)])).toEqual([
+    ['closed', '2 Std.'],
+  ]);
+  // The job's own view keeps the closing clock-out with its start.
+  expect(jobIntervalEntries(night, jobX, NOW).map((jobEntry) => jobEntry.id)).toEqual(['in', 'out']);
+  // A minute past midnight is a real gap: the start lacks its end.
+  const late = [night[0], entry('late-out', 'clock_out', '2026-09-17T00:01', null)].flatMap((item) =>
+    item ? [item] : [],
+  );
+  expect(activities(late).map((interval) => intervalDurationLabel(interval))).toEqual([
+    'Ende fehlt',
+    'Beginn fehlt',
+  ]);
+});
+
 test('only an open start of today runs; an open start of an earlier day lacks its end', () => {
   const intervals = activities([
     entry('yesterday', 'clock_in', '2026-09-17T06:57', jobX),
@@ -185,16 +207,23 @@ function segment(
 
 /** The walkthrough's clock: in, travel, break, work again, out, each a few seconds or minutes apart. */
 function walkthroughEntries(): TimeEntry[] {
-  const segments = [
-    segment('work-1', 'work', '2026-09-17T06:12:00.000Z', '2026-09-17T06:14:30.000Z', jobX),
-    segment('travel', 'travel', '2026-09-17T06:14:30.000Z', '2026-09-17T06:15:05.000Z', jobX),
-    segment('break', 'break', '2026-09-17T06:15:05.000Z', '2026-09-17T06:15:40.000Z', null),
-    segment('work-2', 'work', '2026-09-17T06:15:40.000Z', '2026-09-17T06:40:00.000Z', jobX),
-  ];
+  return projectedEntries(
+    [
+      segment('work-1', 'work', '2026-09-17T06:12:00.000Z', '2026-09-17T06:14:30.000Z', jobX),
+      segment('travel', 'travel', '2026-09-17T06:14:30.000Z', '2026-09-17T06:15:05.000Z', jobX),
+      segment('break', 'break', '2026-09-17T06:15:05.000Z', '2026-09-17T06:15:40.000Z', null),
+      segment('work-2', 'work', '2026-09-17T06:15:40.000Z', '2026-09-17T06:40:00.000Z', jobX),
+    ],
+    new Date('2026-09-16T22:00:00.000Z'),
+  );
+}
+
+/** The segments' projected transitions from `from` to the end of 17 September, as the Verlauf receives them. */
+function projectedEntries(segments: TimeSegmentFact[], from: Date): TimeEntry[] {
   const kinds = new Map(segments.map((fact) => [fact.id, fact]));
   const points = projectTimeSegmentsToLegacyTransitions(
     segments,
-    new Date('2026-09-16T22:00:00.000Z'),
+    from,
     new Date('2026-09-17T21:59:59.999Z'),
     NOW,
   );
@@ -237,6 +266,42 @@ test('a day of activities reads as one row per activity in time order, without i
   ).toEqual([
     ['work', jobX, '2026-09-17T06:12:00.000Z', '2026-09-17T06:14:30.000Z'],
     ['work', jobX, '2026-09-17T06:15:40.000Z', '2026-09-17T06:40:00.000Z'],
+  ]);
+});
+
+test('a break over midnight closes on its own day in the Verlauf, as the week counts it', () => {
+  // Work from 22:00, a break from 23:30 to 00:30, work until 01:00 (Berlin, summer time).
+  const days = activityDays(
+    projectedEntries(
+      [
+        segment('evening', 'work', '2026-09-16T20:00:00.000Z', '2026-09-16T21:30:00.000Z', jobX),
+        segment('break', 'break', '2026-09-16T21:30:00.000Z', '2026-09-16T22:30:00.000Z', null),
+        segment('night', 'work', '2026-09-16T22:30:00.000Z', '2026-09-16T23:00:00.000Z', jobX),
+      ],
+      new Date('2026-09-15T22:00:00.000Z'),
+    ),
+    NOW,
+  );
+  expect(
+    days.map((day) => [
+      day.date,
+      day.intervals.map((interval) => [interval.kind, interval.state, intervalDurationLabel(interval)]),
+    ]),
+  ).toEqual([
+    [
+      '2026-09-17',
+      [
+        ['break', 'closed', '30 Min.'],
+        ['work', 'closed', '30 Min.'],
+      ],
+    ],
+    [
+      '2026-09-16',
+      [
+        ['work', 'closed', '1 Std. 30 Min.'],
+        ['break', 'closed', '30 Min.'],
+      ],
+    ],
   ]);
 });
 

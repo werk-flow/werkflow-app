@@ -161,3 +161,9 @@ test('Claude denies its file tools every workstation secret file in the home fol
   ])
     expect(settings.permissions.deny).toContain(rule);
 });
+
+// Process patterns can match every worktree's verification on the shared machine.
+test('both agent tools run the pattern-kill guard before every shell call', () => {
+  for (const file of ['.claude/settings.json', '.codex/hooks.json'])
+    expect(guardedTools(file, ['Bash'], '.claude/hooks/refuse-pattern-kill.ts')).toEqual(['Bash']);
+});

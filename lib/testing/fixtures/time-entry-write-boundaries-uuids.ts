@@ -195,9 +195,11 @@ const createAdmin = () => {
       }
       return query;
     },
-    rpc: async (name: string, args: Record<string, unknown> = {}) => {
+    // Not async: a set-returning function's answer chains `order` and `range`.
+    rpc: (name: string, args: Record<string, unknown> = {}) => {
       rpcCalls.push({ name, args });
-      if (rpcRefusal) return { data: null, error: { code: 'P0001', message: rpcRefusal }, count: null };
+      if (rpcRefusal)
+        return Promise.resolve({ data: null, error: { code: 'P0001', message: rpcRefusal }, count: null });
       return admin.rpc(name, args);
     },
   };
@@ -214,6 +216,7 @@ mock.module('@/lib/data/cached', () => ({
   CACHE_TAGS: {},
   getAuthenticatedUser: async () => ({ id: callerUser }),
   getCachedMemberships: async () => [{ orgId: ownOrganization, role: callerRole }],
+  getOwnEmployeeRecordId: async () => null,
   getCachedOrganizationSettings: async () => {
     if (settingsReadFails) throw new Error('organization_settings_read_failed');
     return { breakMode: 'manual', autoBreakThresholdMinutes: 360, autoBreakDurationMinutes: 30 };

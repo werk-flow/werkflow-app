@@ -116,6 +116,23 @@ test('an end applies only when the page holds the whole answer; otherwise the sa
   );
 });
 
+test('a stopped answer that kept less than the page holds is read, never cut on the page', () => {
+  let window = applyKiLiveEvent(earlier, started).window;
+  window = applyKiLiveEvent(window, text(0, 'Erst das Ventil öffnen')).window;
+  const stopped = (length: number): KiLiveEvent => ({
+    v,
+    type: 'end',
+    command,
+    status: 'cancelled',
+    failure: 'Du hast die Antwort angehalten.',
+    length,
+  });
+  expect(applyKiLiveEvent(window, stopped(15)).applied, 'text past what the stop kept is read').toBe(false);
+  const ended = applyKiLiveEvent(window, stopped(22)).window;
+  expect(answerOf(ended)?.status).toBe('cancelled');
+  expect(answerOf(ended)?.failure).toBe('Du hast die Antwort angehalten.');
+});
+
 test('a turn that starts past messages the page never saw waits for a read, so the cursor does not skip them', () => {
   const later: KiLiveEvent = {
     ...started,
@@ -322,4 +339,24 @@ test('an empty window read keeps its older pages when the page held nothing, and
     'a read whose window holds no shown entry must still page older ones in',
   ).toBe(true);
   expect(mergeWindow(null, { hasOlder: false, messages: [] }).hasOlder).toBe(false);
+});
+
+test('a row of a stopped turn that arrives after the stop still lands, so a broken-off call shows as ended', () => {
+  let window = applyKiLiveEvent(earlier, started).window;
+  window = applyKiLiveEvent(window, text(0, 'Ich suche.')).window;
+  const running = toolRow(`${command}:tool:1`, 5, 1);
+  window = applyKiLiveEvents(window, [{ v, type: 'row', command, row: running }]).window;
+  const stopped: KiLiveEvent = {
+    v,
+    type: 'end',
+    command,
+    status: 'cancelled',
+    failure: 'Du hast die Antwort angehalten.',
+    length: 10,
+  };
+  const broken = { ...running, status: 'failed' as const, revision: 2, outcome: 'failed' as const };
+  const result = applyKiLiveEvents(window, [stopped, { v, type: 'row', command, row: broken }]);
+  expect(result.held).toEqual([]);
+  expect(answerOf(result.window)?.status).toBe('cancelled');
+  expect(result.window.messages.find((entry) => entry.key === running.key)).toEqual(broken);
 });

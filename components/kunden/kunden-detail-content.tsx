@@ -21,6 +21,7 @@ import { MetadataSection, type MetadataField } from '@/components/shared/metadat
 import { EmbeddedAuftraegeSection } from '@/components/shared/embedded-auftraege-section';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { ClientFinancePlaceholder } from '@/components/kunden/client-finance-placeholder';
+import { ClientConditionsSection } from '@/components/kunden/client-conditions-section';
 import { ClientOffersSection } from '@/components/kunden/client-offers-section';
 import { buildClientMetadataFields } from '@/components/kunden/client-metadata-fields';
 import { ClientHeldRolesCard } from '@/components/kunden/client-held-roles-card';
@@ -30,6 +31,7 @@ import { ClientRemovalDialog, type ClientRemoval } from '@/components/kunden/cli
 import { useClientRemoval } from '@/components/kunden/use-client-deletion';
 import { useCommunicationContactGuard } from '@/components/kunden/use-communication-contact-guard';
 import type { OfferPage } from '@/lib/offers/list-page';
+import type { CustomerConditions } from '@/lib/price-catalog/customer-conditions';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 
 import type { ClientContact, ClientSite } from '@/lib/clients/types';
@@ -70,6 +72,8 @@ interface KundenDetailContentProps {
   equipmentLoadFailed: boolean;
   /** The customer's newest offers; null for a failed read. */
   offers: OfferPage | null;
+  /** The customer's Kundenkonditionen, newest version first; null for a failed read. */
+  conditions: CustomerConditions | null;
 }
 
 export function KundenDetailContent({
@@ -88,11 +92,10 @@ export function KundenDetailContent({
   equipment,
   equipmentLoadFailed,
   offers,
+  conditions,
 }: KundenDetailContentProps) {
   const removal = useClientRemoval(client);
-  const contactGuard = useCommunicationContactGuard({
-    clientId: client.id,
-  });
+  const contactGuard = useCommunicationContactGuard({ clientId: client.id });
 
   useKundenDetailRealtime(client.id, siteRoles, removal.isLeaving, removal.isLeavingRef);
 
@@ -141,6 +144,8 @@ export function KundenDetailContent({
             currentUserId={currentUserId}
             relationshipBundle={relationshipBundle}
             offers={offers}
+            archived={archivedAt !== null}
+            conditions={conditions}
           />
         </DetailColumns>
       </PageBody>
@@ -169,9 +174,12 @@ function KundenDetailActivityColumn({
   currentUserId,
   relationshipBundle,
   offers,
+  archived,
+  conditions,
 }: Pick<
   KundenDetailContentProps,
   | 'offers'
+  | 'conditions'
   | 'client'
   | 'relations'
   | 'linkedWork'
@@ -180,7 +188,7 @@ function KundenDetailActivityColumn({
   | 'visibleColumns'
   | 'currentUserId'
   | 'relationshipBundle'
->) {
+> & { archived: boolean }) {
   return (
     <div className="min-w-0 space-y-8">
       {relationshipBundle ? (
@@ -204,6 +212,7 @@ function KundenDetailActivityColumn({
         visibleColumns={visibleColumns}
       />
       <ClientOffersSection clientId={client.id} offers={offers} />
+      <ClientConditionsSection clientId={client.id} archived={archived} conditions={conditions} />
     </div>
   );
 }

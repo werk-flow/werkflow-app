@@ -21,6 +21,7 @@ import {
   parseContentForm,
   type SectionForm,
 } from '@/lib/offers/content-form';
+import type { SaveOfferContentInput } from '@/lib/offers/action-schemas';
 import type { OfferCalculation } from '@/lib/offers/calculation';
 import type { OfferWithCosts } from '@/lib/offers/types';
 import { ownWrites } from '@/lib/realtime/own-writes';
@@ -57,6 +58,12 @@ type Draft = {
   edited: boolean;
   /** One per change: only a repeat of the same press answers with the first save. */
   attemptKey: string;
+  /**
+   * Untouched text that catalog picks hold while their prices are read: the
+   * attempt key it had and how many picks hold it. When the last of them adds
+   * nothing and nothing changed since, the text is untouched again.
+   */
+  held: { key: string; picks: number } | null;
 };
 
 function contentDraftOf(offer: OfferWithCosts, keyPrefix?: string): Draft {
@@ -66,6 +73,7 @@ function contentDraftOf(offer: OfferWithCosts, keyPrefix?: string): Draft {
     savedVersion: offer.contentVersion,
     edited: false,
     attemptKey: crypto.randomUUID(),
+    held: null,
   };
 }
 
@@ -93,13 +101,43 @@ function useContentDraft(offer: OfferWithCosts, saving: boolean) {
         sections: typeof next === 'function' ? next(current.sections) : next,
         edited: true,
         attemptKey: crypto.randomUUID(),
+        held: null,
       })),
+    /**
+     * A catalog pick counts as an own change while its price is read, so another
+     * session's content cannot move its Titel meanwhile. The answer releases it:
+     * after a read that added nothing, untouched text is untouched again.
+     */
+    hold: () => {
+      const key = draft.attemptKey;
+      // Text typed before the pick stays edited whatever its read answers.
+      if (draft.edited && draft.held?.key !== key) return () => undefined;
+      setDraft((current) =>
+        current.attemptKey === key
+          ? {
+              ...current,
+              edited: true,
+              held: { key, picks: (current.held?.key === key ? current.held.picks : 0) + 1 },
+            }
+          : current,
+      );
+      return () =>
+        setDraft((current) => {
+          const { held } = current;
+          if (!held || held.key !== key || current.attemptKey !== key) return current;
+          return held.picks > 1
+            ? { ...current, held: { key, picks: held.picks - 1 } }
+            : { ...current, edited: false, held: null };
+        });
+    },
     /** The save under `attemptKey` was stored as `contentVersion`; text changed since stays edited. */
     saved: (attemptKey: string, contentVersion: number) =>
       setDraft((current) => ({
         ...current,
         savedVersion: contentVersion,
-        ...(current.attemptKey === attemptKey ? { edited: false, attemptKey: crypto.randomUUID() } : {}),
+        ...(current.attemptKey === attemptKey
+          ? { edited: false, attemptKey: crypto.randomUUID(), held: null }
+          : {}),
       })),
     // New keys: an article pick still pending targets a Titel of the discarded text, which no longer exists.
     reload: () => setDraft(contentDraftOf(offer, `reload-${crypto.randomUUID()}`)),
@@ -127,14 +165,13 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
   // The saved content is on screen once the page renders the content version the save answered.
   const settle = useSettleOnChange(offer.contentVersion);
   const { run, isPending: pending } = usePendingTask();
-  const { draft, newerElsewhere, edit, saved, reload } = useContentDraft(offer, pending);
+  const { draft, newerElsewhere, edit, hold, saved, reload } = useContentDraft(offer, pending);
   useReportOfferUnsaved(draft.edited);
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { sections } = draft;
-  const parsed = parseContentForm(sections);
+  const parsed = parseContentForm(draft.sections);
   const errors = attempted && !parsed.ok ? parsed.errors : {};
-  const figures = liveContentFigures(sections);
+  const figures = liveContentFigures(draft.sections);
   const newKey = useNewKey();
 
   const submit = (event: React.FormEvent) => {
@@ -152,17 +189,12 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
     void run(async () => {
       setError(null);
       const since = settle.markChange();
-      // Recorded, so this tab skips the Realtime echo of its own save (lib/realtime/own-writes.ts).
-      const result = await ownWrites
-        .track(
-          saveOfferContent({
-            offerId: offer.id,
-            expectedContentVersion: draft.baseVersion,
-            attemptKey: draft.attemptKey,
-            sections: parsed.sections,
-          }),
-        )
-        .catch(() => null);
+      const result = await saveTrackedContent({
+        offerId: offer.id,
+        expectedContentVersion: draft.baseVersion,
+        attemptKey: draft.attemptKey,
+        sections: parsed.sections,
+      }).catch(() => null);
       if (!result?.success) {
         setError(failureSentence(result?.error ?? null, draft.edited));
         return;
@@ -191,22 +223,29 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
         </ReloadNotice>
       )}
       <OfferSectionList
-        sections={sections}
+        offerId={offer.id}
+        sections={draft.sections}
         calculation={figures?.calculation ?? null}
         onChange={(next) => {
           edit(next);
           // A sentence about the earlier content no longer applies to the changed one.
           setError(null);
         }}
+        onHold={hold}
         newKey={newKey}
         errors={errors}
         disabled={pending}
       />
       <InvoiceTotals amounts={figures?.amounts ?? null} />
-      <OfferCalculationPanel sections={sections} calculation={figures?.calculation ?? null} />
+      <OfferCalculationPanel sections={draft.sections} calculation={figures?.calculation ?? null} />
       <SaveRow error={error} pending={pending} />
     </form>
   );
+}
+
+/** One content save, recorded so this tab skips the Realtime echo of it (lib/realtime/own-writes.ts). */
+function saveTrackedContent(input: SaveOfferContentInput) {
+  return ownWrites.track(saveOfferContent(input));
 }
 
 /** The save's failure sentence beside „Speichern“. */
@@ -236,16 +275,21 @@ function ReloadNotice({ children, onReload }: { children: React.ReactNode; onRel
 
 /** The Titel in order, or the first step while there is none, and adding a Titel. */
 function OfferSectionList({
+  offerId,
   sections,
   calculation,
   onChange,
+  onHold,
   newKey,
   errors,
   disabled,
 }: {
+  offerId: string;
   sections: SectionForm[];
   calculation: OfferCalculation | null;
   onChange: (sections: SetStateAction<SectionForm[]>) => void;
+  /** Holds the text while a catalog pick reads its price; the answer calls the release. */
+  onHold: () => () => void;
   newKey: () => string;
   errors: Record<string, string | undefined>;
   disabled: boolean;
@@ -263,6 +307,7 @@ function OfferSectionList({
           {sections.map((section, index) => (
             <OfferSectionFields
               key={section.key}
+              offerId={offerId}
               index={index}
               count={sections.length}
               section={section}
@@ -270,6 +315,7 @@ function OfferSectionList({
               onChange={(next) => onChange(sections.map((current, at) => (at === index ? next : current)))}
               onMove={(direction) => onChange(move(sections, index, direction))}
               onRemove={() => onChange(sections.filter((_section, at) => at !== index))}
+              onPickCatalog={onHold}
               onAddCatalog={(position) =>
                 onChange((current) =>
                   current.map((entry) =>

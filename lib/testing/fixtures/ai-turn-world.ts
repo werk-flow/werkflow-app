@@ -139,15 +139,34 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome | Promise<
     }
     case 'start_ai_turn':
       return startTurn(world, args);
+    case 'read_ai_answer_status': {
+      const item = rows('ai_thread_items').find(
+        (row) => row.id === args.p_item_id && row.organization_id === organizationId,
+      );
+      if (!item) return raise('ai_thread_item_not_found');
+      const member = world.memberships.find((row) => row.orgId === organizationId);
+      if (!member || (member.accessState && member.accessState !== 'active'))
+        return raise('ai_actor_without_access');
+      const thread = rows('ai_threads').find(
+        (row) =>
+          row.id === item.thread_id &&
+          row.organization_id === organizationId &&
+          row.user_id === args.p_user_id,
+      );
+      return thread ? ok(item.status) : raise('ai_thread_not_found');
+    }
     case 'update_ai_thread_item': {
       const item = rows('ai_thread_items').find(
         (row) => row.id === args.p_item_id && row.organization_id === organizationId,
       );
       if (!item) return raise('ai_thread_item_not_found');
+      if (isStopped(item)) return raise('ai_thread_item_stopped');
       if (item.status !== 'streaming') return raise('ai_thread_item_finished');
       Object.assign(item, { status: args.p_status, body: args.p_body });
       return ok(null);
     }
+    case 'cancel_ai_turn':
+      return cancelTurn(world, args);
     case 'record_ai_run_attempt': {
       const existing = rows('ai_run_attempts').find(
         (row) => row.organization_id === organizationId && row.idempotency_key === args.p_idempotency_key,
@@ -243,6 +262,38 @@ async function recordToolItem(world: AiTurnWorld, args: Row): Promise<Outcome> {
     idempotency_key: args.p_item_key,
   });
   return ok(items.length + 1);
+}
+
+const isStopped = (item: Row): boolean =>
+  item.status === 'cancelled' && z.object({ failure: z.literal('stopped') }).safeParse(item.body).success;
+
+/** `cancel_ai_turn`: only the author stops their answer, and only while it is written; a repeat answers again. */
+function cancelTurn(world: AiTurnWorld, args: Row): Outcome {
+  const thread = tableRows(world, 'ai_threads').find(
+    (row) =>
+      row.id === args.p_thread_id &&
+      row.organization_id === args.p_organization_id &&
+      row.user_id === args.p_user_id,
+  );
+  if (!thread) return raise('ai_thread_not_found');
+  const item = tableRows(world, 'ai_thread_items').find(
+    (row) =>
+      row.thread_id === args.p_thread_id && row.idempotency_key === `${String(args.p_command_id)}:assistant`,
+  );
+  if (!item) return ok([{ verdict: 'not_found', text_length: null }]);
+  if (item.status !== 'streaming' && !isStopped(item))
+    return ok([{ verdict: 'finished', text_length: null }]);
+  if (item.status === 'streaming') stopAnswer(item);
+  const { text } = z.object({ text: z.string() }).parse(item.body);
+  return ok([{ verdict: 'stopped', text_length: text.length }]);
+}
+
+/** What a stop leaves: the last saved text, finished as stopped. */
+export function stopAnswer(item: Row): void {
+  Object.assign(item, {
+    status: 'cancelled',
+    body: { ...z.record(z.string(), z.unknown()).parse(item.body), failure: 'stopped' },
+  });
 }
 
 /** A tool call's ledger row: an attempt row with the tool's outcome and nil cost (lib/ai/turn.ts). */
@@ -443,6 +494,21 @@ export async function postTurn(
     },
   );
   return POST(request, { params: Promise.resolve({ threadId: options.threadId ?? THREAD_ID }) });
+}
+
+/** Posts „Antwort anhalten“ for one command as the signed-in caller's browser would. */
+export async function postStop(
+  commandId: string,
+  options: { organizationId?: string; threadId?: string } = {},
+): Promise<Response> {
+  const { POST } = await import('@/app/api/ki/threads/[threadId]/stop/route');
+  const threadId = options.threadId ?? THREAD_ID;
+  const request = new Request(`https://app.example.test/api/ki/threads/${threadId}/stop`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' },
+    body: JSON.stringify({ organizationId: options.organizationId ?? ORGANIZATION_A, commandId }),
+  });
+  return POST(request, { params: Promise.resolve({ threadId }) });
 }
 
 /** The streamed events of a started turn, once its run has settled. */

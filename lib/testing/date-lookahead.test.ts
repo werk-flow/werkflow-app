@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { addLocalDays } from '../date-time/berlin';
 import { readWorkflow } from './ci-workflow';
-import { agentHosts, askedDay, failedBrowserDates, lookaheadDays, lookaheadLegs } from './date-lookahead';
+import { agentHosts, askedDay, failedLookaheadDates, lookaheadDays, lookaheadLegs } from './date-lookahead';
 
 const input = {
   sql: 'sql:planning,sql:security',
@@ -26,11 +26,11 @@ function isMonthEnd(date: string) {
   return addLocalDays(date, 1).slice(0, 7) !== date.slice(0, 7);
 }
 
-test('a run day looks at its next 14 days, then the next month end and year end', () => {
+test('a run day checks only offsets 1, 2, 3, 7 and 14, then the next month end and year end', () => {
   const days = lookaheadDays('2026-11-06');
 
   expect(days.map((day) => `${day.date} ${day.label}`)).toEqual([
-    ...Array.from({ length: 13 }, (_, index) => `${addLocalDays('2026-11-06', index + 1)} window`),
+    ...[1, 2, 3, 7].map((offset) => `${addLocalDays('2026-11-06', offset)} window`),
     '2026-11-20 day 14',
     '2026-11-30 month end',
     '2026-12-31 year end',
@@ -80,7 +80,26 @@ test('a date whose browser leg failed keeps it until it arrives, so a green run 
   expect(browserDates('2026-11-09', ['2026-12-31'])).toEqual(['2026-11-23 day 14', '2026-12-31 year end']);
 });
 
-test('the open alert names a date only for a failed browser leg', () => {
+test('a failed suite date stays between checkpoints without adding browser work until it passes or arrives', () => {
+  const alert = '- 2026-11-13 window / Suite: Run the groups on the shifted clock';
+  const failed = failedLookaheadDates(alert, 'Suite');
+  const retained = lookaheadDays('2026-11-07', [], failed);
+  expect(retained.find((day) => day.date === '2026-11-13')).toEqual({
+    date: '2026-11-13',
+    label: 'window',
+    instant: '2026-11-13T11:00:00Z',
+    browser: false,
+  });
+  expect(
+    lookaheadLegs(retained, input)
+      .filter((leg) => leg.name.startsWith('2026-11-13 '))
+      .map((leg) => leg.name),
+  ).toEqual(['2026-11-13 window / Suite']);
+  expect(lookaheadDays('2026-11-07').some((day) => day.date === '2026-11-13')).toBe(false);
+  expect(lookaheadDays('2026-11-13', [], failed).some((day) => day.date === '2026-11-13')).toBe(false);
+});
+
+test('the open alert separates failed suite dates from failed browser dates', () => {
   const body = [
     'The run failed. Failed jobs:',
     '',
@@ -92,8 +111,10 @@ test('the open alert names a date only for a failed browser leg', () => {
     'Run: https://github.test/owner/repo/actions/runs/7',
   ].join('\n');
 
-  expect(failedBrowserDates(body)).toEqual(['2026-11-30', '2026-12-31']);
-  expect(failedBrowserDates('')).toEqual([]);
+  expect(failedLookaheadDates(body, 'Browser')).toEqual(['2026-11-30', '2026-12-31']);
+  expect(failedLookaheadDates('', 'Browser')).toEqual([]);
+  expect(failedLookaheadDates(body, 'Suite')).toEqual(['2026-11-12']);
+  expect(failedLookaheadDates('', 'Suite')).toEqual([]);
 });
 
 test('every run day through 2037 keeps the plan whole', () => {
@@ -104,17 +125,18 @@ test('every run day through 2037 keeps the plan whole', () => {
 
     expect(new Set(dates).size).toBe(dates.length);
     expect(dates.toSorted()).toEqual(dates);
-    expect(dates.at(13)).toBe(lastWindowDay);
-    expect(dates.slice(14).every((date) => date > lastWindowDay && isMonthEnd(date))).toBe(true);
+    expect(dates.slice(0, 5)).toEqual([1, 2, 3, 7, 14].map((offset) => addLocalDays(runDay, offset)));
+    expect(dates.slice(5).every((date) => date > lastWindowDay && isMonthEnd(date))).toBe(true);
     expect(dates.at(-1)?.slice(5)).toBe('12-31');
     // Every date reaches day 14 once, so a browser leg sees it two weeks before it arrives.
     expect(days.filter((day) => day.browser).map((day) => day.date)).toContain(lastWindowDay);
     // A date that failed stays planned: it can keep its browser leg until it arrives.
-    expect(days.map((day) => day.date)).toEqual(
-      expect.arrayContaining(
-        lookaheadDays(addLocalDays(runDay, -1)).flatMap((day) => (day.date > runDay ? [day.date] : [])),
-      ),
-    );
+    const previousDates = lookaheadDays(addLocalDays(runDay, -1)).map((day) => day.date);
+    expect(
+      lookaheadDays(runDay, previousDates)
+        .filter((day) => day.browser)
+        .map((day) => day.date),
+    ).toEqual(expect.arrayContaining(previousDates.filter((date) => date > runDay)));
   }
 });
 

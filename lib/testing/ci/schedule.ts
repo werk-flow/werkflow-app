@@ -22,8 +22,8 @@ export const CLOCK_WORK = {
   /**
    * The release decides at 03:30 on weekdays, so PROD is live by 05:00 Berlin
    * (docs/technical/environments.md, "Release and rollback"). A missed slot still goes on until
-   * 16:30, as .github/scripts/hold-until.sh lets a late scheduled run go on at once, and never on
-   * another day.
+   * 16:30, and never on another day. On GitHub Actions the ci-alert timer dispatches it instead
+   * (lib/testing/ci/profiles.ts).
    */
   release: { time: '03:30', weekdays: [0, 1, 2, 3, 4], lateMs: 13 * HOUR_MS },
   /**

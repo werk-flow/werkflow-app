@@ -44,7 +44,13 @@ if (process.env.REMOVE_CHECKOUT === '1' && job !== 'siblings') require('node:fs'
 `;
 // Prints its pid and its port once it holds it: LISTEN_PORT, or one the system assigns.
 const LISTENER = `const server = require('node:net').createServer().listen(Number(process.env.LISTEN_PORT ?? 0), () => console.log(process.pid + ' ' + server.address().port));`;
-const JOB = `${RECORD('job')}
+// With FIRST_ACT, the body's first act writes <FIRST_ACT>.ran, then opens the FIFO <FIRST_ACT> to
+// tell a reader it did.
+const JOB = `if (process.env.FIRST_ACT) {
+  require('node:fs').writeFileSync(process.env.FIRST_ACT + '.ran', '');
+  require('node:fs').closeSync(require('node:fs').openSync(process.env.FIRST_ACT, 'w'));
+}
+${RECORD('job')}
 const { spawn } = require('node:child_process');
 const reported = (child) => new Promise((resolveReport) => child.stdout.once('data', (chunk) => resolveReport(chunk.toString().trim())));
 // A listener in the job's own group that would outlive the job: a test server left running.
@@ -579,7 +585,7 @@ test('the sibling step refuses a trusted folder that is a link', async () => {
   expect(existsSync(join(folder, 'prepare-siblings.env'))).toBe(false);
 });
 
-test("a task learns of its body's launch after its steps, and a launch that cannot be recorded ends the body", async () => {
+test("a task learns of its body's launch after its steps, before the body runs", async () => {
   const seen: string[] = [];
   const launched = await executor().run(
     {
@@ -593,19 +599,41 @@ test("a task learns of its body's launch after its steps, and a launch that cann
   );
   expect(launched.exitCode, launched.detail).toBe(0);
   expect(seen).toEqual(['prepare:true', 'body:false']);
-  rmSync(join(folder, 'job-fast.env'));
-  const refused = await executor().run(
+});
+
+// However long the record takes, the body waits for it: a launch that cannot be recorded never runs
+// the body's first act. While the body's process runs the body itself, the record waits until the
+// body has done its first act, so a body that starts before its record fails here every time.
+test('a body whose launch cannot be recorded never runs, however long the record takes', async () => {
+  const firstAct = join(folder, 'first-act');
+  execFileSync('mkfifo', [firstAct]);
+  // The arguments of the launched process: this process's child that carries the body's.
+  let launched: string | undefined;
+  const run = await executor().run(
     {
-      ...task('sql'),
+      ...task('sql', { FIRST_ACT: firstAct }),
       onLaunch: () => {
+        launched = execFileSync('ps', ['-A', '-o', 'ppid=,args='], { encoding: 'utf8' })
+          .split('\n')
+          .map((line) => line.trim().split(/\s+/))
+          .find(
+            ([parent, ...args]) =>
+              parent === String(process.pid) && args.join(' ').includes('scripts/ci/job.ts sql'),
+          )
+          ?.slice(1)
+          .join(' ');
+        // Bounded outside this event loop: a body that dies before its first act fails the wait.
+        if (launched?.startsWith(`${process.execPath} scripts/ci/job.ts`))
+          execFileSync('sh', ['-c', 'exec 3<"$1"', 'sh', firstAct], { timeout: 30_000 });
         throw new Error('the work root is read-only');
       },
     },
     new AbortController().signal,
   );
-  expect(refused.exitCode, refused.detail).toBeNull();
-  expect(refused.detail).toContain('its launch could not be recorded: the work root is read-only');
-  expect(existsSync(join(folder, 'job-sql.env'))).toBe(false);
+  expect(launched, 'the launched process was not found').toBeDefined();
+  expect(run.exitCode, run.detail).toBeNull();
+  expect(run.detail).toContain('its launch could not be recorded: the work root is read-only');
+  expect(existsSync(`${firstAct}.ran`), 'the body ran although its launch was never recorded').toBe(false);
 });
 
 // The run's start record is written on onLaunch: a body that never launched must never be recorded

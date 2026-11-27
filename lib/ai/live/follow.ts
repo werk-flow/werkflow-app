@@ -183,8 +183,9 @@ function applyKiLiveEvent(
   } else {
     // The end carries the turn's rows as saved, so a row whose send this page missed lands with it.
     const placed = (event.rows ?? []).reduce(placeRow, window);
-    // The answer's end with text this page never received: the saved answer holds it.
-    if (answer.text.length < event.length) return { window: placed, applied: false };
+    // An end whose length differs from what the page holds reads the saved answer: text the page
+    // missed, or text past what a stopped answer kept.
+    if (answer.text.length !== event.length) return { window: placed, applied: false };
     const ended = { ...answer, status: event.status, failure: event.failure };
     return {
       window: {

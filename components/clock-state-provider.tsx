@@ -233,7 +233,7 @@ type ClockConfirmed = {
 };
 
 /** The clock state as the server answers it, live, and when it was last read. */
-function useClockServerView(activeOrgId: string | null) {
+function useClockServerView(activeOrgId: string | null, viewerId: string | null) {
   // The running session's job, for the `jobs` event filter below; a ref so
   // the filter reads the latest value without re-registering.
   const activeJobIdRef = useRef<string | null>(null);
@@ -242,8 +242,17 @@ function useClockServerView(activeOrgId: string | null) {
   // When the newest failed read started: with network it ends the shown clock's wait (shown-clock.ts).
   const [failedFrom, setFailedFrom] = useState(-1);
   const view = useLiveView<ServerClock | null>({
-    tables: ['time_entries', 'time_sessions', 'time_segments', 'jobs'],
-    eventFilter: (event) => isClockStateEventRelevant(event, activeJobIdRef.current),
+    // An approved correction of the viewer's own time changes today's totals
+    // (its approval updates the request), and a saved break rule the running day's.
+    tables: [
+      'time_entries',
+      'time_sessions',
+      'time_segments',
+      'time_correction_requests',
+      'organization_settings',
+      'jobs',
+    ],
+    eventFilter: (event) => isClockStateEventRelevant(event, activeJobIdRef.current, viewerId),
     read: async ({ signal }) => {
       if (!activeOrgId) return { ok: true, data: null };
       const startedAt = new Date().toISOString();
@@ -379,7 +388,7 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
     () => (userId && activeOrgId ? { userId, organizationId: activeOrgId } : null),
     [userId, activeOrgId],
   );
-  const view = useClockServerView(activeOrgId);
+  const view = useClockServerView(activeOrgId, userId);
   const { serverState, readTimes } = view;
   const { run, isPending } = useServerAction(transitionTimeActivity);
   const { refresh, invalidate, setData } = view;
