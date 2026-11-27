@@ -8,7 +8,7 @@ import {
   TimeAccountPeriodList,
 } from '@/components/zeiterfassung/time-account-overview-lists';
 import { formatMinutes } from '@/lib/time-accounts/presentation';
-import { formatBerlin } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 import {
   getTimeAccountOverview,
   OVERVIEW_EVENT_LIMIT,
@@ -63,7 +63,7 @@ function TimeAccountOverviewContent({ overview }: { overview: TimeAccountOvervie
               {formatMinutes(overview.account.currentBalanceMinutes)}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Eröffnet am {formatBerlin(overview.account.openedOn, 'numericDate')}
+              Eröffnet am {formatGermanDate(overview.account.openedOn)}
             </p>
           </CardContent>
         </Card>
