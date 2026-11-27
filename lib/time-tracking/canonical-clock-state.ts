@@ -13,7 +13,7 @@ import {
   UNUSUALLY_LONG_SESSION_MS,
   type TimeSegmentFact,
 } from './segments';
-import { computeBreakdownForSettings, currentBreakPolicy, type BreakPolicy } from './settings';
+import { computeDayBreakdown, currentBreakPolicy, type BreakPolicy } from './settings';
 import type { ClockJobInfo, LiveClockState, TimeActivitySelection } from './types';
 
 // The caller's canonical clock day for getCurrentClockState: the segments of
@@ -244,7 +244,16 @@ export function clockTotalsState(
   | 'calloutMinutes'
   | 'internalMinutes'
 > {
-  const breakdown = computeBreakdownForSettings(totals.presenceMinutes, totals.breakMinutes, settings);
+  // The state carries no target: its work minutes owe no overtime.
+  const breakdown = computeDayBreakdown(
+    {
+      presenceMinutes: totals.presenceMinutes,
+      standbyMinutes: totals.standbyMinutes,
+      trackedBreakMinutes: totals.breakMinutes,
+    },
+    settings,
+    undefined,
+  );
   return {
     breakPolicy: currentBreakPolicy(settings),
     todayMinutes: totals.presenceMinutes,

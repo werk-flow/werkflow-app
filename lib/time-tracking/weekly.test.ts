@@ -1,15 +1,22 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, mock, setSystemTime, test } from 'bun:test';
 
 import type { DailyTarget } from '@/lib/personnel/targets';
 import { canonicalDayTotals } from './clock-day-totals';
+import { liveMinutes } from './helpers';
+import { computeZeiterfassungLiveTotals } from './live-totals';
+import { memberLiveDay, memberStatusOf } from './member-day';
 import {
   createActivitySelection,
   projectTimeSegmentsToLegacyTransitions,
   type TimeSegmentFact,
 } from './segments';
-import { computeBreakdownForSettings, type BreakPolicy } from './settings';
-import type { TimeEntry } from './types';
+import type { BreakPolicy, TimeBreakdown } from './settings';
+import type { LiveClockState, TimeEntry } from './types';
 import { buildWeeklyTimeData, computeWeekLabel, getTodayIndex, getWeekBounds, targetsOfWeek } from './weekly';
+
+// The clock state's totals live in a server-only module; they are a pure function.
+mock.module('server-only', () => ({}));
+const { clockTotalsState } = await import('./canonical-clock-state');
 
 // The server renders in UTC. 2026-09-27T22:30Z is Sunday in UTC but Monday
 // 00:30 in Berlin (CEST): the overview must already show the new week.
@@ -53,7 +60,12 @@ const STANDBY_POLICY: BreakPolicy = {
   breakPolicyHistory: [],
 };
 
-function segment(id: string, kind: 'work' | 'standby', startedAt: string, endedAt: string): TimeSegmentFact {
+function segment(
+  id: string,
+  kind: 'work' | 'standby',
+  startedAt: string,
+  endedAt: string | null,
+): TimeSegmentFact {
   const base = {
     id,
     sessionId: 'session',
@@ -112,22 +124,15 @@ describe('standby in the day and the week', () => {
 
   test('counts toward working time and overtime in the week as in the day', () => {
     const target = mondayTarget(480);
-    // The day path: today's totals and the dashboard's breakdown of them.
-    const dayTotals = canonicalDayTotals(segments, MONDAY, MONDAY_END);
-    const day = computeBreakdownForSettings(
-      dayTotals.presenceMinutes,
-      dayTotals.breakMinutes,
-      STANDBY_POLICY,
-      target.targetMinutes,
-    );
     const [weekDay] = buildWeeklyTimeData(weekEntriesOf(segments), MONDAY, STANDBY_POLICY, [target]);
 
-    expect(day).toEqual({ workMinutes: 480, breakMinutes: 30, overtimeMinutes: 90 });
     expect(weekDay?.totalMinutes).toBe(600);
     expect(weekDay?.standbyMinutes).toBe(180);
-    expect(weekDay?.workMinutes).toBe(day.workMinutes);
-    expect(weekDay?.breakMinutes).toBe(day.breakMinutes);
-    expect(weekDay?.overtimeMinutes).toBe(day.overtimeMinutes);
+    expect(weekDay).toMatchObject({ workMinutes: 480, breakMinutes: 30, overtimeMinutes: 90 });
+    expect(todaysSplits(segments, STANDBY_POLICY, 480, AFTER_THE_DAY)).toEqual({
+      dashboard: { workMinutes: 480, breakMinutes: 30, overtimeMinutes: 90 },
+      mitarbeiter: { workMinutes: 480, breakMinutes: 30, overtimeMinutes: 90 },
+    });
   });
 
   test('stays out of the break steps', () => {
@@ -143,6 +148,113 @@ describe('standby in the day and the week', () => {
     expect(weekDay?.breakMinutes).toBe(0);
     expect(weekDay?.workMinutes).toBe(480);
     expect(weekDay?.overtimeMinutes).toBe(0);
+  });
+});
+
+/** Monday 17:00 Berlin, after every closed segment of the fixtures. */
+const AFTER_THE_DAY = Date.parse('2026-09-07T15:00:00.000Z');
+
+/** Today's clock state as the server builds it from the day's segments; the last one may still run. */
+function clockStateOf(segments: TimeSegmentFact[], policy: BreakPolicy): LiveClockState {
+  const running = segments.find((fact) => fact.endedAt === null) ?? null;
+  return {
+    ...clockTotalsState(canonicalDayTotals(segments, MONDAY, MONDAY_END), policy),
+    organizationId: 'org',
+    status: running ? 'working' : 'clocked_out',
+    isClockedIn: running !== null,
+    isOnBreak: false,
+    clockInTime: segments[0]?.startedAt ?? null,
+    statusStartedAt: running?.startedAt ?? null,
+    breakStartTime: null,
+    activeJobId: null,
+    activeJobInfo: null,
+    captureModel: 'canonical',
+    sessionId: 'session',
+    sessionVersion: 1,
+    currentSegmentId: running?.id ?? null,
+    currentActivity: running ? createActivitySelection(running.kind) : null,
+    resumeActivity: null,
+    resumeJobInfo: null,
+    recoveryReason: null,
+    legacyOpen: false,
+    fetchedAt: new Date(AFTER_THE_DAY).toISOString(),
+  };
+}
+
+/**
+ * Today's split at `nowMs` in each live view that shows it: the Zeiterfassung
+ * dashboard (its hero and the week chart's today bar) from the clock state,
+ * and the Mitarbeiter detail (its cards and the today bar) from the entries.
+ */
+function todaysSplits(
+  segments: TimeSegmentFact[],
+  policy: BreakPolicy,
+  targetMinutes: number | undefined,
+  nowMs: number,
+): { dashboard: TimeBreakdown; mitarbeiter: TimeBreakdown } {
+  setSystemTime(new Date(nowMs));
+  const state = clockStateOf(segments, policy);
+  const presence = liveMinutes(state.todayMinutes, state.statusStartedAt, nowMs);
+  const status = memberStatusOf(weekEntriesOf(segments), policy);
+  return {
+    dashboard: computeZeiterfassungLiveTotals(state, presence, targetMinutes, nowMs).breakdown,
+    mitarbeiter: memberLiveDay(status, policy, targetMinutes, nowMs).breakdown,
+  };
+}
+
+afterEach(() => {
+  setSystemTime();
+});
+
+describe('today’s totals and the week', () => {
+  // 07:00–12:00 work, then 12:00–15:00 standby: eight hours of working time,
+  // five toward the six-hour step.
+  const workThenStandby = (standbyEnd: string | null) => [
+    segment('work', 'work', '2026-09-07T05:00:00.000Z', '2026-09-07T10:00:00.000Z'),
+    segment('standby', 'standby', '2026-09-07T10:00:00.000Z', standbyEnd),
+  ];
+  const DAY_OF_SEVEN_HOURS = 420;
+  const WEEK_SPLIT = { workMinutes: 420, breakMinutes: 0, overtimeMinutes: 60 };
+
+  test('give a day with standby past the first step the break, working time and overtime of the week', () => {
+    const closed = workThenStandby('2026-09-07T13:00:00.000Z');
+    const [weekDay] = buildWeeklyTimeData(weekEntriesOf(closed), MONDAY, STANDBY_POLICY, [
+      mondayTarget(DAY_OF_SEVEN_HOURS),
+    ]);
+
+    expect(weekDay).toMatchObject(WEEK_SPLIT);
+    expect(todaysSplits(closed, STANDBY_POLICY, DAY_OF_SEVEN_HOURS, AFTER_THE_DAY)).toEqual({
+      dashboard: WEEK_SPLIT,
+      mitarbeiter: WEEK_SPLIT,
+    });
+    // The clock state's own split, which the phone keeps offline, has no target.
+    expect(clockTotalsState(canonicalDayTotals(closed, MONDAY, MONDAY_END), STANDBY_POLICY)).toMatchObject({
+      workMinutes: 480,
+      breakMinutes: 0,
+    });
+  });
+
+  test('keep a standby that is still running out of the break steps', () => {
+    const running = workThenStandby(null);
+    const threeHoursOfStandby = Date.parse('2026-09-07T13:00:00.000Z');
+
+    expect(todaysSplits(running, STANDBY_POLICY, DAY_OF_SEVEN_HOURS, threeHoursOfStandby)).toEqual({
+      dashboard: WEEK_SPLIT,
+      mitarbeiter: WEEK_SPLIT,
+    });
+  });
+
+  test('owe no overtime when today’s target is unknown', () => {
+    const tenHours = [segment('work', 'work', '2026-09-07T05:00:00.000Z', '2026-09-07T15:00:00.000Z')];
+    const noOvertime = { workMinutes: 570, breakMinutes: 30, overtimeMinutes: 0 };
+
+    expect(todaysSplits(tenHours, STANDBY_POLICY, undefined, AFTER_THE_DAY)).toEqual({
+      dashboard: noOvertime,
+      mitarbeiter: noOvertime,
+    });
+    expect(clockTotalsState(canonicalDayTotals(tenHours, MONDAY, MONDAY_END), STANDBY_POLICY)).toMatchObject({
+      workMinutes: 570,
+    });
   });
 });
 

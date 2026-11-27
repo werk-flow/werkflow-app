@@ -1,7 +1,7 @@
 import { describe, expect, setSystemTime, test } from 'bun:test';
 
 import {
-  computeBreakdownForSettings,
+  computeDayBreakdown,
   getAutomaticBreakRanges,
   parseBreakPolicyHistory,
   resolveBreakPolicyAtTimestamp,
@@ -29,7 +29,8 @@ const TWO_STEPS: BreakPolicyValues = {
 };
 
 const breakOf = (presenceMinutes: number, policy: BreakPolicyValues) =>
-  computeBreakdownForSettings(presenceMinutes, 0, policy).breakMinutes;
+  computeDayBreakdown({ presenceMinutes, standbyMinutes: 0, trackedBreakMinutes: 0 }, policy, undefined)
+    .breakMinutes;
 
 describe('the automatic break with the nine-hour step', () => {
   test.each([

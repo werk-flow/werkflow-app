@@ -1,33 +1,11 @@
 'use client';
 
-import {
-  calculateBreakMinutes,
-  calculateBreakSessions,
-  deriveCurrentClockState,
-  calculateTotalMinutes,
-} from '@/lib/time-tracking/helpers';
 import { logError } from '@/lib/logging';
-import { calculateWorkSessions } from '@/lib/time-tracking/work-sessions';
+import { memberStatusOf, type MemberStatus } from '@/lib/time-tracking/member-day';
 import { readInBackground, type BackgroundReadFailure } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import {
-  breakPolicyKey,
-  computeBreakdownForSettings,
-  type BreakPolicyValues,
-} from '@/lib/time-tracking/settings';
-import type { GetTimeEntriesParams, GetTimeEntriesResult, TimeEntry } from '@/lib/time-tracking/types';
-
-export type MemberStatus = {
-  status: 'clocked_out' | 'working' | 'on_break';
-  isClockedIn: boolean;
-  isOnBreak: boolean;
-  isPending: boolean;
-  clockInTime: string | null;
-  statusStartedAt: string | null;
-  todayMinutes: number;
-  workMinutes: number;
-  breakMinutes: number;
-};
+import { breakPolicyKey, type BreakPolicyValues } from '@/lib/time-tracking/settings';
+import type { GetTimeEntriesParams, GetTimeEntriesResult } from '@/lib/time-tracking/types';
 
 type MemberStatusMap = Record<string, MemberStatus>;
 
@@ -38,50 +16,6 @@ function fetchTimeEntries(
   signal: AbortSignal,
 ): Promise<GetTimeEntriesResult | BackgroundReadFailure> {
   return readInBackground('time-entries', params, signal);
-}
-
-/** The member's most recent clock-in that still counts: pending included, rejected and pending_delete excluded. */
-function latestClockInEntry(memberEntries: TimeEntry[]): TimeEntry | undefined {
-  return memberEntries
-    .filter((e) => e.entryType === 'clock_in' && e.status !== 'rejected' && e.status !== 'pending_delete')
-    .sort((a, b) => {
-      const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      if (diff !== 0) return diff;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    })[0];
-}
-
-/** One member's status today, from that member's entries of the day. */
-function memberStatusOf(memberEntries: TimeEntry[], breakPolicy: BreakPolicyValues): MemberStatus {
-  const currentState = deriveCurrentClockState(memberEntries);
-  const workSessions = calculateWorkSessions(memberEntries);
-  const breakSessions = calculateBreakSessions(memberEntries);
-  const trackedWorkMinutes = calculateTotalMinutes(workSessions);
-  const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
-  const todayMinutes = trackedWorkMinutes + trackedBreakMinutes;
-  const breakdown = computeBreakdownForSettings(todayMinutes, trackedBreakMinutes, breakPolicy);
-
-  // If clocked in, find the last clock_in timestamp and check if it's pending
-  let clockInTime: string | null = null;
-  let isPending = false;
-
-  if (currentState.isClockedIn) {
-    const clockInEntry = latestClockInEntry(memberEntries);
-    clockInTime = clockInEntry?.timestamp || null;
-    isPending = clockInEntry?.status === 'pending';
-  }
-
-  return {
-    status: currentState.status,
-    isClockedIn: currentState.isClockedIn,
-    isOnBreak: currentState.isOnBreak,
-    isPending,
-    clockInTime,
-    statusStartedAt: currentState.statusStartedAt,
-    todayMinutes,
-    workMinutes: breakdown.workMinutes,
-    breakMinutes: breakdown.breakMinutes,
-  };
 }
 
 interface UseMemberStatusOptions {

@@ -177,7 +177,7 @@ function MitarbeiterDetailWeek() {
   });
   return (
     <section aria-label="Mitarbeiter">
-      <MitarbeiterDetailTimeCards liveTime={liveTime} breakPolicy={RULE_CHANGED_ON_TUESDAY} />
+      <MitarbeiterDetailTimeCards liveTime={liveTime} />
     </section>
   );
 }

@@ -1,7 +1,6 @@
 import { z } from '@/lib/zod';
 
 import type { Database, Json } from '@/lib/supabase/database.types';
-import { computeTimeBreakdown, type TimeBreakdown } from '@/lib/time-tracking/helpers';
 
 export type OrgBreakMode = Database['public']['Enums']['time_tracking_break_mode'];
 
@@ -186,17 +185,49 @@ function automaticBreakMinutes(totalMinutes: number, settings: BreakPolicyValues
   return breakSteps(settings).findLast((step) => totalMinutes >= step.thresholdMinutes)?.durationMinutes ?? 0;
 }
 
-export function computeBreakdownForSettings(
-  totalMinutes: number,
-  trackedBreakMinutes: number,
-  settings: BreakPolicyValues | null | undefined,
-  targetMinutes?: number,
-): TimeBreakdown {
-  if (!settings || settings.breakMode === 'manual') {
-    return computeTimeBreakdown(totalMinutes, trackedBreakMinutes, targetMinutes);
-  }
+export type TimeBreakdown = {
+  workMinutes: number;
+  breakMinutes: number;
+  overtimeMinutes: number;
+};
 
-  return computeTimeBreakdown(totalMinutes, automaticBreakMinutes(totalMinutes, settings), targetMinutes);
+/** The minutes of one person's day that its break rule and target split. */
+export type DayPresence = {
+  /** Everything clocked that day: work, standby and tracked break. */
+  presenceMinutes: number;
+  /** The standby inside the presence: working time, but outside the break steps. */
+  standbyMinutes: number;
+  /** The break the person tracked; it counts under the manual rule only. */
+  trackedBreakMinutes: number;
+};
+
+/**
+ * A day's work, break and overtime, the one split the week and every live
+ * view of today share (docs/features/time-tracking.md, „Break rule“ and
+ * „Targets“). The automatic steps count the presence without standby;
+ * standby is working time, so it counts toward the target and overtime.
+ * Overtime is the work beyond the target; an unknown target (`undefined`)
+ * owes none, never an assumed 8 hours.
+ */
+export function computeDayBreakdown(
+  day: DayPresence,
+  settings: BreakPolicyValues | null | undefined,
+  targetMinutes: number | undefined,
+): TimeBreakdown {
+  const breakMinutes =
+    !settings || settings.breakMode === 'manual'
+      ? day.trackedBreakMinutes
+      : automaticBreakMinutes(day.presenceMinutes - day.standbyMinutes, settings);
+  const presenceMinutes = Math.max(0, day.presenceMinutes);
+  const clampedBreakMinutes = Math.max(0, Math.min(breakMinutes, presenceMinutes));
+  const netWorkMinutes = presenceMinutes - clampedBreakMinutes;
+  const overtimeMinutes =
+    targetMinutes === undefined ? 0 : Math.max(0, netWorkMinutes - Math.max(0, targetMinutes));
+  return {
+    workMinutes: netWorkMinutes - overtimeMinutes,
+    breakMinutes: clampedBreakMinutes,
+    overtimeMinutes,
+  };
 }
 
 export type AutomaticBreakRange = { breakStart: Date; breakEnd: Date };

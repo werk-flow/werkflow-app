@@ -2,19 +2,19 @@
 
 import { useMemo } from 'react';
 import { cn, formatBerlin } from '@/lib/utils';
-import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { sumTargetMinutes, type DailyTarget } from '@/lib/personnel/targets';
 import type { DayData } from '@/hooks/use-weekly-time-data';
-import type { BreakPolicyValues } from '@/lib/time-tracking/settings';
+import type { TimeBreakdown } from '@/lib/time-tracking/settings';
 
 interface WeeklyHoursChartProps {
   weekData: DayData[];
   todayIndex: number;
-  liveTodayMinutes?: number;
-  liveTodayBreakMinutes?: number;
-  /** Today's break rule; without one, today counts as manual breaks. */
-  liveTodayBreakPolicy?: BreakPolicyValues;
+  /**
+   * Today with the running activity, split as the view's own totals show it
+   * (`computeDayBreakdown`): the bar repeats those numbers, never its own.
+   */
+  liveToday?: { presenceMinutes: number; breakdown: TimeBreakdown } | undefined;
   narrowBars?: boolean;
   weekLabel?: { dateRange: string; kw: string };
   /** Monday-first resolved daily targets (P1-04) for the shown week. */
@@ -186,9 +186,7 @@ function WeeklyHoursChartGrid({
 export function WeeklyHoursChart({
   weekData,
   todayIndex,
-  liveTodayMinutes,
-  liveTodayBreakMinutes,
-  liveTodayBreakPolicy,
+  liveToday,
   narrowBars = false,
   weekLabel,
   weekTargets,
@@ -197,18 +195,12 @@ export function WeeklyHoursChart({
   const data = useMemo(() => {
     if (!weekData.length) return [];
     return weekData.map((day, i) => {
-      if (i === todayIndex && liveTodayMinutes !== undefined) {
-        const bd = computeBreakdownForSettings(
-          liveTodayMinutes,
-          liveTodayBreakMinutes ?? 0,
-          liveTodayBreakPolicy,
-          weekTargets?.[i]?.targetMinutes,
-        );
-        return { ...day, ...bd, totalMinutes: liveTodayMinutes };
+      if (i === todayIndex && liveToday) {
+        return { ...day, ...liveToday.breakdown, totalMinutes: liveToday.presenceMinutes };
       }
       return day;
     });
-  }, [weekData, todayIndex, liveTodayBreakMinutes, liveTodayBreakPolicy, liveTodayMinutes, weekTargets]);
+  }, [weekData, todayIndex, liveToday]);
 
   const weeklyTargetMinutes = useMemo(
     () => (weekTargets ? sumTargetMinutes(weekTargets) : null),
