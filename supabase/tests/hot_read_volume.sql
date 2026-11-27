@@ -20,7 +20,8 @@ begin;
 -- Until the rollback, no other session writes these tables, no autovacuum or ANALYZE runs on them,
 -- and a concurrent run of this file waits. Another worktree's writes to them wait about a second.
 lock table public.clients, public.projects, public.jobs, public.job_assignments, public.documents,
-  public.time_entries, public.planning_occurrences, public.maintenance_due_work in share row exclusive mode;
+  public.time_entries, public.planning_occurrences, public.maintenance_due_work,
+  public.time_correction_applications, public.time_correction_application_spans in share row exclusive mode;
 create temp table hot_ids as select gen_random_uuid() run, gen_random_uuid() owner,
   gen_random_uuid() large_org, gen_random_uuid() small_org, gen_random_uuid() large_worker, gen_random_uuid() small_worker;
 grant select on hot_ids to service_role;
@@ -125,8 +126,46 @@ create function pg_temp.seed_maintenance() returns void language sql as $$
     lateral (select (now() at time zone 'Europe/Berlin')::date + case when d<0 then d-6 when d<10 then d-5 else d+20 end as day) due_day
   where (o=1 or d>=0);
 $$;
+-- Approved corrections, each moving one of the worker's days by half an hour: the measured week's
+-- in both organizations, and one for every working day of the year before in the large one. They
+-- bypass the approval's guards as the maintenance rows do, so the seed writes each application's
+-- spans as its insert trigger would (app_private.time_correction_snapshot_spans).
+create function pg_temp.seed_corrections() returns void language plpgsql as $$ begin
+  create temp table hot_corrections on commit drop as
+  select pg_temp.id('correction',o,d) id, pg_temp.org(o) organization_id, record.id record_id, pg_temp.worker(o) worker,
+    md5(pg_temp.id('correction',o,d)::text)||md5(pg_temp.org(o)::text) fingerprint,
+    jsonb_build_object('schemaVersion',1,'facts',jsonb_build_array(
+      jsonb_build_object('factId','in','employeeRecordId',record.id,'userId',pg_temp.worker(o),'entryType','clock_in',
+        'timestamp','2025-11-02T07:00:00Z'::timestamptz+d*interval '1 day'+shift,'jobId',null,'activityKind','work','isManual',true),
+      jsonb_build_object('factId','out','employeeRecordId',record.id,'userId',pg_temp.worker(o),'entryType','clock_out',
+        'timestamp','2025-11-02T15:00:00Z'::timestamptz+d*interval '1 day','jobId',null,'activityKind','work','isManual',true))) snapshot,
+    shift
+  from generate_series(1,2) o, generate_series(0,364) d, (values (interval '0'), (interval '30 minutes')) shifts(shift),
+    lateral (select id from public.employee_records where organization_id=pg_temp.org(o) and user_id=pg_temp.worker(o)) record
+  where extract(isodow from '2025-11-02'::date+d)<6 and (o=1 or d between 337 and 343);
+  insert into public.time_correction_requests(id,organization_id,subject_employee_record_id,subject_user_id,requested_by,kind,
+    status,source_scope_key,reviewed_by,reviewed_at)
+  select id,organization_id,record_id,worker,worker,'edit','approved',fingerprint,owner,now()
+  from hot_ids, hot_corrections where shift = interval '0';
+  insert into public.time_correction_request_revisions(request_id,organization_id,revision,reason,source_fingerprint,
+    before_snapshot,proposed_snapshot,created_by)
+  select before.id,before.organization_id,1,'Arbeitsbeginn',before.fingerprint,before.snapshot,after.snapshot,before.worker
+  from hot_corrections before join hot_corrections after on after.id=before.id and after.shift > before.shift
+  where before.shift = interval '0';
+  insert into public.time_correction_applications(organization_id,request_id,revision,applied_by,operation_id,source_fingerprint,
+    before_snapshot,applied_snapshot,responsibility_snapshot)
+  select before.organization_id,before.id,1,owner,gen_random_uuid(),before.fingerprint,before.snapshot,after.snapshot,'{}'
+  from hot_ids, hot_corrections before join hot_corrections after on after.id=before.id and after.shift > before.shift
+  where before.shift = interval '0';
+  insert into public.time_correction_application_spans(application_id,organization_id,snapshot,user_id,span)
+  select application.id,application.organization_id,spans.snapshot,spans.user_id,spans.span
+  from public.time_correction_applications application
+  cross join lateral app_private.time_correction_snapshot_spans(application.before_snapshot,application.applied_snapshot) spans
+  where application.organization_id in (select large_org from hot_ids union all select small_org from hot_ids);
+end $$;
 set local session_replication_role = replica;
 select pg_temp.seed_maintenance();
+select pg_temp.seed_corrections();
 set local session_replication_role = origin;
 
 -- Per public table: sequential scans, and rows touched so far in this transaction.
@@ -194,6 +233,16 @@ do $$ declare
       format('select public.list_job_entries_page(%%1$L,%%2$L,true,jsonb_build_object(''active'',%L::jsonb))', job_query)),
     'auftraege-employee', jsonb_build_array('{jobs,projects}',
       format('select public.list_job_entries_page(%%1$L,%%3$L,false,jsonb_build_object(''active'',%L::jsonb))', job_query)),
+    -- Zeiterfassung and the Mitarbeiter detail: the approved corrections of the worker's week, read to
+    -- the midnight that closes it (lib/time-tracking/entry-window-projections.ts, readWindowProjections).
+    'zeiterfassung-week-corrections', jsonb_build_array('{time_correction_applications,time_correction_application_spans}',
+      $q$select id from public.read_time_correction_applications(%1$L,array[%3$L]::uuid[],'2026-10-04T22:00:00Z','2026-10-11T22:00:00Z')$q$),
+    -- The clock: the approved corrections of the worker's day (lib/time-tracking/clock-state-actions.ts, readTodaysCorrections).
+    'clock-day-corrections', jsonb_build_array('{time_correction_applications,time_correction_application_spans}',
+      $q$select id from public.read_time_correction_applications(%1$L,array[%3$L]::uuid[],'2026-10-06T22:00:00Z','2026-10-07T21:59:59.999Z')$q$),
+    -- Kalender: the approved corrections of the whole organization's week (getTimeEntries without a person).
+    'kalender-week-corrections', jsonb_build_array('{time_correction_applications,time_correction_application_spans}',
+      $q$select id from public.read_time_correction_applications(%1$L,null,'2026-10-04T22:00:00Z','2026-10-11T22:00:00Z')$q$),
     -- Dokumente: the first page of the library (lib/documents/library-actions.ts).
     'dokumente', jsonb_build_array('{documents}', $q$select public.list_document_page(%1$L,'{"view":"all","sort":"name","page":1,"pageSize":50}')$q$));
   ids hot_ids;

@@ -517,6 +517,8 @@ declare
   v_request jsonb;
   v_application uuid;
   v_sources jsonb;
+  v_signals_before jsonb;
+  v_signals_after jsonb;
 begin
   select id into v_original_employee from public.employee_records
   where organization_id = '22000000-0000-0000-0000-000000000010' and user_id = '22000000-0000-0000-0000-000000000003';
@@ -526,12 +528,37 @@ begin
     'factId', 'reassigned', 'employeeRecordId', v_recipient_employee,
     'userId', '22000000-0000-0000-0000-000000000002', 'entryType', 'clock_in',
     'timestamp', '2026-08-12T06:00:00Z', 'jobId', null, 'activityKind', 'work', 'isManual', true)));
+  -- Each login's signal row as a version: an update writes a new tuple, so its ctid moves even
+  -- when updated_at keeps this transaction's now().
+  select jsonb_object_agg(employee.id, signal.ctid::text) into v_signals_before
+  from public.employee_records employee
+  left join public.employment_target_signals signal on signal.employee_record_id = employee.id
+  where employee.organization_id = '22000000-0000-0000-0000-000000000010' and employee.user_id is not null;
   v_request := public.create_time_correction_request(
     '22000000-0000-0000-0000-000000000010', v_original_employee,
     '22000000-0000-0000-0000-000000000001', gen_random_uuid(), 'add', 'Reassigned owner fixture',
     repeat('8', 64), repeat('9', 64), '{"schemaVersion":1,"facts":[]}', v_snapshot, '[]', pg_temp.timeline_fence());
   select id into v_application from public.time_correction_applications where request_id = (v_request->>'requestId')::uuid;
   if v_application is null then raise exception 'reassignment fixture was not applied'; end if;
+  -- The recipient cannot read the request, so the approval signals them, and only them
+  -- (werk-flow/werkflow-planning#610): the subject hears of the request itself.
+  select jsonb_object_agg(employee.id, signal.ctid::text) into v_signals_after
+  from public.employee_records employee
+  left join public.employment_target_signals signal on signal.employee_record_id = employee.id
+  where employee.organization_id = '22000000-0000-0000-0000-000000000010' and employee.user_id is not null;
+  if v_signals_after->>v_recipient_employee::text is null
+    or v_signals_after->>v_recipient_employee::text is not distinct from v_signals_before->>v_recipient_employee::text
+  then raise exception 'the approval did not signal the person it moved time to'; end if;
+  if (v_signals_after - v_recipient_employee::text) is distinct from (v_signals_before - v_recipient_employee::text)
+  then raise exception 'the approval signalled someone it moved no time to: % before, % after',
+    v_signals_before, v_signals_after; end if;
+  -- The application wrote the recipient's span of the applied snapshot, and the empty original
+  -- snapshot none.
+  if (select array_agg(array[snapshot, user_id::text, span::text]) from public.time_correction_application_spans
+      where application_id = v_application)
+    is distinct from array[array['after', '22000000-0000-0000-0000-000000000002',
+      tstzrange('2026-08-12T06:00:00Z', '2026-08-12T06:00:00Z', '[]')::text]]
+  then raise exception 'the application did not write its spans'; end if;
   v_sources := jsonb_build_array(jsonb_build_object('kind', 'correction_application', 'id', v_application, 'version', repeat('9', 64)));
   v_request := public.create_time_correction_request(
     '22000000-0000-0000-0000-000000000010', v_recipient_employee,
@@ -541,8 +568,44 @@ begin
   if not exists (select 1 from public.read_time_correction_applications(
     '22000000-0000-0000-0000-000000000010', array['22000000-0000-0000-0000-000000000002'::uuid]) where id = v_application)
   then raise exception 'recipient projection omitted reassigned time'; end if;
+  if not exists (select 1 from public.read_time_correction_applications(
+    '22000000-0000-0000-0000-000000000010', array['22000000-0000-0000-0000-000000000002'::uuid],
+    '2026-08-12T06:00:00Z', '2026-08-12T06:00:00Z') where id = v_application)
+  then raise exception 'a window that ends at the fact''s instant omitted it'; end if;
 end;
 $$;
+
+-- Every application of the file holds exactly the spans of its snapshots, so the indexed read finds
+-- what a scan of the snapshots finds. Only the owner executes the private span function.
+reset role;
+do $$
+begin
+  if exists (
+    (select application.id, spans.snapshot, spans.user_id, spans.span
+      from public.time_correction_applications application
+      cross join lateral app_private.time_correction_snapshot_spans(application.before_snapshot, application.applied_snapshot) spans
+      where application.organization_id = '22000000-0000-0000-0000-000000000010'
+    except
+    select application_id, snapshot, user_id, span from public.time_correction_application_spans
+      where organization_id = '22000000-0000-0000-0000-000000000010')
+    union all
+    (select application_id, snapshot, user_id, span from public.time_correction_application_spans
+      where organization_id = '22000000-0000-0000-0000-000000000010'
+    except
+    select application.id, spans.snapshot, spans.user_id, spans.span
+      from public.time_correction_applications application
+      cross join lateral app_private.time_correction_snapshot_spans(application.before_snapshot, application.applied_snapshot) spans
+      where application.organization_id = '22000000-0000-0000-0000-000000000010')
+  ) then raise exception 'an application''s spans differ from its snapshots'; end if;
+  -- The approved deletion names its legacy entry by time only, without a person: the organization's
+  -- window still finds it, so the office's week hides the deleted entry.
+  if not exists (select 1 from public.read_time_correction_applications(
+      '22000000-0000-0000-0000-000000000010', null, '2026-09-01T00:00:00Z', '2026-09-01T23:59:59Z') application
+    where application.before_snapshot @> '{"facts":[{"kind":"legacy_transition"}]}')
+  then raise exception 'the organization''s window lost a fact without a person'; end if;
+end;
+$$;
+set local role service_role;
 
 -- Four eyes for a holder: the admin holds the time approval for everyone
 -- else, yet their own correction stays a request that they cannot approve.

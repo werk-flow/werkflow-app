@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 
+import { hydratedAndSettled } from '../../golden/support/steps/interaction';
 import { confirmed } from '../../golden/support/steps/shared';
 
 // Copy and structure of „Abgeschlossene Wartungsbesuche“ on the Wartung page
@@ -16,6 +17,12 @@ const REPORT_FILED = 'Servicebericht erstellt und beim Auftrag abgelegt.';
 
 /** The Wartung page, which lists every completed visit below its workspace. */
 export const COMPLETED_VISITS_PATH = '/service/wartung';
+
+/** Open the completed visits only after hydration and page reads have settled. */
+export async function openCompletedVisits(page: Page): Promise<void> {
+  await page.goto(COMPLETED_VISITS_PATH);
+  await hydratedAndSettled(page);
+}
 
 /** The completed visit row of a plan, inside its section. */
 export function completedVisitRow(page: Page, planNumber: string): Locator {

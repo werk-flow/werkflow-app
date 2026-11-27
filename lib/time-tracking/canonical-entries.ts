@@ -29,18 +29,27 @@ type CanonicalSegment = {
   segment: TimeSegmentFact;
 };
 
+/**
+ * The entries of the canonical segments, and the employee record each person
+ * of the read holds in the organization now: the records whose segments count,
+ * and the effective records of the correction facts (`keepEffectiveFacts`).
+ */
+type CanonicalEntries = { entries: TimeEntry[]; recordByUser: ReadonlyMap<string, string> };
+
+const NO_CANONICAL_ENTRIES: CanonicalEntries = { entries: [], recordByUser: new Map() };
+
 /** Internal reader. Callers establish organization and employee authorization first. */
 export async function getCanonicalTimeEntries(
   params: CanonicalEntryParams,
-): Promise<ActionResult<{ entries: TimeEntry[] }, 'load_failed'>> {
-  if (params.userIds?.length === 0) return { success: true, entries: [] };
+): Promise<ActionResult<CanonicalEntries, 'load_failed'>> {
+  if (params.userIds?.length === 0) return { success: true, ...NO_CANONICAL_ENTRIES };
   const admin = createSupabaseAdminClient();
   const { data: employees, error: employeeError } = await readCanonicalEmployees(admin, params);
   if (employeeError) {
     logReadFailure('Error fetching employees for canonical time entries:', employeeError);
     return { success: false, error: 'load_failed' };
   }
-  if (!employees.length) return { success: true, entries: [] };
+  if (!employees.length) return { success: true, ...NO_CANONICAL_ENTRIES };
   const userByEmployee = new Map(
     employees.flatMap((employee) =>
       employee.user_id === null ? [] : [[employee.id, employee.user_id] as const],
@@ -69,7 +78,8 @@ export async function getCanonicalTimeEntries(
         to: new Date(params.to),
         now: params.referenceTime ? new Date(params.referenceTime) : new Date(),
       });
-  return { success: true, entries };
+  const recordByUser = new Map([...userByEmployee].map(([record, user]) => [user, record] as const));
+  return { success: true, entries, recordByUser };
 }
 
 function readCanonicalEmployees(admin: AdminClient, params: CanonicalEntryParams) {
