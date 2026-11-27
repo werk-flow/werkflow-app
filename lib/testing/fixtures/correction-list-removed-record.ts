@@ -68,12 +68,18 @@ function addedShift(id: string, employeeRecordId: string, hours: number) {
 const removed = addedShift(removedRequest, removedRecord, 2);
 const current = addedShift(currentRequest, currentRecord, 4);
 
+/** An employee record as the responsibility read embeds its access lifecycle and blockers. */
+const record = (id: string, userId: string | null) => ({
+  id,
+  organization_id: ORGANIZATION_A,
+  user_id: userId,
+  exit_date: null,
+  personnel_access_lifecycles: [],
+  personnel_onboarding_requirements: [],
+});
 const world = installActionWorld({
   // The caller's old record lost its login; they hold a new one.
-  employee_records: [
-    { id: removedRecord, organization_id: ORGANIZATION_A, user_id: null },
-    { id: currentRecord, organization_id: ORGANIZATION_A, user_id: CALLER_ID },
-  ],
+  employee_records: [record(removedRecord, null), record(currentRecord, CALLER_ID)],
   organization_members: [{ organization_id: ORGANIZATION_A, user_id: CALLER_ID, role: 'employee' }],
   time_correction_requests: [removed.request, current.request],
   time_correction_request_revisions: [removed.revision, current.revision],
@@ -112,7 +118,7 @@ for (const role of ['employee', 'admin'] as const) {
 }
 
 // Without a record the person holds now, no request shows.
-world.tables.employee_records = [{ id: removedRecord, organization_id: ORGANIZATION_A, user_id: null }];
+world.tables.employee_records = [record(removedRecord, null)];
 for (const role of ['employee', 'admin'] as const) {
   signInAs(world, role);
   assert.deepEqual(

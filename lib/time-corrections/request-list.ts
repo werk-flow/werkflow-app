@@ -14,7 +14,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { PENDING_CORRECTION_STATUSES } from './pending-projection';
-import { isEffectiveFact, readRecordByUser } from './person-corrections';
+import { isEffectiveFact } from './person-corrections';
 import { TIME_ACTIVITY_LABELS } from '@/lib/time-tracking/types';
 import { formatBerlinTime } from '@/lib/utils';
 import { snapshotSegments } from './snapshot-segments';
@@ -47,13 +47,11 @@ type CallerView = {
   holder: EffectiveResponsibilityHolder | null;
 };
 
-/** What the hydration reads beside the requests: roles, names, revisions and the subjects' records. */
+/** What the hydration reads beside the requests: roles, names and revisions. */
 type RequestDetails = {
   roleByUser: Map<string, OrgRole>;
   nameByUser: Map<string, string | null>;
   revisionByKey: Map<string, RevisionRow>;
-  /** The employee record each subject holds in the organization now. */
-  recordByUser: ReadonlyMap<string, string>;
 };
 
 export async function readCorrectionRequestList(input: {
@@ -66,9 +64,8 @@ export async function readCorrectionRequestList(input: {
   const admin = createSupabaseAdminClient();
   // The holder lookup answers null for "not responsible" and for a failed
   // read alike; a failed read must not hide the requests the caller reviews.
-  if (!(await loadResponsibilityRuntimeState(organizationId))) {
-    return { success: false, error: 'responsibility_load_failed' };
-  }
+  const state = await loadResponsibilityRuntimeState(organizationId);
+  if (!state) return { success: false, error: 'responsibility_load_failed' };
   const holder = await getEffectiveResponsibilityHolderForActor({
     organizationId,
     responsibility: 'time_approval',
@@ -94,10 +91,18 @@ export async function readCorrectionRequestList(input: {
     logReadFailure('getTimeCorrectionRequests: requests failed', error);
     return { success: false, error: 'fetch_failed' };
   }
-  return hydrateCorrectionRequests({ admin, organizationId, callerUserId, callerRole, holder, roots });
+  return hydrateCorrectionRequests({
+    admin,
+    organizationId,
+    callerUserId,
+    callerRole,
+    holder,
+    roots,
+    recordByUser: state.recordByUser,
+  });
 }
 
-/** The roles, names, revisions and subjects' records of the requests; null when a read fails. */
+/** The roles, names and revisions of the requests; null when a read fails. */
 async function readRequestDetails(
   admin: AdminClient,
   organizationId: string,
@@ -105,8 +110,7 @@ async function readRequestDetails(
 ): Promise<RequestDetails | null> {
   const requestIds = roots.map((request) => request.id);
   const userIds = [...new Set(roots.flatMap((request) => [request.requested_by, request.subject_user_id]))];
-  const subjectIds = [...new Set(roots.map((request) => request.subject_user_id))];
-  const [memberships, profiles, revisions, records] = await Promise.all([
+  const [memberships, profiles, revisions] = await Promise.all([
     readInBatches(userIds, (batch) =>
       admin
         .from('organization_members')
@@ -134,14 +138,10 @@ async function readRequestDetails(
         LIST_ROW_CAP,
       ),
     ),
-    readRecordByUser(admin, organizationId, subjectIds).then(
-      (recordByUser) => ({ recordByUser, error: null }),
-      (error: unknown) => ({ recordByUser: null, error }),
-    ),
   ]);
-  const detailError = memberships.error ?? profiles.error ?? revisions.error ?? records.error;
-  if (detailError || !records.recordByUser) {
-    // Without roles, revisions or records the filter below would drop requests silently.
+  const detailError = memberships.error ?? profiles.error ?? revisions.error;
+  if (detailError) {
+    // Without roles or revisions the filter below would drop requests silently.
     logReadFailure('getTimeCorrectionRequests: request details failed', detailError);
     return null;
   }
@@ -156,7 +156,6 @@ async function readRequestDetails(
     revisionByKey: new Map(
       revisions.data.map((revision) => [`${revision.request_id}:${revision.revision}`, revision]),
     ),
-    recordByUser: records.recordByUser,
   };
 }
 
@@ -167,10 +166,10 @@ async function readRequestDetails(
  * correction input boundary"); `list_time_correction_history_page` applies
  * the same rule to the history in the database.
  */
-function hasEffectiveSubject(request: RequestRow, details: RequestDetails): boolean {
+function hasEffectiveSubject(request: RequestRow, recordByUser: ReadonlyMap<string, string>): boolean {
   return isEffectiveFact(
     { userId: request.subject_user_id, employeeRecordId: request.subject_employee_record_id },
-    details.recordByUser,
+    recordByUser,
   );
 }
 
@@ -241,7 +240,13 @@ function toCorrectionRequest(
  * (`hasEffectiveSubject`). A missing or unreadable revision fails the read.
  */
 export async function hydrateCorrectionRequests(
-  input: CallerView & { admin: AdminClient; organizationId: string; roots: RequestRow[] },
+  input: CallerView & {
+    admin: AdminClient;
+    organizationId: string;
+    roots: RequestRow[];
+    /** The employee record each person holds in the organization now (`loadResponsibilityRuntimeState`). */
+    recordByUser: ReadonlyMap<string, string>;
+  },
 ): Promise<TimeCorrectionListResult> {
   const { admin, organizationId, roots } = input;
   if (!roots.length) return { success: true, requests: [] };
@@ -249,7 +254,7 @@ export async function hydrateCorrectionRequests(
   if (!details) return { success: false, error: 'fetch_failed' };
   const visible = roots.filter(
     (request) =>
-      hasEffectiveSubject(request, details) &&
+      hasEffectiveSubject(request, input.recordByUser) &&
       (input.callerRole !== 'employee' ||
         request.requested_by === input.callerUserId ||
         request.subject_user_id === input.callerUserId ||

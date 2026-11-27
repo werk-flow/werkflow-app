@@ -39,6 +39,8 @@ export type ResponsibilityRuntimeState = {
 type ResponsibilityRuntimeAccessState = ResponsibilityRuntimeState & {
   accessEvaluatedAt: number;
   accessSchedulesByRecordId: ReadonlyMap<string, string | null>;
+  /** The employee record each login holds in the organization now, member or not. */
+  recordByUser: ReadonlyMap<string, string>;
 };
 
 /**
@@ -126,6 +128,11 @@ export const loadResponsibilityRuntimeState = memoizeRequestRead(
           record.id,
           record.personnel_access_lifecycles[0]?.scheduled_for ?? null,
         ]),
+      ),
+      recordByUser: new Map(
+        rows.employeeRecords.flatMap((record) =>
+          record.user_id ? [[record.user_id, record.id] as const] : [],
+        ),
       ),
       members,
       people: people.toSorted((left, right) => {
