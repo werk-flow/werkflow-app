@@ -4,8 +4,16 @@ import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { ESLint } from 'eslint';
 import { z } from 'zod';
-import { BROAD_LINT_FILES, heavyCommandRefusal, lintedFileCount, withHeavyNodeHeap } from './heavy-command';
+import {
+  BROAD_LINT_FILES,
+  heavyCommandRefusal,
+  lintedFileCount,
+  lintRuns,
+  WHOLE_LINT_PARTS,
+  withHeavyNodeHeap,
+} from './heavy-command';
 import { temporaryDirectory } from '../temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
@@ -190,7 +198,58 @@ test('lint and build fix their Node heap instead of inheriting the machine defau
     expect([
       script,
       readFileSync(resolve(repositoryRoot, script), 'utf8').includes(
-        'withHeavyNodeHeap(process.env.NODE_OPTIONS)',
+        'withHeavyNodeHeap(process.env.NODE_OPTIONS',
       ),
     ]).toEqual([script, true]);
+});
+
+// One type-aware eslint process over the whole repository reached 3.8 GiB live of its 4 GiB heap.
+test('a whole-repository lint runs in parts under a lower heap ceiling; any other lint runs once', () => {
+  const whole = lintRuns(['--fix']);
+  expect(whole.heapMb).toBe(3072);
+  expect(whole.runs.length).toBe(WHOLE_LINT_PARTS.length);
+  expect(whole.runs[0]).toEqual(['--fix', 'lib', '--ignore-pattern', 'lib/[n-z]*']);
+  expect(lintRuns([]).runs.length).toBe(WHOLE_LINT_PARTS.length);
+  // A formatter, an output file, a warning limit, own ignores or stdin keep eslint's one-run meaning.
+  for (const args of [['components'], ['-f', 'json'], ['--max-warnings', '5'], ['--no-ignore'], ['--stdin']])
+    expect([args, lintRuns(args)]).toEqual([args, { runs: [args], heapMb: 4096 }]);
+});
+
+test('every path falls into exactly one part of a whole-repository lint', async () => {
+  const parts = await Promise.all(
+    WHOLE_LINT_PARTS.map(async ({ paths, ignores }) => {
+      const eslint = new ESLint({
+        cwd: repositoryRoot,
+        // No configuration file: only the part's ignore patterns decide.
+        overrideConfigFile: true,
+        overrideConfig: { files: ['**/*.ts'] },
+        ignorePatterns: [...ignores],
+      });
+      return async (path: string) =>
+        paths.some((root) => root === '.' || path.startsWith(`${root}/`)) &&
+        !(await eslint.isPathIgnored(path));
+    }),
+  );
+  const paths = [
+    'lib/ai/model.ts',
+    'lib/m-last.ts',
+    'lib/n-first/index.ts',
+    'lib/time-tracking/helpers.ts',
+    'lib/testing/runner/heavy-command.ts',
+    'lib/_example.ts',
+    'lib/2fa/login.ts',
+    'lib/API/index.ts',
+    'tests/golden/start.spec.ts',
+    'components/lib/shared.ts',
+    'components/tests/shared.ts',
+    'scripts/lint.ts',
+    'proxy.ts',
+  ];
+  const owners = await Promise.all(
+    paths.map(async (path) => [
+      path,
+      (await Promise.all(parts.map((inPart) => inPart(path)))).filter(Boolean).length,
+    ]),
+  );
+  expect(owners).toEqual(paths.map((path) => [path, 1]));
 });
