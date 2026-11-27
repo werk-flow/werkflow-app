@@ -4,7 +4,6 @@ import { KI_LIVE_PROTOCOL, type KiLiveEvent } from '@/lib/ai/live/events';
 import {
   applyKiLiveEvents,
   fresherMessage,
-  isChatMessage,
   kiLiveCursor,
   kiLiveGapFillable,
   mergeNewer,
@@ -65,7 +64,7 @@ function applyKiLiveEvent(
 }
 const answerOf = (window: AiThreadWindow): AiChatMessage | undefined =>
   window.messages.find(
-    (entry): entry is AiChatMessage => entry.key === `${command}:assistant` && isChatMessage(entry),
+    (entry): entry is AiChatMessage => entry.key === `${command}:assistant` && entry.role === 'assistant',
   );
 
 test('a started turn adds the message and an empty answer in sequence order, once', () => {

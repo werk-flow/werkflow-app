@@ -10,7 +10,7 @@ const userKey = (command: string): string => `${command}:user`;
 const answerKey = (command: string): string => `${command}:assistant`;
 
 /** Whether an entry is a message, as opposed to a row of the agent's work. */
-export function isChatMessage(entry: AiThreadEntry): entry is AiChatMessage {
+function isChatMessage(entry: AiThreadEntry): entry is AiChatMessage {
   return entry.role === 'user' || entry.role === 'assistant';
 }
 
