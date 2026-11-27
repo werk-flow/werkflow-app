@@ -1612,7 +1612,10 @@ const eslintConfig = defineConfig([
   {
     files: ['components/ki/use-ki-live.ts'],
     rules: {
-      'no-restricted-syntax': productRestrictions({ jsx: true, allow: [channelSelector, visibilitySelector] }),
+      'no-restricted-syntax': productRestrictions({
+        jsx: true,
+        allow: [channelSelector, visibilitySelector],
+      }),
     },
   },
   // Deliberate exception: the recovery form must react to PASSWORD_RECOVERY.

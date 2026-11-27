@@ -20,8 +20,22 @@ const started: KiLiveEvent = {
   user: { sequence: 3, text: 'Wie entlüfte ich?' },
   answer: { sequence: 4 },
 };
-const text = (at: number, delta: string, saved = 0): KiLiveEvent => ({ v, type: 'text', command, at, delta, saved });
-const end = (length: number): KiLiveEvent => ({ v, type: 'end', command, status: 'complete', failure: null, length });
+const text = (at: number, delta: string, saved = 0): KiLiveEvent => ({
+  v,
+  type: 'text',
+  command,
+  at,
+  delta,
+  saved,
+});
+const end = (length: number): KiLiveEvent => ({
+  v,
+  type: 'end',
+  command,
+  status: 'complete',
+  failure: null,
+  length,
+});
 
 const message = (key: string, sequence: number, patch: Partial<AiChatMessage> = {}): AiChatMessage => ({
   key,
@@ -34,7 +48,10 @@ const message = (key: string, sequence: number, patch: Partial<AiChatMessage> = 
 });
 const earlier: AiThreadWindow = {
   hasOlder: false,
-  messages: [message('c0:user', 1, { role: 'user', text: 'Hallo' }), message('c0:assistant', 2, { text: 'Hi' })],
+  messages: [
+    message('c0:user', 1, { role: 'user', text: 'Hallo' }),
+    message('c0:assistant', 2, { text: 'Hi' }),
+  ],
 };
 const answerOf = (window: AiThreadWindow): AiChatMessage | undefined =>
   window.messages.find((entry) => entry.key === `${command}:assistant`);
@@ -78,10 +95,14 @@ test('text past a gap is not applied, and a read from the cursor lets it apply',
 test('an end applies only when the page holds the whole answer; otherwise the saved answer is read', () => {
   let window = applyKiLiveEvent(earlier, started).window;
   window = applyKiLiveEvent(window, text(0, 'Fertig.')).window;
-  expect(applyKiLiveEvent(window, end(12)).applied, 'an end with text the page missed must be read').toBe(false);
+  expect(applyKiLiveEvent(window, end(12)).applied, 'an end with text the page missed must be read').toBe(
+    false,
+  );
   const ended = applyKiLiveEvent(window, end(7)).window;
   expect(answerOf(ended)?.status).toBe('complete');
-  expect(applyKiLiveEvent(ended, text(7, ' Noch was')).window, 'a finished answer takes no more text').toBe(ended);
+  expect(applyKiLiveEvent(ended, text(7, ' Noch was')).window, 'a finished answer takes no more text').toBe(
+    ended,
+  );
 });
 
 test('text for an answer the page never saw waits for a read', () => {
@@ -105,14 +126,20 @@ test('the cursor starts at the first answer still being written, else after the 
 });
 
 test('a catch-up keeps every message the page holds and adds the newer ones', () => {
-  const merged = mergeNewer(earlier, { hasOlder: false, messages: [message('c1:user', 3, { role: 'user' })] });
+  const merged = mergeNewer(earlier, {
+    hasOlder: false,
+    messages: [message('c1:user', 3, { role: 'user' })],
+  });
   expect(merged.messages.map((entry) => entry.key)).toEqual(['c0:user', 'c0:assistant', 'c1:user']);
   expect(mergeNewer(earlier, { hasOlder: false, messages: [] }).messages).toEqual(earlier.messages);
 });
 
 test('a gap is read only once the partial save covers it, and an end is read at once', () => {
   expect(kiLiveGapFillable([])).toBe(false);
-  expect(kiLiveGapFillable([text(40, 'x', 20), text(41, 'y', 30)]), 'a save short of the gap cannot fill it').toBe(false);
+  expect(
+    kiLiveGapFillable([text(40, 'x', 20), text(41, 'y', 30)]),
+    'a save short of the gap cannot fill it',
+  ).toBe(false);
   expect(kiLiveGapFillable([text(40, 'x', 20), text(41, 'y', 41)])).toBe(true);
   expect(kiLiveGapFillable([text(40, 'x', 20), end(42)])).toBe(true);
 });

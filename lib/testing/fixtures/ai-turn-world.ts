@@ -80,14 +80,17 @@ export async function installAiTurnWorld(): Promise<AiTurnWorld> {
 }
 
 const liveSendSchema = z.object({
-  messages: z.array(z.object({ topic: z.string(), event: z.literal('ki'), payload: z.unknown(), private: z.literal(true) })),
+  messages: z.array(
+    z.object({ topic: z.string(), event: z.literal('ki'), payload: z.unknown(), private: z.literal(true) }),
+  ),
 });
 
 /** Realtime's REST broadcast, answered in the process: each send is kept, and every other request fails. */
 function installLiveChannel(world: AiTurnWorld): void {
   const live = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(input instanceof Request ? input.url : input.toString());
-    if (url.pathname !== '/realtime/v1/api/broadcast') throw new Error(`fetch outside this fixture: ${url.host}`);
+    if (url.pathname !== '/realtime/v1/api/broadcast')
+      throw new Error(`fetch outside this fixture: ${url.host}`);
     const { messages } = liveSendSchema.parse(JSON.parse(String(init?.body)));
     const topics = new Set(messages.map((message) => message.topic));
     if (topics.size !== 1) throw new Error('one live send carries one topic');

@@ -11,7 +11,12 @@ import { resolve } from 'node:path';
 import { z } from '@/lib/zod';
 
 type Metric = 'bytes' | 'rows' | 'messages';
-type Flow = 'thread open' | 'live turn, sending tab' | 'live turn, other tab' | 'resume after reload' | 'idle reconnect';
+type Flow =
+  | 'thread open'
+  | 'live turn, sending tab'
+  | 'live turn, other tab'
+  | 'resume after reload'
+  | 'idle reconnect';
 
 /**
  * Measured at the commit that set the ceilings, on the fixture's thread: 60 turns, 40 shown, and
@@ -39,11 +44,14 @@ const measureSchema = z.object({ bytes: z.number(), rows: z.number(), messages: 
 const reportSchema = z.record(z.string(), measureSchema);
 
 async function measure(): Promise<z.infer<typeof reportSchema>> {
-  const child = Bun.spawn([process.execPath, resolve(import.meta.dir, '../../testing/fixtures/ki-transfer-budget.ts')], {
-    cwd: resolve(import.meta.dir, '../../..'),
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
+  const child = Bun.spawn(
+    [process.execPath, resolve(import.meta.dir, '../../testing/fixtures/ki-transfer-budget.ts')],
+    {
+      cwd: resolve(import.meta.dir, '../../..'),
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  );
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),

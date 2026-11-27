@@ -526,7 +526,13 @@ test('a turn of another tab streams into the thread on screen, and only the show
     .toEqual([expect.objectContaining({ threadId: THREAD_A, afterSequence: 3 })]);
 
   const v = KI_LIVE_PROTOCOL;
-  await liveEmit(page, { v, type: 'started', command: 'x', user: { sequence: 3, text: 'Und Fittinge?' }, answer: { sequence: 4 } });
+  await liveEmit(page, {
+    v,
+    type: 'started',
+    command: 'x',
+    user: { sequence: 3, text: 'Und Fittinge?' },
+    answer: { sequence: 4 },
+  });
   await expect(timeline(page).getByText('Und Fittinge?', { exact: true })).toBeVisible();
   await liveEmit(page, { v, type: 'text', command: 'x', at: 0, delta: 'Vier ', saved: 0 });
   await liveEmit(page, { v, type: 'text', command: 'x', at: 5, delta: 'Stück.', saved: 5 });

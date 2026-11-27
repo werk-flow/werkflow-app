@@ -76,7 +76,11 @@ export async function POST(
 
     const stream = createTurnEventStream();
     stream.send({ type: 'started', userItem: start.userItem, assistantItem: start.assistantItem });
-    const live = createKiLiveBroadcast({ threadId: threadId.data, commandId: parsed.data.commandId, entryPoint: 'chat' });
+    const live = createKiLiveBroadcast({
+      threadId: threadId.data,
+      commandId: parsed.data.commandId,
+      entryPoint: 'chat',
+    });
     live.start({
       type: 'started',
       command: parsed.data.commandId,

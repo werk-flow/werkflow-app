@@ -60,17 +60,22 @@ function seedHeavyThread(): void {
  * client receives. The stand-in database keeps table order
  * (in-memory-admin.ts), so the items stand in the order the read's query asks for.
  */
-async function readWindow(input: { afterSequence?: number } = {}): Promise<{ window: AiThreadWindow; bytes: number }> {
+async function readWindow(
+  input: { afterSequence?: number } = {},
+): Promise<{ window: AiThreadWindow; bytes: number }> {
   const ascending = input.afterSequence !== undefined;
   tableRows(world, 'ai_thread_items').sort((left, right) =>
-    ascending ? Number(left.sequence) - Number(right.sequence) : Number(right.sequence) - Number(left.sequence),
+    ascending
+      ? Number(left.sequence) - Number(right.sequence)
+      : Number(right.sequence) - Number(left.sequence),
   );
   const result = await getAiThreadWindow({ organizationId, threadId: THREAD_ID, ...input });
   assert.ok(result.success, 'the author reads their thread');
   return { window: result.window, bytes: bytesOf(result) };
 }
 
-const parseEvents = (events: unknown[]): KiLiveEvent[] => events.map((event) => kiLiveEventSchema.parse(event));
+const parseEvents = (events: unknown[]): KiLiveEvent[] =>
+  events.map((event) => kiLiveEventSchema.parse(event));
 
 type FollowingTab = { window: AiThreadWindow; held: KiLiveEvent[]; measure: Measure };
 
@@ -163,7 +168,9 @@ assert.ok(opened.window.messages.length <= 40, 'a thread opens with at most 40 m
     }
     if (reload.tab) await reload.tab.receive(parseEvents(events));
   };
-  const response = await postTurn('[replay:langsam] Und wenn der Druck wieder fällt?', { commandId: command });
+  const response = await postTurn('[replay:langsam] Und wenn der Druck wieder fällt?', {
+    commandId: command,
+  });
   await readTurn(world, response);
   world.onLiveSend = null;
   const resumed = reload.tab;
@@ -179,7 +186,11 @@ assert.ok(opened.window.messages.length <= 40, 'a thread opens with at most 40 m
   // An idle reconnect: the catch-up from the cursor finds nothing new.
   const idle = follower(resumed.tab.window);
   await idle.catchUp();
-  assert.equal(idle.tab.window.messages.length, resumed.tab.window.messages.length, 'an idle reconnect adds nothing');
+  assert.equal(
+    idle.tab.window.messages.length,
+    resumed.tab.window.messages.length,
+    'an idle reconnect adds nothing',
+  );
   measured['idle reconnect'] = idle.tab.measure;
 }
 

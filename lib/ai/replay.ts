@@ -71,7 +71,10 @@ const answer: ReplayAttempt = () => [
 
 /** Steps of an answer that is still being written: one part every PACED_PART_MS. */
 const slowSteps = (count: number): string[] =>
-  Array.from({ length: count }, (_, index) => `Schritt ${index + 1}: Druck am Manometer prüfen und notieren. `);
+  Array.from(
+    { length: count },
+    (_, index) => `Schritt ${index + 1}: Druck am Manometer prüfen und notieren. `,
+  );
 
 const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
   antwort: [answer],
@@ -216,7 +219,11 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
 const PACED_PART_MS: Readonly<Record<string, number>> = { langsam: 25, 'sehr-langsam': 100 };
 
 /** The parts as a stream; a paced one waits between parts and stops when the request is aborted. */
-function replayStream(parts: StreamPart[], paceMs: number, signal: AbortSignal | undefined): ReadableStream<StreamPart> {
+function replayStream(
+  parts: StreamPart[],
+  paceMs: number,
+  signal: AbortSignal | undefined,
+): ReadableStream<StreamPart> {
   if (paceMs === 0)
     return new ReadableStream<StreamPart>({
       start(controller) {

@@ -87,7 +87,9 @@ export function applyKiLiveEvent(
         text: '',
         failure: null,
       });
-    return added.length === 0 ? unchanged : { window: withMessages(window, [...window.messages, ...added]), applied: true };
+    return added.length === 0
+      ? unchanged
+      : { window: withMessages(window, [...window.messages, ...added]), applied: true };
   }
   const answer = window.messages.find((message) => message.key === answerKey(event.command));
   if (!answer) return { window, applied: false };
@@ -123,6 +125,9 @@ export function kiLiveGapFillable(held: readonly KiLiveEvent[]): boolean {
   return first.type === 'text' && latest?.type === 'text' && latest.saved >= first.at;
 }
 
+/** Events a tab holds while it waits to fill a gap: about two minutes of a fast answer. */
+const KI_LIVE_HELD_EVENTS = 500;
+
 /** Applies held events in order; the ones the window cannot take yet stay held, at most `KI_LIVE_HELD_EVENTS`. */
 export function applyKiLiveEvents(
   window: AiThreadWindow,
@@ -137,6 +142,3 @@ export function applyKiLiveEvents(
   }
   return { window: current, held: held.slice(-KI_LIVE_HELD_EVENTS) };
 }
-
-/** Events a tab holds while it waits to fill a gap: about two minutes of a fast answer. */
-export const KI_LIVE_HELD_EVENTS = 500;

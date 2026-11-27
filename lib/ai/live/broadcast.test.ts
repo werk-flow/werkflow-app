@@ -37,7 +37,11 @@ function heldSend() {
 }
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
-const input = { threadId: '40000000-0000-4000-8000-000000000001', commandId: 'c1', entryPoint: 'chat' } as const;
+const input = {
+  threadId: '40000000-0000-4000-8000-000000000001',
+  commandId: 'c1',
+  entryPoint: 'chat',
+} as const;
 const started = {
   type: 'started',
   command: 'c1',
@@ -59,7 +63,9 @@ test('a turn sends its start, then its text batched per interval with its offset
   clock.runDue();
   live.sink.saved(3);
   live.sink.text(' Welt');
-  expect(network.calls[1]?.events).toEqual([{ v: 1, type: 'text', command: 'c1', at: 0, delta: 'Hallo', saved: 0 }]);
+  expect(network.calls[1]?.events).toEqual([
+    { v: 1, type: 'text', command: 'c1', at: 0, delta: 'Hallo', saved: 0 },
+  ]);
   network.calls[1]?.answer(true);
   const ended = live.end({ status: 'complete' });
   await flush();
@@ -87,9 +93,9 @@ test('text that waits for a slow send joins one later message instead of a queue
   network.calls[0]?.answer(true);
   await flush();
   clock.runDue();
-  expect(network.calls[1]?.events.map((event) => (event.type === 'text' ? event.delta : event.type))).toEqual([
-    'abc',
-  ]);
+  expect(network.calls[1]?.events.map((event) => (event.type === 'text' ? event.delta : event.type))).toEqual(
+    ['abc'],
+  );
 });
 
 test('a failed send is logged once per turn and the end still goes out', async () => {
