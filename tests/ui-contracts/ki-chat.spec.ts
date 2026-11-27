@@ -174,6 +174,25 @@ test('a message refused before its thread exists goes back into the composer wit
   expect(edited?.commandId).not.toBe(calls[0]?.commandId);
 });
 
+test('a message refused as a command conflict goes again as a new command in its thread', async ({
+  page,
+}) => {
+  await openChat(page);
+  await threadLink(page, 'Material für die Heizung').click();
+  await composer(page).fill('Wie viel Rohr?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  await page.evaluate(() =>
+    window.uiContractKiTurn.resolve?.({ kind: 'refused', message: 'Schick sie noch einmal.', spent: true }),
+  );
+  await expect(composer(page)).toHaveValue('Wie viel Rohr?');
+
+  // The refused command can never run, so sending the message again unchanged must not repeat it.
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  const calls = await page.evaluate(() => window.uiContractKiTurn.calls);
+  expect(calls[1]?.threadId).toBe(THREAD_A);
+  expect(calls[1]?.commandId, 'a spent command must not be sent again').not.toBe(calls[0]?.commandId);
+});
+
 test('an empty message marks the composer and focuses it', async ({ page }) => {
   await openChat(page);
   await page.getByRole('button', { name: 'Senden', exact: true }).click();

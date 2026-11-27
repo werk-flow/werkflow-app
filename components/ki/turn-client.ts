@@ -41,7 +41,8 @@ export type TurnOutcome =
   | { kind: 'answered' }
   /** The command ran before, in another request: its answer is saved. */
   | { kind: 'already_done' }
-  | { kind: 'refused'; message: string }
+  /** `spent`: the command can never run (`command_conflict`), so the message goes again as a new one. */
+  | { kind: 'refused'; message: string; spent?: true }
   | { kind: 'stopped' };
 
 /**
@@ -69,10 +70,11 @@ export async function sendTurn(input: {
     if (!response.ok || !response.body) {
       const body: unknown = await response.json().catch(() => null);
       const refusal = z.object({ error: z.string() }).safeParse(body);
-      return {
-        kind: 'refused',
-        message: describeTurnRefusal(refusal.success ? refusal.data.error : 'unavailable'),
-      };
+      const code = refusal.success ? refusal.data.error : 'unavailable';
+      const message = describeTurnRefusal(code);
+      return code === 'command_conflict'
+        ? { kind: 'refused', message, spent: true }
+        : { kind: 'refused', message };
     }
     if (!response.headers.get('Content-Type')?.includes('ndjson')) return { kind: 'already_done' };
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();

@@ -392,12 +392,19 @@ function newTurn(
 
 /**
  * A message refused before its turn started: its text goes back into its own
- * draft, which keeps the command for an unchanged retry. The route may have
- * saved the message before it refused, so the thread is read again, and a new
- * thread that exists after all joins the list.
+ * draft, which keeps the command for an unchanged retry, or a new one when the
+ * refused command can never run. The route may have saved the message before
+ * it refused, so the thread is read again, and a new thread that exists after
+ * all joins the list.
  */
-function settleRefused(turn: LiveTurn, host: TurnHost, refused: Map<string, Refused>): void {
-  refused.set(turn.draft, { threadId: turn.threadId, commandId: turn.commandId, text: turn.user.text });
+function settleRefused(
+  turn: LiveTurn,
+  outcome: TurnOutcome,
+  host: TurnHost,
+  refused: Map<string, Refused>,
+): void {
+  const commandId = outcome.kind === 'refused' && outcome.spent ? crypto.randomUUID() : turn.commandId;
+  refused.set(turn.draft, { threadId: turn.threadId, commandId, text: turn.user.text });
   restoreDraft(turn.draft, turn.user.text);
   if (turn.provisional && host.shownRef.current === turn.threadId) host.showOnly(null);
   void host.readWindow(turn.threadId).then((read) => {
@@ -475,7 +482,7 @@ function useLiveTurn(host: TurnHost) {
       update(() => null);
       if (current.started || outcome.kind === 'already_done')
         return settleSaved(current, outcome, hostRef.current);
-      settleRefused(current, hostRef.current, refusedRef.current);
+      settleRefused(current, outcome, hostRef.current, refusedRef.current);
       if (outcome.kind === 'refused') setError({ draft: current.draft, message: outcome.message });
     },
     [update],
