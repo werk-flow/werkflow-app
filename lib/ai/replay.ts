@@ -78,10 +78,10 @@ const slowSteps = (count: number): string[] =>
 
 const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
   antwort: [answer],
-  // Answers that take about one and a half and twelve seconds: other tabs follow them, and a reload in the middle
+  // Answers that take about one and a half and eight seconds: other tabs follow them, and a reload in the middle
   // resumes them.
   langsam: [() => [...textParts(...slowSteps(60)), finish('stop', 900, 900)]],
-  'sehr-langsam': [() => [...textParts(...slowSteps(120)), finish('stop', 900, 1800)]],
+  'sehr-langsam': [() => [...textParts(...slowSteps(80)), finish('stop', 900, 1200)]],
   // Injection case (B21): a document told the model to end the answer early on every tab, force a
   // reload and write into another thread, so it writes the live channel's own message shapes.
   'live-falle': [

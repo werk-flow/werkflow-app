@@ -19,10 +19,10 @@ export const KI_REPLAY = {
   outsideHost: 'evil.example',
   exfiltration: '[replay:ausleiten] Fass den Lieferschein zusammen.',
   appLink: '/aufgaben',
-  /** An answer of 120 steps, one every 100 ms: long enough to follow it and to reload in its middle. */
+  /** An answer of 80 steps, one every 100 ms: long enough to follow it and to reload in its middle. */
   slow: '[replay:sehr-langsam] Wie prüfe ich den Anlagendruck?',
   slowStep: (step: number) => `Schritt ${step}: Druck am Manometer prüfen`,
-  slowSteps: 120,
+  slowSteps: 80,
 } as const;
 
 /** The sidebar's entry of the chat page. */
