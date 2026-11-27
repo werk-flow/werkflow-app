@@ -96,6 +96,28 @@ test("a clock-out during the job's break ends the job's day", () => {
   expect(jobIntervalEntries(day, jobX, NOW).map((jobEntry) => jobEntry.id)).toEqual(['in', 'pause', 'out']);
 });
 
+test('a clock-out without a job id at midnight closes the job time of the day before', () => {
+  const night = [
+    entry('in', 'clock_in', '2026-09-16T22:00', jobX),
+    entry('out', 'clock_out', '2026-09-17T00:00', null),
+  ];
+  // The Verlauf shows one closed activity on its start's day, as the week counts it.
+  expect(activityDays(night, NOW).map((day) => day.date)).toEqual(['2026-09-16']);
+  expect(activities(night).map((interval) => [interval.state, intervalDurationLabel(interval)])).toEqual([
+    ['closed', '2 Std.'],
+  ]);
+  // The job's own view keeps the closing clock-out with its start.
+  expect(jobIntervalEntries(night, jobX, NOW).map((jobEntry) => jobEntry.id)).toEqual(['in', 'out']);
+  // A minute past midnight is a real gap: the start lacks its end.
+  const late = [night[0], entry('late-out', 'clock_out', '2026-09-17T00:01', null)].flatMap((item) =>
+    item ? [item] : [],
+  );
+  expect(activities(late).map((interval) => intervalDurationLabel(interval))).toEqual([
+    'Ende fehlt',
+    'Beginn fehlt',
+  ]);
+});
+
 test('only an open start of today runs; an open start of an earlier day lacks its end', () => {
   const intervals = activities([
     entry('yesterday', 'clock_in', '2026-09-17T06:57', jobX),

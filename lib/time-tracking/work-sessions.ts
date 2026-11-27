@@ -41,6 +41,26 @@ export function entryLocalDate(entry: Pick<TimeEntry, 'entryType' | 'timestamp'>
   return formatBerlinLocalDate(new Date(entry.entryType === 'clock_out' ? instant - 1 : instant));
 }
 
+/**
+ * The instant a read of a window has to reach: a window that ends on a Berlin
+ * day's last instant also holds the clock-out at the next midnight that
+ * closes that day.
+ */
+export function windowReadEnd(toMs: number): number {
+  const endsADay = formatBerlinLocalDate(new Date(toMs)) !== formatBerlinLocalDate(new Date(toMs + 1));
+  return endsADay ? toMs + 1 : toMs;
+}
+
+/** Whether an entry belongs to a window: inside it, or its last day's closing clock-out (`windowReadEnd`). */
+export function isInEntryWindow(
+  entry: Pick<TimeEntry, 'entryType' | 'timestamp'>,
+  window: { fromMs: number; toMs: number },
+): boolean {
+  const instant = Date.parse(entry.timestamp);
+  if (instant >= window.fromMs && instant <= window.toMs) return true;
+  return entry.entryType === 'clock_out' && instant > window.toMs && instant === windowReadEnd(window.toMs);
+}
+
 /** Whether an end counts on the same Berlin day as the start it would close. */
 function closesOnStartDay(start: TimeEntry, end: TimeEntry): boolean {
   return entryLocalDate(start) === entryLocalDate(end);
@@ -104,7 +124,8 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
       }
       currentWorkStart = entry;
     } else if (entry.entryType === 'clock_out' || entry.entryType === 'break_start') {
-      if (currentWorkStart && closesOnStartDay(currentWorkStart, entry)) {
+      // A start of another day was left unpaired above.
+      if (currentWorkStart) {
         const startTime = new Date(currentWorkStart.timestamp).getTime();
         const endTime = new Date(entry.timestamp).getTime();
         const durationMinutes = (endTime - startTime) / 60000;
@@ -119,24 +140,17 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
           pendingState: determinePendingState(currentWorkStart, entry),
         });
         currentWorkStart = null;
-      } else {
-        if (currentWorkStart) {
-          pushUnpairedWorkStart(currentWorkStart);
-          currentWorkStart = null;
-        }
-
-        if (entry.entryType === 'clock_out') {
-          sessions.push({
-            clockIn: null,
-            clockOut: entry,
-            durationMinutes: null,
-            jobId: entry.jobId,
-            startEntryType: null,
-            endEntryType: 'clock_out',
-            isOrphan: true,
-            pendingState: determinePendingState(null, entry),
-          });
-        }
+      } else if (entry.entryType === 'clock_out') {
+        sessions.push({
+          clockIn: null,
+          clockOut: entry,
+          durationMinutes: null,
+          jobId: entry.jobId,
+          startEntryType: null,
+          endEntryType: 'clock_out',
+          isOrphan: true,
+          pendingState: determinePendingState(null, entry),
+        });
       }
     }
   }

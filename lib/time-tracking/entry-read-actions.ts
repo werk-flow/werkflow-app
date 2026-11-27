@@ -25,7 +25,8 @@ import {
 import { canViewEntries } from './helpers';
 import { jobIntervalEntries } from './activity-intervals';
 import { uuidSchema } from '@/lib/validation/uuid';
-import { formatBerlinLocalDate, getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
+import { getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
+import { entryLocalDate, windowReadEnd } from './work-sessions';
 import { getCanonicalTimeEntries } from './canonical-entries';
 import { readWindowProjections } from './entry-window-projections';
 import type { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/actions';
@@ -136,6 +137,8 @@ export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<G
     }
     const normalizedFrom = new Date(fromTimestamp).toISOString();
     const normalizedTo = new Date(toTimestamp).toISOString();
+    // The read reaches the clock-out that closes the window's last day at the next midnight.
+    const readTo = new Date(windowReadEnd(toTimestamp)).toISOString();
 
     const callerRole = await verifyCurrentMembership(organizationId);
     if (!callerRole) {
@@ -153,7 +156,7 @@ export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<G
       .select('*')
       .eq('organization_id', organizationId)
       .gte('timestamp', normalizedFrom)
-      .lte('timestamp', normalizedTo)
+      .lte('timestamp', readTo)
       .order('timestamp', { ascending: true })
       .order('created_at', { ascending: true })
       .order('id');
@@ -173,6 +176,7 @@ export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<G
         organizationId,
         from: normalizedFrom,
         to: normalizedTo,
+        canonicalTo: readTo,
         status,
         subjectUserId: userId ?? (callerRole === 'employee' ? user.id : undefined),
         effectiveUserId,
@@ -241,9 +245,9 @@ async function loadJobParticipants(
   }));
 }
 
-/** The key of one person's local day in one organization. */
+/** The key of one person's local day in one organization, the day a midnight clock-out closes included. */
 function userDayKey(entry: TimeEntry): string {
-  return `${entry.userId}:${entry.organizationId}:${formatBerlinLocalDate(new Date(entry.timestamp))}`;
+  return `${entry.userId}:${entry.organizationId}:${entryLocalDate(entry)}`;
 }
 
 /** What one job's time read needs: the caller and the approved corrections the caller loaded once. */
@@ -356,7 +360,7 @@ async function readSpanDayEntries(
           .in('user_id', [...batch])
           .eq('organization_id', organizationId)
           .gte('timestamp', new Date(span.start).toISOString())
-          .lte('timestamp', new Date(span.end).toISOString())
+          .lte('timestamp', new Date(windowReadEnd(span.end)).toISOString())
           .neq('status', 'rejected')
           .order('timestamp', { ascending: true })
           .order('created_at', { ascending: true })

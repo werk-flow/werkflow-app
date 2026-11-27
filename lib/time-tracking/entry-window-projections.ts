@@ -21,6 +21,8 @@ export function readWindowProjections(
     organizationId: string;
     from: string;
     to: string;
+    /** Where the segments are read to: the window's end, or the next midnight that closes its last day. */
+    canonicalTo: string;
     status: TimeEntryStatus | undefined;
     subjectUserId: string | undefined;
     effectiveUserId: string | undefined;
@@ -36,7 +38,7 @@ export function readWindowProjections(
   return Promise.all([
     status && status !== 'approved'
       ? Promise.resolve({ success: true as const, entries: [] })
-      : getCanonicalTimeEntries({ organizationId, from, to, userId: input.subjectUserId }),
+      : getCanonicalTimeEntries({ organizationId, from, to: input.canonicalTo, userId: input.subjectUserId }),
     status && status !== 'approved'
       ? Promise.resolve([])
       : loadApprovedCorrectionProjection(admin, {

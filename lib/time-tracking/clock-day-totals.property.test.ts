@@ -13,6 +13,7 @@ import { createActivitySelection, splitSegmentAtLocalDayBoundaries, type TimeSeg
 import type { BreakPolicy } from './settings';
 import type { TimeEntry, TimeSegmentKind, WeeklyTimeDataPoint } from './types';
 import { buildWeeklyTimeData, getWeekBounds } from './weekly';
+import { isInEntryWindow, windowReadEnd } from './work-sessions';
 
 // Property tests (docs/technical/testing.md, "Property tests"). The rules come from
 // docs/features/time-tracking.md, "Live capture" and "Targets": live capture records work, travel,
@@ -78,11 +79,17 @@ function clockDay(segments: readonly TimeSegmentFact[], date: string): ClockDayT
   return clockDayTotals(entries, dayEnd);
 }
 
-/** The week around a Berlin day, read once it has ended. */
+/**
+ * The week around a Berlin day, read once it has ended, as `getTimeEntries`
+ * reads it: up to the clock-out that closes Sunday at the next midnight.
+ */
 function weekOf(segments: readonly TimeSegmentFact[], date: string): WeeklyTimeDataPoint[] {
   const { monday, sunday } = getWeekBounds(new Date(berlinMidnightMs(date)));
-  const entries = entriesIn(segments, monday, sunday);
-  setSystemTime(sunday);
+  const window = { fromMs: monday.getTime(), toMs: sunday.getTime() };
+  const entries = entriesIn(segments, monday, new Date(windowReadEnd(window.toMs))).filter((entry) =>
+    isInEntryWindow(entry, window),
+  );
+  setSystemTime(new Date(windowReadEnd(window.toMs)));
   return buildWeeklyTimeData(entries, monday, MANUAL_RULE);
 }
 
@@ -234,12 +241,9 @@ describe('A day’s totals on the clock and in the week, counted from its projec
         expect(clockDay(sliced, date)).toEqual(clockDay(segments, date));
         const week = weekOf(segments, date);
         expect(weekOf(sliced, date)).toEqual(week);
-        // Each day of the week keeps the minutes that fall on it: a slice that
-        // ends at midnight closes its own day. The week's window ends at
-        // Sunday's last instant, so a session that runs past it is checked up to Saturday.
-        const { sunday } = getWeekBounds(new Date(berlinMidnightMs(date)));
-        const sessionEnd = Math.max(...segments.map((fact) => Date.parse(fact.endedAt ?? fact.startedAt)));
-        for (const day of week.slice(0, sessionEnd > sunday.getTime() ? 6 : 7)) {
+        // Each day of the week keeps the minutes that fall on it, Sunday
+        // included: a slice that ends at midnight closes its own day.
+        for (const day of week) {
           expect(weekCounts(day)).toEqual(expectedCounts(minutesOnDay(segments, day.date)));
         }
       }),
