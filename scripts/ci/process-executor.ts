@@ -193,12 +193,13 @@ function runGroup(
     const output = openSync(options.log, 'a');
     // The gate: a shell that execs the command once its stdin gives the go line, written after
     // onSpawn returned, or ends because this process died: a crash after onSpawn still launches the
-    // command. A refused launch kills the gate before it closes its stdin, so it never execs. The
-    // command itself reads no stdin, as without a gate.
+    // command, as one before it did without a gate. A refused launch writes the stop line instead,
+    // so the gate ends without the command even when its kill fails. The command itself reads no
+    // stdin, as without a gate.
     const gated = options.onSpawn !== undefined;
     const child = spawn(
       gated ? '/bin/sh' : command,
-      gated ? ['-c', 'read -r go; exec "$@" </dev/null', 'sh', command, ...args] : args,
+      gated ? ['-c', 'read -r go; [ "$go" = stop ] || exec "$@" </dev/null', 'sh', command, ...args] : args,
       {
         cwd: options.cwd,
         env: options.env,
@@ -226,10 +227,8 @@ function runGroup(
         options.onSpawn?.();
       } catch {
         refused = true;
-        // Killed first: a process with a pending SIGKILL runs no further instruction, so the
-        // gate never sees its stdin close.
+        child.stdin?.end('stop\n');
         signalGroup('SIGKILL');
-        child.stdin?.destroy();
         return;
       }
       child.stdin?.end('go\n');

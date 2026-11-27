@@ -6,11 +6,9 @@
 import { afterEach, beforeEach, expect, setSystemTime, spyOn, test } from 'bun:test';
 import {
   chmodSync,
-  closeSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
-  openSync,
   readFileSync,
   rmSync,
   statSync,
@@ -624,7 +622,9 @@ test('a body whose launch cannot be recorded never runs, however long the record
           )
           ?.slice(1)
           .join(' ');
-        if (launched?.startsWith(`${process.execPath} scripts/ci/job.ts`)) closeSync(openSync(firstAct, 'r'));
+        // Bounded outside this event loop: a body that dies before its first act fails the wait.
+        if (launched?.startsWith(`${process.execPath} scripts/ci/job.ts`))
+          execFileSync('sh', ['-c', 'exec 3<"$1"', 'sh', firstAct], { timeout: 30_000 });
         throw new Error('the work root is read-only');
       },
     },
