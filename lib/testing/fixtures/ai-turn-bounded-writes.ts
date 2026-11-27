@@ -3,7 +3,7 @@
 // werk-flow/werkflow-planning#559). The write limits and the turn's total time
 // are cut here, so a hanging call ends within the test; every other limit is
 // the product's.
-import { mock } from 'bun:test';
+import { mock, setSystemTime } from 'bun:test';
 import assert from 'node:assert/strict';
 import { tableRows } from './action-boundary-world';
 import { installAiTurnWorld, postTurn, readTurn, resetAiTables } from './ai-turn-world';
@@ -92,4 +92,66 @@ const hang = (name: string, when: (args: Record<string, unknown>) => boolean = (
   assert.equal(events.at(-1)?.failure, 'timeout', 'a switch read past the turn time must end the turn');
   assert.equal(answerItem()?.status, 'cancelled');
   assert.deepEqual(runStatus(), ['cancelled'], 'a turn stopped at its time must still settle');
+}
+
+// Slow but successful ledger rows of a step's unrun tool calls share one write's limit: the batch
+// stops when it is spent and ends the turn, which still saves and settles in time (B13, B19).
+// Each tool row moves the clock past the limit, as a slow write that succeeds would.
+{
+  resetAiTables(world);
+  let now = Date.parse('2026-11-27T08:00:00.000Z');
+  setSystemTime(new Date(now));
+  world.rpc = (call) => {
+    if (call.name === 'record_ai_run_attempt' && String(call.args.p_outcome).startsWith('tool_call_')) {
+      now += WRITE_LIMIT_MS * 1.2;
+      setSystemTime(new Date(now));
+    }
+    return answerOf(call);
+  };
+  const events = await readTurn(world, await postTurn('[replay:vergiftet] Was steht an?'));
+  world.rpc = answerOf;
+  setSystemTime();
+  assert.equal(events.at(-1)?.failure, 'interrupted', 'a tool-call batch past its limit must end the turn');
+  assert.deepEqual(
+    rows('ai_run_attempts').flatMap((row) =>
+      String(row.p_outcome).startsWith('tool_call_') ? [row.p_outcome] : [],
+    ),
+    ['tool_call_auftraege_finden_failed', 'tool_call_unknown_not_run'],
+    'the batch must stop at its shared limit',
+  );
+  assert.deepEqual(runStatus(), ['failed'], 'the run must still settle');
+  assert.equal(answerItem()?.status, 'failed');
+}
+
+const toolRows = () =>
+  rows('ai_run_attempts').flatMap((row) =>
+    String(row.p_outcome).startsWith('tool_call_') ? [row.p_outcome] : [],
+  );
+
+// A provider cost row past its limit still leaves each emitted tool call its ledger row; the run
+// keeps its provisional charge (B15, B19).
+{
+  resetAiTables(world);
+  hang('record_ai_run_attempt', (args) => !String(args.p_outcome).startsWith('tool_call_'));
+  const events = await readTurn(world, await postTurn('[replay:schleife] Schick alles raus.'));
+  world.rpc = answerOf;
+  assert.equal(events.at(-1)?.failure, 'interrupted');
+  assert.deepEqual(toolRows(), ['tool_call_unknown_not_run'], 'a failed cost row must not drop the call row');
+  assert.deepEqual(runStatus(), ['reserved']);
+}
+
+// A tool still reading when the turn's time is up gets its ledger row before the run settles (B19).
+{
+  resetAiTables(world);
+  hang('list_job_entries_page');
+  const request = JSON.stringify({ name: 'auftraege_finden', input: { suche: 'Heizung' } });
+  const events = await readTurn(world, await postTurn(`[replay:werkzeug] ${request}`));
+  world.rpc = answerOf;
+  assert.equal(events.at(-1)?.failure, 'timeout');
+  assert.deepEqual(
+    toolRows(),
+    ['tool_call_auftraege_finden_failed'],
+    'a stalled call must be ledgered as failed',
+  );
+  assert.deepEqual(runStatus(), ['cancelled'], 'the run settles after the stalled call is recorded');
 }

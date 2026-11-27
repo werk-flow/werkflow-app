@@ -2,7 +2,10 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { addLocalMonthsClamped } from '../../../../lib/date-time/berlin';
 import type { DialogOpenerId } from '../../../../lib/testing/selection/dialog-inventory';
 import { seedCustomer } from '../../../golden/support/db/customers';
-import { seedMaintenanceVisitJob } from '../../../golden/support/db/maintenance-visits';
+import {
+  seedCompletedMaintenanceVisit,
+  seedMaintenanceVisitJob,
+} from '../../../golden/support/db/maintenance-visits';
 import {
   seedInstalledEquipment,
   seedInstalledEquipmentReplacement,
@@ -49,6 +52,14 @@ import {
 } from '../../../golden/support/steps/on-call';
 import type { TestWorld } from '../../../golden/support/world';
 import type { DialogOpener } from '../dialog-opener';
+import {
+  COMPLETED_VISITS_PATH,
+  completedVisitRow,
+  createServiceReportButton,
+  deliverServiceReportButton,
+  serviceReportDeliveryDialog,
+  serviceReportEmailStepButton,
+} from '../service-report-steps';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
 import { worldName } from '../../../../lib/testing/seed-world-plan';
 
@@ -152,6 +163,31 @@ function prepareMaintenanceVisit({ world, businessDate }: SurfaceContext): Promi
     });
     return names.visitJobNumber;
   });
+}
+
+/**
+ * A completed visit with its filed Servicebericht on the Wartung page:
+ * „Servicebericht erstellen“ files it on the first open, later opens find it.
+ * Returns the row's „Versenden“.
+ */
+async function deliverableServiceReport({ page, world, businessDate }: SurfaceContext): Promise<Locator> {
+  const planNumber = await surfaceFixture(world, 'service.report-delivery', async () => {
+    const visit = await seedCompletedMaintenanceVisit({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      customerName: worldName('Layout Berichtskunde', world.runId),
+      jobNumber: `LAYOUT-BERICHT-${world.runId}`,
+      businessDate,
+    });
+    return visit.planNumber;
+  });
+  await page.goto(COMPLETED_VISITS_PATH);
+  const row = completedVisitRow(page, planNumber);
+  const deliver = deliverServiceReportButton(row);
+  await expect(deliver.or(createServiceReportButton(row))).toBeVisible();
+  if (!(await deliver.isVisible())) await createServiceReportButton(row).click();
+  await expect(deliver).toBeVisible();
+  return deliver;
 }
 
 /** Opens the maintenance workspace searched for the seeded customer, on one of its tabs. */
@@ -387,5 +423,20 @@ export const SERVICE_OPENERS = {
     },
     // The title names the coverage number; the search leaves one coverage on screen.
     layer: maintenanceCoverageDocumentsLayer,
+  },
+  'service.report-delivery': {
+    trigger: deliverableServiceReport,
+    layer: serviceReportDeliveryDialog,
+    // The sends are read once the dialog opens.
+    prepareLayer: async (layer) => expect(serviceReportEmailStepButton(layer)).toBeEnabled(),
+  },
+  // The email step: recipient, subject and text before „Senden“.
+  'service.report-delivery-email': {
+    trigger: deliverableServiceReport,
+    layer: serviceReportDeliveryDialog,
+    prepareLayer: async (layer) => {
+      await serviceReportEmailStepButton(layer).click();
+      await expect(layer.getByRole('textbox', { name: 'Empfänger' })).toBeVisible();
+    },
   },
 } satisfies Partial<Record<DialogOpenerId, DialogOpener>>;

@@ -232,6 +232,7 @@ test('a Position from an article with an unknown unit asks for a unit before it 
   await expect(editor.getByRole('textbox', { name: 'Bezeichnung' })).toHaveValue('Kupferbogen 15 mm');
   await expect(editor.getByRole('textbox', { name: 'Einzelpreis netto' })).toHaveValue('4,95');
   await expect(editor.getByText('Aus Artikel KB-15 · Kupferbogen 15 mm')).toBeVisible();
+  await expect(editor.getByText('Preis: Listenpreis')).toBeVisible();
   await expect(editor.getByText('Die Einheit des Artikels ist unbekannt. Wähle eine.')).toBeVisible();
 
   await save.click();
@@ -254,6 +255,8 @@ test('a Position from an article with an unknown unit asks for a unit before it 
             unit: 'piece',
             unitPriceCents: 495,
             source: { kind: 'article', id: 'contract-article' },
+            // The office chose the unit the price is for: the price is its own.
+            priceSource: { kind: 'manuell' },
           },
         ],
       },
@@ -261,9 +264,10 @@ test('a Position from an article with an unknown unit asks for a unit before it 
   });
 });
 
-// A Leistung becomes a Position with its cost rate; a markup on the cost sets
-// the price, a typed price clears the markup, and the office's calculation
-// follows. The save sends the Position's own cost beside its price.
+// A Leistung becomes a Position with its cost rate at the customer's own
+// price; a markup on the cost sets the price, a typed price clears the
+// markup, either makes the price „manuell“, and the office's calculation
+// follows. The save sends the Position's own cost and price source beside its price.
 test('a Leistung brings its cost, a markup sets the price, and the calculation shows the margin', async ({
   page,
 }) => {
@@ -283,10 +287,12 @@ test('a Leistung brings its cost, a markup sets the price, and the calculation s
   await expect(price).toHaveValue('72,50');
   await expect(editor.getByRole('textbox', { name: 'Kosten netto' })).toHaveValue('41,80');
   await expect(editor.getByText('Aus Leistung L-7 · Monteurstunde')).toBeVisible();
+  await expect(editor.getByText('Preis: Kundenkondition 2 ab 01.01.2026')).toBeVisible();
   await expect(editor.getByText('Kosten 41,80 € · Marge 30,70 € (42,3 %)')).toBeVisible();
 
   await markup.fill('12,5');
   await expect(price).toHaveValue('47,03');
+  await expect(editor.getByText('Preis: manuell')).toBeVisible();
   const panel = editor.getByRole('region', { name: 'Kalkulation' });
   await expect(editor.getByText('Kosten 41,80 € · Marge 5,23 € (11,1 %)')).toBeVisible();
   await expect(panel.getByRole('group', { name: 'Titel 1 · Montage' })).toContainText('Marge %11,1 %');
@@ -322,6 +328,7 @@ test('a Leistung brings its cost, a markup sets the price, and the calculation s
             unitPriceCents: 5000,
             source: { kind: 'leistung', id: 'contract-leistung' },
             cost: { amountCents: 4180, priceQuantity: 1 },
+            priceSource: { kind: 'manuell' },
           },
         ],
       },

@@ -324,6 +324,10 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.site' }],
     },
+  "components/kunden/client-condition-dialog.tsx#ClientConditionDialog|{newest ? 'Konditionen ändern' : 'Konditionen festlegen'}":
+    {
+      audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.conditions' }],
+    },
   'components/kunden/client-site-roles-dialog.tsx#ClientSiteRolesDialog|Rollen am Einsatzort': {
     audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.site-roles' }],
   },
@@ -527,6 +531,13 @@ export const DIALOG_INVENTORY = {
       { route: '/service/wartung', role: 'admin', opener: 'service.due-completion' },
     ],
   },
+  'components/service/service-report-delivery-dialog.tsx#ServiceReportDeliveryDialog|Servicebericht versenden':
+    {
+      audits: [
+        { route: '/service/wartung', role: 'admin', opener: 'service.report-delivery' },
+        { route: '/service/wartung', role: 'admin', opener: 'service.report-delivery-email' },
+      ],
+    },
   'components/service/maintenance-plan-action-dialog.tsx#MaintenancePlanActionDialog|{title}': {
     audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.plan-action' }],
   },

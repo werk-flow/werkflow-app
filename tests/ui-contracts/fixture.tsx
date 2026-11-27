@@ -83,13 +83,20 @@ import {
   InventoryMovementsContractFixture,
 } from './inventory-movements-boundaries';
 import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
+import {
+  CustomerConditionsContractFixture,
+  CustomerConditionsSectionContractFixture,
+} from './customer-conditions-boundaries';
 import { OffersContractFixture } from './offers-boundaries';
 import {
   InvoiceDeliveriesContractFixture,
+  InvoiceDeliveryRetryContractFixture,
   InvoiceEditorContractFixture,
   InvoiceSettingsContractFixture,
+  mountInvoiceDeliveriesHydration,
 } from './invoice-editor-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
+import { ServiceReportDeliveryContractFixture } from './service-report-delivery-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
@@ -609,7 +616,9 @@ const root = document.getElementById('root');
 if (!root) throw new Error('UI contract fixture root is missing.');
 // The hydration contracts server-render their page into its own container.
 const hydrationRoot = document.getElementById('hydration-root');
-if (hydrationRoot)
+if (hydrationRoot?.dataset.fixture === 'invoice-deliveries-hydration')
+  mountInvoiceDeliveriesHydration(hydrationRoot);
+else if (hydrationRoot)
   mountHydrationFixture(
     hydrationRoot,
     hydrationRoot.dataset.fixture === 'instruction-hydration'
@@ -650,6 +659,12 @@ createRoot(root).render(
     <InventoryMovementsContractFixture />
   ) : window.uiContractFixture === 'leistungen' ? (
     <LeistungenContractFixture />
+  ) : window.uiContractFixture === 'customer-conditions' ? (
+    <CustomerConditionsContractFixture />
+  ) : window.uiContractFixture === 'customer-conditions-section' ? (
+    <BannerProvider>
+      <CustomerConditionsSectionContractFixture />
+    </BannerProvider>
   ) : window.uiContractFixture === 'presentation' ? (
     <PresentationFixture />
   ) : window.uiContractFixture === 'customer' ? (
@@ -676,6 +691,12 @@ createRoot(root).render(
     <InvoiceDeliveriesContractFixture cancelled={false} />
   ) : window.uiContractFixture === 'invoice-deliveries-cancelled' ? (
     <InvoiceDeliveriesContractFixture cancelled />
+  ) : window.uiContractFixture === 'invoice-deliveries-retry' ? (
+    <InvoiceDeliveryRetryContractFixture />
+  ) : window.uiContractFixture === 'invoice-deliveries-stale-retry' ? (
+    <InvoiceDeliveryRetryContractFixture stale />
+  ) : window.uiContractFixture === 'service-report-delivery' ? (
+    <ServiceReportDeliveryContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>

@@ -32,6 +32,9 @@ export const REALTIME_TABLES = [
   'personnel_onboarding_plans',
   'personnel_onboarding_requirements',
   'employment_conditions',
+  // The person's own signal that their entry or exit date or employment
+  // conditions changed: ids only, since they may not read those rows.
+  'employment_target_signals',
   'work_schedules',
   'organization_closure_days',
   'vacation_requests',
@@ -123,7 +126,10 @@ export const UNFILTERED_REALTIME_TABLES: readonly RealtimeTable[] = ['profiles']
 // tell them of another person's row. Their rows leave only with the person's
 // profile or the organization, which no open view needs to hear of.
 // `bun run realtime:check` fails while a listed table carries the trigger.
-export const OWN_USER_REALTIME_TABLES: readonly RealtimeTable[] = ['problem_report_signals'];
+export const OWN_USER_REALTIME_TABLES: readonly RealtimeTable[] = [
+  'problem_report_signals',
+  'employment_target_signals',
+];
 
 // Published tables whose DEFAULT replica identity is already minimal:
 // organization_settings, organization_qualification_settings and

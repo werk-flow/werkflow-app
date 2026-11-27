@@ -166,6 +166,7 @@ const servicePosition = {
   priceQuantity: 1 as const,
   taxRateBasisPoints: 1900 as const,
   cost: null,
+  priceSource: { kind: 'manuell' as const },
 };
 const content = {
   offerId: ownOfferId,
@@ -332,6 +333,7 @@ world.rpc = ({ name }) =>
     ? {
         data: pageOf({
           costs: [],
+          priceSources: [],
           offer: {
             id: ownOfferId,
             offerNumber: 'ANG-2026-1',
@@ -362,12 +364,14 @@ world.rpc = ({ name }) =>
 const sparse = (await readOfferWithRevisions(ORGANIZATION_A, ownOfferId))?.offer;
 assert.equal(sparse?.site?.address, '12345');
 
-// A stored cost above what the editor takes (any article price may stand there) still loads.
+// A stored cost above what the editor takes (any article price may stand there) still loads, and
+// a Position saved before price sources were kept reads as „manuell“.
 world.rpc = ({ name }) =>
   name === 'get_offer_with_revisions'
     ? {
         data: pageOf({
           costs: [[{ amountCents: 250_000_000, priceQuantity: 1000 }]],
+          priceSources: [[null]],
           offer: {
             ...sparse,
             site: null,
@@ -410,6 +414,7 @@ assert.deepEqual(
     taxRateBasisPoints: 1900,
     source: null,
     cost: { amountCents: 250_000_000, priceQuantity: 1000 },
+    priceSource: { kind: 'manuell' },
   },
   'a stored cost above the editor limit did not load',
 );

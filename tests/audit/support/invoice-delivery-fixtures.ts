@@ -8,8 +8,10 @@ import type { TestWorld } from '../../golden/support/world';
 // Issued invoices with a filed stand-in original for the audit world, written
 // through the office's database functions as the issue action writes them;
 // `delivered` also sends it three times as the delivery module records it:
-// an email that went out, one the provider refused, and one by post. The
-// `cancelled` states then cancel it as „Stornieren“ does.
+// an email that went out, one the provider refused, and one by post;
+// `delivered-unclear` sends one email whose first attempt got no answer and
+// whose retry failed. The `cancelled` states then cancel it as „Stornieren“
+// does.
 
 const CUSTOMER = 'Hausverwaltung Lindenhof GmbH';
 
@@ -117,13 +119,32 @@ async function issueFiled(
   return { id: field({ id: invoiceId }, 'id'), number: field(issued, 'invoiceNumber'), documentId };
 }
 
-/** An email delivery of the invoice, settled as the transport answered. */
+type Answer = { messageId: string } | { failureCode: string };
+
+/** Settles one attempt of an email delivery as the transport answered it. */
+async function settle(world: TestWorld, deliveryId: string, attempt: number, answer: Answer): Promise<void> {
+  await createAdminClient()
+    .rpc(
+      'settle_document_delivery',
+      rpcArgs('settle_document_delivery', {
+        p_organization_id: world.orgId,
+        p_delivery_id: deliveryId,
+        p_attempt: attempt,
+        p_outcome: 'messageId' in answer ? 'sent' : 'failed',
+        p_provider_message_id: 'messageId' in answer ? answer.messageId : null,
+        p_failure_code: 'failureCode' in answer ? answer.failureCode : null,
+      }),
+    )
+    .throwOnError();
+}
+
+/** An email delivery of the invoice, settled as the transport answered; answers its id. */
 async function emailed(
   world: TestWorld,
   invoice: { id: string; number: string; documentId: string },
   recipient: string,
-  answer: { messageId: string } | { failureCode: string },
-): Promise<void> {
+  answer: Answer,
+): Promise<string> {
   const admin = createAdminClient();
   const { data } = await admin
     .rpc(
@@ -144,19 +165,28 @@ async function emailed(
       }),
     )
     .throwOnError();
-  await admin
-    .rpc(
-      'settle_document_delivery',
-      rpcArgs('settle_document_delivery', {
-        p_organization_id: world.orgId,
-        p_delivery_id: field(data, 'deliveryId'),
-        p_attempt: 1,
-        p_outcome: 'messageId' in answer ? 'sent' : 'failed',
-        p_provider_message_id: 'messageId' in answer ? answer.messageId : null,
-        p_failure_code: 'failureCode' in answer ? answer.failureCode : null,
-      }),
-    )
+  const deliveryId = field(data, 'deliveryId');
+  await settle(world, deliveryId, 1, answer);
+  return deliveryId;
+}
+
+/** An email whose first attempt got no answer, retried as „Erneut senden“ does, and the retry failed. */
+async function emailedUnclear(
+  world: TestWorld,
+  invoice: { id: string; number: string; documentId: string },
+): Promise<void> {
+  const deliveryId = await emailed(world, invoice, 'erika.musterfrau@lindenhof.example', {
+    failureCode: 'email_provider_unreachable',
+  });
+  await createAdminClient()
+    .rpc('retry_document_delivery', {
+      p_actor_id: world.users.buero.id,
+      p_organization_id: world.orgId,
+      p_delivery_id: deliveryId,
+      p_expected_attempt: 1,
+    })
     .throwOnError();
+  await settle(world, deliveryId, 2, { failureCode: 'email_provider_503' });
 }
 
 /** Cancels the invoice without a correction; its Stornorechnung stays without an original. */
@@ -179,12 +209,13 @@ async function cancel(world: TestWorld, invoiceId: string): Promise<void> {
     .throwOnError();
 }
 
-type DeliverySeedState = 'fresh' | 'delivered' | 'cancelled' | 'cancelled-delivered';
+type DeliverySeedState = 'fresh' | 'delivered' | 'delivered-unclear' | 'cancelled' | 'cancelled-delivered';
 
 /**
  * The seed of an issued invoice with its filed original for `surfaceFixture`:
  * `fresh` was never sent, `delivered` went out by email, failed once and went
- * by post; the `cancelled` states are the same invoice cancelled afterwards.
+ * by post, `delivered-unclear` may have gone out before its retry failed; the
+ * `cancelled` states are the same invoice cancelled afterwards.
  * `parseDeliverySeed` reads back what `create` stored.
  */
 export function invoiceDeliverySeed(
@@ -210,6 +241,7 @@ export function invoiceDeliverySeed(
           })
           .throwOnError();
       }
+      if (state === 'delivered-unclear') await emailedUnclear(world, invoice);
       if (state === 'cancelled' || state === 'cancelled-delivered') await cancel(world, invoice.id);
       return JSON.stringify({ id: invoice.id, heading: `Rechnung ${invoice.number}` });
     },

@@ -25,7 +25,7 @@ const ok = (data: unknown): Outcome => ({ data, error: null });
 const raise = (message: string): Outcome => ({ data: null, error: { message } });
 
 export type AiTurnWorld = ActionWorld & {
-  /** Runs after each recorded attempt: the change that lands between two model steps. */
+  /** Runs after each recorded provider attempt: the change that lands between two model steps. */
   afterAttempt: ((world: AiTurnWorld) => void) | null;
   /** The runs `after()` keeps alive; `settle` awaits them. */
   pending: Promise<unknown>[];
@@ -33,6 +33,10 @@ export type AiTurnWorld = ActionWorld & {
   streamSignals: (AbortSignal | undefined)[];
   /** Each provider request as the model received it, in order: what the context builder sent. */
   streamRequests: Parameters<AiModel['doStream']>[0][];
+  /** Each send on a thread's live channel, as Realtime's REST API received it. */
+  liveSends: Array<{ topic: string; events: unknown[] }>;
+  /** Runs at each live send, before it is accepted: what another tab does while the answer is written. */
+  onLiveSend: ((events: unknown[]) => Promise<void> | void) | null;
 };
 
 export async function installAiTurnWorld(): Promise<AiTurnWorld> {
@@ -40,13 +44,19 @@ export async function installAiTurnWorld(): Promise<AiTurnWorld> {
   // The fixtures replay; a key in the shell that runs them must never reach a provider.
   delete process.env.WERKFLOW_KI_ANTHROPIC_KEY;
   process.env.AI_ORGANIZATION_IDS = `${ORGANIZATION_A},${ORGANIZATION_B}`;
+  // Live sends never leave the process: Realtime's REST API answers here.
+  process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.fixture.invalid';
+  process.env.SUPABASE_SECRET_KEY = 'fixture-only-secret-key';
   const base = installActionWorld({});
   const world: AiTurnWorld = Object.assign(base, {
     afterAttempt: null,
     pending: [],
     streamSignals: [],
     streamRequests: [],
+    liveSends: [],
+    onLiveSend: null,
   });
+  installLiveChannel(world);
   mock.module('next/server', () => ({ after: (task: Promise<unknown>) => world.pending.push(task) }));
   // The real replay model, watched: each request's abort signal is kept for the fixture to read.
   const { AI_REPLAY_PROVIDER, createReplayModel } = await import('@/lib/ai/replay');
@@ -69,6 +79,29 @@ export async function installAiTurnWorld(): Promise<AiTurnWorld> {
   return world;
 }
 
+const liveSendSchema = z.object({
+  messages: z.array(
+    z.object({ topic: z.string(), event: z.literal('ki'), payload: z.unknown(), private: z.literal(true) }),
+  ),
+});
+
+/** Realtime's REST broadcast, answered in the process: each send is kept, and every other request fails. */
+function installLiveChannel(world: AiTurnWorld): void {
+  const live = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    if (url.pathname !== '/realtime/v1/api/broadcast')
+      throw new Error(`fetch outside this fixture: ${url.host}`);
+    const { messages } = liveSendSchema.parse(JSON.parse(String(init?.body)));
+    const topics = new Set(messages.map((message) => message.topic));
+    if (topics.size !== 1) throw new Error('one live send carries one topic');
+    const events = messages.map((message) => message.payload);
+    await world.onLiveSend?.(events);
+    world.liveSends.push({ topic: [...topics][0] ?? '', events });
+    return new Response(null, { status: 202 });
+  };
+  globalThis.fetch = Object.assign(live, { preconnect: globalThis.fetch.preconnect });
+}
+
 export function resetAiTables(world: AiTurnWorld, settings: Row = {}): void {
   world.tables.ai_organization_settings = [
     {
@@ -88,6 +121,8 @@ export function resetAiTables(world: AiTurnWorld, settings: Row = {}): void {
   world.pending = [];
   world.streamSignals = [];
   world.streamRequests = [];
+  world.liveSends = [];
+  world.onLiveSend = null;
   world.failingTables.clear();
   signInAs(world, 'employee');
 }
@@ -124,7 +159,7 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
           run_id: args.p_run_id,
           idempotency_key: args.p_idempotency_key,
         });
-      world.afterAttempt?.(world);
+      if (!isToolCallRow(args)) world.afterAttempt?.(world);
       return ok('attempt');
     }
     case 'settle_ai_run': {
@@ -136,6 +171,17 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
       throw new Error(`${name} is outside this fixture`);
   }
 }
+
+/** A tool call's ledger row: an attempt row with the tool's outcome and nil cost (lib/ai/turn.ts). */
+const isToolCallRow = (row: Row): boolean => String(row.p_outcome).startsWith('tool_call_');
+
+/** The ledger's provider attempts, without the tool calls' rows. */
+export const providerAttempts = (world: AiTurnWorld): Row[] =>
+  tableRows(world, 'ai_run_attempts').filter((row) => !isToolCallRow(row));
+
+/** The outcome of each tool call's ledger row, in order. */
+export const toolCallOutcomes = (world: AiTurnWorld): string[] =>
+  tableRows(world, 'ai_run_attempts').flatMap((row) => (isToolCallRow(row) ? [String(row.p_outcome)] : []));
 
 function attemptCost(world: AiTurnWorld, runId: string): number {
   return tableRows(world, 'ai_run_attempts')

@@ -15,6 +15,7 @@ import {
 import { readInBackground } from '@/lib/data/background-read-client';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
+import { DAILY_TARGET_LIVE_TABLES } from '@/lib/personnel/targets';
 import { OwnVacationBalanceSummary } from './vacation-section-balance';
 import { getVacationRequestErrorMessage } from './vacation-section-messages';
 import { OwnVacationRequestDialog } from './vacation-section-request-dialog';
@@ -64,7 +65,9 @@ export function VacationSection() {
   const [listError, setListError] = useState<string | null>(null);
 
   const view = useLiveView<OwnVacationOverview>({
-    tables: ['vacation_requests', 'employment_conditions'],
+    // The requests and every source of a daily target: a request counts the
+    // targets of its days, and the conditions set the entitlement.
+    tables: DAILY_TARGET_LIVE_TABLES,
     read: async ({ signal }): Promise<LiveViewResult<OwnVacationOverview>> => {
       const result = await readInBackground('own-vacation-overview', {}, signal);
       return result.success ? { ok: true, data: result.overview } : { ok: false };

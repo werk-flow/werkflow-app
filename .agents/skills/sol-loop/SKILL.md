@@ -11,8 +11,8 @@ You own the change. GPT Sol reviews it in rounds until you agree or the budget e
 
 ## Budget
 
-- 3 rounds per PR, at every level, in [trial mode](../../../docs/technical/coderabbit.md#trial-mode-until-2026-11-27) too. A billing PR gets 5: it changes how WerkFlow bills its own customers (Stripe, subscriptions, WerkFlow's invoices, receipts and debit notices). Each is a hard limit: no lead grants an extra round. Only the owner can raise it, for one PR.
-- The order: round 1 reviews everything while CodeRabbit reviews the draft. One push answers both. Round 2 confirms that push. Round 3 runs only when round 2 left a blocker or should open, and checks its fix.
+- 3 rounds per PR at level 1. A level 2 PR gets 5, so Sol, not the scarce CodeRabbit review that follows, catches what it can. A billing PR gets 5 too: it changes how WerkFlow bills its own customers (Stripe, subscriptions, WerkFlow's invoices, receipts and debit notices). Each is a hard limit: no lead grants an extra round. Only the owner can raise it, for one PR.
+- The order: round 1 reviews everything. One push answers it. Round 2 confirms that push. Round 3 runs only when round 2 left a blocker or should open, and checks its fix.
 - Stop early when a round returns only nits.
 - One reviewer. Sol starts no subagents.
 - Keep a ledger: finding id, severity, outcome.
@@ -27,7 +27,7 @@ A reviewer told to find problems always finds some, so more rounds never mean a 
 2. Run `git fetch origin`. The base is `git merge-base HEAD origin/main`.
 3. Commit locally. Sol's worktree starts from your last commit.
 4. Run `bun run check:changed` and the focused tests. Note any failure in the brief.
-5. Before round 1, push and open the PR as a draft (the `file-pr` skill). In [trial mode](../../../docs/technical/coderabbit.md#trial-mode-until-2026-11-27) it carries `needs-coderabbit` at once, so CodeRabbit reviews the draft while round 1 runs. Never push while a round runs.
+5. Before round 1, push and open the PR as a draft (the `file-pr` skill). Never push while a round runs.
 
 ## 2. Start a round
 
@@ -72,7 +72,7 @@ Check each finding against the source. Another path, a rare case or a small cost
 - **Disagree:** give evidence: `file:line`, a test, command output.
 - **Out of scope or nit:** decline in one line and note a follow-up.
 
-Answer CodeRabbit's findings on the same commit in the same fix round. Rerun the checks and `git diff --shortstat <base>`. If review grew the diff, cut first. Then push the round once; in trial mode, add `needs-coderabbit` again.
+Rerun the checks and `git diff --shortstat <base>`. If review grew the diff, cut first. Then push the round once.
 
 ## 4. Next round
 

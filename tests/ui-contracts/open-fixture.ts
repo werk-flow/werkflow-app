@@ -20,6 +20,30 @@ export async function openContractFixture(page: Page, fixture: Window['uiContrac
   await expect(page.getByRole('heading', { name: 'Komponentenverträge' })).toBeVisible();
 }
 
+/**
+ * Opens the fixture page with the named page server-rendered and hydrated in
+ * its own container; `beforeMount` runs in the page before the bundle loads.
+ */
+export async function openHydrationFixture(
+  page: Page,
+  name: 'instruction-hydration' | 'auftraege-hydration' | 'invoice-deliveries-hydration',
+  beforeMount: () => void = () => undefined,
+): Promise<void> {
+  assertWorkspaceTestLock();
+  const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
+  if (!bundle) throw new Error('Run through bun tests/ui-contracts/run.ts.');
+  const url = 'http://localhost/ui-contracts';
+  await page.route(url, (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: `<html lang="de"><body><div id="root"></div><div id="hydration-root" data-fixture="${name}"></div></body></html>`,
+    }),
+  );
+  await page.goto(url);
+  await page.evaluate(beforeMount);
+  await page.addScriptTag({ path: bundle });
+}
+
 /** Waits until the surface has issued its write and the gate holds it open. */
 export async function expectHeldWrite(page: Page, kind: string): Promise<void> {
   await expect

@@ -29,6 +29,7 @@ const CATALOG: Record<InvoiceLineSourceKind, CatalogKind> = {
     failed: 'Der Artikel konnte nicht übernommen werden. Bitte versuche es erneut.',
     messages: {
       source_not_found: 'Diesen Artikel gibt es nicht mehr. Wähle einen anderen.',
+      offer_not_found: 'Das Angebot gibt es nicht mehr.',
       source_archived: 'Dieser Artikel ist archiviert und lässt sich nicht mehr übernehmen.',
       source_unpriced:
         'Für diesen Artikel gilt heute kein Verkaufspreis. Trag ihn im Inventar nach oder schreib die Position frei.',
@@ -43,6 +44,7 @@ const CATALOG: Record<InvoiceLineSourceKind, CatalogKind> = {
     failed: 'Die Leistung konnte nicht übernommen werden. Bitte versuche es erneut.',
     messages: {
       source_not_found: 'Diese Leistung gibt es nicht mehr. Wähle eine andere.',
+      offer_not_found: 'Das Angebot gibt es nicht mehr.',
       source_archived: 'Diese Leistung ist archiviert und lässt sich nicht mehr übernehmen.',
       source_unpriced:
         'Für diese Leistung gilt heute kein Verkaufspreis. Trag ihn in den Preisen nach oder schreib die Position frei.',
@@ -54,12 +56,13 @@ const CATALOG: Record<InvoiceLineSourceKind, CatalogKind> = {
 
 /**
  * „Artikel hinzufügen“ or „Leistung hinzufügen“ under a Titel: the picked
- * entry becomes a new Position with today's net sale price, unit, VAT rate
- * and cost, read on the server by the rule of an invoice line. The office
- * can change every value before it saves. A read that failed for no reason
+ * entry becomes a new Position with today's net price by the offer's
+ * customer's conditions, unit, VAT rate and cost, read on the server by the
+ * rule of an invoice line. The office can change every value before it saves. A read that failed for no reason
  * of the entry offers „Erneut versuchen“ with the same entry.
  */
 export function OfferCatalogPicker({
+  offerId,
   kind,
   id,
   label,
@@ -67,6 +70,8 @@ export function OfferCatalogPicker({
   onAdd,
   disabled,
 }: {
+  /** The offer whose customer's conditions price the entry. */
+  offerId: string;
   kind: InvoiceLineSourceKind;
   id: string;
   /** The accessible name, naming the Titel, because every Titel has one. */
@@ -95,8 +100,8 @@ export function OfferCatalogPicker({
       setRetryId(null);
       const result = await (
         kind === 'leistung'
-          ? readOfferLeistungLine({ leistungId: entryId })
-          : readOfferArticleLine({ articleId: entryId })
+          ? readOfferLeistungLine({ offerId, leistungId: entryId })
+          : readOfferArticleLine({ offerId, articleId: entryId })
       ).catch(() => null);
       setPicked('');
       if (!result?.success) {

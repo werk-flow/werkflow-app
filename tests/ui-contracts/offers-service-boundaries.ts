@@ -106,6 +106,7 @@ export async function readOfferArticleLine(): Promise<
         archived: false,
       },
       cost: { amountCents: 310, priceQuantity: 1 },
+      priceSource: { kind: 'listenpreis', proof: 'contract-proof' },
     },
   };
 }
@@ -132,7 +133,7 @@ export async function startOfferRevision(
 /** „Als gesendet festhalten“ is not part of these contracts. */
 export const sendOffer = unexpectedWrite;
 
-/** The Leistung picker's price read: one hour with its cost rate. */
+/** The Leistung picker's price read: one hour at the customer's own price, with its cost rate. */
 export async function readOfferLeistungLine(): Promise<{ success: true; line: OfferCatalogLine }> {
   return {
     success: true,
@@ -151,6 +152,12 @@ export async function readOfferLeistungLine(): Promise<{ success: true; line: Of
         archived: false,
       },
       cost: { amountCents: 4180, priceQuantity: 1 },
+      // The customer's own hourly rate, version 2.
+      priceSource: {
+        kind: 'kundenkondition',
+        condition: { id: 'contract-condition', version: 2, validFrom: '2026-01-01' },
+        proof: 'contract-proof',
+      },
     },
   };
 }

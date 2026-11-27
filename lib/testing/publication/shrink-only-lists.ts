@@ -149,6 +149,8 @@ export const SHRINK_ONLY_LISTS: readonly ShrinkOnlyList[] = [
     extract: { kind: 'json', path: [] },
     approval: 'approved: context growth',
   },
+  // What WerkFlow KI's flows may send (check 1 of werk-flow/werkflow-planning#20).
+  variable('KI transfer ceilings', 'lib/ai/live/transfer-budget.test.ts', 'TRANSFER_CEILINGS'),
   {
     id: 'browser wait registry',
     file: 'tests/golden/support/timeouts.ts',

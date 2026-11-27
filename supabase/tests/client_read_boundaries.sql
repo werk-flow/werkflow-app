@@ -763,8 +763,94 @@ begin
 end;
 $$;
 
+-- A thread's live channel (werk-flow/werkflow-planning#532) is private:
+-- Realtime lets a client join `ki-thread:<id>` only when it may select a
+-- broadcast row of that topic. The author joins their thread; the admin of the
+-- same organization, a foreign admin and anonymous callers join no other
+-- person's; no topic outside a thread opens; nobody may send on it; a
+-- suspended author joins not even their own.
+insert into realtime.messages (topic, extension, event, payload, private)
+select 'ki-thread:' || thread_id, 'broadcast', 'ki', '{}'::jsonb, true
+from (values ('cb000000-0000-4000-8000-000000000301'), ('cb000000-0000-4000-8000-000000000304'),
+  ('cb000000-0000-4000-8000-000000000305')) as thread (thread_id)
+union all select 'ki-thread:not-a-thread', 'broadcast', 'ki', '{}'::jsonb, true
+union all select 'ki-thread:cb000000-0000-4000-8000-000000000304', 'presence', 'ki', '{}'::jsonb, true;
+
+create function pg_temp.joins_ai_live(p_user uuid, p_topic text, p_extension text default 'broadcast')
+returns boolean language plpgsql as $$
+declare visible bigint;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_user, 'role', 'authenticated')::text, true);
+  perform set_config('realtime.topic', p_topic, true);
+  execute 'set local role authenticated';
+  select count(*) into visible from realtime.messages message
+  where message.topic = p_topic and message.extension = p_extension;
+  execute 'reset role';
+  perform set_config('realtime.topic', '', true);
+  return visible > 0;
+end;
+$$;
+
+do $$
+declare
+  own constant text := 'ki-thread:cb000000-0000-4000-8000-000000000304';
+begin
+  if not pg_temp.joins_ai_live('cb000000-0000-4000-8000-000000000004', own) then
+    raise exception 'The author cannot join their own WerkFlow KI thread''s live channel';
+  end if;
+  if pg_temp.joins_ai_live('cb000000-0000-4000-8000-000000000001', own) then
+    raise exception 'The admin of the same organization joined another person''s WerkFlow KI live channel';
+  end if;
+  if pg_temp.joins_ai_live('cb000000-0000-4000-8000-000000000005', own) then
+    raise exception 'A foreign admin joined another organization''s WerkFlow KI live channel';
+  end if;
+  if pg_temp.joins_ai_live('cb000000-0000-4000-8000-000000000004',
+      'ki-thread:cb000000-0000-4000-8000-000000000301') then
+    raise exception 'A member joined the WerkFlow KI live channel of their admin''s thread';
+  end if;
+  if pg_temp.joins_ai_live('cb000000-0000-4000-8000-000000000004', 'ki-thread:not-a-thread') then
+    raise exception 'A WerkFlow KI live topic that names no thread opened';
+  end if;
+  if pg_temp.joins_ai_live('cb000000-0000-4000-8000-000000000004', own, 'presence') then
+    raise exception 'The WerkFlow KI live policy opened presence, not only broadcast';
+  end if;
+end;
+$$;
+
+set local role authenticated;
+select set_config('request.jwt.claims',
+  json_build_object('sub', 'cb000000-0000-4000-8000-000000000004', 'role', 'authenticated')::text, true);
+select set_config('realtime.topic', 'ki-thread:cb000000-0000-4000-8000-000000000304', true);
+do $$
+begin
+  insert into realtime.messages (topic, extension, event, payload, private)
+  values ('ki-thread:cb000000-0000-4000-8000-000000000304', 'broadcast', 'ki', '{}'::jsonb, true);
+  raise exception 'A client sent on its WerkFlow KI live channel';
+exception when insufficient_privilege then null;
+end;
+$$;
+reset role;
+set local role anon;
+do $$
+begin
+  if exists (select 1 from realtime.messages where topic = 'ki-thread:cb000000-0000-4000-8000-000000000304') then
+    raise exception 'An anonymous caller joined a WerkFlow KI live channel';
+  end if;
+end;
+$$;
+reset role;
+select set_config('realtime.topic', '', true);
+
 select pg_temp.set_access('cb000000-0000-4000-8000-000000000004', 0, 'suspend_now', clock_timestamp(),
   'cb000000-0000-4000-8000-000000000154');
 select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000004', 'threads= | items=');
+do $$
+begin
+  if pg_temp.joins_ai_live('cb000000-0000-4000-8000-000000000004',
+      'ki-thread:cb000000-0000-4000-8000-000000000304') then
+    raise exception 'A suspended author joined their WerkFlow KI thread''s live channel';
+  end if;
+end;
+$$;
 
 rollback;

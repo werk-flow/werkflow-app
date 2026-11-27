@@ -128,6 +128,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               )
                 return { path: join(import.meta.dir, 'calendar-service-boundaries.tsx') };
             });
+            // The conditions section saves through its contract's stand-in.
+            builder.onResolve({ filter: /^@\/lib\/price-catalog\/actions$/ }, (args) => {
+              if (args.importer.endsWith('client-conditions-section.tsx'))
+                return { path: join(import.meta.dir, 'customer-conditions-service-boundaries.ts') };
+            });
             builder.onResolve({ filter: /^@\/lib\/vacation\/actions$/ }, () => ({
               path: join(import.meta.dir, 'approval-service-boundaries.ts'),
             }));
@@ -303,8 +308,13 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                   return { path: join(import.meta.dir, 'invoice-editor-service-boundaries.tsx') };
               },
             );
-            // The WerkFlow KI chat sends its turns through a held stand-in the spec answers.
-            builder.onResolve({ filter: /^\.\/turn-client$/ }, (args) => {
+            // A Servicebericht's „Versand“ sends and records through held stand-ins.
+            builder.onResolve({ filter: /^@\/lib\/service-reports\/delivery-actions$/ }, (args) => {
+              if (args.importer.endsWith('service-report-delivery-dialog.tsx'))
+                return { path: join(import.meta.dir, 'service-report-delivery-boundaries.tsx') };
+            });
+            // The WerkFlow KI chat sends its turns, and hears its live channel, through stand-ins the spec drives.
+            builder.onResolve({ filter: /^\.\/(?:turn-client|use-ki-live)$/ }, (args) => {
               if (args.importer.endsWith('components/ki/use-ki-chat.ts'))
                 return { path: join(import.meta.dir, 'ki-chat-boundaries.tsx') };
             });
