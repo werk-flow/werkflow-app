@@ -21,7 +21,7 @@ export type FullRun = {
 export const MAIN_HISTORY_DEPTH = 100;
 
 /** Daytime slots start from FIRST to LAST Berlin time, at most one per INTERVAL. */
-export const FULL_RUN_SLOTS = { first: '06:00', last: '20:00', intervalMs: 3 * 60 * 60 * 1000 };
+export const FULL_RUN_SLOTS = { first: '06:00', last: '20:00', intervalMs: 6 * 60 * 60 * 1000 };
 /**
  * A full run in a ledger without its final Check this long after its start has died with its
  * runner (its jobs' own timeouts and the midnight hold end a live one sooner), so it neither holds
@@ -33,8 +33,6 @@ const FULL_RUN_STALE_MS = 4 * 60 * 60 * 1000;
 export type Landed = {
   /** The changed files; empty when the tree is the full run's. */
   files: readonly string[];
-  /** Why the changes run a tooling sample or every group (scripts/ci-plan.ts), or undefined. */
-  tooling: () => string | undefined;
   /** Whether a file is documentation no build reads: `isDocsFile` and no Tailwind source (fast-tier.ts). */
   isDocs: (file: string) => boolean;
 };
@@ -51,9 +49,9 @@ const berlinClock = (at: Date): string => formatBerlinLocalDateTime(at).slice(11
 /**
  * Whether main's head needs a full run now. Requests coalesce: a head that has a full run, or a
  * full run still running on one of its commits, starts none. Nothing untested landed when the changes since the newest
- * full run are documentation only. A tooling input that landed (a sample or every group in its
- * plan) starts one at once, by day or night; otherwise a daytime slot starts one at most every
- * 3 hours. A diff that cannot be read counts as a tooling change.
+ * full run are documentation only. All other changes, including tooling inputs and unreadable
+ * diffs, share the next daytime slot, at most every 6 hours. The nightly covers changes after
+ * the daytime window.
  */
 export function fullRunDue(input: {
   now: Date;
@@ -92,9 +90,6 @@ export function fullRunDue(input: {
   const due = input.now.getTime() - started >= FULL_RUN_SLOTS.intervalMs;
   if (daytime && due)
     return { run: true, reason: `main moved ${behind} commits since the full run on ${commit}.` };
-  const tooling = landed ? landed.tooling() : 'the diff since that run cannot be read';
-  if (tooling)
-    return { run: true, reason: `A tooling change landed since the full run on ${commit}: ${tooling}.` };
   return {
     run: false,
     reason: daytime

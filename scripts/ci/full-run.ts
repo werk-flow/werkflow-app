@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
@@ -50,31 +49,6 @@ const ledger = values.ledger === undefined ? [] : readLedger(values.ledger);
 if ('unreadable' in ledger) throw new Error(`The ledger cannot count: ${ledger.unreadable}`);
 const runs = [...fullRunsInLedger(ledger, now), ...(values.run ?? []).map(reported)];
 
-/** The planner's answer for the change since `commit`: why it runs a tooling sample or every group. */
-function tooling(commit: string): string | undefined {
-  const directory = mkdtempSync(join(tmpdir(), 'full-run-'));
-  const output = join(directory, 'outputs');
-  try {
-    execFileSync(process.execPath, ['scripts/ci-plan.ts', '--base', commit], {
-      cwd: repository,
-      stdio: ['ignore', 'ignore', 'inherit'],
-      env: { ...process.env, GITHUB_OUTPUT: output },
-    });
-    const outputs = Object.fromEntries(
-      readFileSync(output, 'utf8')
-        .split('\n')
-        .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
-    );
-    if (outputs.full_reason === undefined || outputs.tooling_reason === undefined)
-      return 'the planner named no full or tooling reason';
-    return outputs.full_reason || outputs.tooling_reason || undefined;
-  } catch (error) {
-    return `the planner failed (${error instanceof Error ? error.message : String(error)})`;
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-}
-
 // Markdown Tailwind scans for class names can change the stylesheet every page renders with, so it
 // is no documentation here; an unknown scan counts every file.
 const scans = await tailwindScan(readFileSync(join(repository, 'app/globals.css'), 'utf8'), repository);
@@ -85,7 +59,7 @@ function landedSince(commit: string): Landed | undefined {
     const files = git('diff', '--name-only', '--no-renames', '-z', commit, 'HEAD', '--')
       .split('\0')
       .filter(Boolean);
-    return { files, tooling: () => tooling(commit), isDocs };
+    return { files, isDocs };
   } catch {
     return undefined;
   }
