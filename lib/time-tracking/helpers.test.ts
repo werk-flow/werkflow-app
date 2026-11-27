@@ -72,6 +72,7 @@ describe('canApproveEntries: the one approval predicate of the server and every 
   const roleDefault = (role: 'admin' | 'buero'): EffectiveResponsibilityHolder => ({
     employeeRecordId: `${role}-record`,
     userId: `${role}-user`,
+    isLastingHolder: true,
     source: { kind: 'role_default', configurationId: null, role },
   });
 
@@ -86,6 +87,7 @@ describe('canApproveEntries: the one approval predicate of the server and every 
     const delegated: EffectiveResponsibilityHolder = {
       employeeRecordId: 'employee-record',
       userId: 'substitute-user',
+      isLastingHolder: true,
       source: {
         kind: 'delegation',
         configurationId: null,

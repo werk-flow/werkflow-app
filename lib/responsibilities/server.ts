@@ -220,6 +220,7 @@ function toResponsibilityMembers(
       userId: record.user_id,
       role,
       active: isActive,
+      hasExitDate: record.exit_date !== null,
       hasEffectiveAccess: hasOperationalAccess(record, now),
     });
     if (isActive) {
