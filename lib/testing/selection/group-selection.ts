@@ -11,7 +11,7 @@ type SelectableGroup = {
   scopes?: readonly string[];
   /** A browser group's `changeTrigger`; a group without one keeps the scope selection. */
   trigger?: ChangeTrigger | undefined;
-  /** A layout sweep's rendered product files (surface-closure.ts): a change to one selects the sweep. */
+  /** A layout sweep's or the visual references' rendered product files (surface-closure.ts): a change to one selects the group. */
   renderedFiles?: readonly string[] | undefined;
 };
 
@@ -170,7 +170,8 @@ export function groupSelections(input: {
     } else if (group.trigger === 'release-only') {
       // The author of a sweep or a capture gets feedback on the change; a wall-clock group never runs in it.
       const testChanges = ownTestChanges(group, input.changedFiles);
-      // A layout sweep also runs when a page, tab or dialog it audits, or a file only a few sweeps render, changed.
+      // A layout sweep also runs when a page, tab or dialog it audits, or a file only a few sweeps render, changed;
+      // the visual references run when a file any page renders changed.
       const surfaceChanges = input.changedFiles.filter((file) => group.renderedFiles?.includes(file));
       // A pass counts only on the current content of every file that selected the group, product files included.
       if (testChanges.length && !group.id.startsWith(MEASURED_GROUP_PREFIX))

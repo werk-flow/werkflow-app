@@ -6,7 +6,8 @@ import { LAB_SPEC_DIRECTORY } from '../lab-steps';
  * Wall-clock measurements, captures and sweeps run in release mode, in CI's
  * full runs and on explicit request only: the wall-clock groups, the visual
  * references and acceptance captures, and the layout and accessibility sweeps.
- * A change plan selects one only when its own spec or test support changed.
+ * A change plan selects one when its own spec or test support changed, and a layout sweep or the
+ * visual references when a product file they render changed (surface-closure.ts).
  */
 function isReleaseOnlySpec(file: string): boolean {
   return /^tests\/audit\/(performance|visual|layout)\//.test(file);

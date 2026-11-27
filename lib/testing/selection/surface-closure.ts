@@ -75,3 +75,50 @@ export function renderedSurfaceFiles(
     }),
   );
 }
+
+/** The visual references' group (tests/audit/visual/references.spec.ts): one screenshot per page family. */
+export const VISUAL_REFERENCE_GROUP = 'audit:visual';
+
+/**
+ * The files Next.js serves a route with: each page belongs to a visual family (visual-families.test.ts),
+ * its layouts, skeletons and error frames draw around it, and a route handler answers a read the page
+ * renders after its body, such as `/api/background-read`.
+ */
+const ROUTE_FILE =
+  /^app\/(?:.*\/)?(?:page|layout|template|loading|error|global-error|not-found|route)\.[cm]?[jt]sx?$/;
+
+/** Product code a screen draws with or takes its text from; test and harness code draw nothing. */
+const PRODUCT_CODE = /^(?:(?:app|components|hooks)\/|lib\/(?!testing\/))/;
+
+/**
+ * The files the visual references render: what any route under app/ reaches through product code.
+ * The closure follows lib/ too, unlike a sweep's, because a reference also compares the page's
+ * exact text, and a reader or a label there decides it: #694 changed the offer header through its
+ * page and its reader, selected no reference, and turned main red. No shared file is left out
+ * either, as a changed button changes every family's screenshot. A new page needs no entry here.
+ */
+function visualReferenceFiles(graph: ReadonlyMap<string, readonly string[]>): string[] {
+  const reached = new Set<string>();
+  const pending = [...graph.keys()].filter((file) => ROUTE_FILE.test(file));
+  while (pending.length) {
+    const file = pending.pop();
+    if (file === undefined || reached.has(file) || !PRODUCT_CODE.test(file)) continue;
+    reached.add(file);
+    pending.push(...(graph.get(file) ?? []));
+  }
+  return [...reached].sort();
+}
+
+/**
+ * The rendered product files of each group a changed one selects: the layout sweeps' and the visual
+ * references'. `graph` is the repository's import graph (group-evidence.ts `sourceImportGraph`).
+ */
+export function renderedGroupFiles(
+  repositoryRoot: string,
+  graph: ReadonlyMap<string, readonly string[]>,
+): Map<string, string[]> {
+  return new Map([
+    ...renderedSurfaceFiles(graph, surfaceRoots(repositoryRoot)),
+    [VISUAL_REFERENCE_GROUP, visualReferenceFiles(graph)],
+  ]);
+}
