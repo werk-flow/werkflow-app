@@ -22,6 +22,7 @@ import { readInBackground } from '@/lib/data/background-read-client';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
+import { DAILY_TARGET_LIVE_TABLES } from '@/lib/personnel/targets';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { useVacationApprovalDecisions, type VacationReasonDialogState } from './use-vacation-approvals';
 import { VacationApprovalApprovedList, VacationApprovalPendingCard } from './vacation-approvals-cards';
@@ -109,7 +110,9 @@ export function VacationApprovals({ plansWork }: { plansWork: boolean }) {
   const busy = useBusyIds();
 
   const view = useLiveView<ApproverVacationLists>({
-    tables: ['vacation_requests'],
+    // The requests and every source of a daily target: a request's day count
+    // is the sum of its days' targets.
+    tables: DAILY_TARGET_LIVE_TABLES,
     read: ({ signal }) => readApproverVacationLists(signal),
   });
 

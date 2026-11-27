@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { cn } from '@/lib/utils';
 import { TimeProgressRing } from './time-progress-ring';
 import { formatDuration } from '@/lib/time-tracking/helpers';
@@ -112,6 +113,10 @@ type ZeiterfassungDashboardHeroProps = {
   todayTarget: DailyTarget | undefined;
   todayTargetMinutes: number | undefined;
   todayTargetHint: string | null;
+  /** The last targets read failed: today's target is the last known one. */
+  targetsStale: boolean;
+  /** The week's read, targets included. */
+  onRetryTargets: () => Promise<unknown>;
   totals: ZeiterfassungLiveTotals;
 };
 
@@ -122,6 +127,8 @@ export function ZeiterfassungDashboardHero({
   todayTarget,
   todayTargetMinutes,
   todayTargetHint,
+  targetsStale,
+  onRetryTargets,
   totals,
 }: ZeiterfassungDashboardHeroProps) {
   const { breakdown, ringTimelineSegments, workPercentage } = totals;
@@ -150,11 +157,18 @@ export function ZeiterfassungDashboardHero({
         </p>
       ) : null}
 
-      <ZeiterfassungTodayTargetNote
-        todayTarget={todayTarget}
-        todayTargetHint={todayTargetHint}
-        workPercentage={workPercentage}
-      />
+      <StaleRegion
+        stale={targetsStale && todayTarget !== undefined}
+        onRetry={onRetryTargets}
+        notice="Das Tagesziel konnte nicht aktualisiert werden und ist eventuell nicht mehr aktuell."
+        className="flex flex-col items-center"
+      >
+        <ZeiterfassungTodayTargetNote
+          todayTarget={todayTarget}
+          todayTargetHint={todayTargetHint}
+          workPercentage={workPercentage}
+        />
+      </StaleRegion>
 
       <ZeiterfassungTimeBreakdown totals={totals} />
     </div>

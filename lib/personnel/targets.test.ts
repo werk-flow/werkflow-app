@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import type { EmploymentCondition } from './types';
 import type { WorkSchedule } from './schedule';
 import { getBusinessWeekDates, getWeekdayIndex } from './schedule';
+import { OWN_USER_REALTIME_TABLES } from '@/lib/realtime/tables';
 import {
   DAILY_TARGET_LIVE_TABLES,
   DEFAULT_DAILY_TARGET_MINUTES,
@@ -301,6 +302,14 @@ describe('the live tables behind a daily target', () => {
     expect(DAILY_TARGET_LIVE_TABLES).toEqual(
       expect.arrayContaining(['vacation_requests', 'sickness_reports', 'school_days', 'employee_records']),
     );
+  });
+
+  test("include the person's own signal, which alone tells them of their record and conditions", () => {
+    // werk-flow/werkflow-planning#589: only Admin and Büro read employee_records
+    // and employment_conditions, so their events never reach the employee.
+    expect(DAILY_TARGET_LIVE_TABLES).toContain('employment_target_signals');
+    expect(OWN_USER_REALTIME_TABLES).toContain('employment_target_signals');
+    expect(new Set(DAILY_TARGET_LIVE_TABLES).size).toBe(DAILY_TARGET_LIVE_TABLES.length);
   });
 });
 
