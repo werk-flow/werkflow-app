@@ -216,6 +216,10 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     }
     return this.where((row) => terms.some((term) => term(row)));
   }
+  /** An in-memory read answers at once, before any signal can abort it. */
+  abortSignal(): this {
+    return this;
+  }
   single(): this {
     this.cardinality = 'single';
     return this;

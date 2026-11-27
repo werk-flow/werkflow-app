@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
+import type { OfflineTodayContact } from './offline-today-service-boundaries';
 
 // Without signal the phone shows its stored day, until a sign-out or an
 // organization switch in another tab wipes it (decision record 0010, "Device
@@ -29,10 +30,41 @@ test.beforeEach(async ({ page }) => {
   await page.addScriptTag({ path: bundle });
 });
 
-async function answerRead(page: Page, read: number, withDay: boolean): Promise<void> {
+async function answerRead(
+  page: Page,
+  read: number,
+  withDay: boolean,
+  contact?: OfflineTodayContact,
+): Promise<void> {
   await expect.poll(() => page.evaluate(() => window.offlineTodayContract.reads)).toBe(read);
-  await page.evaluate((day) => window.offlineTodayContract.answer(day), withDay);
+  await page.evaluate(([day, person]) => window.offlineTodayContract.answer(day, person), [
+    withDay,
+    contact,
+  ] as const);
 }
+
+/** The view reads the path when the device answers: there it opens the job's pack. */
+async function openPack(page: Page): Promise<void> {
+  await page.evaluate(() => history.replaceState(null, '', '/auftraege/AUF-2026-21'));
+}
+
+// werk-flow/werkflow-planning#367: a private customer is usually their own
+// contact; the „Kontakt“ fact names them once, like the work pack.
+test('a customer who is their own contact is named once under „Kontakt“', async ({ page }) => {
+  await openPack(page);
+  await answerRead(page, 1, true, { name: 'Familie Muster', role: 'Eigentümer' });
+  const facts = page.getByRole('main').getByRole('region', { name: 'Vor dem Einsatz' });
+  await expect(facts.getByText('Eigentümer', { exact: true })).toBeVisible();
+  await expect(facts.getByText('Familie Muster', { exact: true })).toHaveCount(1);
+});
+
+test('a contact other than the customer keeps the customer line under „Kontakt“', async ({ page }) => {
+  await openPack(page);
+  await answerRead(page, 1, true, { name: 'Erika Hausmeister', role: 'Hausverwaltung' });
+  const facts = page.getByRole('main').getByRole('region', { name: 'Vor dem Einsatz' });
+  await expect(facts.getByText('Erika Hausmeister', { exact: true })).toBeVisible();
+  await expect(facts.getByText('Familie Muster', { exact: true })).toBeVisible();
+});
 
 test('a shown day vanishes at another tab’s wipe signal, before the next read answers', async ({ page }) => {
   await answerRead(page, 1, true);

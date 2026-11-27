@@ -5,11 +5,14 @@ import type { StoredToday } from '@/lib/field-sync/device/today-store';
 
 export type { StoredToday };
 
+/** The contact a stored day's job names; the day has none unless the spec sets one. */
+export type OfflineTodayContact = { name: string; role: string | null };
+
 declare global {
   interface Window {
     offlineTodayContract: {
       reads: number;
-      answer: (withDay: boolean) => void;
+      answer: (withDay: boolean, contact?: OfflineTodayContact) => void;
     };
   }
 }
@@ -50,10 +53,17 @@ const storedDay: StoredToday = {
 
 window.offlineTodayContract = {
   reads: 0,
-  answer(withDay): void {
+  answer(withDay, contact): void {
     const resolve = pending.shift();
     if (!resolve) throw new Error('No pending device read.');
-    resolve(withDay ? storedDay : null);
+    if (!withDay) return resolve(null);
+    if (!contact) return resolve(storedDay);
+    const assignments = storedDay.snapshot.assignments.map((assignment) => ({
+      ...assignment,
+      contactName: contact.name,
+      contactRole: contact.role,
+    }));
+    resolve({ ...storedDay, snapshot: { ...storedDay.snapshot, assignments } });
   },
 };
 

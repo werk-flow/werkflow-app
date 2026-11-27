@@ -3,6 +3,7 @@ import type { Locator, Page, Route } from '@playwright/test';
 
 import { MAINTENANCE_PLAN_ERROR_MESSAGES } from '../../../components/service/maintenance-plan-form-state';
 import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
+import { formatGermanDate } from '../../../lib/utils';
 import { expect, test } from '../support/fixtures';
 import { captureResponsiveSection } from '../support/visual-evidence';
 import { seedCustomer } from '../../golden/support/db/customers';
@@ -134,7 +135,7 @@ async function seedMaintenanceOwners(
         ...(coverage ? { coverageId: coverage.id } : {}),
       })
     : null;
-  const firstDueLabel = new Intl.DateTimeFormat('de-DE').format(new Date(`${firstDue}T12:00:00Z`));
+  const firstDueLabel = formatGermanDate(firstDue);
   return { names, customer, siteId, equipment, coverage, plan, firstDue, firstDueLabel };
 }
 

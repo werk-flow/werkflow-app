@@ -37,15 +37,15 @@ export function providerFailure(error: unknown): { status: number | undefined; b
 }
 
 /**
- * Whether the provider accepted the request before the attempt failed, so it
- * bills it: a failure under a success status, or a stream it opened and closed
- * without output (the SDK raises NoOutputGeneratedError only after the
- * provider's response began).
+ * Whether the provider may have accepted the request before the attempt
+ * failed, so it may bill it: every failure but a refusal it answered with an
+ * error status. A failure under a success status, a stream it closed without
+ * output, a lost connection and an abort after the request left all count,
+ * which only overstates (werk-flow/werkflow-planning#559).
  */
 export function acceptedByProvider(error: unknown): boolean {
-  if (NoOutputGeneratedError.isInstance(error)) return true;
   const status = providerFailure(error)?.status;
-  return status !== undefined && status < 400;
+  return status === undefined || status < 400;
 }
 
 /**
