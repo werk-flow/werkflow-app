@@ -1,4 +1,4 @@
-import { program, readShell, type ShellWord } from '../../security/shell-words';
+import { program, readShell, withoutRedirections, type ShellWord } from '../../security/shell-words';
 
 const REFUSAL =
   "Refused: killing processes by pattern can kill other agents' runs on the shared machine. Stop only a PID your own run recorded, or use the tool's own stop. Use a literal positive PID, %job, $!, or a variable assigned from $! in this command.";
@@ -21,18 +21,32 @@ const XARGS_VALUE_FLAGS = new Set([
 
 /** Bash command wrappers run their utility; command -v/-V only describes it. */
 function unwrappedProgram(words: ShellWord[]): ReturnType<typeof program> {
-  let call = program(words);
+  let call = program(withoutRedirections(words));
   while (call && ['command', 'builtin'].includes(call.name)) {
-    if (call.name === 'command' && call.args.some((arg) => /^-[vV]$/.test(arg.text))) return undefined;
-    const start = call.args.findIndex((arg) => !arg.text.startsWith('-'));
-    call = start < 0 ? undefined : program(call.args.slice(start));
+    let start = 0;
+    let query = false;
+    for (const arg of call.args) {
+      if (arg.text === '--') {
+        start++;
+        break;
+      }
+      if (!arg.text.startsWith('-') || arg.text === '-') break;
+      if (call.name === 'command' && /^-[pvV]+$/.test(arg.text)) query ||= /[vV]/.test(arg.text);
+      start++;
+    }
+    if (query) return undefined;
+    call = program(call.args.slice(start));
   }
   return call;
 }
 
 /** Whether a kill operand names an explicit process or this command's recorded background PID. */
 function recordedTarget(word: ShellWord, recorded: Set<string>): boolean {
-  if (!word.expands) return /^0*[1-9]\d*$|^%(?:%|[\w+-]+)$/.test(word.text);
+  if (!word.expands) {
+    if (/^%(?:%|[\w+-]+)$/.test(word.text)) return true;
+    const pid = Number(word.text);
+    return /^\d+$/.test(word.text) && pid > 0 && pid <= 2_147_483_647;
+  }
   if (word.text === '$!') return true;
   const variable = /^\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})$/.exec(word.text);
   const name = variable?.[1] ?? variable?.[2];
@@ -46,7 +60,13 @@ function xargsUtility(args: ShellWord[]): ReturnType<typeof program> {
     if (!arg) continue;
     if (arg.text === '--') return unwrappedProgram(args.slice(index + 1));
     if (!arg.text.startsWith('-')) return unwrappedProgram(args.slice(index));
-    if (XARGS_VALUE_FLAGS.has(arg.text)) index++;
+    if (arg.text.startsWith('--')) {
+      if (XARGS_VALUE_FLAGS.has(arg.text)) index++;
+      continue;
+    }
+    // A required short-option value consumes the rest of its cluster, or the next word.
+    const valueFlag = [...arg.text.slice(1)].findIndex((flag) => XARGS_VALUE_FLAGS.has(`-${flag}`));
+    if (valueFlag >= 0 && valueFlag === arg.text.length - 2) index++;
   }
   return undefined;
 }
@@ -64,7 +84,7 @@ export function patternKillRefusal(command: string): string | undefined {
       for (const word of words) {
         const [name, value] = word.text.split('=');
         if (!name) continue;
-        if (word.expands && value === '$!' && !/[|()`]/.test(command) && !/\$!["']?\s*&/.test(command))
+        if (word.expands && value === '$!' && !/[|()`]|&&/.test(command) && !/\$!["']?\s*&/.test(command))
           recorded.add(name);
         else recorded.delete(name);
       }
