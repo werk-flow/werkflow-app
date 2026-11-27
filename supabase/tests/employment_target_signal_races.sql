@@ -1,5 +1,5 @@
 -- Signal writes that race a change of the record's login
--- (20270503090001_signal_target_changes_to_the_employee.sql,
+-- (20270503090002_signal_target_changes_to_the_employee.sql,
 -- werk-flow/werkflow-planning#589).
 -- 1. The first session locks a personnel record and then relinks it to a new
 --    login; a condition write in the second session waits for the record

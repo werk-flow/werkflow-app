@@ -1,5 +1,5 @@
 -- The employee's target signal
--- (20270503090001_signal_target_changes_to_the_employee.sql,
+-- (20270503090002_signal_target_changes_to_the_employee.sql,
 -- werk-flow/werkflow-planning#589). A change of a person's entry or exit
 -- date, login or employment conditions moves their own signal row and no
 -- other; a change of anything else on the record or the conditions, and the
