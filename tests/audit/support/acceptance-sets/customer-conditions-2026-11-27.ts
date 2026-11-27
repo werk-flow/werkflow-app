@@ -10,6 +10,7 @@ import { surfaceFixture } from '../surface-fixtures';
 
 const CUSTOMER = 'Hausverwaltung Lindenhof GmbH';
 const OFFER = 'Wartung Lindenhof';
+const LEISTUNG = 'Kundendienst-Stunde';
 
 async function seedCustomer(world: TestWorld, name: string): Promise<string> {
   const clientId = randomUUID();
@@ -23,7 +24,7 @@ async function seedCustomer(world: TestWorld, name: string): Promise<string> {
 /**
  * A made-up Hausverwaltung with two versions of its conditions: version 1
  * since 01.01.2026 with 10 % on material, 5 % on Arbeit and 68,00 € per
- * Monteurstunde, and version 2 from 01.01.2037 with 12,5 % on material.
+ * Kundendienst-Stunde, and version 2 from 01.01.2037 with 12,5 % on material.
  * Returns the customer.
  */
 async function seedConditionedCustomer(world: TestWorld): Promise<string> {
@@ -33,7 +34,7 @@ async function seedConditionedCustomer(world: TestWorld): Promise<string> {
       orgId: world.orgId,
       actorId: world.users.buero.id,
       leistungNumber: `KON-${world.runId}`,
-      name: `Monteurstunde ${world.runId}`,
+      name: `${LEISTUNG} ${world.runId}`,
       prices: [{ validFrom: '2026-01-01', salePriceCents: 7250, costRateCents: 4180 }],
     });
     const clientId = await seedCustomer(world, CUSTOMER);
@@ -70,7 +71,7 @@ async function seedConditionedCustomer(world: TestWorld): Promise<string> {
 
 /**
  * A draft offer of that customer with one Position of each price source: the
- * Monteurstunde at the customer's own price, the same at the list price and a
+ * Kundendienst-Stunde at the customer's own price, the same at the list price and a
  * typed one. Returns the offer id.
  */
 async function seedOfferWithSources(world: TestWorld): Promise<string> {
@@ -113,7 +114,7 @@ async function seedOfferWithSources(world: TestWorld): Promise<string> {
     if (!offerId) throw new Error('The offer fixture returned no offer.');
     const hour = (unitPriceCents: number, priceSource: { kind: string; conditionId: string | null }) => ({
       kind: 'free',
-      name: `Monteurstunde ${world.runId}`,
+      name: `${LEISTUNG} ${world.runId}`,
       description: '',
       quantity: '2',
       unit: 'hour',
