@@ -1,7 +1,7 @@
 import { prepareScheduleScenario } from './support/schedule-fixture';
 import { expect, test } from './support/fixtures';
 import { HOLIDAY_REGION_LABELS, getHolidayName } from '../../lib/personnel/holidays';
-import { resolveDailyTarget } from '../../lib/personnel/targets';
+import { describeNoTargetToday, resolveDailyTarget } from '../../lib/personnel/targets';
 import { getEmployeeRecordStateByUser } from './support/db/personnel';
 import { getTargetContextForRecord } from './support/db/vacation';
 import {
@@ -247,9 +247,7 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
       employeePage,
       todayTarget.isHoliday
         ? holidayTargetText(todayTarget.holidayName)
-        : todayTarget.targetMinutes > 0
-          ? TARGET_COPY.dailyTargetPrefix
-          : TARGET_COPY.noWorkday,
+        : (describeNoTargetToday(todayTarget) ?? TARGET_COPY.dailyTargetPrefix),
     );
     await expect(textInDom(employeePage, TARGET_COPY.closure)).toHaveCount(0);
   });

@@ -497,8 +497,7 @@ export const TARGET_COPY = {
   closure: 'Betriebsruhe',
   noTargetToday: 'heute keine Sollarbeitszeit.',
   dailyTargetPrefix: 'Tagesziel:',
-  noWorkday: 'Laut Arbeitszeitmodell heute kein Arbeitstag.',
-  vacationNoTarget: 'Urlaub genehmigt – heute keine Sollarbeitszeit.',
+  vacationNoTarget: 'Urlaub – heute keine Sollarbeitszeit.',
   sicknessNoTarget: 'Krankmeldung – heute keine Sollarbeitszeit.',
 } as const;
 
