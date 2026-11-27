@@ -100,7 +100,7 @@ function focusDialogInstead(event: Event, initialFocus: DialogInitialFocus): voi
     firstFocusable(content)?.getAttribute('data-slot') === 'dialog-close';
   event.preventDefault();
   if (initialFocus === 'first-control' && !fieldsPending) {
-    (firstFocusable(content) ?? content).focus();
+    (firstFocusable(content) ?? content).focus({ preventScroll: true });
     return;
   }
   content.focus();
