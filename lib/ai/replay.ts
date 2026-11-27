@@ -174,6 +174,14 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
     },
     () => [...textParts('Erledigt.'), finish('stop', 1300, 20)],
   ],
+  // Writes for about a second, then calls the tool the message names: a stop can land while it reads.
+  'langsam-werkzeug': [
+    (userText) => {
+      const call = requestedToolCall(userText);
+      return [...textParts(...slowSteps(40)), ...(call ? [call] : []), finish('tool-calls', 1100, 600)];
+    },
+    () => [...textParts('Erledigt.'), finish('stop', 1300, 20)],
+  ],
   // Calls the named tool in two steps, so a change between them reaches the second call.
   zweimal: [1, 2]
     .map(
@@ -273,7 +281,12 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
 };
 
 /** Transcripts whose parts arrive one at a time, this far apart; every other one arrives at once. */
-const PACED_PART_MS: Readonly<Record<string, number>> = { langsam: 25, 'sehr-langsam': 100, gruebeln: 100 };
+const PACED_PART_MS: Readonly<Record<string, number>> = {
+  langsam: 25,
+  'langsam-werkzeug': 25,
+  'sehr-langsam': 100,
+  gruebeln: 100,
+};
 
 /** The parts as a stream; a paced one waits between parts and stops when the request is aborted. */
 function replayStream(

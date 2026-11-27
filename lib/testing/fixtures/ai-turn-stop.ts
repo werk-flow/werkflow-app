@@ -14,9 +14,11 @@ import {
   installAiTurnWorld,
   postStop,
   postTurn,
+  providerAttempts,
   readTurn,
   resetAiTables,
   stopAnswer,
+  toolCallOutcomes,
 } from './ai-turn-world';
 
 const world = await installAiTurnWorld();
@@ -172,7 +174,53 @@ const outputCap = costMicroUsd(
   assert.equal(world.streamRequests.length, 1, 'a stop between two steps must start no further step');
   assert.equal(events.at(-1)?.failure, 'stopped');
   assert.deepEqual(runStatus(), ['cancelled']);
-  assert.equal(rows('ai_run_attempts').length, 1, 'the step that ran is in the ledger');
+  assert.equal(providerAttempts(world).length, 1, 'the step that ran is in the ledger');
+}
+
+// A stop that lands while a tool still reads: the partial save in flight sees it and aborts the
+// request with the call still running. The call gets its ledger row before the run settles (B19).
+{
+  resetAiTables(world);
+  const command = crypto.randomUUID();
+  const answer = world.rpc;
+  const writes: string[] = [];
+  let releaseSave: (() => void) | null = null;
+  world.rpc = (call) => {
+    writes.push(call.name === 'record_ai_run_attempt' ? String(call.args.p_outcome) : call.name);
+    if (call.name === 'list_job_entries_page')
+      // The person stops while the tool reads, the held partial save then lands, and the tool never answers.
+      return (async () => {
+        await postStop(command);
+        releaseSave?.();
+        return new Promise<never>(() => {});
+      })();
+    if (call.name === 'update_ai_thread_item' && call.args.p_status === 'streaming' && !releaseSave)
+      return new Promise((resolve) => {
+        releaseSave = () => resolve(answer(call));
+      });
+    return answer(call);
+  };
+  const request = JSON.stringify({ name: 'auftraege_finden', input: { suche: 'Heizung' } });
+  const events = await readTurn(
+    world,
+    await postTurn(`[replay:langsam-werkzeug] ${request}`, { commandId: command }),
+  );
+  world.rpc = answer;
+  assert.ok(writes.includes('list_job_entries_page'), 'the tool was reading when the stop landed');
+  assert.equal(world.streamSignals.at(-1)?.aborted, true, 'a stop during a tool must end the request');
+  assert.equal(events.at(-1)?.failure, 'stopped');
+  assert.deepEqual(
+    toolCallOutcomes(world),
+    ['tool_call_auftraege_finden_failed'],
+    'a stopped turn must record the call its tool still ran',
+  );
+  assert.ok(
+    writes.indexOf('tool_call_auftraege_finden_failed') < writes.indexOf('settle_ai_run'),
+    "the running call's row must be written before the run settles",
+  );
+  assert.equal(world.streamRequests.length, 1, 'a stopped turn starts no further step');
+  assert.equal(providerAttempts(world).at(-1)?.p_outcome, 'stopped');
+  assert.deepEqual(runStatus(), ['cancelled']);
 }
 
 // A stop that lands after the answer's last partial save is first seen by the final save: the turn
