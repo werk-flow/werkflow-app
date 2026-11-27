@@ -66,13 +66,8 @@ const TABBABLE =
   'a[href], button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 /**
- * Where focus lands when the dialog opens. Radix focuses the first control
- * that exists and is enabled at that moment; while the fields still load (a
- * `Skeleton` stands in for them) or stay disabled until a read ends, that is
- * the footer's „Abbrechen“ or the close button, and focus stayed there once
- * the fields arrived (rendered dialog audit). Such a dialog, and one that asks
- * for it with `initialFocus="dialog"`, focuses itself instead: the first Tab
- * then reaches its first control.
+ * Focus the first control without selecting its text, unless the caller already handled focus.
+ * Pending fields or `initialFocus="dialog"` focus the content so Tab reaches the first control.
  */
 function focusDialogInstead(event: Event, initialFocus: DialogInitialFocus): void {
   if (event.defaultPrevented) return;
@@ -81,8 +76,11 @@ function focusDialogInstead(event: Event, initialFocus: DialogInitialFocus): voi
   const fieldsPending =
     content.querySelector('[data-slot="skeleton"]') !== null ||
     content.querySelector(TABBABLE)?.getAttribute('data-slot') === 'dialog-close';
-  if (initialFocus === 'first-control' && !fieldsPending) return;
   event.preventDefault();
+  if (initialFocus === 'first-control' && !fieldsPending) {
+    (content.querySelector<HTMLElement>(TABBABLE) ?? content).focus();
+    return;
+  }
   content.focus();
 }
 
