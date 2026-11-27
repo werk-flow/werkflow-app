@@ -213,6 +213,14 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     heading: 'Wochenzahlen',
   },
   {
+    // The audit world's organization is not released for WerkFlow KI, so the page says so.
+    id: 'ki',
+    role: 'admin',
+    covers: ['/ki'],
+    route: fixed('/ki'),
+    heading: 'WerkFlow KI',
+  },
+  {
     id: 'meldungen',
     role: 'admin',
     covers: ['/meldungen'],

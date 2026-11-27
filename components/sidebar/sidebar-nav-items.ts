@@ -19,7 +19,7 @@ import {
 
 import { isManagerRole, type OrgRole } from '@/lib/roles';
 
-type NavItem = {
+export type NavItem = {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;

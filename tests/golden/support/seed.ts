@@ -61,7 +61,7 @@ function randomOrgCode(): string {
   return code;
 }
 
-async function createTestUser(admin: SupabaseClient<Database>, user: TestUser): Promise<void> {
+export async function createTestUser(admin: SupabaseClient<Database>, user: TestUser): Promise<void> {
   const { id, email, password, firstName, lastName } = user;
 
   const { data, error } = await admin.auth.admin.createUser({
@@ -88,7 +88,7 @@ async function createTestUser(admin: SupabaseClient<Database>, user: TestUser): 
   }
 }
 
-async function createOrganizationWithSettings(
+export async function createOrganizationWithSettings(
   admin: SupabaseClient<Database>,
   organizationId: string,
   name: string,
