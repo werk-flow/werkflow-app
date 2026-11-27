@@ -23,7 +23,7 @@ export type MemberStatus = {
   todayMinutes: number;
   /** Today's closed standby, part of `todayMinutes`; the running activity is not in it. */
   standbyMinutes: number;
-  /** Whether the running activity is standby: its minutes grow the standby too. */
+  /** Whether the running activity is standby: its minutes grow the standby too. Never during a break. */
   isOnStandby: boolean;
   workMinutes: number;
   breakMinutes: number;
@@ -78,7 +78,8 @@ export function memberStatusOf(memberEntries: TimeEntry[], breakPolicy: BreakPol
     statusStartedAt: currentState.statusStartedAt,
     todayMinutes,
     standbyMinutes,
-    isOnStandby: currentState.isClockedIn && runningSession !== undefined && isStandby(runningSession),
+    isOnStandby:
+      currentState.status === 'working' && runningSession !== undefined && isStandby(runningSession),
     workMinutes: breakdown.workMinutes,
     breakMinutes: breakdown.breakMinutes,
   };

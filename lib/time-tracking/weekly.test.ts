@@ -64,21 +64,19 @@ const STANDBY_POLICY: BreakPolicy = {
 
 function segment(
   id: string,
-  kind: 'work' | 'standby',
+  kind: 'work' | 'standby' | 'break',
   startedAt: string,
   endedAt: string | null,
 ): TimeSegmentFact {
-  const base = {
+  return {
     id,
     sessionId: 'session',
     organizationId: 'org',
     employeeRecordId: 'record',
     startedAt,
     endedAt,
+    ...createActivitySelection(kind),
   };
-  return kind === 'work'
-    ? { ...base, ...createActivitySelection('work') }
-    : { ...base, ...createActivitySelection('standby') };
 }
 
 describe('standby in the day and the week', () => {
@@ -205,28 +203,46 @@ describe('today’s totals and the week', () => {
     });
   });
 
+  /** A start at 06:00 Berlin that was never closed, as legacy captures left some. */
+  const unclosedStart = (activityKind?: 'standby'): TimeEntry => ({
+    id: 'legacy',
+    userId: 'user',
+    organizationId: 'org',
+    entryType: 'clock_in',
+    timestamp: '2026-09-07T04:00:00.000Z',
+    isManual: false,
+    jobId: null,
+    status: 'approved',
+    reviewedBy: null,
+    reviewedAt: null,
+    createdAt: '2026-09-07T04:00:00.000Z',
+    updatedAt: '2026-09-07T04:00:00.000Z',
+    activityKind,
+  });
+
   test('find the running standby behind an earlier start that was never closed', () => {
     setSystemTime(new Date('2026-09-07T12:00:00.000Z'));
-    const unclosedLegacyStart: TimeEntry = {
-      id: 'legacy',
-      userId: 'user',
-      organizationId: 'org',
-      entryType: 'clock_in',
-      timestamp: '2026-09-07T04:00:00.000Z',
-      isManual: false,
-      jobId: null,
-      status: 'approved',
-      reviewedBy: null,
-      reviewedAt: null,
-      createdAt: '2026-09-07T04:00:00.000Z',
-      updatedAt: '2026-09-07T04:00:00.000Z',
-    };
     const status = memberStatusOf(
-      [unclosedLegacyStart, ...liveDayEntriesOf(workThenStandby(null))],
+      [unclosedStart(), ...liveDayEntriesOf(workThenStandby(null))],
       STANDBY_POLICY,
     );
 
     expect(status.isOnStandby).toBe(true);
+  });
+
+  test('count no running standby during a break, also behind an unclosed standby start', () => {
+    setSystemTime(new Date('2026-09-07T11:00:00.000Z'));
+    const workThenBreak = [
+      segment('work', 'work', '2026-09-07T05:00:00.000Z', '2026-09-07T10:00:00.000Z'),
+      segment('break', 'break', '2026-09-07T10:00:00.000Z', null),
+    ];
+    const status = memberStatusOf(
+      [unclosedStart('standby'), ...liveDayEntriesOf(workThenBreak)],
+      STANDBY_POLICY,
+    );
+
+    expect(status.status).toBe('on_break');
+    expect(status.isOnStandby).toBe(false);
   });
 
   test('owe no overtime when today’s target is unknown', () => {
