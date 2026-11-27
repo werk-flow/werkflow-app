@@ -51,6 +51,11 @@ export function untrustedText(source: UntrustedSource, text: string): UntrustedT
   return { source, [TEXT]: visibleText(text) };
 }
 
+/** A record's free text as a tool returns it: labelled `record_text`, or null when the field is empty. */
+export function recordText(text: string | null): UntrustedText | null {
+  return text ? untrustedText('record_text', text) : null;
+}
+
 /**
  * A tool's result: values the tool itself controls (ids, numbers, codes,
  * dates, links) as plain values, and every text a person typed into a record

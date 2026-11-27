@@ -407,9 +407,6 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
       prompt,
       turnSignal: context.turnSignal,
     });
-    // Every call the model emitted is recorded before the step's outcome counts (B19).
-    await recordUnrunCalls(context);
-    if (context.toolCalls.unrecorded) return failedEnd('failed', 'interrupted');
     if (outcome.kind === 'failed') {
       const stopped = outcome.failure === 'timeout' || outcome.failure === 'answer_too_long';
       return failedEnd(stopped ? 'cancelled' : 'failed', outcome.failure);
@@ -451,6 +448,9 @@ async function runStep(
       answer.ledgerFailed = true;
       return { kind: 'failed', failure: 'interrupted' };
     }
+    // Every call the attempt emitted is recorded before its outcome counts or a retry starts (B19).
+    await recordUnrunCalls(context);
+    if (context.toolCalls.unrecorded) return { kind: 'failed', failure: 'interrupted' };
     if (result.ok) {
       return {
         kind: 'finished',
@@ -489,6 +489,8 @@ async function runAttempt(
     model: context.model,
     instructions: context.modelContext.instructions,
     tools: prepareStep(context),
+    // One call at a time, so none starts after another's ledger row failed.
+    toolCallConcurrency: 1,
     messages: step.messages,
     maxOutputTokens: limits.maxOutputTokens,
     // The harness retries, so it can ledger each attempt and never retry a spend limit.

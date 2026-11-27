@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { type ToolValue, untrustedText } from '@/lib/ai/context';
+import { type ToolValue, recordText } from '@/lib/ai/context';
 import { defineTool } from '@/lib/ai/tools/define-tool';
 import type { JobListQuery, JobListSection } from '@/lib/jobs/list-page';
 import { readJobListPage } from '@/lib/jobs/list-server';
@@ -18,8 +18,6 @@ const SECTIONS: Readonly<Record<'offen' | 'geparkt' | 'abgeschlossen', JobListSe
   abgeschlossen: 'archived',
 };
 
-const record = (text: string | null) => (text ? untrustedText('record_text', text) : null);
-
 /**
  * Aufträge and Projekte through the reader of `/auftraege`: an employee finds
  * only assigned work, the office all of it.
@@ -28,7 +26,7 @@ export const auftraegeFinden = defineTool({
   name: 'auftraege_finden',
   label: 'Aufträge finden',
   description:
-    'Findet Aufträge und Projekte nach Nummer, Titel oder Kunde. Gibt höchstens 10 Treffer mit Nummer, Titel, Status, Kunde, Termin und Link zurück. Handwerker sehen nur ihre zugewiesenen Aufträge.',
+    'Findet Aufträge und Projekte der Auftragsliste nach Nummer, Titel oder Kunde; ein Auftrag in einem Projekt erscheint als sein Projekt. Gibt höchstens 10 Treffer mit Nummer, Titel, Status, Kunde, Terminen und Link zurück. Handwerker sehen nur ihre zugewiesene Arbeit.',
   input: z.strictObject({
     suche: z.string().trim().max(100).default('').describe('Nummer, Titel oder Kundenname; leer für alle'),
     bereich: z.enum(['offen', 'geparkt', 'abgeschlossen']).default('offen'),
@@ -65,7 +63,7 @@ export const auftraegeFinden = defineTool({
     const jobs = new Map(page.jobs.map((job) => [job.id, job]));
     const projects = new Map(page.projects.map((project) => [project.id, project]));
     const customer = (clientId: string | null) =>
-      record(clientId ? (page.clientMap[clientId] ?? null) : null);
+      recordText(clientId ? (page.clientMap[clientId] ?? null) : null);
     const section = page.pagination.pages[asked];
     const auftraege = section.entries.flatMap((entry): ToolValue[] => {
       const project = entry.type === 'project' ? projects.get(entry.id) : undefined;
@@ -73,14 +71,15 @@ export const auftraegeFinden = defineTool({
         return [
           {
             art: 'Projekt',
-            nummer: record(project.projectNumber),
-            titel: record(project.name),
+            nummer: recordText(project.projectNumber),
+            titel: recordText(project.name),
             status: UNIFIED_STATUS_LABELS[getEntryUnifiedStatus({ type: 'project', project, childJobs: [] })],
             auftraege: entry.jobCount,
             kunde: customer(project.clientId),
             beginn: project.plannedStartDate,
             ende: project.plannedEndDate,
-            link: projectDetailHref(project),
+            // The link holds the editable number, so it is record text too.
+            link: recordText(projectDetailHref(project)),
           },
         ];
       }
@@ -89,12 +88,12 @@ export const auftraegeFinden = defineTool({
       return [
         {
           art: 'Auftrag',
-          nummer: record(job.jobNumber),
-          titel: record(job.title),
+          nummer: recordText(job.jobNumber),
+          titel: recordText(job.title),
           status: UNIFIED_STATUS_LABELS[getEntryUnifiedStatus({ type: 'standalone-job', job })],
           kunde: customer(job.clientId),
           termin: job.plannedDate,
-          link: jobDetailHref(job),
+          link: recordText(jobDetailHref(job)),
         },
       ];
     });

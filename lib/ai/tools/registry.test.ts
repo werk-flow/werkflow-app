@@ -65,6 +65,10 @@ test('the schema walk fails on a planted tool with an organizationId input, an o
   ]);
   const open = planted(z.object({ suche: z.string().max(10) }));
   expect(aiToolSchemaProblems(await walked([open]))).toEqual(['geplant: input takes keys it does not name']);
+  const loose = planted(z.strictObject({ wert: z.unknown() }));
+  expect(aiToolSchemaProblems(await walked([loose]))).toEqual(['geplant: input.wert accepts any value']);
+  const bare = planted(z.string().max(10));
+  expect(aiToolSchemaProblems(await walked([bare]))).toEqual(['geplant: input is no object']);
 });
 
 test('the boundary walk fails on a planted tool without its foreign-organization, lower-role and suspended-member cases', () => {

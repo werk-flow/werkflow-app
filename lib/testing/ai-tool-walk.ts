@@ -28,6 +28,7 @@ const schemaNode = z.object({
   items: z.unknown().optional(),
   anyOf: z.array(z.unknown()).optional(),
   enum: z.array(z.unknown()).optional(),
+  const: z.unknown().optional(),
   format: z.string().optional(),
   maxLength: z.number().optional(),
   maxItems: z.number().optional(),
@@ -39,6 +40,9 @@ function schemaProblems(tool: string, value: unknown, path: string): string[] {
   if (!node.success) return [`${tool}: ${path} is no schema`];
   const { type, properties, additionalProperties, items, anyOf, maxLength, maxItems } = node.data;
   const problems = (anyOf ?? []).flatMap((option, index) => schemaProblems(tool, option, `${path}|${index}`));
+  // A node that names no type, options or values accepts anything.
+  if (!type && !anyOf && !node.data.enum && node.data.const === undefined)
+    problems.push(`${tool}: ${path} accepts any value`);
   if (type === 'object') {
     if (additionalProperties !== false) problems.push(`${tool}: ${path} takes keys it does not name`);
     for (const [key, property] of Object.entries(properties ?? {})) {
@@ -65,6 +69,8 @@ export function aiToolSchemaProblems(tools: readonly WalkedTool[]): string[] {
   const names = tools.map((tool) => tool.name);
   return tools.flatMap((tool) => {
     const problems = schemaProblems(tool.name, tool.inputJsonSchema, 'input');
+    if (schemaNode.safeParse(tool.inputJsonSchema).data?.type !== 'object')
+      problems.push(`${tool.name}: input is no object`);
     if (!TOOL_NAME.test(tool.name)) problems.push(`${tool.name}: the name is no ledger code`);
     if (names.indexOf(tool.name) !== names.lastIndexOf(tool.name)) problems.push(`${tool.name}: twice`);
     if (!tool.label.trim()) problems.push(`${tool.name}: no label`);

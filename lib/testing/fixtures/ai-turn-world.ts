@@ -127,21 +127,6 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
       if (!isToolCallRow(args)) world.afterAttempt?.(world);
       return ok('attempt');
     }
-    case 'append_ai_thread_item': {
-      const thread = rows('ai_threads').find(
-        (row) => row.id === args.p_thread_id && row.organization_id === organizationId,
-      );
-      if (thread?.user_id !== args.p_user_id) return raise('ai_thread_not_found');
-      const item = appendItem(
-        world,
-        args,
-        String(args.p_kind),
-        String(args.p_status),
-        z.record(z.string(), z.unknown()).parse(args.p_body),
-        String(args.p_idempotency_key),
-      );
-      return ok([{ item_id: item.id, item_sequence: item.sequence }]);
-    }
     case 'settle_ai_run': {
       const run = rows('ai_runs').find((row) => row.id === args.p_run_id);
       if (run?.status === 'reserved') run.status = args.p_status;

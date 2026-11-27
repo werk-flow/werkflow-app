@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import { AI_SYSTEM_PROMPT } from '@/lib/ai/prompt/system-prompt';
-import { ORGANIZATION_A, ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
+import { ORGANIZATION_A, ORGANIZATION_B, signInAs } from './action-boundary-world';
 import { postTurn, readTurn, resetAiTables, toolCallOutcomes } from './ai-turn-world';
 import { callTool, installAiToolWorld, offeredTools, seedToolTables, toolResults } from './ai-tool-world';
 
@@ -97,15 +97,10 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
       'record text must never change the system prompt',
     );
   }
-  const rows = tableRows(world, 'ai_thread_items').filter((row) => row.kind === 'tool_call');
-  assert.deepEqual(
-    rows.map((row) => row.body),
-    [
-      { tool: 'auftraege_finden', label: 'Aufträge finden', status: 'ok' },
-      { tool: 'unknown', label: 'Unbekanntes Werkzeug', status: 'not_run' },
-      { tool: 'notiz_merken', label: 'Notiz merken', status: 'not_run' },
-    ],
-    'the thread keeps a row of every call with its label and outcome, never the record text or a model-made name',
+  assert.equal(
+    JSON.stringify(read?.output).includes(JSON.stringify({ source: 'record_text', text: '/auftraege/A-1' })),
+    true,
+    'a link that holds the editable number must reach the model labelled as record text',
   );
 }
 
