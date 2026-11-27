@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, mock, spyOn, test } from 'bun:test';
+import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 
 // The transport's contract (werk-flow/werkflow-planning#251, agreed with E2c on
 // #17): a hosted deployment sends one Resend request with the idempotency key,
@@ -6,7 +6,6 @@ import { afterAll, describe, expect, mock, spyOn, test } from 'bun:test';
 // or permanent; missing configuration is retryable and sends nothing; a local
 // or CI process never calls the network and keeps the message once per key;
 // logs carry no address, subject or provider body. Tier 2.
-mock.module('server-only', () => ({}));
 const logged: string[] = [];
 const consoleError = spyOn(console, 'error').mockImplementation((...parts: unknown[]) => {
   logged.push(parts.map((part) => JSON.stringify(part)).join(' '));

@@ -1,10 +1,9 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
 import type { DocumentArchiveRows } from './documents';
 
 type ProfileFiles = NonNullable<DocumentArchiveRows['profileFiles']>;
 
-mock.module('server-only', () => ({}));
 const { exportSourceFiles } = await import('./documents');
 const { buildDocumentManifest } = await import('./manifest');
 const { planFileParts } = await import('./plan');

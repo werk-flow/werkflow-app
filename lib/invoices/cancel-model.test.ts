@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
 import { EMPTY_COMPANY_PROFILE_DETAILS } from '@/lib/company-profile/profile';
 import { calculateInvoice } from '@/lib/invoicing/calculate';
@@ -7,7 +7,6 @@ import { cancelInvoiceSchema, cancellationReasonProblem, stornoOf } from './canc
 import { invoiceDraftOf, type IssueSnapshot } from './issue-model';
 import { INVOICE_REFERENCE_MAX_LENGTH, type InvoiceLineValues } from './types';
 
-mock.module('server-only', () => ({}));
 // SaxonJS loads only with Bun's own stack traces; see lib/invoicing/check-en16931.test.ts.
 const prepareStackTrace = Error.prepareStackTrace;
 Reflect.set(Error, 'prepareStackTrace', undefined);

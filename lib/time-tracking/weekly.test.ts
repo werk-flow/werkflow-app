@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, setSystemTime, test } from 'bun:test';
+import { afterEach, describe, expect, setSystemTime, test } from 'bun:test';
 
 import {
   LIVE_DAY_END,
@@ -16,8 +16,6 @@ import type { BreakPolicy, TimeBreakdown } from './settings';
 import type { LiveClockState, TimeEntry } from './types';
 import { buildWeeklyTimeData, computeWeekLabel, getTodayIndex, getWeekBounds, targetsOfWeek } from './weekly';
 
-// The clock state's totals live in a server-only module; they are a pure function.
-mock.module('server-only', () => ({}));
 const { clockTotalsState } = await import('./canonical-clock-state');
 
 // The server renders in UTC. 2026-09-27T22:30Z is Sunday in UTC but Monday

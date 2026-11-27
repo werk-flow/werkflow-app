@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 import type { Tables } from '@/lib/supabase/database.types';
 import { berlinMidnightMs } from '@/lib/testing/berlin-arbitraries';
@@ -14,8 +14,6 @@ import { PAYROLL_CODE_ROWS } from './payroll-mapping';
 // confirmed Lohnart code and the employee's payroll reference ("An Admin sees and edits the
 // Lohnart code of every classification before confirming").
 
-// payroll-export-rows reads server-only modules; the stub lets the unit tier import it.
-mock.module('server-only', () => ({}));
 const { buildPayrollExportRows } = await import('./payroll-export-rows');
 
 type Sources = Parameters<typeof buildPayrollExportRows>[0];

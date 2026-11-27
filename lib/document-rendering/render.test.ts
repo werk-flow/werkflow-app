@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { deflateSync } from 'node:zlib';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { getDocumentProxy } from 'unpdf';
@@ -7,7 +7,6 @@ import type { BusinessDocument, DocumentImage, DocumentPosition, DocumentSection
 
 type StationeryPage = NonNullable<BusinessDocument['stationery']>['firstPage'];
 
-mock.module('server-only', () => ({}));
 const { canEmbedFile, renderBusinessDocument } = await import('./render');
 const { sampleOffer } = await import('./sample-offer');
 const { offerLetterhead } = await import('@/lib/company-profile/letterhead');
