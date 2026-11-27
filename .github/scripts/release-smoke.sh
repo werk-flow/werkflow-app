@@ -46,7 +46,7 @@ else
 fi
 rm -f "$page"
 
-# The health edge function reports which PROD function secrets are missing, never their values.
+# The health edge function reports which PROD function secrets are missing or misplaced, never their values.
 if bash .github/scripts/health-check.sh prod supabase-function-prod endpoint HEALTH_CHECK_TOKEN "$HEALTH_URL"; then
   echo "The health edge function answers 200."
 else

@@ -4,11 +4,15 @@ import { describe, expect, test } from 'bun:test';
 
 import {
   StagingFailure,
+  actorRunId,
   factLine,
   failureText,
   newRunId,
+  originsFact,
   redact,
   runActorEmail,
+  runActorsQuery,
+  runMemberEmail,
   runOrganizationName,
   selectRuns,
   type ActorRow,
@@ -35,6 +39,51 @@ test('a run id names its UTC minute and six hex digits, and refuses less randomn
   expect(() => newRunId(NOW, 'zzzzzz')).toThrow();
   expect(runOrganizationName(RUN)).toBe('Agenten-Test 20261125-1500-a1b2c3');
   expect(runActorEmail(RUN)).toBe('agent+20261125-1500-a1b2c3@werkflow-agents.test');
+});
+
+describe('actor addresses', () => {
+  test('an actor that receives no mail keeps the reserved .test domain', () => {
+    expect(runActorEmail(RUN).endsWith('.test')).toBe(true);
+    expect(actorRunId(runActorEmail(RUN))).toBe(RUN);
+  });
+
+  test("an invited member gets Resend's simulated delivery address, one per run and role", () => {
+    expect(runMemberEmail(RUN, 'buero')).toBe('delivered+agent-buero-20261125-1500-a1b2c3@resend.dev');
+    expect(runMemberEmail(RUN, 'employee')).toBe('delivered+agent-employee-20261125-1500-a1b2c3@resend.dev');
+    expect(runMemberEmail(OTHER_RUN, 'buero')).not.toBe(runMemberEmail(RUN, 'buero'));
+    expect(() => runMemberEmail('not-a-run', 'buero')).toThrow(StagingFailure);
+    for (const role of ['buero', 'employee'] as const)
+      expect(actorRunId(runMemberEmail(RUN, role))).toBe(RUN);
+  });
+
+  test('no other address names a run: plain simulated addresses, other labels, other roles or domains', () => {
+    for (const email of [
+      'delivered@resend.dev',
+      `delivered+gg-${RUN}@resend.dev`,
+      `delivered+agent-admin-${RUN}@resend.dev`,
+      `delivered+agent-buero-${RUN}@resend.dev.example`,
+      `bounced+agent-buero-${RUN}@resend.dev`,
+      `delivered+agent-buero-${RUN}@werkflow-agents.test`,
+      `agent+${RUN}@resend.dev`,
+      'delivered+agent-buero-20261125-1500-a1b2c@resend.dev',
+    ])
+      expect(actorRunId(email), email).toBeNull();
+  });
+
+  test("the cleanup's DEV read returns a user only when its address is a run address of its own marker", () => {
+    const { query, parameters } = runActorsQuery();
+    // Each parameter is one run address with `{run}`, which the query fills with the user's own marker.
+    expect(parameters.map((address) => address.replace('{run}', RUN))).toEqual([
+      runActorEmail(RUN),
+      runMemberEmail(RUN, 'buero'),
+      runMemberEmail(RUN, 'employee'),
+    ]);
+    for (const [index] of parameters.entries())
+      expect(query).toContain(`replace($${index + 1}, '{run}', run.marker)`);
+    expect(query).toContain("run.marker ~ '^20[0-9]{6}-[0-9]{4}-[0-9a-f]{6}$' and email in (");
+    // No pattern match: an unmarked look-alike address never leaves the database.
+    expect(query).not.toContain(' like ');
+  });
 });
 
 describe('cleanup selection', () => {
@@ -71,12 +120,38 @@ describe('cleanup selection', () => {
     expect(selectRuns(actors, organizations, '20261126-1200-000000', NOW)).toEqual([]);
   });
 
+  test("a run's member is selected by its simulated address and marker, never without the marker", () => {
+    const member = {
+      id: 'member',
+      email: runMemberEmail(OTHER_RUN, 'buero'),
+      createdAt: FRESH,
+      runMarker: OTHER_RUN,
+    };
+    const unmarked = { ...member, id: 'unmarked', runMarker: null };
+    expect(selectRuns([member, unmarked], organizations, OTHER_RUN, NOW)).toEqual([
+      { runId: OTHER_RUN, actorId: 'member', organizationIds: [] },
+    ]);
+  });
+
   test('an actor with an unreadable creation time stays', () => {
     expect(selectRuns([actor('actor-odd', RUN, 'yesterday')], organizations, null, NOW)).toEqual([]);
   });
 });
 
 describe('printing', () => {
+  test('refused origins print as one bounded fact, however long or key-shaped a host is', () => {
+    const long = `https://${'a'.repeat(63)}.${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(57)}`;
+    const keyShaped = 'https://sbp-cdn.example';
+    for (const origins of [[long], [keyShaped], ['https://pay.google.com', long, keyShaped]]) {
+      const fact = originsFact(origins, []);
+      expect(fact.length).toBeLessThanOrEqual(240);
+      expect(() => factLine('blocked', { origins: fact })).not.toThrow();
+    }
+    expect(originsFact(['https://pay.google.com', 'https://maps.googleapis.com'], [])).toBe(
+      'https://pay.google.com,https://maps.googleapis.com',
+    );
+  });
+
   test('a failure line loses every secret, key-shaped word and address', () => {
     const password = 'MadeUpPassword-Aa1';
     const line = redact(

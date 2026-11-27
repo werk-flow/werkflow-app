@@ -6,6 +6,7 @@ import { DateTimeField } from '@/components/ui/date-time-field';
 import { DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { FileInput } from '@/components/ui/file-input';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
@@ -215,16 +216,25 @@ type PersonnelLifecycleUploadFieldsProps = {
 
 export function PersonnelLifecycleUploadBody({ lifecycle, documents }: PersonnelLifecycleUploadFieldsProps) {
   const { isPending, error, fieldErrors } = lifecycle;
-  const { setFile, documentType, setDocumentType, accessClass, setAccessClass, setUploadOpen, submitUpload } =
-    documents;
+  const {
+    file,
+    setFile,
+    documentType,
+    setDocumentType,
+    accessClass,
+    setAccessClass,
+    setUploadOpen,
+    submitUpload,
+  } = documents;
 
   return (
     <>
       <DialogBody className="space-y-4 py-1">
         <Field label="Datei" htmlFor="personnel-file" required error={fieldErrors['personnel-file']}>
-          <Input
-            type="file"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          <FileInput
+            buttonLabel="Datei auswählen"
+            fileName={file?.name ?? null}
+            onSelect={setFile}
             disabled={isPending}
           />
         </Field>

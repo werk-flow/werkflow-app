@@ -571,6 +571,54 @@ const iconButtonNeedsNameRule = {
  */
 const TEXT_INPUT_TYPES = new Set(['text', 'search', 'email', 'tel', 'url', 'password']);
 
+/** A static attribute value, a template literal without expressions included; null when it is built at runtime. */
+function staticControlValue(attribute) {
+  const expression = attribute?.value?.type === 'JSXExpressionContainer' ? attribute.value.expression : null;
+  if (expression?.type === 'TemplateLiteral' && expression.expressions.length === 0)
+    return expression.quasis[0]?.value.cooked ?? null;
+  return staticAttributeValue(attribute);
+}
+
+const HIDING_PROPS = new Set(['className', 'hidden', 'style']);
+
+/** A spread of an object literal whose fixed keys leave the hiding props alone, such as `{...{ webkitdirectory: '' }}`. */
+function isInertSpread(attribute) {
+  const argument = attribute.argument;
+  return (
+    argument.type === 'ObjectExpression' &&
+    argument.properties.every(
+      (property) =>
+        property.type === 'Property' &&
+        !property.computed &&
+        !HIDING_PROPS.has(
+          property.key.type === 'Identifier' ? property.key.name : String(property.key.value),
+        ),
+    )
+  );
+}
+
+/**
+ * A file input on screen shows the browser's own „Choose File No file chosen“
+ * in the browser's language. A picker hidden behind a button proves it by a
+ * class that is exactly `hidden` or `sr-only`, or a `hidden` attribute that
+ * is always on. Any other class may show it again (`hidden md:block`,
+ * `sr-only focus:not-sr-only`), as may a class built at runtime,
+ * `hidden={open}`, an inline `style` or a spread that can override them.
+ * `aria-hidden` hides it from assistive technology only, not from the eye, so
+ * it does not count.
+ */
+function isHiddenFileInput(node) {
+  if (jsxAttribute(node, 'style')) return false;
+  if (
+    node.attributes.some((attribute) => attribute.type === 'JSXSpreadAttribute' && !isInertSpread(attribute))
+  )
+    return false;
+  const hidden = jsxAttribute(node, 'hidden');
+  if (hidden && (hidden.value === null || staticControlValue(hidden) === 'true')) return true;
+  const classes = staticControlValue(jsxAttribute(node, 'className'))?.trim();
+  return classes === 'hidden' || classes === 'sr-only';
+}
+
 const noRawControlsRule = {
   meta: {
     type: 'problem',
@@ -579,7 +627,8 @@ const noRawControlsRule = {
       button:
         'Raw <button> outside components/ui: use Button for an action or PlainButton (components/ui/plain-button) for a clickable region. Both set the type and the focus ring.',
       input:
-        'Raw text <input> outside components/ui: use Input inside Field (components/ui/input, components/ui/field). Only file and hidden inputs stay raw.',
+        'Raw text <input> outside components/ui: use Input inside Field (components/ui/input, components/ui/field). Only hidden inputs and hidden file pickers stay raw.',
+      file: 'A visible file input reads „Choose File No file chosen“ in the browser\'s language: use FileInput inside Field (components/ui/file-input). A picker behind its own button stays a raw <input type="file"> with className "hidden" or "sr-only".',
     },
   },
   create(context) {
@@ -590,11 +639,19 @@ const noRawControlsRule = {
           context.report({ node, messageId: 'button' });
           return;
         }
-        if (node.name.name !== 'input') return;
+        if (node.name.name !== 'input' && node.name.name !== 'Input') return;
         // The other native types (date, number, checkbox, ...) have their own
         // registry bans; a dynamic type is left to review.
         const typeAttribute = jsxAttribute(node, 'type');
-        const type = staticAttributeValue(typeAttribute);
+        // The browser reads the type case-insensitively.
+        const type = staticControlValue(typeAttribute)?.toLowerCase() ?? null;
+        if (type === 'file') {
+          // The registry Input always renders a visible box.
+          if (node.name.name === 'Input' || !isHiddenFileInput(node))
+            context.report({ node, messageId: 'file' });
+          return;
+        }
+        if (node.name.name === 'Input') return;
         // An empty static type falls back to text in the browser.
         if (typeAttribute ? type === '' || TEXT_INPUT_TYPES.has(type) : true)
           context.report({ node, messageId: 'input' });

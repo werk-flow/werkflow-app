@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { DeliveryEntry } from './delivery-types';
-import { deliveryFailureAdvice, priorEmailAdvice } from './failure-advice';
+import { deliveryFailureAdvice, pastDeliveryOutcome, priorEmailAdvice } from './failure-advice';
 
 // A failed send names the step that helps. Tier 2.
 
@@ -14,6 +14,32 @@ test('a mail the provider refused points to a new email, since the retry repeats
     'Die E-Mail ist nicht rausgegangen. Unter „Versand“ kannst du sie erneut senden.',
   );
   expect(deliveryFailureAdvice('attachment_unavailable')).toBe('Das Original war gerade nicht lesbar.');
+});
+
+test('a past delivery names no step, since a cancelled invoice is never sent again', () => {
+  for (const failureCode of [
+    'email_not_configured',
+    'email_provider_422',
+    'email_provider_unreachable',
+    null,
+  ]) {
+    const outcome = pastDeliveryOutcome({ failureCode, outcomeUnknown: false });
+    expect(outcome).not.toContain('Versuche');
+    expect(outcome).not.toContain('senden');
+  }
+  expect(deliveryFailureAdvice('email_not_configured')).toBe(
+    'Der E-Mail-Versand war nicht eingerichtet. Versuche es später erneut.',
+  );
+});
+
+test('a past delivery keeps its last reason and says when an earlier attempt may have reached the customer', () => {
+  expect(pastDeliveryOutcome({ failureCode: 'email_provider_503', outcomeUnknown: true })).toBe(
+    'Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: Die E-Mail ist nicht rausgegangen.',
+  );
+  // The last attempt itself got no usable answer: its reason already says so, once.
+  expect(pastDeliveryOutcome({ failureCode: 'email_provider_invalid_response', outcomeUnknown: true })).toBe(
+    'Der Mailanbieter hat nicht geantwortet. Ob die E-Mail rausging, ist unklar.',
+  );
 });
 
 const email = (

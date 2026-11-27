@@ -9,6 +9,7 @@ import {
   type ResponsibilityDelegation,
   type ResponsibilityMember,
 } from './resolution';
+import type { OrganizationResponsibility } from './types';
 
 const members: ResponsibilityMember[] = [
   {
@@ -16,6 +17,7 @@ const members: ResponsibilityMember[] = [
     userId: 'admin-user',
     role: 'admin',
     active: true,
+    hasExitDate: false,
     hasEffectiveAccess: true,
   },
   {
@@ -23,6 +25,7 @@ const members: ResponsibilityMember[] = [
     userId: 'buero-user',
     role: 'buero',
     active: true,
+    hasExitDate: false,
     hasEffectiveAccess: true,
   },
   {
@@ -30,6 +33,7 @@ const members: ResponsibilityMember[] = [
     userId: 'employee-user',
     role: 'employee',
     active: true,
+    hasExitDate: false,
     hasEffectiveAccess: true,
   },
 ];
@@ -302,6 +306,50 @@ describe('resolveEffectiveResponsibility', () => {
       ),
     ).toEqual(['time_approval']);
   });
+
+  // The database's last-holder checks count another holder only with no exit
+  // date and with effective access (werk-flow/werkflow-planning#591).
+  test.each([
+    ['with effective access and no exit date', {}, []],
+    ['without effective access', { hasEffectiveAccess: false }, ['time_approval']],
+    ['with a planned exit date', { hasExitDate: true }, ['time_approval']],
+    [
+      'after the exit date',
+      { active: false, hasExitDate: true, hasEffectiveAccess: false },
+      ['time_approval'],
+    ],
+  ] satisfies [string, Partial<ResponsibilityMember>, OrganizationResponsibility[]][])(
+    'the removal precheck counts a co-holder %s as the database does',
+    (_, coHolderState, stranded) => {
+      const twoHolders: ResponsibilityConfiguration = {
+        ...directConfiguration,
+        assignments: [
+          ...directConfiguration.assignments,
+          {
+            id: 'co-holder-assignment',
+            configurationId: 'selected-version',
+            employeeRecordId: 'admin-record',
+            source: 'direct',
+            roleSnapshot: null,
+          },
+        ],
+      };
+      const timeApproval = resolveEffectiveResponsibility({
+        responsibility: 'time_approval',
+        actionTime: '2026-08-10T10:00:00.000Z',
+        businessDate: '2026-08-10',
+        members: members.map((member) =>
+          member.employeeRecordId === 'admin-record' ? { ...member, ...coHolderState } : member,
+        ),
+        configurations: [twoHolders],
+        delegations: [],
+      });
+
+      expect(
+        getResponsibilitiesStrandedByEmployeeRemoval({ time_approval: timeApproval }, 'buero-record'),
+      ).toEqual(stranded);
+    },
+  );
 });
 
 describe('approval scope over a personnel record', () => {
