@@ -6,6 +6,10 @@ const eslint = createProbeLinter();
 const ruleId = 'quality/no-import-meta-file-read';
 
 const unsafeReads = [
+  `import { readFile } from 'node:fs/promises'; let path = new URL('./a', import.meta.url); if (condition) { path = new URL('file:///a'); } readFile(path);`,
+  `import { readFile } from 'node:fs/promises'; let path = new URL('file:///a'); if (condition) { path = new URL('./a', import.meta.url); } readFile(path);`,
+  `import { promises as fs } from 'node:fs'; fs.readFile(new URL('./font.ttf', import.meta.url));`,
+  `const { promises: fs } = await import('node:fs'); fs.readFile(new URL('./font.ttf', import.meta.url));`,
   `import fs from 'node:fs'; fs['readFileSync'](new URL('./font.ttf', import.meta.url));`,
   `const { readFile } = await import('node:fs/promises'); readFile(new URL('./font.ttf', import.meta.url));`,
   `const { readFile: read } = await import('fs/promises'); read(new URL('./font.ttf', import.meta.url));`,
@@ -39,6 +43,7 @@ for (const filePath of ['lib/probe.test.ts', 'scripts/probe.ts', 'lib/invoicing/
 
 test('app-root paths, ordinary URLs and unrelated readFile functions remain valid', async () => {
   for (const source of [
+    `import { readFile } from 'node:fs/promises'; let path = new URL('./a', import.meta.url); path = new URL('file:///a'); readFile(path);`,
     `import { readFile } from 'node:fs/promises'; const { pathname } = new URL('./font.ttf', import.meta.url); readFile(pathname);`,
     `import { readFile } from 'node:fs/promises'; let path = '/font.ttf'; readFile(path); path = new URL('./font.ttf', import.meta.url);`,
     `import { readFile } from 'node:fs/promises'; let path = '/font.ttf'; const alias = path; path = new URL('./font.ttf', import.meta.url); readFile(alias);`,

@@ -1,12 +1,7 @@
+import { variableOf } from './bindings.mjs';
+
 const FILE_MODULES = new Set(['fs', 'node:fs', 'fs/promises', 'node:fs/promises']);
 const READS = new Set(['readFile', 'readFileSync', 'createReadStream']);
-
-function bindingOf(sourceCode, node) {
-  for (let scope = sourceCode.getScope(node); scope; scope = scope.upper) {
-    const variable = scope.set.get(node.name);
-    if (variable) return variable;
-  }
-}
 
 function propertyName(node, computed = false) {
   if (node?.type === 'Literal') return node.value;
@@ -16,7 +11,7 @@ function propertyName(node, computed = false) {
 // A named reader, or * for the fs namespace, resolved at the lexical binding.
 function fsBinding(sourceCode, node) {
   if (node?.type !== 'Identifier') return;
-  for (const definition of bindingOf(sourceCode, node)?.defs ?? []) {
+  for (const definition of variableOf(node, sourceCode)?.defs ?? []) {
     if (definition.type === 'ImportBinding' && FILE_MODULES.has(definition.parent.source.value)) {
       return definition.node.type === 'ImportSpecifier' ? propertyName(definition.node.imported) : '*';
     }
@@ -39,7 +34,7 @@ function isFileRead(sourceCode, callee) {
   if (callee.type !== 'MemberExpression' || !READS.has(propertyName(callee.property, callee.computed)))
     return false;
   const object = callee.object;
-  if (fsBinding(sourceCode, object) === '*') return true;
+  if (['*', 'promises'].includes(fsBinding(sourceCode, object))) return true;
   return (
     object.type === 'MemberExpression' &&
     propertyName(object.property, object.computed) === 'promises' &&
@@ -47,23 +42,37 @@ function isFileRead(sourceCode, callee) {
   );
 }
 
+// A direct declaration or assignment in the read's block supersedes earlier writes.
+// Conditional writes after it still count: source order alone cannot prove which branch ran.
+function writesBeforeRead(variable, node, before) {
+  let block = node.parent;
+  while (block && !['BlockStatement', 'Program'].includes(block.type)) block = block.parent;
+  const writes = variable.references.filter((reference) => {
+    const target = reference.identifier.parent;
+    const wholeValue =
+      (target.type === 'VariableDeclarator' && target.id.type === 'Identifier') ||
+      (target.type === 'AssignmentExpression' && target.left.type === 'Identifier');
+    return wholeValue && reference.writeExpr && reference.writeExpr.range[0] < before;
+  });
+  const definite = writes.findLast((reference) => {
+    const statement = reference.identifier.parent.parent;
+    return (
+      ['VariableDeclaration', 'ExpressionStatement'].includes(statement.type) && statement.parent === block
+    );
+  });
+  return writes.filter(
+    (reference) => !definite || reference.writeExpr.range[0] >= definite.writeExpr.range[0],
+  );
+}
+
 function isImportMetaUrl(sourceCode, node, before = node?.range[0], seen = new Set()) {
   if (node?.type === 'Identifier') {
-    const variable = bindingOf(sourceCode, node);
+    const variable = variableOf(node, sourceCode);
     if (!variable || seen.has(variable)) return false;
     seen.add(variable);
-    return variable.references.some((reference) => {
-      const target = reference.identifier.parent;
-      const wholeValue =
-        (target.type === 'VariableDeclarator' && target.id.type === 'Identifier') ||
-        (target.type === 'AssignmentExpression' && target.left.type === 'Identifier');
-      return (
-        wholeValue &&
-        reference.writeExpr &&
-        reference.writeExpr.range[0] < before &&
-        isImportMetaUrl(sourceCode, reference.writeExpr, reference.writeExpr.range[0], new Set(seen))
-      );
-    });
+    return writesBeforeRead(variable, node, before).some((reference) =>
+      isImportMetaUrl(sourceCode, reference.writeExpr, reference.writeExpr.range[0], new Set(seen)),
+    );
   }
   if (node?.type !== 'NewExpression' || node.callee.name !== 'URL') return false;
   const base = node.arguments[1];
