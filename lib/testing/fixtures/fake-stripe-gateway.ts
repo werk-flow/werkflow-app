@@ -326,6 +326,7 @@ export function createFakeStripeGateway(
       : resolved.gateway.readInvoiceDebit,
     listFinalizedInvoices: async () => objects.finalizedInvoices ?? [],
     listEventIds: async () => objects.eventIds ?? [],
+    readEvent: resolved.gateway.readEvent,
     subscriptions: fakeSubscriptionCalls(billing),
   };
 }

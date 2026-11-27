@@ -64,6 +64,7 @@ gateway = {
   readInvoiceDebit: noRead,
   listFinalizedInvoices: noRead,
   listEventIds: noRead,
+  readEvent: noRead,
   subscriptions: fakeSubscriptionCalls(stripe),
 };
 
@@ -180,6 +181,8 @@ world.rpc = ({ name, args }) => {
   throw new Error(`unexpected rpc ${name}`);
 };
 mock.module('@/lib/org/generate-code', () => ({ generateUniqueOrgCode: async () => 'NEWORG' }));
+// The signals that waited for a new organization run after its creation answers; signals-before-organization.ts proves them.
+mock.module('next/server', () => ({ after: () => {} }));
 // Organization creation also sets the active-organization cookie.
 const cookieWrites: string[] = [];
 mock.module('next/headers', () => ({
