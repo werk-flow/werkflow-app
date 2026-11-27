@@ -6,5 +6,6 @@ Deno.serve(
     resendApiKey: Deno.env.get('RESEND_API_KEY'),
     fromEmail: Deno.env.get('FROM_EMAIL'),
     secretKeys: Deno.env.get('SUPABASE_SECRET_KEYS'),
+    localMailCapture: Deno.env.get('WERKFLOW_LOCAL_MAIL_CAPTURE'),
   }),
 );

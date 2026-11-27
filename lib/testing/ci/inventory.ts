@@ -255,7 +255,7 @@ export const OUTSIDE_INVENTORY: Readonly<Record<string, string>> = {
   'mustang-cache.yml#seed': "Keeps Mustang's pinned jar in main's Actions cache: no check.",
   'staging.yml#migrate': 'Migrates DEV after a merge.',
   'staging.yml#deploy': 'Deploys staging after a merge.',
-  'production-alert.yml#alert': "Writes the production watcher's alerts.",
+  'production-alert.yml#alert': "Writes ci-alert's release and Boat key alerts as github-actions.",
   'prod-inspect.yml#inspect': "Reads PROD's structure with a read-only token, which only main may hold.",
   'prod-inspect.yml#auth': "Reads PROD's auth settings and copies mailer fields to DEV, when dispatched.",
   'prod-inspect.yml#report': "Reports the inspection's failure.",

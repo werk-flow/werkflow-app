@@ -33,8 +33,14 @@
 //   (lib/supabase/client.ts) calls REST, Auth and Storage and opens the
 //   Realtime socket; lib/documents/upload-client.ts PUTs file bytes to the
 //   presigned object-storage URL.
-// - frame-src storage: the PDF preview frames the signed object-storage URL
-//   (components/dokumente/document-viewer-dialog.tsx). No other frame exists.
+// - frame-src blob: storage: the PDF preview frames the signed object-storage URL
+//   (components/dokumente/document-viewer-dialog.tsx), and the offer preview
+//   and the Musterangebot frame a blob: URL of PDF bytes the page itself
+//   fetched from its own route handler (components/shared/pdf-frame.tsx).
+//   blob: is local-only: a page frames only bytes it holds. 'self' is not
+//   allowed: it would frame every page of the app, and the route handlers'
+//   frame-ancestors 'none' and X-Frame-Options: DENY would block them anyway.
+//   No other frame exists.
 // - object-src 'none', base-uri 'self', form-action 'self', frame-ancestors
 //   'none': no plugin, no <base>, forms post to this origin only, and the app
 //   is never framed (X-Frame-Options: DENY says the same).
@@ -102,7 +108,7 @@ export function buildContentSecurityPolicy(env: CspEnvironment): string {
     `img-src ${sourceList("'self'", 'data:', 'blob:', supabase, storage)}`,
     "font-src 'self'",
     `connect-src ${sourceList("'self'", supabase, supabase ? socketOrigin(supabase) : null, storage)}`,
-    `frame-src ${storage ?? "'none'"}`,
+    `frame-src ${sourceList('blob:', storage)}`,
     "worker-src 'self'",
     "manifest-src 'self'",
     "object-src 'none'",

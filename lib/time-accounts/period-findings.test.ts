@@ -1,10 +1,9 @@
 // Rule test: a period finding names its real cause (werk-flow/werkflow-planning#47, #48).
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
 import { employeeSetupGaps } from './period-results';
 import type { DailyTargetInput, EmployeePeriodCalculation, TimeActivityInterval } from './types';
 
-mock.module('server-only', () => ({}));
 const { pushEmployeeFindings } = await import('./period-findings');
 const { getDateRange } = await import('./period-sources');
 

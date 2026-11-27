@@ -5,8 +5,13 @@
 /** `20261126-1530-a1b2c3`: UTC start minute and six random hex digits. */
 const RUN_ID = /^20\d{6}-\d{4}-[0-9a-f]{6}$/;
 const ORGANIZATION_PREFIX = 'Agenten-Test ';
-/** A reserved test domain (RFC 2606): no mail to it leaves the internet's edge. */
+/** A reserved test domain (RFC 2606) for every actor that receives no mail: none leaves the internet's edge. */
 const ACTOR_DOMAIN = 'werkflow-agents.test';
+/**
+ * Resend's simulated delivery address, which accepts a label after `+`: an invited member's mail goes
+ * through the shared Resend account, reaches no person and never bounces.
+ */
+const MEMBER_DOMAIN = 'resend.dev';
 /** How long a run's rows stay before any machine's cleanup removes them. */
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
@@ -25,20 +30,63 @@ export function runOrganizationName(runId: string): string {
   return `${ORGANIZATION_PREFIX}${runId}`;
 }
 
-export function runActorEmail(runId: string): string {
-  return `agent+${runId}@${ACTOR_DOMAIN}`;
+/** The roles a run's member actors join its organization with (`org_role`, an Admin cannot be invited). */
+export const MEMBER_ROLES = ['buero', 'employee'] as const;
+export type MemberRole = (typeof MEMBER_ROLES)[number];
+
+export function isMemberRole(role: string): role is MemberRole {
+  return MEMBER_ROLES.some((known) => known === role);
 }
 
-/** The SQL `like` pattern of every run's organization name and actor address. */
-export const RUN_PATTERNS = {
-  organizationName: `${ORGANIZATION_PREFIX}%`,
-  actorEmail: `agent+%@${ACTOR_DOMAIN}`,
-} as const;
+/** Where a run address holds its run id. */
+const RUN_SLOT = '{run}';
+/** The address of a run's actor that receives no mail, such as an Admin. */
+const ACTOR_ADDRESS = `agent+${RUN_SLOT}@${ACTOR_DOMAIN}`;
+/**
+ * The address a run's member is invited at and signs in with: Resend's simulated delivery address,
+ * labeled with the role and the run, so each run and role has its own.
+ */
+const memberAddress = (role: MemberRole) => `delivered+agent-${role}-${RUN_SLOT}@${MEMBER_DOMAIN}`;
+/** Every address a run's actor can have, with `{run}` for the run id. */
+const RUN_ADDRESSES = [ACTOR_ADDRESS, ...MEMBER_ROLES.map(memberAddress)];
 
-function runIdOf(value: string, prefix: string, suffix: string): string | null {
-  if (!value.startsWith(prefix) || !value.endsWith(suffix)) return null;
-  const runId = value.slice(prefix.length, value.length - suffix.length);
-  return RUN_ID.test(runId) ? runId : null;
+function filled(address: string, runId: string): string {
+  if (!RUN_ID.test(runId)) throw new StagingFailure('A run address needs a run id.');
+  return address.replace(RUN_SLOT, runId);
+}
+
+export function runActorEmail(runId: string): string {
+  return filled(ACTOR_ADDRESS, runId);
+}
+
+export function runMemberEmail(runId: string, role: MemberRole): string {
+  return filled(memberAddress(role), runId);
+}
+
+/** The SQL `like` pattern of every run's organization name. */
+export const RUN_ORGANIZATION_PATTERN = `${ORGANIZATION_PREFIX}%`;
+
+/**
+ * The read of every run's actor on DEV: a user only when its address is a run address filled with its
+ * own run marker, which only the secret key writes. No other user's id or address leaves the database.
+ */
+export function runActorsQuery(): { query: string; parameters: string[] } {
+  const addresses = RUN_ADDRESSES.map((_, index) => `replace($${index + 1}, '${RUN_SLOT}', run.marker)`);
+  return {
+    query: `select id, email, created_at, run.marker as run_marker from auth.users cross join lateral (select raw_app_meta_data->>'werkflow_agent_run' as marker) run where run.marker ~ '^20[0-9]{6}-[0-9]{4}-[0-9a-f]{6}$' and email in (${addresses.join(', ')})`,
+    parameters: [...RUN_ADDRESSES],
+  };
+}
+
+/** The run an actor's address names, as a run's Admin or as one of its members, or null for any other address. */
+export function actorRunId(email: string): string | null {
+  for (const address of RUN_ADDRESSES) {
+    const [prefix = '', suffix = ''] = address.split(RUN_SLOT);
+    if (!email.startsWith(prefix) || !email.endsWith(suffix)) continue;
+    const runId = email.slice(prefix.length, email.length - suffix.length);
+    if (RUN_ID.test(runId)) return runId;
+  }
+  return null;
 }
 
 /** `runMarker`: the run id in the user's app metadata, which only the secret key writes. */
@@ -60,7 +108,7 @@ export function selectRuns(
   now: Date,
 ): RunRows[] {
   return actors.flatMap((actor) => {
-    const actorRun = runIdOf(actor.email, 'agent+', `@${ACTOR_DOMAIN}`);
+    const actorRun = actorRunId(actor.email);
     // The address alone proves nothing: the marker only the kit's secret key writes must match it.
     if (actorRun === null || actor.runMarker !== actorRun) return [];
     const created = Date.parse(actor.createdAt);
@@ -70,7 +118,7 @@ export function selectRuns(
         : actorRun === runId;
     if (!selected) return [];
     const organizationIds = organizations
-      .filter((row) => row.adminId === actor.id && runIdOf(row.name, ORGANIZATION_PREFIX, '') === actorRun)
+      .filter((row) => row.adminId === actor.id && row.name === runOrganizationName(actorRun))
       .map((row) => row.id);
     return [{ runId: actorRun, actorId: actor.id, organizationIds }];
   });
@@ -120,6 +168,14 @@ export function failureText(error: unknown, secrets: readonly string[]): string 
 }
 
 export type Fact = string | number | boolean | null;
+
+/**
+ * Refused origins as one printable fact, redacted and cut like a failure line, so a long or key-shaped
+ * host never makes `factLine` throw after a journey that passed.
+ */
+export function originsFact(origins: Iterable<string>, secrets: readonly string[]): string {
+  return redact([...origins].join(','), secrets);
+}
 
 /**
  * One printed line: a step and its ids and states. A value that holds a secret, or looks like an

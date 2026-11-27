@@ -65,7 +65,6 @@ test('a loading file renders a skeleton instead of re-exporting another route', 
 const SKELETON_SLOT = 'data-slot="skeleton"';
 // A loading file may import a module that also serves the page, and the
 // settings skeleton picks its section from the path.
-mock.module('server-only', () => ({}));
 const navigation = await import('next/navigation');
 mock.module('next/navigation', () => ({ ...navigation, usePathname: () => '/einstellungen/profil' }));
 

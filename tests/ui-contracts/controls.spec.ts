@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 import { expectDefined } from '@/lib/testing/spec-support/expect-defined';
 import { WORK_EXECUTION_LABELS, workTransitionActionLabel } from '@/lib/work-lifecycle/types';
@@ -48,7 +48,7 @@ test(
     });
     await page.getByRole('button', { name: 'Nachweis hochladen' }).click();
     const dialog = page.getByRole('dialog', { name: 'Gesundheitsnachweis hochladen' });
-    await dialog.getByLabel('Datei').setInputFiles({
+    await chooseFileInGerman(page, dialog, 'Nachweis auswählen', {
       name: 'nachweis.txt',
       mimeType: 'text/plain',
       buffer: Buffer.from('Contract evidence'),
@@ -746,6 +746,25 @@ test('unmount cancels an outstanding refresh without a failure banner', async ({
   await expect(page.getByRole('alert').filter({ hasText: 'aktualisiert' })).toHaveCount(0);
 });
 
+/**
+ * werk-flow/werkflow-planning#309: the field „Datei“ is a German button that
+ * opens the file chooser and shows the chosen file's name, never the browser's
+ * own „Choose File No file chosen“ in the browser's language.
+ */
+async function chooseFileInGerman(
+  page: Page,
+  dialog: Locator,
+  buttonText: string,
+  file: { name: string; mimeType: string; buffer: Buffer },
+): Promise<void> {
+  const button = dialog.getByRole('button', { name: 'Datei', exact: true });
+  await expect(button).toHaveText(buttonText);
+  const chooser = page.waitForEvent('filechooser');
+  await button.click();
+  await (await chooser).setFiles(file);
+  await expect(dialog.getByText(file.name, { exact: true })).toBeVisible();
+}
+
 async function uploadPersonnelContractFile(page: Page): Promise<void> {
   const section = page.getByRole('main').getByTestId('personnel-lifecycle');
   await section.getByRole('button', { name: 'Datei', exact: true }).click();
@@ -753,7 +772,7 @@ async function uploadPersonnelContractFile(page: Page): Promise<void> {
     name: 'Geschützte Personalunterlage',
     exact: true,
   });
-  await dialog.getByLabel('Datei').setInputFiles({
+  await chooseFileInGerman(page, dialog, 'Datei auswählen', {
     name: 'willkommen-contract.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from('Protected contract fixture'),

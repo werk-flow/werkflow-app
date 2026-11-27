@@ -24,7 +24,7 @@ First ask of every choice: entities or a fixed enum? A raw `Select` holds a fixe
 | Dialog only some roles open (create, edit) | `lazyDialog` (`components/shared/lazy-dialog`): its module downloads on the opener's intent (`PageActionButton` through `usePageActionLoader`, `RowActionsMenu onOpen`) or on first open |
 | Confirmation whose action runs a request | `ConfirmActionDialog` (`components/shared/confirm-action-dialog`): stays open while the request runs and on failure, shows the failure in its footer, closes on success |
 | Destructive confirmation | `AlertDialog`, root `pending`; `AlertDialogBody` scrolls a long confirmation between header and footer; without it the footer sticks to the bottom; a failed confirm shows in `AlertDialogFooter error` |
-| Sheet, menu, popover | `Sheet`, `DropdownMenu`, `ContextMenu`, `Popover` |
+| Sheet, menu, popover | `Sheet`, `DropdownMenu`, `ContextMenu`, `Popover`. A `DropdownMenu` item that opens a dialog needs no focus handling: the menu leaves focus in the dialog, which returns it to the trigger on close |
 | Row menu that survives an optimistic replace or a Realtime remount | `RowActionsMenu` |
 | Table | `Table`, `SortableTableHead`, `TableRow interactive` (`"select"`: click selects, double click opens) |
 | Card row on phones, row in a divided card | `ListRow` (`variant="plain"` inside `divide-y`); its menu or checkbox sits in `ListRowActions` |
@@ -45,7 +45,7 @@ First ask of every choice: entities or a fixed enum? A raw `Select` holds a fixe
 | Date, month, time, date with time | `DatePicker`, `MonthPicker`, `TimeInput`, `DateTimeField` |
 | Hours, quantity, other number | `DurationHoursInput`, `QuantityStepper`, `Input inputMode="decimal"` with `lib/ui/decimal` |
 | Yes or no, long text, password, one-time code | `Checkbox`, `Textarea`, `PasswordInput`, `InputOTP` |
-| File choice in a form | `FileInput` inside `Field`, its button naming what to choose („Bild auswählen“); it shows the chosen file in German |
+| File choice in a form | `FileInput` inside `Field`, its button naming what to choose („Bild auswählen“); it shows the chosen file in German. A picker behind its own button stays a raw `<input type="file">` with `className="hidden"` or `"sr-only"`; lint refuses a visible one |
 | Hide parts of an image before it leaves the device | `ScreenshotRedactor` (`components/problem-reports/`): drawn boxes burn into the pixels (`burnRedactions`) |
 | Optional form block („Weitere Angaben“) | `FormDisclosure` |
 | Clock actions | `ClockActionList` over `deriveClockActions`, `TimeActivityDialog`, `JobPickerModal` |

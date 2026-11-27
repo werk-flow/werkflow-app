@@ -42,6 +42,7 @@ test('read-request scopes stay confined to the reviewed GET handlers and identit
     }
   }
   expect(scopeOwners.sort()).toEqual([
+    'app/api/angebote/vorschau/route.ts',
     'app/api/attention-counts/route.ts',
     'app/api/background-read/route.ts',
     'app/api/calendar-board/route.ts',

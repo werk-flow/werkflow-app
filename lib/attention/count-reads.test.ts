@@ -150,7 +150,6 @@ ${stderr}`,
 });
 
 if (ISOLATED) {
-  mock.module('server-only', () => ({}));
   mock.module('@/lib/logging', () => ({ logError: () => undefined }));
   mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => client }));
   mock.module('@/lib/supabase/server', () => ({ createSupabaseServerClient: async () => client }));

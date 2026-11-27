@@ -1,7 +1,6 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import Stripe from 'stripe';
 
-mock.module('server-only', () => ({}));
 const { resolveStripeGateway } = await import('./stripe');
 
 // The real gateway's billing-page calls (werk-flow/werkflow-planning#252),

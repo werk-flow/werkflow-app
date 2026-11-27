@@ -4,9 +4,9 @@ import { shellCommand } from '../../lib/testing/runner/edit-guard';
 /**
  * PreToolUse hook for shell calls, wired in .claude/settings.json and
  * .codex/hooks.json (pinned by lib/testing/runner/guard-wiring.test.ts): exits 2
- * with the reason when the command starts a sign-in, hands out an account token
- * or runs the Vercel CLI (lib/security/account-sign-in.ts). A call it cannot
- * read is refused.
+ * with the reason when the command starts a sign-in, hands out an account token,
+ * runs the Vercel CLI or touches a hosted project's function secrets
+ * (lib/security/account-sign-in.ts). A call it cannot read is refused.
  */
 let call: unknown;
 try {

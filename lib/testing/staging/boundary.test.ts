@@ -6,8 +6,10 @@ import { describe, expect, test } from 'bun:test';
 import {
   STAGING_ORIGIN,
   bypassHeaders,
+  refusalOf,
   refusedOrigin,
   requestVerdict,
+  strayPageCloser,
   type BrowserRequest,
 } from './boundary';
 
@@ -142,4 +144,67 @@ test("a refused request is named by its origin, never by its path's tokens", () 
     'https://app.werk-flow.app',
   );
   expect(refusedOrigin('::')).toBe('an unreadable URL');
+});
+
+describe('what a refusal does', () => {
+  test("a page refused in the journey's own page fails the journey", () => {
+    expect(refusalOf(page('https://stripe.com/'), true)).toBe('fail');
+  });
+
+  test('a page refused in a popup Stripe opens closes that popup and fails nothing', () => {
+    expect(verdict(page('https://stripe.com/'))).toBe('refused');
+    expect(refusalOf(page('https://stripe.com/'), false)).toBe('close');
+  });
+
+  test('a refused asset or frame is blocked in any page', () => {
+    for (const inJourneyPage of [true, false]) {
+      expect(refusalOf(asset('https://pay.google.com/gp/p/js/pay.js'), inJourneyPage)).toBe('block');
+      expect(refusalOf(embedded('https://pay.google.com/'), inJourneyPage)).toBe('block');
+    }
+  });
+});
+
+describe('closing a stray page', () => {
+  /** Pages by name, and each request's page once the fake browser has reported it. */
+  const browser = () => {
+    const owners = new Map<string, string>();
+    const closed: string[] = [];
+    const closer = strayPageCloser<string, string>({
+      pageOf: (request) => owners.get(request) ?? null,
+      journeyPage: () => 'journey',
+      close: (page) => closed.push(page),
+    });
+    return { owners, closed, closer };
+  };
+
+  test('a refused popup closes, and only that popup: other pages stay open', () => {
+    const { owners, closed, closer } = browser();
+    owners.set('stripe-popup-load', 'stripe-popup');
+    owners.set('checkout-popup-load', 'checkout-popup');
+    closer.refused('stripe-popup-load');
+    closer.pageOpened();
+    expect(closed).toEqual(['stripe-popup']);
+  });
+
+  test("a popup's first page, refused before its page is reported, closes that page once it is", () => {
+    const { owners, closed, closer } = browser();
+    closer.refused('stripe-popup-load');
+    expect(closed).toEqual([]);
+    // Another page opens first: it is not the refused request's page, so it stays.
+    owners.set('other-load', 'other-popup');
+    closer.pageOpened();
+    expect(closed).toEqual([]);
+    owners.set('stripe-popup-load', 'stripe-popup');
+    closer.pageOpened();
+    closer.pageOpened();
+    expect(closed).toEqual(['stripe-popup']);
+  });
+
+  test("the journey's own page never closes", () => {
+    const { owners, closed, closer } = browser();
+    owners.set('journey-load', 'journey');
+    closer.refused('journey-load');
+    closer.pageOpened();
+    expect(closed).toEqual([]);
+  });
 });

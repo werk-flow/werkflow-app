@@ -11,6 +11,7 @@ import type {
   DocumentImage,
   DocumentPosition,
   DocumentSection,
+  DocumentTextLine,
   DocumentTotals,
   StationeryFile,
 } from './model';
@@ -181,15 +182,18 @@ const POSITION_MARKS: Record<DocumentPosition['kind'], string | null> = {
   alternative: 'Alternativposition',
 };
 
-/** A position's head line with its price columns and mark, then one item per description line. */
+/**
+ * A position's head line with its price columns and mark, then one item per
+ * description line. A text line draws its text and description only.
+ */
 function positionFlow(
-  position: DocumentPosition,
+  position: DocumentPosition | DocumentTextLine,
   travelsWithSubtotal: boolean,
   fonts: Fonts,
   textWidth: number,
 ): FlowItem[] {
   const [firstLine = '', ...moreLines] = wrap(position.text, fonts.regular, BODY_SIZE, textWidth);
-  const mark = POSITION_MARKS[position.kind];
+  const mark = position.kind === 'text' ? null : POSITION_MARKS[position.kind];
   const descriptionLines = position.description.trim()
     ? wrap(position.description, fonts.regular, DESCRIPTION_SIZE, textWidth)
     : [];
@@ -207,8 +211,11 @@ function positionFlow(
     tableLine(4 + BODY_LEADING, (page, top, box) => {
       const columns = columnsOf(box);
       const line = top + 4;
-      drawLeft(page, position.number, columns.numberLeft, line, fonts.regular, BODY_SIZE);
+      if (position.kind !== 'text') {
+        drawLeft(page, position.number, columns.numberLeft, line, fonts.regular, BODY_SIZE);
+      }
       drawLeft(page, firstLine, columns.textLeft, line, fonts.regular, BODY_SIZE);
+      if (position.kind === 'text') return;
       const quantity = `${formatQuantity(position.quantity)} ${position.unitLabel}`;
       drawRight(page, quantity, columns.quantityRight, line, fonts.regular, BODY_SIZE);
       const per = position.priceQuantity && position.priceQuantity !== 1 ? `/${position.priceQuantity}` : '';
@@ -251,33 +258,42 @@ function positionFlow(
   return [...head, ...description];
 }
 
+/** The quantity and unit price columns beside the text, less room for an amount: where a label may run. */
+const SECTION_LABEL_EXTRA = 70 + 72 - 4;
+
 /** The flow of a section: its heading, its positions and its subtotal. */
 function sectionFlow(section: DocumentSection, fonts: Fonts, textWidth: number): FlowItem[] {
+  // A heading or subtotal label wraps before the amount column, which keeps room for the subtotal.
+  const labelWidth = textWidth + SECTION_LABEL_EXTRA;
+  const titleLines = wrap(section.title, fonts.bold, 10, labelWidth);
   const heading: FlowItem = {
-    height: 24,
+    height: 24 + (titleLines.length - 1) * BODY_LEADING,
     keepWithNext: true,
     bindsNext: true,
     inTable: true,
     draw: (page, top, box) => {
       const columns = columnsOf(box);
       drawLeft(page, section.number, columns.numberLeft, top + 10, fonts.bold, 10);
-      drawLeft(page, section.title, columns.textLeft, top + 10, fonts.bold, 10);
+      titleLines.forEach((line, index) =>
+        drawLeft(page, line, columns.textLeft, top + 10 + index * BODY_LEADING, fonts.bold, 10),
+      );
     },
   };
+  const labelLines = wrap(
+    ['Summe', section.number, section.title].filter(Boolean).join(' '),
+    fonts.bold,
+    BODY_SIZE,
+    labelWidth,
+  );
   const subtotal: FlowItem = {
-    height: 26,
+    height: 26 + (labelLines.length - 1) * BODY_LEADING,
     keepWithNext: false,
     inTable: true,
     draw: (page, top, box) => {
       const columns = columnsOf(box);
       drawRule(page, columns.textLeft, columns.amountRight, top + 4);
-      drawLeft(
-        page,
-        ['Summe', section.number, section.title].filter(Boolean).join(' '),
-        columns.textLeft,
-        top + 9,
-        fonts.bold,
-        BODY_SIZE,
+      labelLines.forEach((line, index) =>
+        drawLeft(page, line, columns.textLeft, top + 9 + index * BODY_LEADING, fonts.bold, BODY_SIZE),
       );
       drawRight(
         page,
@@ -470,6 +486,12 @@ function drawLetterhead(
   page.drawImage(logo, { x: box.right - width, y: PAGE_HEIGHT - 12 * MM - height, width, height });
 }
 
+/** The address field's lines, each wrapped to the field so a long name or street stays left of the info block. */
+function recipientLinesOf(document: BusinessDocument, fonts: Fonts, box: Box): string[] {
+  const width = (INFO_BLOCK_LEFT_MM - RECIPIENT_GAP_MM) * MM - box.left;
+  return document.recipientLines.flatMap((line) => wrap(line, fonts.regular, BODY_SIZE, width));
+}
+
 /**
  * The address field and the info block of the first page (DIN 5008, form B),
  * moved down by `shift` and starting at the content's left edge, so they keep
@@ -484,7 +506,7 @@ function drawAddressAndInfo(
 ) {
   const returnAddress = [document.sender.name, ...document.sender.addressLines].join(' · ');
   drawLeft(page, returnAddress, box.left, RETURN_ADDRESS_TOP_MM * MM + shift, fonts.regular, 6.5, MUTED);
-  document.recipientLines.forEach((line, index) =>
+  recipientLinesOf(document, fonts, box).forEach((line, index) =>
     drawLeft(page, line, box.left, 55 * MM + shift + index * BODY_LEADING, fonts.regular, BODY_SIZE),
   );
   const labelLeft = INFO_BLOCK_LEFT_MM * MM;
@@ -499,6 +521,8 @@ function drawAddressAndInfo(
 }
 
 const INFO_BLOCK_TOP_MM = 50;
+/** The least space between the address field and the info block. */
+const RECIPIENT_GAP_MM = 5;
 /** The least space between the address field or info block and the first page's content. */
 const HEAD_GAP_MM = 6;
 
@@ -516,7 +540,7 @@ function headBottom(document: BusinessDocument, fonts: Fonts, box: Box, shift: n
     (top, row) => top + wrap(row.value, fonts.regular, 8, valueWidth).length * 11 + 2,
     INFO_BLOCK_TOP_MM * MM + shift,
   );
-  const recipientBottom = 55 * MM + shift + document.recipientLines.length * BODY_LEADING;
+  const recipientBottom = 55 * MM + shift + recipientLinesOf(document, fonts, box).length * BODY_LEADING;
   return Math.max(infoBottom, recipientBottom) + HEAD_GAP_MM * MM;
 }
 
@@ -628,13 +652,17 @@ function documentFlow(
   // Lines wrap once, to the narrower of the two page kinds, so a line fits on whichever page it lands.
   const width = Math.min(firstBox.right - firstBox.left, followingBox.right - followingBox.left);
   const textWidth = Math.min(columnsOf(firstBox).textWidth, columnsOf(followingBox).textWidth);
+  // A title wider than the page wraps; its lines stay together, and the last keeps the space below.
+  const titleLines = wrap(document.title, fonts.bold, 15, width);
   return [
-    {
-      height: 26,
-      keepWithNext: false,
-      inTable: false,
-      draw: (page, top, box) => drawLeft(page, document.title, box.left, top, fonts.bold, 15),
-    },
+    ...titleLines.map(
+      (line, index): FlowItem => ({
+        height: index === titleLines.length - 1 ? 26 : 19,
+        keepWithNext: index < titleLines.length - 1,
+        inTable: false,
+        draw: (page, top, box) => drawLeft(page, line, box.left, top, fonts.bold, 15),
+      }),
+    ),
     ...paragraphFlow(document.openingText, fonts.regular, width, 0),
     { height: 10, keepWithNext: true, bindsNext: true, inTable: false, draw: () => undefined },
     ...document.sections.flatMap((section) => sectionFlow(section, fonts, textWidth)),

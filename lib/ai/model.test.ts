@@ -1,6 +1,5 @@
-import { afterEach, expect, mock, test } from 'bun:test';
+import { afterEach, expect, test } from 'bun:test';
 
-mock.module('server-only', () => ({}));
 const { isAllowedModel, resolveAiModel } = await import('./model');
 
 // The one model of decision 30.

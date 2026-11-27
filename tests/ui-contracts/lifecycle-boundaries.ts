@@ -65,6 +65,7 @@ declare global {
       | 'route-refresh'
       | 'customer'
       | 'customer-create'
+      | 'customer-menu-edit'
       | 'request-capture'
       | 'request-attach'
       | 'global-search'
