@@ -26,11 +26,11 @@ function isMonthEnd(date: string) {
   return addLocalDays(date, 1).slice(0, 7) !== date.slice(0, 7);
 }
 
-test('a run day looks at its next 14 days, then the next month end and year end', () => {
+test('a run day checks only offsets 1, 2, 3, 7 and 14, then the next month end and year end', () => {
   const days = lookaheadDays('2026-11-06');
 
   expect(days.map((day) => `${day.date} ${day.label}`)).toEqual([
-    ...Array.from({ length: 13 }, (_, index) => `${addLocalDays('2026-11-06', index + 1)} window`),
+    ...[1, 2, 3, 7].map((offset) => `${addLocalDays('2026-11-06', offset)} window`),
     '2026-11-20 day 14',
     '2026-11-30 month end',
     '2026-12-31 year end',
@@ -104,17 +104,18 @@ test('every run day through 2037 keeps the plan whole', () => {
 
     expect(new Set(dates).size).toBe(dates.length);
     expect(dates.toSorted()).toEqual(dates);
-    expect(dates.at(13)).toBe(lastWindowDay);
-    expect(dates.slice(14).every((date) => date > lastWindowDay && isMonthEnd(date))).toBe(true);
+    expect(dates.slice(0, 5)).toEqual([1, 2, 3, 7, 14].map((offset) => addLocalDays(runDay, offset)));
+    expect(dates.slice(5).every((date) => date > lastWindowDay && isMonthEnd(date))).toBe(true);
     expect(dates.at(-1)?.slice(5)).toBe('12-31');
     // Every date reaches day 14 once, so a browser leg sees it two weeks before it arrives.
     expect(days.filter((day) => day.browser).map((day) => day.date)).toContain(lastWindowDay);
     // A date that failed stays planned: it can keep its browser leg until it arrives.
-    expect(days.map((day) => day.date)).toEqual(
-      expect.arrayContaining(
-        lookaheadDays(addLocalDays(runDay, -1)).flatMap((day) => (day.date > runDay ? [day.date] : [])),
-      ),
-    );
+    const previousDates = lookaheadDays(addLocalDays(runDay, -1)).map((day) => day.date);
+    expect(
+      lookaheadDays(runDay, previousDates)
+        .filter((day) => day.browser)
+        .map((day) => day.date),
+    ).toEqual(expect.arrayContaining(previousDates.filter((date) => date > runDay)));
   }
 });
 

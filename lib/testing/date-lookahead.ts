@@ -1,7 +1,7 @@
 import { addLocalDays, getLocalWeekday } from '../date-time/berlin';
 
-/** Every run day's window, so a date is seen at least this many days before it arrives. */
-const WINDOW_DAYS = 14;
+/** Check each date first two weeks ahead, then weekly and on its last three days. */
+const WINDOW_OFFSETS = [1, 2, 3, 7, 14];
 
 /** The run day that also takes browser groups to the month end and the year end. */
 const SUNDAY = 6;
@@ -67,17 +67,22 @@ export function failedBrowserDates(alertBody: string): string[] {
 }
 
 /**
- * The dates one run day looks at: the next 14 days, then the first month end and year end past them,
+ * The dates one run day looks at: checkpoints within 14 days, then the first month end and year end,
  * so a run always sees weeks further than its window.
  *
  * Browser groups run on day 14, which every date reaches once, and on Sundays also on the two ends.
  * A date whose browser leg failed keeps it: the next run would otherwise pass without that date, and
  * the green run would close the alert with the failure still ahead. Such a date stays in the plan
- * until it arrives, because the window, the month end and the year end all hold it.
+ * until it arrives, including between the window checkpoints.
  */
 export function lookaheadDays(runDay: string, failedDates: readonly string[] = []): LookaheadDay[] {
-  const window = Array.from({ length: WINDOW_DAYS }, (_, index) => addLocalDays(runDay, index + 1));
-  const lastDay = window.at(-1) ?? runDay;
+  const lastDay = addLocalDays(runDay, 14);
+  const window = [
+    ...new Set([
+      ...WINDOW_OFFSETS.map((offset) => addLocalDays(runDay, offset)),
+      ...failedDates.filter((date) => date > runDay && date <= lastDay),
+    ]),
+  ].toSorted();
   const monthEnd = nextMonthEndAfter(lastDay);
   const yearEnd = nextYearEndAfter(lastDay);
   const sunday = getLocalWeekday(runDay) === SUNDAY;
