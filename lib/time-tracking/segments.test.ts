@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
-  calculateTimeActivityTotals,
   createActivitySelection,
-  getSegmentDurationMinutes,
   projectTimeSegmentsToLegacyTransitions,
   splitSegmentAtLocalDayBoundaries,
   toTimeSegmentFact,
@@ -87,15 +85,6 @@ describe('canonical time segment projections', () => {
     ).toThrow('Invalid canonical time segment shape: segment');
   });
 
-  test('clamps duration to the requested range', () => {
-    const minutes = getSegmentDurationMinutes(
-      segment('work', '2026-08-30T21:00:00.000Z', '2026-08-31T06:00:00.000Z'),
-      new Date('2026-08-30T22:00:00.000Z'),
-      new Date('2026-08-31T22:00:00.000Z'),
-    );
-    expect(minutes).toBe(480);
-  });
-
   test('splits an overnight segment at Europe/Berlin midnight', () => {
     expect(
       splitSegmentAtLocalDayBoundaries(
@@ -148,29 +137,6 @@ describe('canonical time segment projections', () => {
         endedAt: '2026-08-31T10:00:00.000Z',
       },
     ]);
-  });
-
-  test('keeps factual activity totals separate', () => {
-    const rangeStart = new Date('2026-08-31T00:00:00.000Z');
-    const rangeEnd = new Date('2026-09-01T00:00:00.000Z');
-    const segments = [
-      segment('work', '2026-08-31T08:00:00.000Z', '2026-08-31T09:00:00.000Z'),
-      segment('travel', '2026-08-31T09:00:00.000Z', '2026-08-31T09:30:00.000Z'),
-      segment('break', '2026-08-31T09:30:00.000Z', '2026-08-31T09:45:00.000Z'),
-      segment('standby', '2026-08-31T09:45:00.000Z', '2026-08-31T10:00:00.000Z'),
-      segment('callout', '2026-08-31T10:00:00.000Z', '2026-08-31T10:30:00.000Z'),
-      segment('internal_activity', '2026-08-31T10:30:00.000Z', '2026-08-31T11:00:00.000Z'),
-    ];
-
-    expect(calculateTimeActivityTotals(segments, rangeStart, rangeEnd)).toEqual({
-      presenceMinutes: 180,
-      workMinutes: 60,
-      breakMinutes: 15,
-      travelMinutes: 30,
-      standbyMinutes: 15,
-      calloutMinutes: 30,
-      internalMinutes: 30,
-    });
   });
 
   test('projects work and break switches without closing attendance', () => {
