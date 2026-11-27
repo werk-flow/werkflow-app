@@ -1,15 +1,17 @@
 import { afterEach, describe, expect, mock, setSystemTime, test } from 'bun:test';
 
-import type { DailyTarget } from '@/lib/personnel/targets';
+import {
+  LIVE_DAY_END,
+  LIVE_DAY_START,
+  liveClockStateOf,
+  liveDayEntriesOf,
+  liveDayTarget,
+} from '@/lib/testing/live-day-arbitraries';
 import { canonicalDayTotals } from './clock-day-totals';
 import { liveMinutes } from './helpers';
 import { computeZeiterfassungLiveTotals } from './live-totals';
 import { memberLiveDay, memberStatusOf } from './member-day';
-import {
-  createActivitySelection,
-  projectTimeSegmentsToLegacyTransitions,
-  type TimeSegmentFact,
-} from './segments';
+import { createActivitySelection, type TimeSegmentFact } from './segments';
 import type { BreakPolicy, TimeBreakdown } from './settings';
 import type { LiveClockState, TimeEntry } from './types';
 import { buildWeeklyTimeData, computeWeekLabel, getTodayIndex, getWeekBounds, targetsOfWeek } from './weekly';
@@ -50,8 +52,8 @@ describe('the Berlin calendar week', () => {
 });
 
 /** Monday, 7 September 2026, in Berlin (CEST). */
-const MONDAY = new Date('2026-09-06T22:00:00.000Z');
-const MONDAY_END = new Date('2026-09-07T21:59:59.999Z');
+const MONDAY = LIVE_DAY_START;
+const MONDAY_END = LIVE_DAY_END;
 const STANDBY_POLICY: BreakPolicy = {
   breakMode: 'automatic',
   autoBreakThresholdMinutes: 360,
@@ -79,42 +81,6 @@ function segment(
     : { ...base, ...createActivitySelection('standby') };
 }
 
-/** The day's segments as the week reads them: projected clock entries carrying their activity. */
-function weekEntriesOf(segments: TimeSegmentFact[]): TimeEntry[] {
-  const kindOf = new Map(segments.map((fact) => [fact.id, fact.kind]));
-  return projectTimeSegmentsToLegacyTransitions(segments, MONDAY, MONDAY_END).map((point, index) => ({
-    id: `${point.segmentId}:${index}`,
-    userId: 'user',
-    organizationId: 'org',
-    entryType: point.entryType,
-    timestamp: point.timestamp,
-    isManual: false,
-    jobId: null,
-    status: 'approved',
-    reviewedBy: null,
-    reviewedAt: null,
-    createdAt: point.timestamp,
-    updatedAt: point.timestamp,
-    activityKind: kindOf.get(point.segmentId),
-  }));
-}
-
-function mondayTarget(targetMinutes: number): DailyTarget {
-  return {
-    date: '2026-09-07',
-    weekday: 0,
-    targetMinutes,
-    baseTargetMinutes: targetMinutes,
-    source: 'schedule',
-    outsideEmployment: null,
-    isHoliday: false,
-    holidayName: null,
-    isClosureDay: false,
-    closureLabel: null,
-    absence: null,
-  };
-}
-
 describe('standby in the day and the week', () => {
   // 07:00–14:00 work, then 14:00–17:00 standby: ten hours of working time.
   const segments = [
@@ -123,8 +89,8 @@ describe('standby in the day and the week', () => {
   ];
 
   test('counts toward working time and overtime in the week as in the day', () => {
-    const target = mondayTarget(480);
-    const [weekDay] = buildWeeklyTimeData(weekEntriesOf(segments), MONDAY, STANDBY_POLICY, [target]);
+    const target = liveDayTarget(480);
+    const [weekDay] = buildWeeklyTimeData(liveDayEntriesOf(segments), MONDAY, STANDBY_POLICY, [target]);
 
     expect(weekDay?.totalMinutes).toBe(600);
     expect(weekDay?.standbyMinutes).toBe(180);
@@ -141,8 +107,8 @@ describe('standby in the day and the week', () => {
       segment('work', 'work', '2026-09-07T05:00:00.000Z', '2026-09-07T10:00:00.000Z'),
       segment('standby', 'standby', '2026-09-07T10:00:00.000Z', '2026-09-07T13:00:00.000Z'),
     ];
-    const [weekDay] = buildWeeklyTimeData(weekEntriesOf(shortWork), MONDAY, STANDBY_POLICY, [
-      mondayTarget(480),
+    const [weekDay] = buildWeeklyTimeData(liveDayEntriesOf(shortWork), MONDAY, STANDBY_POLICY, [
+      liveDayTarget(480),
     ]);
 
     expect(weekDay?.breakMinutes).toBe(0);
@@ -156,29 +122,11 @@ const AFTER_THE_DAY = Date.parse('2026-09-07T15:00:00.000Z');
 
 /** Today's clock state as the server builds it from the day's segments; the last one may still run. */
 function clockStateOf(segments: TimeSegmentFact[], policy: BreakPolicy): LiveClockState {
-  const running = segments.find((fact) => fact.endedAt === null) ?? null;
-  return {
-    ...clockTotalsState(canonicalDayTotals(segments, MONDAY, MONDAY_END), policy),
-    organizationId: 'org',
-    status: running ? 'working' : 'clocked_out',
-    isClockedIn: running !== null,
-    isOnBreak: false,
-    clockInTime: segments[0]?.startedAt ?? null,
-    statusStartedAt: running?.startedAt ?? null,
-    breakStartTime: null,
-    activeJobId: null,
-    activeJobInfo: null,
-    captureModel: 'canonical',
-    sessionId: 'session',
-    sessionVersion: 1,
-    currentSegmentId: running?.id ?? null,
-    currentActivity: running ? createActivitySelection(running.kind) : null,
-    resumeActivity: null,
-    resumeJobInfo: null,
-    recoveryReason: null,
-    legacyOpen: false,
-    fetchedAt: new Date(AFTER_THE_DAY).toISOString(),
-  };
+  return liveClockStateOf(
+    segments,
+    clockTotalsState(canonicalDayTotals(segments, MONDAY, MONDAY_END), policy),
+    AFTER_THE_DAY,
+  );
 }
 
 /**
@@ -195,7 +143,7 @@ function todaysSplits(
   setSystemTime(new Date(nowMs));
   const state = clockStateOf(segments, policy);
   const presence = liveMinutes(state.todayMinutes, state.statusStartedAt, nowMs);
-  const status = memberStatusOf(weekEntriesOf(segments), policy);
+  const status = memberStatusOf(liveDayEntriesOf(segments), policy);
   return {
     dashboard: computeZeiterfassungLiveTotals(state, presence, targetMinutes, nowMs).breakdown,
     mitarbeiter: memberLiveDay(status, policy, targetMinutes, nowMs).breakdown,
@@ -218,8 +166,8 @@ describe('today’s totals and the week', () => {
 
   test('give a day with standby past the first step the break, working time and overtime of the week', () => {
     const closed = workThenStandby('2026-09-07T13:00:00.000Z');
-    const [weekDay] = buildWeeklyTimeData(weekEntriesOf(closed), MONDAY, STANDBY_POLICY, [
-      mondayTarget(DAY_OF_SEVEN_HOURS),
+    const [weekDay] = buildWeeklyTimeData(liveDayEntriesOf(closed), MONDAY, STANDBY_POLICY, [
+      liveDayTarget(DAY_OF_SEVEN_HOURS),
     ]);
 
     expect(weekDay).toMatchObject(WEEK_SPLIT);
@@ -240,8 +188,8 @@ describe('today’s totals and the week', () => {
       segment('work', 'work', '2026-09-07T05:00:00.000Z', '2026-09-07T11:00:00.000Z'),
       segment('standby', 'standby', '2026-09-07T11:00:00.000Z', '2026-09-07T14:00:00.007Z'),
     ];
-    const [weekDay] = buildWeeklyTimeData(weekEntriesOf(sixHoursAndStandby), MONDAY, STANDBY_POLICY, [
-      mondayTarget(DAY_OF_SEVEN_HOURS),
+    const [weekDay] = buildWeeklyTimeData(liveDayEntriesOf(sixHoursAndStandby), MONDAY, STANDBY_POLICY, [
+      liveDayTarget(DAY_OF_SEVEN_HOURS),
     ]);
 
     expect(weekDay?.breakMinutes).toBe(30);
@@ -274,7 +222,7 @@ describe('today’s totals and the week', () => {
       updatedAt: '2026-09-07T04:00:00.000Z',
     };
     const status = memberStatusOf(
-      [unclosedLegacyStart, ...weekEntriesOf(workThenStandby(null))],
+      [unclosedLegacyStart, ...liveDayEntriesOf(workThenStandby(null))],
       STANDBY_POLICY,
     );
 
@@ -299,7 +247,7 @@ describe('a day whose target is unknown', () => {
   test('shows every worked minute as working time, never overtime past eight hours', () => {
     const tenHours = [segment('work', 'work', '2026-09-07T05:00:00.000Z', '2026-09-07T15:00:00.000Z')];
     const manual: BreakPolicy = { ...STANDBY_POLICY, breakMode: 'manual' };
-    const [weekDay] = buildWeeklyTimeData(weekEntriesOf(tenHours), MONDAY, manual, undefined);
+    const [weekDay] = buildWeeklyTimeData(liveDayEntriesOf(tenHours), MONDAY, manual, undefined);
 
     expect(weekDay?.workMinutes).toBe(600);
     expect(weekDay?.overtimeMinutes).toBe(0);
@@ -308,9 +256,9 @@ describe('a day whose target is unknown', () => {
 
 describe('targets kept from an earlier read', () => {
   test('apply only to the week they were read for', () => {
-    const lastWeek = [{ ...mondayTarget(480), date: '2026-08-31' }];
+    const lastWeek = [{ ...liveDayTarget(480), date: '2026-08-31' }];
     expect(targetsOfWeek(lastWeek, MONDAY)).toBeUndefined();
-    const thisWeek = [mondayTarget(480)];
+    const thisWeek = [liveDayTarget(480)];
     expect(targetsOfWeek(thisWeek, MONDAY)).toBe(thisWeek);
     expect(targetsOfWeek(undefined, MONDAY)).toBeUndefined();
   });

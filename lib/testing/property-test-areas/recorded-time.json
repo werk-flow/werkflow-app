@@ -8,6 +8,8 @@
     "lib/time-tracking/canonical-clock-state.ts",
     "lib/time-tracking/closed-period-dates.ts",
     "lib/time-tracking/helpers.ts",
+    "lib/time-tracking/live-totals.ts",
+    "lib/time-tracking/member-day.ts",
     "lib/time-tracking/segments.ts",
     "lib/time-tracking/settings.ts",
     "lib/time-tracking/validation.ts",
