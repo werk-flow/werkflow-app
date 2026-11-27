@@ -1,9 +1,9 @@
 name: Full run on main
 
-# Every browser group on main right after a tooling change landed (its plan ran only a sample,
-# owner decision D3, werk-flow/werkflow-planning#503), and otherwise every 3 hours from 06:00 to
-# 20:00 Berlin when something besides documentation landed, so a break that no change plan selected
-# shows within hours instead of at the nightly (werk-flow/werkflow-planning#413). GitHub starts
+# Every browser group on main every 6 hours from 06:00 to 20:00 Berlin when something besides
+# documentation landed. Tooling landings share the next slot, at most one full run per slot
+# (owner decision, werk-flow/werkflow-planning#503). Changes after the daytime window wait for
+# the nightly (werk-flow/werkflow-planning#413). GitHub starts
 # this repository's scheduled runs 4 to 10 hours late, so the timer of ops/ci-alert.py in
 # werk-flow/werkflow-planning dispatches it (the release gate counts only dispatched or scheduled
 # full runs, .github/scripts/release-candidate.sh). Its first job decides in about a minute
@@ -36,7 +36,7 @@ jobs:
     outputs:
       run: ${{ steps.decide.outputs.run }}
     steps:
-      # The rule diffs main since its newest full run and plans that diff; no step needs the job
+      # The rule reads main's diff since its newest full run; no step needs the job
       # token in .git/config.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
