@@ -1,11 +1,14 @@
 // The real offer actions for a Position from an article or a Leistung over
 // the in-memory database: a field worker is refused before any database
-// access, another organization's entry is not found, an article with a unit
-// outside the list answers without one, the offer's read carries the
-// entry's cost while the invoice's read of the same entry carries none, and
-// Büro's save hands each Position's own cost to the database for its own
-// organization and actor.
-// supabase/tests/offers.sql proves the stored source, the hidden cost and the refusals.
+// access, another organization's entry or offer is not found, an article
+// with a unit outside the list answers without one, the offer's read carries
+// the entry's cost and its customer's conditions while the invoice's read of
+// the same entry carries neither, and Büro's save hands each Position's own
+// cost and price source to the database for its own organization and actor.
+// The customer's conditions are recorded only by Admin and Büro, for their
+// own organization and as themselves.
+// supabase/tests/offers.sql and client_price_conditions.sql prove the stored
+// source, the hidden cost, the conditions and the refusals.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import {
@@ -17,9 +20,18 @@ import {
   tableRows,
 } from './action-boundary-world';
 import type { OfferPositionCost } from '@/lib/offers/types';
+import type { PriceSourceClaim } from '@/lib/price-catalog/customer-conditions';
 import { assertRefused } from './operations-boundary-refusals';
 
 const offerId = '95000000-0000-4000-8000-000000000001';
+const plainOfferId = '95000000-0000-4000-8000-000000000002';
+const foreignOfferId = '95000000-0000-4000-8000-000000000009';
+const clientIds = {
+  conditioned: '94000000-0000-4000-8000-000000000001',
+  plain: '94000000-0000-4000-8000-000000000002',
+  foreign: '94000000-0000-4000-8000-000000000009',
+};
+const conditionId = '98000000-0000-4000-8000-000000000002';
 const articleIds = {
   own: '96000000-0000-4000-8000-000000000001',
   legacyUnit: '96000000-0000-4000-8000-000000000003',
@@ -52,6 +64,7 @@ const leistung = (id: string, organizationId: string) => ({
   leistung_number: 'L-7',
   name: 'Monteurstunde',
   description: 'Je angefangene Stunde',
+  kind: 'arbeit',
   unit: 'hour',
   tax_rate_basis_points: 1900,
   archived_at: null,
@@ -66,10 +79,36 @@ const world = installActionWorld({
     article(articleIds.foreign, ORGANIZATION_B),
   ],
   leistungen: [leistung(leistungIds.own, ORGANIZATION_A), leistung(leistungIds.foreign, ORGANIZATION_B)],
+  offers: [
+    { id: offerId, organization_id: ORGANIZATION_A, client_id: clientIds.conditioned },
+    { id: plainOfferId, organization_id: ORGANIZATION_A, client_id: clientIds.plain },
+    { id: foreignOfferId, organization_id: ORGANIZATION_B, client_id: clientIds.foreign },
+  ],
 });
 mock.module('next/cache', () => ({ updateTag: () => {}, revalidatePath: () => {}, revalidateTag: () => {} }));
 
 const SAVED = { contentVersion: 2, updatedAt: '2026-11-26T08:00:00.123456+00:00' };
+
+/** Haustechnik Sonnenberg's own conditions since 2026-01-01: 10 % on material, 68,00 € per Monteurstunde. */
+const CONDITION = {
+  id: conditionId,
+  version: 2,
+  validFrom: '2026-01-01',
+  materialDiscountTenths: 100,
+  arbeitDiscountTenths: 50,
+  anfahrtDiscountTenths: 0,
+  recordedAt: '2025-12-20T08:00:00Z',
+  leistungPrices: [
+    {
+      leistungId: leistungIds.own,
+      number: 'L-7',
+      name: 'Monteurstunde',
+      unit: 'hour',
+      archived: false,
+      salePriceCents: 6800,
+    },
+  ],
+};
 
 const ownRows = (table: string, organizationId: unknown, ids: unknown) =>
   tableRows(world, table).filter(
@@ -106,6 +145,10 @@ world.rpc = ({ name, args }) => {
     }));
     return { data: rows, error: null };
   }
+  if (name === 'list_client_price_conditions') {
+    const own = args.p_organization_id === ORGANIZATION_A && args.p_client_id === clientIds.conditioned;
+    return { data: own ? [CONDITION] : [], error: null };
+  }
   if (name === 'save_offer_content') return { data: SAVED, error: null };
   return { data: null, error: { message: `unexpected ${name}` } };
 };
@@ -114,10 +157,12 @@ const { readInvoiceLineSource, readOfferArticleLine, readOfferLeistungLine } = a
   '@/lib/invoices/line-source-actions'
 );
 const { saveOfferContent } = await import('@/lib/offers/actions');
+const { recordCustomerCondition } = await import('@/lib/price-catalog/actions');
 
 const position = (
   source: { kind: 'article' | 'leistung'; id: string } | null,
   cost: OfferPositionCost | null = null,
+  priceSource: PriceSourceClaim = { kind: 'manuell' },
 ) => ({
   kind: 'free' as const,
   name: 'Kupferrohr 15 mm',
@@ -129,6 +174,7 @@ const position = (
   taxRateBasisPoints: 1900 as const,
   source,
   cost,
+  priceSource,
 });
 const contentWith = (positions: ReadonlyArray<ReturnType<typeof position>>) => ({
   offerId,
@@ -143,8 +189,14 @@ signInAs(world, 'employee');
 await assertRefused(
   world,
   [
-    ['readOfferArticleLine', () => readOfferArticleLine({ articleId: articleIds.own })],
-    ['readOfferLeistungLine', () => readOfferLeistungLine({ leistungId: leistungIds.own })],
+    [
+      'readOfferArticleLine',
+      () => readOfferArticleLine({ offerId: plainOfferId, articleId: articleIds.own }),
+    ],
+    [
+      'readOfferLeistungLine',
+      () => readOfferLeistungLine({ offerId: plainOfferId, leistungId: leistungIds.own }),
+    ],
     [
       'saveOfferContent with a cost',
       () => saveOfferContent(contentWith([position({ kind: 'leistung', id: leistungIds.own }, COST)])),
@@ -159,8 +211,8 @@ signInAs(world, 'buero');
 await assertRefused(
   world,
   [
-    ['readOfferArticleLine bad id', () => readOfferArticleLine({ articleId: 'KR-15' })],
-    ['readOfferLeistungLine bad id', () => readOfferLeistungLine({ leistungId: 'L-7' })],
+    ['readOfferArticleLine bad id', () => readOfferArticleLine({ offerId, articleId: 'KR-15' })],
+    ['readOfferLeistungLine bad id', () => readOfferLeistungLine({ offerId, leistungId: 'L-7' })],
     [
       'saveOfferContent bad Leistung id',
       () => saveOfferContent(contentWith([position({ kind: 'leistung', id: 'L-7' })])),
@@ -175,12 +227,12 @@ await assertRefused(
 const foreignReads: Array<[string, () => Promise<unknown>, string]> = [
   [
     'readOfferArticleLine',
-    () => readOfferArticleLine({ articleId: articleIds.foreign }),
+    () => readOfferArticleLine({ offerId: plainOfferId, articleId: articleIds.foreign }),
     'read_inventory_item_prices_on_day',
   ],
   [
     'readOfferLeistungLine',
-    () => readOfferLeistungLine({ leistungId: leistungIds.foreign }),
+    () => readOfferLeistungLine({ offerId: plainOfferId, leistungId: leistungIds.foreign }),
     'leistung_prices_on_day',
   ],
 ];
@@ -192,16 +244,34 @@ for (const [label, call, priceRead] of foreignReads) {
     `${label}: the refusal changed`,
   );
   assert.deepEqual(
-    world.rpcCalls.map((rpc) => [rpc.name, rpc.args.p_organization_id]),
-    [[priceRead, ORGANIZATION_A]],
-    `${label}: called more than the price read of its own organization`,
+    // The two reads run side by side, in either order.
+    world.rpcCalls.map((rpc) => [rpc.name, rpc.args.p_organization_id]).sort(),
+    [
+      ['list_client_price_conditions', ORGANIZATION_A],
+      [priceRead, ORGANIZATION_A],
+    ].sort(),
+    `${label}: called more than the reads of its own organization`,
+  );
+}
+
+// Another organization's offer is not found: no customer's conditions of it are read.
+for (const call of [
+  () => readOfferArticleLine({ offerId: foreignOfferId, articleId: articleIds.own }),
+  () => readOfferLeistungLine({ offerId: foreignOfferId, leistungId: leistungIds.own }),
+]) {
+  world.rpcCalls.length = 0;
+  assert.deepEqual(await call(), { success: false, error: 'offer_not_found' });
+  assert.ok(
+    world.rpcCalls.every((rpc) => rpc.name !== 'list_client_price_conditions'),
+    "another organization's offer read its customer's conditions",
   );
 }
 
 // Büro's own entries become Positions with today's sale price and their cost: an article's
 // purchase price per its price quantity, a Leistung's cost rate. One with a unit outside the
-// list answers without a unit, which the editor asks for.
-assert.deepEqual(await readOfferArticleLine({ articleId: articleIds.own }), {
+// list answers without a unit, which the editor asks for. A customer without conditions gets
+// the list price.
+assert.deepEqual(await readOfferArticleLine({ offerId: plainOfferId, articleId: articleIds.own }), {
   success: true,
   line: {
     name: 'Kupferrohr 15 mm',
@@ -218,6 +288,7 @@ assert.deepEqual(await readOfferArticleLine({ articleId: articleIds.own }), {
       archived: false,
     },
     cost: COST,
+    priceSource: { kind: 'listenpreis' },
   },
 });
 const leistungLine = {
@@ -229,11 +300,36 @@ const leistungLine = {
   taxRateBasisPoints: 1900,
   source: { kind: 'leistung', id: leistungIds.own, number: 'L-7', name: 'Monteurstunde', archived: false },
 } as const;
-assert.deepEqual(await readOfferLeistungLine({ leistungId: leistungIds.own }), {
+assert.deepEqual(await readOfferLeistungLine({ offerId: plainOfferId, leistungId: leistungIds.own }), {
   success: true,
-  line: { ...leistungLine, cost: { amountCents: 4180, priceQuantity: 1 } },
+  line: {
+    ...leistungLine,
+    cost: { amountCents: 4180, priceQuantity: 1 },
+    priceSource: { kind: 'listenpreis' },
+  },
 });
-const legacy = await readOfferArticleLine({ articleId: articleIds.legacyUnit });
+
+// The customer's conditions of today price the same entries: the Leistung's own price, the
+// article's list price less 10 % on material (1234 × 0,9 = 1110,6 → 1111), both naming the version.
+const fromCondition = {
+  kind: 'kundenkondition',
+  condition: { id: conditionId, version: 2, validFrom: '2026-01-01' },
+} as const;
+const ownLeistung = await readOfferLeistungLine({ offerId, leistungId: leistungIds.own });
+assert.deepEqual(ownLeistung.success && [ownLeistung.line.unitPriceCents, ownLeistung.line.priceSource], [
+  6800,
+  fromCondition,
+]);
+const ownArticle = await readOfferArticleLine({ offerId, articleId: articleIds.own });
+assert.deepEqual(
+  ownArticle.success && [
+    ownArticle.line.unitPriceCents,
+    ownArticle.line.priceQuantity,
+    ownArticle.line.priceSource,
+  ],
+  [1111, 1, fromCondition],
+);
+const legacy = await readOfferArticleLine({ offerId: plainOfferId, articleId: articleIds.legacyUnit });
 assert.equal(legacy.success && legacy.line.unit, null, 'an article with a unit outside the list kept a unit');
 
 // An invoice line of the same Leistung reads as before offers kept a cost: none reaches it.
@@ -242,16 +338,23 @@ assert.deepEqual(await readInvoiceLineSource({ kind: 'leistung', id: leistungIds
   line: leistungLine,
 });
 
-// The save hands each Position's own cost to the database as its cost store names it, with the
-// caller's organization and actor; it reads no price again.
+// The save hands each Position's own cost to the database as its cost store names it, and its
+// price source, with the caller's organization and actor; it reads no price again. A source
+// whose answered price the Position no longer has is stored as „manuell“.
 world.rpcCalls.length = 0;
 assert.deepEqual(
   await saveOfferContent(
     contentWith([
-      position({ kind: 'article', id: articleIds.own }, COST),
-      position({ kind: 'leistung', id: leistungIds.own }, { amountCents: 4180, priceQuantity: 1 }),
+      {
+        ...position({ kind: 'article', id: articleIds.own }, COST),
+        priceSource: { kind: 'listenpreis', unitPriceCents: 1234 },
+      },
+      {
+        ...position({ kind: 'leistung', id: leistungIds.own }, { amountCents: 4180, priceQuantity: 1 }),
+        priceSource: { kind: 'kundenkondition', conditionId, unitPriceCents: 6800 },
+      },
       position(null, { amountCents: 0, priceQuantity: 1 }),
-      position(null),
+      { ...position(null), priceSource: { kind: 'listenpreis', unitPriceCents: 1234 } },
     ]),
   ),
   { success: true, offerId, ...SAVED },
@@ -265,11 +368,89 @@ assert.ok(Array.isArray(saved));
 const positions: unknown = saved[0]?.positions;
 assert.ok(Array.isArray(positions));
 assert.deepEqual(
-  positions.map((entry) => [entry.source, entry.purchaseCost, 'cost' in entry]),
+  positions.map((entry) => [entry.source, entry.purchaseCost, 'cost' in entry, entry.priceSource]),
   [
-    [{ kind: 'article', id: articleIds.own }, COST, false],
-    [{ kind: 'leistung', id: leistungIds.own }, { amountCents: 4180, priceQuantity: 1 }, false],
-    [null, { amountCents: 0, priceQuantity: 1 }, false],
-    [null, null, false],
+    [{ kind: 'article', id: articleIds.own }, COST, false, { kind: 'listenpreis', conditionId: null }],
+    [
+      { kind: 'leistung', id: leistungIds.own },
+      { amountCents: 4180, priceQuantity: 1 },
+      false,
+      // The Position's price is 12,34 €, not the condition's 68,00 €: the office changed it.
+      { kind: 'manuell', conditionId: null },
+    ],
+    [null, { amountCents: 0, priceQuantity: 1 }, false, { kind: 'manuell', conditionId: null }],
+    // No catalog entry: a list price claim cannot stand.
+    [null, null, false, { kind: 'manuell', conditionId: null }],
   ],
 );
+
+// Only Admin and Büro record a customer's conditions, for their own organization and as
+// themselves; a field worker is refused before any database access, a bad id before the call.
+const conditionInput = {
+  clientId: clientIds.conditioned,
+  expectedVersion: 2,
+  attemptKey: '98000000-0000-4000-8000-000000000101',
+  validFrom: '2027-01-01',
+  discountTenths: { material: 125, arbeit: 0, anfahrt: 50 },
+  leistungPrices: [{ leistungId: leistungIds.own, salePriceCents: 6900 }],
+};
+signInAs(world, 'employee');
+await assertRefused(
+  world,
+  [['recordCustomerCondition', () => recordCustomerCondition(conditionInput)]],
+  { success: false, error: 'not_authorized' },
+  'none',
+);
+signInAs(world, 'buero');
+await assertRefused(
+  world,
+  [
+    [
+      'recordCustomerCondition bad client',
+      () => recordCustomerCondition({ ...conditionInput, clientId: 'K-1' }),
+    ],
+    [
+      'recordCustomerCondition discount above 100 %',
+      () =>
+        recordCustomerCondition({
+          ...conditionInput,
+          discountTenths: { material: 1001, arbeit: 0, anfahrt: 0 },
+        }),
+    ],
+    [
+      'recordCustomerCondition one Leistung twice',
+      () =>
+        recordCustomerCondition({
+          ...conditionInput,
+          leistungPrices: [...conditionInput.leistungPrices, ...conditionInput.leistungPrices],
+        }),
+    ],
+  ],
+  { success: false, error: 'invalid_input' },
+  'none',
+);
+// Another organization's customer: the one call names Büro's own organization, whose function
+// refuses it (client_price_conditions.sql).
+world.rpc = ({ name, args }) =>
+  name === 'record_client_price_condition' && args.p_client_id === clientIds.foreign
+    ? { data: null, error: { message: 'client_not_found', code: 'P0001' } }
+    : { data: { conditionId, version: 3 }, error: null };
+world.rpcCalls.length = 0;
+assert.deepEqual(await recordCustomerCondition({ ...conditionInput, clientId: clientIds.foreign }), {
+  success: false,
+  error: 'client_not_found',
+});
+assert.deepEqual(await recordCustomerCondition(conditionInput), { success: true, version: 3 });
+assert.deepEqual(
+  world.rpcCalls.map((call) => [
+    call.name,
+    call.args.p_organization_id,
+    call.args.p_actor_id,
+    call.args.p_client_id,
+  ]),
+  [
+    ['record_client_price_condition', ORGANIZATION_A, CALLER_ID, clientIds.foreign],
+    ['record_client_price_condition', ORGANIZATION_A, CALLER_ID, clientIds.conditioned],
+  ],
+);
+assert.deepEqual(world.rpcCalls[1]?.args.p_leistung_prices, conditionInput.leistungPrices);

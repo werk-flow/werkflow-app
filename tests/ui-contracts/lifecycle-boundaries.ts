@@ -81,6 +81,7 @@ declare global {
       | 'supplier-catalog'
       | 'inventory-movements'
       | 'leistungen'
+      | 'customer-conditions'
       | 'offers'
       | 'invoice-editor'
       | 'invoice-settings'

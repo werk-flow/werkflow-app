@@ -13,6 +13,7 @@ import {
   OFFER_STATUSES,
   offerWorkKindSchema,
   type OfferDetail,
+  type OfferPriceSource,
   type OfferWithCosts,
   type OfferWorkKind,
 } from './types';
@@ -129,15 +130,40 @@ function offerDetailOf(data: unknown): OfferDetail {
   };
 }
 
+const priceSourceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('listenpreis'), condition: z.null() }),
+  z.object({
+    kind: z.literal('kundenkondition'),
+    condition: z.object({ id: uuidSchema, version: z.number().int().positive(), validFrom: z.iso.date() }),
+  }),
+  z.object({ kind: z.literal('manuell'), condition: z.null() }),
+]);
+
 const offerWithCostsSchema = z.object({
   offer: z.unknown(),
   costs: z.array(z.array(positionCostSchema.nullable())),
+  priceSources: z.array(z.array(priceSourceSchema.nullable())),
 });
 
 /**
+ * A stored price source as the editor holds it: a source names the price it
+ * answered, which a save keeps only while the Position still has it. A
+ * Position saved before sources were kept reads as „manuell“.
+ */
+function priceSourceOf(
+  stored: z.infer<typeof priceSourceSchema> | null,
+  unitPriceCents: number,
+): OfferPriceSource {
+  if (!stored || stored.kind === 'manuell') return { kind: 'manuell' };
+  return stored.kind === 'listenpreis'
+    ? { kind: 'listenpreis', unitPriceCents }
+    : { kind: 'kundenkondition', condition: stored.condition, unitPriceCents };
+}
+
+/**
  * One offer of the organization as the office's page reads it: its header
- * with the names it shows, its content, and each priced Position's cost,
- * read in one statement with the content. The caller has established Admin
+ * with the names it shows, its content, and each priced Position's cost and
+ * price source, read in one statement with the content. The caller has established Admin
  * or Büro; `null` when there is no such offer.
  */
 export async function readOfferWithCosts(
@@ -154,7 +180,7 @@ export async function readOfferWithCosts(
   const parsed = offerWithCostsSchema.safeParse(selected.data);
   if (!parsed.success) throw new Error('offer_read_failed');
   const offer = offerDetailOf(parsed.data.offer);
-  const { costs } = parsed.data;
+  const { costs, priceSources } = parsed.data;
   return {
     ...offer,
     sections: offer.sections.map((section, sectionIndex) => ({
@@ -162,9 +188,10 @@ export async function readOfferWithCosts(
       positions: section.positions.map((position, positionIndex) => {
         if (position.kind === 'text') return position;
         const cost = costs[sectionIndex]?.[positionIndex];
-        // Both answers come from one statement: a missing entry is a broken read, never a cost of zero.
-        if (cost === undefined) throw new Error('offer_read_failed');
-        return { ...position, cost };
+        const priceSource = priceSources[sectionIndex]?.[positionIndex];
+        // The answers come from one statement: a missing entry is a broken read, never a cost of zero.
+        if (cost === undefined || priceSource === undefined) throw new Error('offer_read_failed');
+        return { ...position, cost, priceSource: priceSourceOf(priceSource, position.unitPriceCents) };
       }),
     })),
   };

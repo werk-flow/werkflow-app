@@ -854,6 +854,106 @@ export type Database = {
           },
         ];
       };
+      client_price_condition_leistungen: {
+        Row: {
+          condition_id: string;
+          leistung_id: string;
+          organization_id: string;
+          sale_price_cents: number;
+        };
+        Insert: {
+          condition_id: string;
+          leistung_id: string;
+          organization_id: string;
+          sale_price_cents: number;
+        };
+        Update: {
+          condition_id?: string;
+          leistung_id?: string;
+          organization_id?: string;
+          sale_price_cents?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "client_price_condition_leistungen_condition_fk";
+            columns: ["condition_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_price_conditions";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "client_price_condition_leistungen_leistung_fk";
+            columns: ["leistung_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "leistungen";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "client_price_condition_leistungen_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      client_price_conditions: {
+        Row: {
+          anfahrt_discount_tenths: number;
+          arbeit_discount_tenths: number;
+          attempt_key: string;
+          client_id: string;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          material_discount_tenths: number;
+          organization_id: string;
+          valid_from: string;
+          version: number;
+        };
+        Insert: {
+          anfahrt_discount_tenths: number;
+          arbeit_discount_tenths: number;
+          attempt_key: string;
+          client_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          material_discount_tenths: number;
+          organization_id: string;
+          valid_from: string;
+          version: number;
+        };
+        Update: {
+          anfahrt_discount_tenths?: number;
+          arbeit_discount_tenths?: number;
+          attempt_key?: string;
+          client_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          material_discount_tenths?: number;
+          organization_id?: string;
+          valid_from?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "client_price_conditions_client_fk";
+            columns: ["client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "client_price_conditions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       client_request_events: {
         Row: {
           created_at: string;
@@ -6712,7 +6812,9 @@ export type Database = {
           offer_id: string;
           organization_id: string;
           position: number;
+          price_condition_id: string | null;
           price_quantity: number | null;
+          price_source: string | null;
           purchase_cost_cents: number | null;
           purchase_price_quantity: number | null;
           quantity: number | null;
@@ -6733,7 +6835,9 @@ export type Database = {
           offer_id: string;
           organization_id: string;
           position: number;
+          price_condition_id?: string | null;
           price_quantity?: number | null;
+          price_source?: string | null;
           purchase_cost_cents?: number | null;
           purchase_price_quantity?: number | null;
           quantity?: number | null;
@@ -6754,7 +6858,9 @@ export type Database = {
           offer_id?: string;
           organization_id?: string;
           position?: number;
+          price_condition_id?: string | null;
           price_quantity?: number | null;
+          price_source?: string | null;
           purchase_cost_cents?: number | null;
           purchase_price_quantity?: number | null;
           quantity?: number | null;
@@ -6785,6 +6891,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "offer_positions_price_condition_fk";
+            columns: ["price_condition_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_price_conditions";
+            referencedColumns: ["id", "organization_id"];
           },
           {
             foreignKeyName: "offer_positions_section_fk";
@@ -20128,6 +20241,10 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      list_client_price_conditions: {
+        Args: { p_client_id: string; p_organization_id: string };
+        Returns: Json;
+      };
       list_client_site_roles: {
         Args: { p_client_id: string; p_organization_id: string };
         Returns: {
@@ -20953,6 +21070,21 @@ export type Database = {
           p_warnings: Json;
         };
         Returns: string;
+      };
+      record_client_price_condition: {
+        Args: {
+          p_actor_id: string;
+          p_anfahrt_discount_tenths: number;
+          p_arbeit_discount_tenths: number;
+          p_attempt_key: string;
+          p_client_id: string;
+          p_expected_version: number;
+          p_leistung_prices: Json;
+          p_material_discount_tenths: number;
+          p_organization_id: string;
+          p_valid_from: string;
+        };
+        Returns: Json;
       };
       record_customer_commitment: {
         Args: {

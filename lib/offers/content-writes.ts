@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { ActionResult } from '@/lib/action-result';
+import { savedPriceSource } from '@/lib/price-catalog/customer-conditions';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
@@ -16,7 +17,10 @@ import { offerContentArgument } from './amounts';
 // (supabase/migrations/20270201090000_write_titel_and_positionen_into_an_offer.sql).
 // Beside each priced Position it stores the Position's own cost, hidden from
 // every client role: the cost the office took over with an article or a
-// Leistung, or typed (20270501090000_calculate_offers_with_leistungen_and_costs.sql).
+// Leistung, or typed (20270501090000_calculate_offers_with_leistungen_and_costs.sql),
+// and where its price came from: a source stays only while the Position has
+// the price it answered, any other price is „manuell“
+// (20270501110000_price_new_offer_positions_by_customer_conditions.sql).
 
 const contentRefusal = writeRefusalFor(
   new Set([
@@ -27,6 +31,7 @@ const contentRefusal = writeRefusalFor(
     'offer_changed',
     'article_not_found',
     'leistung_not_found',
+    'price_condition_not_found',
   ]),
 );
 
@@ -55,8 +60,12 @@ export async function writeOfferContent(
     ...section,
     positions: section.positions.map((position) => {
       if (position.kind === 'text') return position;
-      const { cost, ...values } = position;
-      return { ...values, purchaseCost: cost };
+      const { cost, priceSource, ...values } = position;
+      return {
+        ...values,
+        purchaseCost: cost,
+        priceSource: savedPriceSource(priceSource, values.source, values.unitPriceCents),
+      };
     }),
   }));
   const { data, error } = await createSupabaseAdminClient().rpc(

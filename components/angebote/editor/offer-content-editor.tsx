@@ -189,6 +189,7 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
         </ReloadNotice>
       )}
       <OfferSectionList
+        offerId={offer.id}
         sections={sections}
         calculation={figures?.calculation ?? null}
         onChange={(next) => {
@@ -234,6 +235,7 @@ function ReloadNotice({ children, onReload }: { children: React.ReactNode; onRel
 
 /** The Titel in order, or the first step while there is none, and adding a Titel. */
 function OfferSectionList({
+  offerId,
   sections,
   calculation,
   onChange,
@@ -241,6 +243,7 @@ function OfferSectionList({
   errors,
   disabled,
 }: {
+  offerId: string;
   sections: SectionForm[];
   calculation: OfferCalculation | null;
   onChange: (sections: SetStateAction<SectionForm[]>) => void;
@@ -261,6 +264,7 @@ function OfferSectionList({
           {sections.map((section, index) => (
             <OfferSectionFields
               key={section.key}
+              offerId={offerId}
               index={index}
               count={sections.length}
               section={section}

@@ -12,14 +12,23 @@ import {
   offerCalculation,
   type OfferCalculation,
 } from './calculation';
-import type { OfferCostedSection, OfferPosition, OfferPositionCost, OfferSection } from './types';
+import type { PriceSourceClaim } from '@/lib/price-catalog/customer-conditions';
+import type {
+  OfferCostedSection,
+  OfferPosition,
+  OfferPositionCost,
+  OfferPriceSource,
+  OfferSection,
+} from './types';
 
 // The content editor's text state and its parse into the Titel and
 // Positionen the save sends. A priced position is read as an invoice line is
 // (parsePricedLine) and needs a unit of the list; a text line needs only its
 // Bezeichnung. A Position from an article or a Leistung keeps it as its
-// source. A priced Position's cost is optional; a markup on it sets the
-// price, and is neither kept nor checked by the save. Each refusal is a German sentence keyed by the
+// source, and where its price came from until the office types another
+// price or a markup sets one: then the price is „manuell“. A priced
+// Position's cost is optional; a markup on it sets the price, and is neither
+// kept nor checked by the save. Each refusal is a German sentence keyed by the
 // control's id, so the editor marks the field and focuses the first
 // (focusFirstInvalidField). The server parses the same limits again
 // (action-schemas.ts).
@@ -31,6 +40,8 @@ export type PositionForm = DraftLineForm & {
   costPriceQuantity: PriceQuantity;
   /** A markup in percent on the cost that set the price; cleared when the price is typed. */
   markup: string;
+  /** Where the price came from; „manuell“ once the office types a price or a markup sets one. */
+  priceSource: OfferPriceSource;
 };
 
 type PositionField = 'name' | 'quantity' | 'unit' | 'price' | 'cost' | 'markup';
@@ -72,6 +83,7 @@ export function contentFormOf(sections: readonly OfferCostedSection[], keyPrefix
         priceQuantity: position.priceQuantity,
         taxRateBasisPoints: position.taxRateBasisPoints,
         source: position.source,
+        priceSource: position.priceSource,
       };
     }),
   }));
@@ -89,14 +101,14 @@ function costFields(cost: OfferPositionCost | null, priceQuantity: PriceQuantity
 /** A new position of a kind: a free one starts as one piece at the standard rate. */
 export function emptyPosition(key: string, kind: OfferPosition['kind']): PositionForm {
   const line = emptyLine(key);
-  return { ...line, kind, ...costFields(null, line.priceQuantity) };
+  return { ...line, kind, ...costFields(null, line.priceQuantity), priceSource: { kind: 'manuell' } };
 }
 
 /**
  * A new Position from an article or a Leistung as the server read it
- * (readOfferArticleLine, readOfferLeistungLine): one unit at its sale price,
- * with its cost, all editable. A unit outside the list stays empty, so the
- * office picks one before the save.
+ * (readOfferArticleLine, readOfferLeistungLine): one unit at the price the
+ * customer's conditions or the list set, with its cost, all editable. A unit
+ * outside the list stays empty, so the office picks one before the save.
  */
 export function catalogPositionForm(key: string, line: OfferCatalogLine): PositionForm {
   return {
@@ -112,7 +124,13 @@ export function catalogPositionForm(key: string, line: OfferCatalogLine): Positi
     priceQuantity: line.priceQuantity,
     taxRateBasisPoints: line.taxRateBasisPoints,
     source: line.source,
+    priceSource: { ...line.priceSource, unitPriceCents: line.unitPriceCents },
   };
+}
+
+/** The position with a price the office typed: its own, so the markup that set the last one no longer applies. */
+export function withTypedPrice(position: PositionForm, price: string): PositionForm {
+  return { ...position, price, markup: '', priceSource: { kind: 'manuell' } };
 }
 
 /** „25“ or „12,5“ percent → tenths of a percent, up to 999,9 %; null for anything else. */
@@ -146,8 +164,8 @@ function markupPrice(position: PositionForm): number | 'too_high' | null {
 
 /**
  * The position after its cost or markup changed: a markup that reads on a
- * cost that reads sets the price. Otherwise, and above a price's limit, the
- * price stays as it was.
+ * cost that reads sets the price, which is then „manuell“. Otherwise, and
+ * above a price's limit, the price stays as it was.
  */
 export function withCostOrMarkup(
   position: PositionForm,
@@ -155,7 +173,9 @@ export function withCostOrMarkup(
 ): PositionForm {
   const next = { ...position, ...change };
   const price = markupPrice(next);
-  return typeof price === 'number' ? { ...next, price: centsToEuroInput(price) } : next;
+  return typeof price === 'number'
+    ? { ...next, price: centsToEuroInput(price), priceSource: { kind: 'manuell' } }
+    : next;
 }
 
 /**
@@ -214,6 +234,16 @@ function parseCost(
   return cost;
 }
 
+/** What the save is told of a price source: a customer's condition by its id. */
+function priceSourceClaim(priceSource: OfferPriceSource): PriceSourceClaim {
+  if (priceSource.kind !== 'kundenkondition') return priceSource;
+  return {
+    kind: 'kundenkondition',
+    conditionId: priceSource.condition.id,
+    unitPriceCents: priceSource.unitPriceCents,
+  };
+}
+
 function parsePosition(
   position: PositionForm,
   fieldId: (field: PositionField) => string,
@@ -233,7 +263,9 @@ function parsePosition(
       if (sentence) errors[fieldId(field)] = sentence;
     }
     const source = position.source ? { kind: position.source.kind, id: position.source.id } : null;
-    return values && unitKnown && cost !== undefined ? { kind: 'free', ...values, source, cost } : null;
+    return values && unitKnown && cost !== undefined
+      ? { kind: 'free', ...values, source, cost, priceSource: priceSourceClaim(position.priceSource) }
+      : null;
   }
   const name = position.name.trim();
   if (!name) errors[fieldId('name')] = 'Gib der Position eine Bezeichnung.';

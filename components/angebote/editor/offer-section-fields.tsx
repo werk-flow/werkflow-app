@@ -20,6 +20,7 @@ import {
   catalogPositionForm,
   contentFieldId,
   emptyPosition,
+  withTypedPrice,
   withUnit,
   type PositionForm,
   type SectionForm,
@@ -27,6 +28,7 @@ import {
 import type { OfferPosition } from '@/lib/offers/types';
 import { OfferCatalogPicker } from './offer-article-picker';
 import { PositionCostFields } from './offer-position-cost-fields';
+import { PositionPriceSourceNote } from './offer-price-source-note';
 
 type Errors = Record<string, string | undefined>;
 
@@ -94,6 +96,7 @@ function positionNumbers(sectionNumber: string, positions: readonly PositionForm
 
 /** One Titel: its name, its positions in order, its subtotal, and adding a position, an article or a text line. */
 export function OfferSectionFields({
+  offerId,
   index,
   count,
   section,
@@ -106,6 +109,8 @@ export function OfferSectionFields({
   errors,
   disabled,
 }: {
+  /** The offer whose customer's conditions price a Position from an article or a Leistung. */
+  offerId: string;
   index: number;
   count: number;
   section: SectionForm;
@@ -161,6 +166,7 @@ export function OfferSectionFields({
         disabled={disabled}
       />
       <SectionFooter
+        offerId={offerId}
         sectionIndex={index}
         number={number}
         netCents={figures?.saleCents ?? null}
@@ -219,6 +225,7 @@ function PositionList({
 
 /** Adding a position, an article or a text line, and the Titel's subtotal. */
 function SectionFooter({
+  offerId,
   sectionIndex,
   number,
   netCents,
@@ -227,6 +234,7 @@ function SectionFooter({
   onAddCatalog,
   disabled,
 }: {
+  offerId: string;
   sectionIndex: number;
   number: string;
   netCents: number | null;
@@ -237,6 +245,7 @@ function SectionFooter({
 }) {
   const picker = (kind: InvoiceLineSourceKind, label: string) => (
     <OfferCatalogPicker
+      offerId={offerId}
       kind={kind}
       id={`offer-section-${sectionIndex}-${kind}`}
       label={`${label} zu Titel ${number} hinzufügen`}
@@ -302,6 +311,7 @@ function PositionFields({
         <OrderButtons label={label} {...order} disabled={disabled} />
       </div>
       {position.kind === 'free' && position.source && <InvoiceLineSourceNote source={position.source} />}
+      {position.kind === 'free' && <PositionPriceSourceNote priceSource={position.priceSource} />}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Bezeichnung" htmlFor={fieldId('name')} required error={errors[fieldId('name')]}>
           <Input
@@ -386,8 +396,7 @@ function PositionAmountFields({
           inputMode="decimal"
           autoComplete="off"
           value={position.price}
-          // A typed price is the office's own: the markup that set the last one no longer applies.
-          onChange={(event) => onChange({ ...position, price: event.target.value, markup: '' })}
+          onChange={(event) => onChange(withTypedPrice(position, event.target.value))}
           placeholder="0,00"
           disabled={disabled}
         />

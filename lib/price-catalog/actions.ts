@@ -8,13 +8,17 @@ import { resolveActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { z } from '@/lib/zod';
 import {
   addLeistungPriceSchema,
   createLeistungSchema,
+  recordCustomerConditionSchema,
   setLeistungArchivedSchema,
   updateLeistungSchema,
   type AddLeistungPriceInput,
   type CreateLeistungInput,
+  type RecordCustomerConditionInput,
   type SetLeistungArchivedInput,
   type UpdateLeistungInput,
 } from './action-schemas';
@@ -22,12 +26,19 @@ import {
 // Admin and Büro keep the Leistungen. Every action resolves the caller's
 // organization and manager role on the server and writes only inside it;
 // the tables have no client grant (supabase/migrations/20261201180000_keep_dated_leistung_prices.sql).
+// A customer's conditions are kept the same way
+// (20270501110000_price_new_offer_positions_by_customer_conditions.sql).
 
 const LEISTUNGEN_PATH = '/angebote/leistungen';
 
 // The refusals create_leistung and add_leistung_price raise.
 const createRefusal = writeRefusalFor(new Set(['leistung_number_taken']));
 const priceRefusal = writeRefusalFor(new Set(['leistung_not_found']));
+// The refusals record_client_price_condition raises.
+const conditionRefusal = writeRefusalFor(
+  new Set(['client_not_found', 'client_archived', 'condition_changed', 'leistung_not_found']),
+);
+const conditionAnswerSchema = z.object({ conditionId: uuidSchema, version: z.number().int().positive() });
 
 /** The caller in the active organization, refused unless Admin or Büro. */
 async function resolveManager() {
@@ -192,6 +203,53 @@ export async function setLeistungArchived(rawInput: SetLeistungArchivedInput): P
     return { success: true };
   } catch (error) {
     logError('setLeistungArchived: unexpected error', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * Records a new version of a customer's conditions, with its own Leistung
+ * prices, in one database call. Earlier versions and every Position they
+ * priced stay as they are.
+ */
+export async function recordCustomerCondition(
+  rawInput: RecordCustomerConditionInput,
+): Promise<ActionResult<{ version: number }>> {
+  const parsed = recordCustomerConditionSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
+  try {
+    const caller = await resolveManager();
+    if (!caller.success) return caller;
+    const { orgId, userId } = caller.context;
+    const { data, error } = await createSupabaseAdminClient().rpc(
+      'record_client_price_condition',
+      rpcArgs('record_client_price_condition', {
+        p_actor_id: userId,
+        p_organization_id: orgId,
+        p_client_id: input.clientId,
+        p_expected_version: input.expectedVersion,
+        p_attempt_key: input.attemptKey,
+        p_valid_from: input.validFrom,
+        p_material_discount_tenths: input.discountTenths.material,
+        p_arbeit_discount_tenths: input.discountTenths.arbeit,
+        p_anfahrt_discount_tenths: input.discountTenths.anfahrt,
+        p_leistung_prices: input.leistungPrices,
+      }),
+    );
+    const recorded = conditionAnswerSchema.safeParse(data);
+    if (error || !recorded.success) {
+      return conditionRefusal(
+        error,
+        'save_failed',
+        'recordCustomerCondition: record_client_price_condition failed',
+      );
+    }
+    // The customer page renders the new version into this answer; another session hears it through Realtime.
+    revalidatePath(`/kunden/${input.clientId}`);
+    return { success: true, version: recorded.data.version };
+  } catch (error) {
+    logError('recordCustomerCondition: unexpected error', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

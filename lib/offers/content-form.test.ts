@@ -10,6 +10,7 @@ import {
   markupSentence,
   parseContentForm,
   withCostOrMarkup,
+  withTypedPrice,
   withUnit,
 } from './content-form';
 import type { OfferSection } from './types';
@@ -100,6 +101,7 @@ describe('catalogPositionForm', () => {
     taxRateBasisPoints: 700 as const,
     source,
     cost: { amountCents: 812, priceQuantity: 10 as const },
+    priceSource: { kind: 'listenpreis' as const },
   };
 
   test('the reader answer fills one unit of the article at its price and cost per price quantity', () => {
@@ -118,6 +120,7 @@ describe('catalogPositionForm', () => {
       cost: '8,12',
       costPriceQuantity: 10,
       markup: '',
+      priceSource: { kind: 'listenpreis', unitPriceCents: 1234 },
     });
     const parsed = parseContentForm([{ key: 's', title: 'Material', positions: [position] }]);
     expect(parsed.ok && parsed.sections[0]?.positions[0]).toEqual({
@@ -131,7 +134,37 @@ describe('catalogPositionForm', () => {
       taxRateBasisPoints: 700,
       source: { kind: 'article', id: source.id },
       cost: { amountCents: 812, priceQuantity: 10 },
+      priceSource: { kind: 'listenpreis', unitPriceCents: 1234 },
     });
+  });
+
+  // The price source the customer's conditions set stays through the editor
+  // and the save, until the office types a price or a markup sets one.
+  test("a customer's condition stays the source until the office changes the price", () => {
+    const condition = { id: '98000000-0000-4000-8000-000000000002', version: 2, validFrom: '2027-01-01' };
+    const position = catalogPositionForm('a', {
+      ...line,
+      unitPriceCents: 1111,
+      priceSource: { kind: 'kundenkondition', condition },
+    });
+    const parse = (form: typeof position) =>
+      parseContentForm([{ key: 's', title: 'Material', positions: [form] }]);
+    const parsed = parse(position);
+    expect(parsed.ok && parsed.sections[0]?.positions[0]).toMatchObject({
+      unitPriceCents: 1111,
+      priceSource: { kind: 'kundenkondition', conditionId: condition.id, unitPriceCents: 1111 },
+    });
+    // Typing the same price again is still the office's own price.
+    const typed = withTypedPrice(position, '11,11');
+    expect([typed.price, typed.priceSource]).toEqual(['11,11', { kind: 'manuell' }]);
+    const typedParse = parse(typed);
+    expect(typedParse.ok && typedParse.sections[0]?.positions[0]).toMatchObject({
+      priceSource: { kind: 'manuell' },
+    });
+    // A cost alone keeps the source; a markup that sets the price makes it manual.
+    expect(withCostOrMarkup(position, { cost: '8,00' }).priceSource).toEqual(position.priceSource);
+    const marked = withCostOrMarkup(withCostOrMarkup(position, { cost: '8,00' }), { markup: '50' });
+    expect([marked.price, marked.priceSource]).toEqual(['12,00', { kind: 'manuell' }]);
   });
 
   test('a Leistung is named as the source, and one without a cost rate leaves the cost to the office', () => {
@@ -183,6 +216,7 @@ describe('catalogPositionForm', () => {
             taxRateBasisPoints: 700,
             source: { ...source, archived: true },
             cost: { amountCents: 812, priceQuantity: 100 },
+            priceSource: { kind: 'listenpreis', unitPriceCents: 1234 },
           },
         ],
       },
@@ -193,6 +227,7 @@ describe('catalogPositionForm', () => {
       quantity: '2.5',
       source: { kind: 'article', id: source.id },
       cost: { amountCents: 812, priceQuantity: 100 },
+      priceSource: { kind: 'listenpreis', unitPriceCents: 1234 },
     });
   });
 });
@@ -264,6 +299,7 @@ describe('cost and markup', () => {
             taxRateBasisPoints: 1900,
             source: null,
             cost: { amountCents: 250_000_000, priceQuantity: 1000 },
+            priceSource: { kind: 'manuell' },
           },
         ],
       },

@@ -54,13 +54,15 @@ export const positionCostSchema = z.object({
   priceQuantity: z.literal(PRICE_QUANTITIES),
 });
 
+const priceCents = z.number().int().min(0).max(MAX_PRICE_CENTS);
+
 /** A priced position, with the limits of an invoice line; a negative quantity credits. */
 const freePositionSchema = z.object({
   kind: z.literal('free'),
   ...positionTextSchema,
   quantity: z.string().regex(/^-?\d{1,9}(?:\.\d{1,3})?$/),
   unit: z.string().refine(isInventoryUnitCode),
-  unitPriceCents: z.number().int().min(0).max(MAX_PRICE_CENTS),
+  unitPriceCents: priceCents,
   priceQuantity: z.literal(PRICE_QUANTITIES),
   taxRateBasisPoints: z.literal(INVOICE_TAX_RATES),
   /** The article or Leistung it was taken from, inside the caller's organization (the save checks); null for one typed by hand. */
@@ -70,6 +72,15 @@ const freePositionSchema = z.object({
    * the key, from a tab older than stored costs, would otherwise clear them.
    */
   cost: positionCostSchema.nullable(),
+  /**
+   * Where the price came from, with the price that source answered; the save
+   * stores „manuell“ for any other price (savedPriceSource). Required like the cost.
+   */
+  priceSource: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('manuell') }),
+    z.object({ kind: z.literal('listenpreis'), unitPriceCents: priceCents }),
+    z.object({ kind: z.literal('kundenkondition'), conditionId: uuidSchema, unitPriceCents: priceCents }),
+  ]),
 });
 
 const textPositionSchema = z.object({ kind: z.literal('text'), ...positionTextSchema });
@@ -82,11 +93,13 @@ const offerSectionSchema = z.object({
     .max(OFFER_CONTENT_LIMITS.positionsPerSection),
 });
 
-/** A Titel as `get_offer` answers it: each Position's article or Leistung with its number, name and archive state, and no cost. */
+/** A Titel as `get_offer` answers it: each Position's article or Leistung with its number, name and archive state, and no cost or price source. */
 export const storedSectionSchema = offerSectionSchema.extend({
   positions: z.array(
     z.discriminatedUnion('kind', [
-      freePositionSchema.omit({ cost: true }).extend({ source: invoiceLineSourceSchema.nullable() }),
+      freePositionSchema
+        .omit({ cost: true, priceSource: true })
+        .extend({ source: invoiceLineSourceSchema.nullable() }),
       textPositionSchema,
     ]),
   ),
