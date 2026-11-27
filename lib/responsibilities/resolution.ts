@@ -335,3 +335,22 @@ export function getResponsibilitiesStrandedByEmployeeRemoval(
     );
   });
 }
+
+/** The next access step that can change a selected group's removal guard. */
+export function getNextSelectedHolderAccessChangeAt(
+  effective: Partial<Record<OrganizationResponsibility, EffectiveResponsibility>>,
+  accessSchedulesByRecordId: ReadonlyMap<string, string | null>,
+  now: number,
+): string | null {
+  let next: string | null = null;
+  for (const responsibility of Object.values(effective)) {
+    if (responsibility.mode !== 'selected') continue;
+    for (const holder of responsibility.holders) {
+      if (holder.source.kind === 'delegation') continue;
+      const scheduledFor = accessSchedulesByRecordId.get(holder.employeeRecordId);
+      if (!scheduledFor || Date.parse(scheduledFor) <= now) continue;
+      if (next === null || Date.parse(scheduledFor) < Date.parse(next)) next = scheduledFor;
+    }
+  }
+  return next;
+}

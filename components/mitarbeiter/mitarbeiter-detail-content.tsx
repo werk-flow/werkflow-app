@@ -1,5 +1,8 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
+import { useDeadlineRefresh } from '@/hooks/use-business-day-refresh';
+
 import { ErrorText } from '@/components/ui/error-text';
 
 import { DetailColumns } from '@/components/shared/detail-columns';
@@ -197,6 +200,11 @@ export function MitarbeiterDetailContent({
   });
 
   useRealtimeRouterRefresh({ tables: DETAIL_REFRESH_TABLES });
+
+  const router = useRouter();
+  const nextHolderAccessChangeAt = responsibilitySettings?.nextHolderAccessChangeAt ?? null;
+  const deadlineMs = nextHolderAccessChangeAt === null ? null : Date.parse(nextHolderAccessChangeAt);
+  useDeadlineRefresh(deadlineMs, () => router.refresh());
 
   const {
     removalBlockedMessage,

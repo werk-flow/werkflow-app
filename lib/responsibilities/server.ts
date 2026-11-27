@@ -10,6 +10,7 @@ import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { getMembershipAccessMode } from '@/lib/personnel/lifecycle';
 import {
   canHolderApproveTarget,
+  getNextSelectedHolderAccessChangeAt,
   getResponsibilitiesStrandedByEmployeeRemoval,
   resolveEffectiveResponsibility,
   type EffectiveResponsibility,
@@ -28,6 +29,11 @@ export type ResponsibilityRuntimeState = {
   people: ResponsibilityPerson[];
   configurations: ResponsibilityConfiguration[];
   delegations: ResponsibilityDelegation[];
+};
+
+type ResponsibilityRuntimeAccessState = ResponsibilityRuntimeState & {
+  accessEvaluatedAt: number;
+  accessSchedulesByRecordId: ReadonlyMap<string, string | null>;
 };
 
 /**
@@ -55,6 +61,7 @@ function getSkewGuardedActionTime(configurations: ResponsibilityConfiguration[])
 }
 
 export type ResponsibilitySettingsData = {
+  nextHolderAccessChangeAt: string | null;
   organizationId: string;
   currentUserId: string;
   currentUserRole: OrgRole;
@@ -75,7 +82,7 @@ export type ResponsibilitySettingsData = {
 export const loadResponsibilityRuntimeState = memoizeRequestRead(
   async function loadResponsibilityRuntimeState(
     organizationId: string,
-  ): Promise<ResponsibilityRuntimeState | null> {
+  ): Promise<ResponsibilityRuntimeAccessState | null> {
     const admin = createSupabaseAdminClient();
     const businessDate = getBusinessTodayIso();
     const now = Date.now();
@@ -108,6 +115,13 @@ export const loadResponsibilityRuntimeState = memoizeRequestRead(
     );
 
     return {
+      accessEvaluatedAt: now,
+      accessSchedulesByRecordId: new Map(
+        rows.employeeRecords.map((record) => [
+          record.id,
+          record.personnel_access_lifecycles[0]?.scheduled_for ?? null,
+        ]),
+      ),
       members,
       people: people.toSorted((left, right) => {
         const leftName = `${left.lastName ?? ''} ${left.firstName ?? ''}`;
@@ -418,6 +432,13 @@ export async function getResponsibilitySettingsData(): Promise<
   return {
     success: true,
     data: {
+      nextHolderAccessChangeAt: isManager
+        ? getNextSelectedHolderAccessChangeAt(
+            effectiveResponsibilities,
+            state.accessSchedulesByRecordId,
+            state.accessEvaluatedAt,
+          )
+        : null,
       organizationId: orgId,
       currentUserId: userId,
       currentUserRole: role,
