@@ -104,7 +104,7 @@ export async function readOfferConditionOnDay(
   day: string,
   leistungId: string | null,
 ): Promise<{ condition: DayCondition | null } | 'offer_not_found'> {
-  const { data, error } = await createSupabaseAdminClient().rpc('offer_price_condition_on_day', {
+  const { data, error } = await createSupabaseAdminClient().rpc('get_offer_price_condition', {
     p_organization_id: organizationId,
     p_offer_id: offerId,
     p_on_date: day,

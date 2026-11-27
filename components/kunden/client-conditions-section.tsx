@@ -1,7 +1,7 @@
 'use client';
 
 import { Percent } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SectionTitle } from '@/components/shared/section-title';
@@ -10,7 +10,7 @@ import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
-import { useBusyIds } from '@/hooks/use-busy-id';
+import { useServerAction } from '@/hooks/use-server-action';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import type { ActionResult } from '@/lib/action-result';
 import { berlinToday } from '@/lib/clients/site-roles';
@@ -38,7 +38,7 @@ const VERSION_BADGES: Record<VersionState, { label: string; variant: 'success' |
     frueher: { label: 'Früher', variant: 'outline' },
   };
 
-function versionState(
+function conditionVersionState(
   condition: CustomerCondition,
   conditions: CustomerConditions,
   today: string,
@@ -111,7 +111,7 @@ function ConditionVersions({ conditions, today }: { conditions: CustomerConditio
           <ConditionVersion
             key={condition.id}
             condition={condition}
-            state={versionState(condition, conditions, today)}
+            state={conditionVersionState(condition, conditions, today)}
           />
         ))}
       </ul>
@@ -145,7 +145,9 @@ export function ClientConditionsSection({
   const [open, setOpen] = useState(false);
   const { showBanner } = useBanner();
   const settle = useSettleOnChange(conditions);
-  const { run, isBusy } = useBusyIds();
+  // The render the save carries in its answer can land before the wait starts: wait from before the call.
+  const since = useRef(0);
+  const save = useServerAction(recordCustomerCondition, { settle: () => settle(since.current) });
   const today = berlinToday();
 
   const record = async (
@@ -153,10 +155,17 @@ export function ClientConditionsSection({
     expectedVersion: number,
     attemptKey: string,
   ): Promise<ActionResult> => {
-    const since = settle.markChange();
-    const result = await recordCustomerCondition({ clientId, expectedVersion, attemptKey, ...input });
+    since.current = settle.markChange();
+    const result = await save.run({ clientId, expectedVersion, attemptKey, ...input });
+    if (!result.success && result.error === 'condition_changed') {
+      // The dialog closes: the page shows the other session's version, which a new dialog starts from.
+      showBanner({
+        variant: 'error',
+        message:
+          'Jemand hat die Konditionen gerade geändert. Prüfe den neuen Stand und öffne „Konditionen ändern“ erneut.',
+      });
+    }
     if (result.success) {
-      void run('conditions', () => settle(since));
       showBanner({
         variant: 'success',
         message: `Konditionen gespeichert. Sie gelten ab ${formatGermanDate(input.validFrom)} für neue Positionen.`,
@@ -178,7 +187,7 @@ export function ClientConditionsSection({
           Konditionen
         </SectionTitle>
         <div className="flex items-center gap-2">
-          <InlinePending active={isBusy('conditions')} label="Konditionen werden aktualisiert" />
+          <InlinePending active={save.isSettling} label="Konditionen werden aktualisiert" />
           {newest && change}
         </div>
       </div>

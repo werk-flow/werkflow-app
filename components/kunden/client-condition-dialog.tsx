@@ -41,8 +41,6 @@ import { parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 
 const SAVE_FAILED = 'Die Konditionen konnten nicht gespeichert werden. Versuche es erneut.';
 const FAILURE_MESSAGES: Readonly<Record<string, string>> = {
-  condition_changed:
-    'Jemand hat die Konditionen gerade geändert. Schließe den Dialog und öffne ihn erneut, um von der neuen Fassung auszugehen.',
   client_archived: 'Der Kunde ist archiviert. Stelle ihn wieder her, um Konditionen festzulegen.',
   client_not_found: 'Diesen Kunden gibt es nicht mehr.',
   leistung_not_found: 'Eine gewählte Leistung gibt es nicht mehr. Entferne sie und speichere erneut.',
@@ -52,16 +50,28 @@ const FAILURE_MESSAGES: Readonly<Record<string, string>> = {
 /** One own price: the Leistung, its net price per unit, and removing the row. */
 function PriceRow({
   row,
+  knownLabel,
   onChange,
   onRemove,
   errors,
 }: {
   row: ConditionPriceRow;
+  /** The picked Leistung's label from the version the form was filled from: no read needed for it. */
+  knownLabel: string | undefined;
   onChange: (row: ConditionPriceRow) => void;
   onRemove: () => void;
   errors: Record<string, string | undefined>;
 }) {
-  const search = useJobEntityOptions({ kind: 'leistungen' }, row.leistungId ? [row.leistungId] : []);
+  // Only a Leistung picked in this dialog reads its label; the picker searches once it opens.
+  const search = useJobEntityOptions(
+    { kind: 'leistungen' },
+    row.leistungId && !knownLabel ? [row.leistungId] : [],
+  );
+  const known = knownLabel ? { value: row.leistungId, label: knownLabel } : null;
+  const options =
+    known && !search.options.some((option) => option.value === known.value)
+      ? [known, ...search.options]
+      : search.options;
   const leistungId = conditionFieldId.leistung(row.key);
   const priceId = conditionFieldId.price(row.key);
   return (
@@ -77,7 +87,7 @@ function PriceRow({
           id={leistungId}
           value={row.leistungId}
           onChange={(value) => onChange({ ...row, leistungId: value })}
-          options={search.options}
+          options={options}
           onSearchChange={search.onSearchChange}
           loading={search.loading}
           loadFailure={search.loadFailure}
@@ -116,7 +126,7 @@ type FormPartProps = {
 };
 
 /** The first day the new version applies. */
-function ValidFromField({ form, onChange, errors }: FormPartProps) {
+function ValidFromField({ form, onChange, errors, disabled }: FormPartProps & { disabled: boolean }) {
   return (
     <Field
       label="Gültig ab"
@@ -127,6 +137,8 @@ function ValidFromField({ form, onChange, errors }: FormPartProps) {
       <DatePicker
         id={conditionFieldId.validFrom}
         ariaLabel="Gültig ab"
+        // Its date segments are no native inputs: the fieldset does not disable them.
+        disabled={disabled}
         value={parseIsoLocalDate(form.validFrom)}
         // The picker answers the local midnight of the chosen day: keep that calendar day.
         onChange={(date) => onChange({ ...form, validFrom: date ? toLocalDateString(date) : '' })}
@@ -167,7 +179,15 @@ function DiscountFields({ form, onChange, errors }: FormPartProps) {
 }
 
 /** The own Leistung prices, each in its row, and adding one. */
-function OwnPriceFields({ form, onChange, errors }: FormPartProps) {
+function OwnPriceFields({
+  form,
+  onChange,
+  errors,
+  newest,
+}: FormPartProps & { newest: CustomerCondition | null }) {
+  const labels = new Map(
+    (newest?.leistungPrices ?? []).map((price) => [price.leistungId, `${price.number} · ${price.name}`]),
+  );
   const setRow = (key: string, next: ConditionPriceRow | null) =>
     onChange({
       ...form,
@@ -185,6 +205,7 @@ function OwnPriceFields({ form, onChange, errors }: FormPartProps) {
             <PriceRow
               key={row.key}
               row={row}
+              knownLabel={labels.get(row.leistungId)}
               onChange={(next) => setRow(row.key, next)}
               onRemove={() => setRow(row.key, null)}
               errors={errors}
@@ -220,7 +241,7 @@ function OwnPriceFields({ form, onChange, errors }: FormPartProps) {
  * One retry key per payload: a retry of the same values answers the first
  * save, whose answer may have been lost; changed values are a new version.
  */
-function useAttemptKey(): (payload: ConditionInput) => string {
+function usePayloadAttemptKey(): (payload: ConditionInput) => string {
   const attempt = useRef<{ key: string; payload: string } | null>(null);
   return (payload) => {
     const text = JSON.stringify(payload);
@@ -249,7 +270,7 @@ export function ClientConditionDialog({
 }) {
   const [form, setForm] = useState<ConditionForm>(() => conditionFormOf(newest, today));
   const [expectedVersion] = useState(() => newest?.version ?? 0);
-  const attemptKeyFor = useAttemptKey();
+  const attemptKeyFor = usePayloadAttemptKey();
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { run, isPending: pending } = usePendingTask();
@@ -267,7 +288,8 @@ export function ClientConditionDialog({
       setError(null);
       const key = attemptKeyFor(parsed.input);
       const result = await onRecord(parsed.input, expectedVersion, key).catch(() => null);
-      if (!result?.success) {
+      // Another session's newer version refuses this form for good: the page names it and shows it.
+      if (!result?.success && result?.error !== 'condition_changed') {
         setError(result ? describeFailure(result.error, FAILURE_MESSAGES, SAVE_FAILED) : SAVE_FAILED);
         return;
       }
@@ -288,9 +310,9 @@ export function ClientConditionDialog({
           <DialogBody>
             {/* While the save runs, no field takes an edit the save would not carry. */}
             <fieldset disabled={pending} className="space-y-6">
-              <ValidFromField form={form} onChange={setForm} errors={errors} />
+              <ValidFromField form={form} onChange={setForm} errors={errors} disabled={pending} />
               <DiscountFields form={form} onChange={setForm} errors={errors} />
-              <OwnPriceFields form={form} onChange={setForm} errors={errors} />
+              <OwnPriceFields form={form} onChange={setForm} errors={errors} newest={newest} />
               <ErrorText>{error}</ErrorText>
             </fieldset>
           </DialogBody>

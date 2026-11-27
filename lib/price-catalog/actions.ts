@@ -38,7 +38,12 @@ const priceRefusal = writeRefusalFor(new Set(['leistung_not_found']));
 const conditionRefusal = writeRefusalFor(
   new Set(['client_not_found', 'client_archived', 'condition_changed', 'leistung_not_found']),
 );
-const conditionAnswerSchema = z.object({ conditionId: uuidSchema, version: z.number().int().positive() });
+const conditionAnswerSchema = z.object({
+  conditionId: uuidSchema,
+  version: z.number().int().positive(),
+  clientId: uuidSchema,
+  updatedAt: z.string(),
+});
 
 /** The caller in the active organization, refused unless Admin or Büro. */
 async function resolveManager() {
@@ -214,7 +219,7 @@ export async function setLeistungArchived(rawInput: SetLeistungArchivedInput): P
  */
 export async function recordCustomerCondition(
   rawInput: RecordCustomerConditionInput,
-): Promise<ActionResult<{ version: number }>> {
+): Promise<ActionResult<{ version: number; clientId: string; updatedAt: string }>> {
   const parsed = recordCustomerConditionSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
@@ -247,7 +252,9 @@ export async function recordCustomerCondition(
     }
     // The customer page renders the new version into this answer; another session hears it through Realtime.
     revalidatePath(`/kunden/${input.clientId}`);
-    return { success: true, version: recorded.data.version };
+    const { version, clientId, updatedAt } = recorded.data;
+    // The customer row's stamp names the echo of this save, which the saving tab skips.
+    return { success: true, version, clientId, updatedAt };
   } catch (error) {
     logError('recordCustomerCondition: unexpected error', error);
     return { success: false, error: 'unexpected_error' };

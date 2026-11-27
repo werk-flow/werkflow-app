@@ -44,8 +44,9 @@ test('a save holds the dialog, keeps its values after a refusal and closes after
   await save.click();
   await expectHeldWrite(page, 'record-customer-condition');
   await expect(save).toBeDisabled();
-  // No field takes an edit the running save would not carry.
+  // No field takes an edit the running save would not carry, the date's segments included.
   await expect(material).toBeDisabled();
+  await expect(dialog.getByRole('group', { name: 'Gültig ab' })).toHaveAttribute('aria-disabled', 'true');
   expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toEqual([
     {
       validFrom: '2026-11-27',
@@ -76,16 +77,13 @@ test('a save holds the dialog, keeps its values after a refusal and closes after
 });
 
 // Changed values are a new version and take a new key, so a retry never answers with a version of
-// other values. Another session's newer version refuses the form; it says to start from that one.
-test('changed values after a refused save take a new retry key', async ({ page }) => {
+// other values.
+test('changed values after a failed save take a new retry key', async ({ page }) => {
   const dialog = page.getByRole('dialog', { name: 'Konditionen ändern' });
   const save = dialog.getByRole('button', { name: 'Konditionen speichern', exact: true });
   await save.click();
   await expectHeldWrite(page, 'record-customer-condition');
-  await answerHeldWrite(page, 'condition_changed');
-  await expect(
-    dialog.getByText('Jemand hat die Konditionen gerade geändert.', { exact: false }),
-  ).toBeVisible();
+  await answerHeldWrite(page, 'save_failed');
   await expect(save).toBeEnabled();
 
   await dialog.getByRole('textbox', { name: 'Material' }).fill('15');
@@ -96,4 +94,15 @@ test('changed values after a refused save take a new retry key', async ({ page }
   );
   expect(keys).toHaveLength(2);
   expect(keys[1]).not.toBe(keys[0]);
+});
+
+// Another session's newer version refuses the form for good: the dialog closes instead of offering
+// a save that would send the old version again, and a new dialog starts from the page's version.
+test('a newer version of another session closes the dialog', async ({ page }) => {
+  const dialog = page.getByRole('dialog', { name: 'Konditionen ändern' });
+  await dialog.getByRole('button', { name: 'Konditionen speichern', exact: true }).click();
+  await expectHeldWrite(page, 'record-customer-condition');
+  await answerHeldWrite(page, 'condition_changed');
+  await expect(dialog).toHaveCount(0);
+  expect(await page.evaluate(() => window.uiContractWrites.calls)).toHaveLength(1);
 });

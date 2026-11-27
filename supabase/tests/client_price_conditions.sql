@@ -80,7 +80,7 @@ begin
     if has_function_privilege(v_role,
         'public.record_client_price_condition(uuid,uuid,uuid,integer,uuid,date,integer,integer,integer,jsonb)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.list_client_price_conditions(uuid,uuid,date,integer)', 'EXECUTE')
-      or has_function_privilege(v_role, 'public.offer_price_condition_on_day(uuid,uuid,date,uuid)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.get_offer_price_condition(uuid,uuid,date,uuid)', 'EXECUTE')
       or has_function_privilege(v_role, 'app_private.client_price_condition_on_day(uuid,uuid,date)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.save_offer_content(uuid,uuid,uuid,integer,uuid,jsonb,jsonb)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.get_offer_with_costs(uuid,uuid)', 'EXECUTE') then
@@ -119,7 +119,10 @@ begin
   v_first := pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000020', 0,
     '38440000-0000-4000-8000-000000000101', '2037-01-02', 100,
     '[{"leistungId": "38440000-0000-4000-8000-000000000080", "salePriceCents": 6800}]');
-  if (v_first ->> 'version')::integer is distinct from 1 then
+  if (v_first ->> 'version')::integer is distinct from 1
+    or v_first ->> 'clientId' is distinct from '38440000-0000-4000-8000-000000000020'
+    or (v_first ->> 'updatedAt')::timestamptz is distinct from
+      (select updated_at from public.clients where id = '38440000-0000-4000-8000-000000000020') then
     raise exception 'the first version is %', v_first;
   end if;
   select * into v_condition from public.client_price_conditions where id = (v_first ->> 'conditionId')::uuid;
@@ -223,9 +226,15 @@ begin
     or pg_temp.list('38440000-0000-4000-8000-000000000020', '2037-01-01') -> 'applyingId' is distinct from 'null'::jsonb then
     raise exception 'the list applies another version on its first days';
   end if;
-  v_list := pg_temp.list('38440000-0000-4000-8000-000000000020', '2037-02-28', 1);
+  -- A limit keeps the newest versions and the one that applies, and still counts every version.
+  v_list := pg_temp.list('38440000-0000-4000-8000-000000000020', '2037-03-01', 1);
   if (v_list ->> 'total')::integer is distinct from 2 or jsonb_array_length(v_list -> 'versions') is distinct from 1 then
     raise exception 'a limited list answered %', v_list;
+  end if;
+  v_list := pg_temp.list('38440000-0000-4000-8000-000000000020', '2037-02-28', 1);
+  if jsonb_array_length(v_list -> 'versions') is distinct from 2
+    or v_list -> 'versions' -> 1 ->> 'id' is distinct from v_list ->> 'applyingId' then
+    raise exception 'a limited list left out the version that applies: %', v_list;
   end if;
   if pg_temp.list('38440000-0000-4000-8000-000000000029', '2037-02-28')
       is distinct from '{"total": 0, "applyingId": null, "versions": []}'::jsonb then
@@ -307,7 +316,7 @@ grant select on ids to service_role;
 -- an offer of another organization answers nothing.
 create function pg_temp.on_day(p_organization uuid, p_offer uuid, p_on date, p_leistung uuid) returns jsonb
 language sql as $$
-  select public.offer_price_condition_on_day(p_organization, p_offer, p_on, p_leistung);
+  select public.get_offer_price_condition(p_organization, p_offer, p_on, p_leistung);
 $$;
 do $$
 declare

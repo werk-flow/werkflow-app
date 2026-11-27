@@ -21,6 +21,7 @@ import {
   signInAs,
   tableRows,
 } from './action-boundary-world';
+import type { PriceQuantity } from '@/lib/inventory/line-amount';
 import type { OfferPositionCost } from '@/lib/offers/types';
 import type { PriceSourceClaim } from '@/lib/price-catalog/customer-conditions';
 import { assertRefused } from './operations-boundary-refusals';
@@ -136,7 +137,7 @@ world.rpc = ({ name, args }) => {
     }));
     return { data: rows, error: null };
   }
-  if (name === 'offer_price_condition_on_day') {
+  if (name === 'get_offer_price_condition') {
     const offer = tableRows(world, 'offers').find(
       (row) => row.organization_id === args.p_organization_id && row.id === args.p_offer_id,
     );
@@ -190,7 +191,11 @@ const position = (
   cost,
   priceSource,
 });
-const contentWith = (positions: ReadonlyArray<ReturnType<typeof position>>) => ({
+const contentWith = (
+  positions: ReadonlyArray<
+    Omit<ReturnType<typeof position>, 'priceQuantity'> & { priceQuantity: PriceQuantity }
+  >,
+) => ({
   offerId,
   expectedContentVersion: 1,
   attemptKey: '96000000-0000-4000-8000-000000000101',
@@ -261,7 +266,7 @@ for (const [label, call, priceRead] of foreignReads) {
     // The two reads run side by side, in either order.
     world.rpcCalls.map((rpc) => [rpc.name, rpc.args.p_organization_id]).sort(),
     [
-      ['offer_price_condition_on_day', ORGANIZATION_A],
+      ['get_offer_price_condition', ORGANIZATION_A],
       [priceRead, ORGANIZATION_A],
     ].sort(),
     `${label}: called more than the reads of its own organization`,
@@ -384,6 +389,9 @@ assert.deepEqual(
         proof: proofOf(plainOfferId, pipe, 'listenpreis', 1234),
       }),
       position(null, { amountCents: 0, priceQuantity: 1 }, { kind: 'listenpreis', proof: 'A'.repeat(43) }),
+      // The answered price per 100 instead of per one, and a forged proof on a real entry.
+      { ...position(hour, null, claimOf(hour, 6800)), unitPriceCents: 6800, priceQuantity: 100 },
+      position(pipe, null, { kind: 'listenpreis', proof: 'A'.repeat(43) }),
     ]),
   ),
   { success: true, offerId, ...SAVED },
@@ -407,6 +415,8 @@ assert.deepEqual(
     [pipe, null, false, { kind: 'manuell', conditionId: null }],
     // A forged proof, and no catalog entry.
     [null, { amountCents: 0, priceQuantity: 1 }, false, { kind: 'manuell', conditionId: null }],
+    [hour, null, false, { kind: 'manuell', conditionId: null }],
+    [pipe, null, false, { kind: 'manuell', conditionId: null }],
   ],
 );
 
@@ -460,13 +470,26 @@ await assertRefused(
 world.rpc = ({ name, args }) =>
   name === 'record_client_price_condition' && args.p_client_id === clientIds.foreign
     ? { data: null, error: { message: 'client_not_found', code: 'P0001' } }
-    : { data: { conditionId, version: 3 }, error: null };
+    : {
+        data: {
+          conditionId,
+          version: 3,
+          clientId: args.p_client_id,
+          updatedAt: '2026-11-27T08:00:00.123456+00:00',
+        },
+        error: null,
+      };
 world.rpcCalls.length = 0;
 assert.deepEqual(await recordCustomerCondition({ ...conditionInput, clientId: clientIds.foreign }), {
   success: false,
   error: 'client_not_found',
 });
-assert.deepEqual(await recordCustomerCondition(conditionInput), { success: true, version: 3 });
+assert.deepEqual(await recordCustomerCondition(conditionInput), {
+  success: true,
+  version: 3,
+  clientId: clientIds.conditioned,
+  updatedAt: '2026-11-27T08:00:00.123456+00:00',
+});
 assert.deepEqual(
   world.rpcCalls.map((call) => [
     call.name,

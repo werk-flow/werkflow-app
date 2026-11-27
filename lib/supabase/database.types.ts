@@ -19781,6 +19781,15 @@ export type Database = {
         Args: { p_offer_id: string; p_organization_id: string };
         Returns: Json;
       };
+      get_offer_price_condition: {
+        Args: {
+          p_leistung_id?: string;
+          p_offer_id: string;
+          p_on_date: string;
+          p_organization_id: string;
+        };
+        Returns: Json;
+      };
       get_offer_with_costs: {
         Args: { p_offer_id: string; p_organization_id: string };
         Returns: Json;
@@ -20646,15 +20655,6 @@ export type Database = {
           p_lead_user_id: string;
           p_organization_id: string;
           p_project_id: string;
-        };
-        Returns: Json;
-      };
-      offer_price_condition_on_day: {
-        Args: {
-          p_leistung_id?: string;
-          p_offer_id: string;
-          p_on_date: string;
-          p_organization_id: string;
         };
         Returns: Json;
       };

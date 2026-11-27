@@ -20,7 +20,7 @@
 --    owning root, so an open customer page hears of the new version.
 -- 5. list_client_price_conditions: a customer's newest versions with their
 --    own prices, how many there are and which applies on a day.
---    offer_price_condition_on_day: what prices a new Position of an offer on
+--    get_offer_price_condition: what prices a new Position of an offer on
 --    a day: the version of its customer and that version's own price of one
 --    Leistung.
 -- 6. save_offer_content as in 20270501090000, with each priced Position's
@@ -156,6 +156,7 @@ create index offer_positions_price_condition_idx on public.offer_positions (pric
 -- version the form was filled from, 0 for none: another session's version
 -- meanwhile refuses this one. A repeat under the same key answers the first
 -- version. p_leistung_prices: [{"leistungId": uuid, "salePriceCents": integer}].
+-- The answer names the version, the customer and the customer row's stamp.
 -- Refusals: invalid_input, not_authorized, client_not_found, client_archived,
 -- condition_changed, leistung_not_found.
 create function public.record_client_price_condition(
@@ -180,6 +181,7 @@ declare
   v_earlier public.client_price_conditions;
   v_newest integer;
   v_condition_id uuid;
+  v_updated_at timestamptz;
 begin
   if p_actor_id is null or p_organization_id is null or p_client_id is null or p_attempt_key is null
     or p_expected_version is null or p_expected_version < 0 or p_valid_from is null
@@ -206,7 +208,8 @@ begin
   where condition.organization_id = p_organization_id and condition.attempt_key = p_attempt_key;
   if found then
     if v_earlier.client_id <> p_client_id then raise exception 'invalid_input'; end if;
-    return jsonb_build_object('conditionId', v_earlier.id, 'version', v_earlier.version);
+    return jsonb_build_object('conditionId', v_earlier.id, 'version', v_earlier.version,
+      'clientId', p_client_id, 'updatedAt', v_client.updated_at);
   end if;
 
   if v_client.archived_at is not null then raise exception 'client_archived'; end if;
@@ -232,9 +235,12 @@ begin
   from jsonb_array_elements(p_leistung_prices) entry;
   -- The customer's row is the published owning root: its change tells open pages of the new version.
   -- No master data field changes, so the master history records nothing.
+  -- Its stamp goes back with the answer, so the saving tab knows the echo of its own save.
   update public.clients client set updated_at = now()
-  where client.organization_id = p_organization_id and client.id = p_client_id;
-  return jsonb_build_object('conditionId', v_condition_id, 'version', v_newest + 1);
+  where client.organization_id = p_organization_id and client.id = p_client_id
+  returning client.updated_at into v_updated_at;
+  return jsonb_build_object('conditionId', v_condition_id, 'version', v_newest + 1,
+    'clientId', p_client_id, 'updatedAt', v_updated_at);
 end;
 $$;
 revoke all on function public.record_client_price_condition(uuid, uuid, uuid, integer, uuid, date, integer, integer, integer, jsonb)
@@ -257,8 +263,8 @@ $$;
 revoke all on function app_private.client_price_condition_on_day(uuid, uuid, date) from public, anon, authenticated;
 grant execute on function app_private.client_price_condition_on_day(uuid, uuid, date) to service_role;
 
--- The customer's newest versions (at most p_limit, the newest number first),
--- each with its own prices and the Leistung's number, name, unit and archive
+-- The customer's newest versions (at most p_limit, the newest number first,
+-- and the one that applies on p_on_date also when it is older), each with its own prices and the Leistung's number, name, unit and archive
 -- state; how many versions it has; and the one that applies on p_on_date. A
 -- customer without one, or of another organization, answers none.
 create function public.list_client_price_conditions(
@@ -291,12 +297,13 @@ create function public.list_client_price_conditions(
             where price.condition_id = newest.id and price.organization_id = p_organization_id
           ), '[]'::jsonb)
         ) order by newest.version desc)
-      from (
-        select * from public.client_price_conditions condition
-        where condition.organization_id = p_organization_id and condition.client_id = p_client_id
-        order by condition.version desc
-        limit least(greatest(p_limit, 1), 100)
-      ) newest
+      -- A customer's versions are numbered 1, 2, 3 … without a gap.
+      from public.client_price_conditions newest
+      where newest.organization_id = p_organization_id and newest.client_id = p_client_id
+        and (newest.version > (select coalesce(max(condition.version), 0) from public.client_price_conditions condition
+            where condition.organization_id = p_organization_id and condition.client_id = p_client_id)
+            - least(greatest(p_limit, 1), 100)
+          or newest.id = app_private.client_price_condition_on_day(p_organization_id, p_client_id, p_on_date))
     ), '[]'::jsonb)
   );
 $$;
@@ -307,7 +314,7 @@ grant execute on function public.list_client_price_conditions(uuid, uuid, date, 
 -- for no such offer; else the version of its customer that applies on the
 -- day, or null, with that version's own price of p_leistung_id (null for an
 -- article or a Leistung without one).
-create function public.offer_price_condition_on_day(
+create function public.get_offer_price_condition(
   p_organization_id uuid, p_offer_id uuid, p_on_date date, p_leistung_id uuid default null
 ) returns jsonb language sql stable security invoker set search_path = '' as $$
   select jsonb_build_object('condition', (
@@ -327,8 +334,8 @@ create function public.offer_price_condition_on_day(
   from public.offers offer
   where offer.organization_id = p_organization_id and offer.id = p_offer_id;
 $$;
-revoke all on function public.offer_price_condition_on_day(uuid, uuid, date, uuid) from public, anon, authenticated;
-grant execute on function public.offer_price_condition_on_day(uuid, uuid, date, uuid) to service_role;
+revoke all on function public.get_offer_price_condition(uuid, uuid, date, uuid) from public, anon, authenticated;
+grant execute on function public.get_offer_price_condition(uuid, uuid, date, uuid) to service_role;
 
 -- 6. p_sections as in 20270501090000; a priced Position may also carry
 -- priceSource {kind: 'listenpreis' | 'kundenkondition' | 'manuell',
