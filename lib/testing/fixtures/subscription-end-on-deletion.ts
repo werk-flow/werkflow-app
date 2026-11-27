@@ -63,6 +63,7 @@ gateway = {
   readInvoiceDebit: noRead,
   listFinalizedInvoices: noRead,
   listEventIds: noRead,
+  readEvent: noRead,
   subscriptions: fakeSubscriptionCalls(stripe),
 };
 const subscription = (id: string, customerId: string, organizationId: string, status: string) =>
