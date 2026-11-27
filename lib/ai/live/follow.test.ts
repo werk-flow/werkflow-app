@@ -112,6 +112,23 @@ test('an end applies only when the page holds the whole answer; otherwise the sa
   );
 });
 
+test('a stopped answer ends where its last save ended, on every tab', () => {
+  let window = applyKiLiveEvent(earlier, started).window;
+  window = applyKiLiveEvent(window, text(0, 'Erst das Ventil öffnen')).window;
+  const stopped: KiLiveEvent = {
+    v,
+    type: 'end',
+    command,
+    status: 'cancelled',
+    failure: 'Du hast die Antwort angehalten.',
+    length: 15,
+  };
+  const ended = applyKiLiveEvent(window, stopped).window;
+  expect(answerOf(ended)?.text, 'text past the last save was never kept').toBe('Erst das Ventil');
+  expect(answerOf(ended)?.status).toBe('cancelled');
+  expect(answerOf(ended)?.failure).toBe('Du hast die Antwort angehalten.');
+});
+
 test('a turn that starts past messages the page never saw waits for a read, so the cursor does not skip them', () => {
   const later: KiLiveEvent = {
     ...started,

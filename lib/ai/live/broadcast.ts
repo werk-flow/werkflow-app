@@ -173,6 +173,11 @@ export function createKiLiveBroadcast(
       stop();
       await inFlight;
       if (revoked) return;
+      // A stopped answer keeps the text of its last partial save; a tab that holds more cuts back to it.
+      if (end.status !== 'complete' && end.failure === 'stopped') {
+        await post([endMessage(input.commandId, end, saved)], 2);
+        return;
+      }
       const length = sent + pending.length;
       const last = takeText();
       await post([...(last ? [last] : []), endMessage(input.commandId, end, length)], 2);

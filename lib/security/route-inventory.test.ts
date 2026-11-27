@@ -73,6 +73,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'delegates to getAttentionCounts, which authenticates the cookie session, resolves the active organization, and checks membership',
     mustCall: ['getAttentionCounts'],
   },
+  'app/api/ki/threads/[threadId]/stop/route.ts': {
+    authorization:
+      'same-origin JSON guard; verified cookie identity and current membership of the organization the body names; the thread author check in the database function, which stops only an answer still being written; private no-store responses',
+    mustCall: ['verifySameOriginJsonRequest', 'resolveActionContextFor', 'stopAiTurn'],
+  },
   'app/api/ki/threads/[threadId]/turns/route.ts': {
     authorization:
       'same-origin JSON guard; verified cookie identity and current membership of the organization the body names; the release gate, the per-person turn limits, the thread author check and the budget reservation in the database functions before any model step; private no-store responses',

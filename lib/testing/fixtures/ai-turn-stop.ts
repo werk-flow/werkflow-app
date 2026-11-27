@@ -1,0 +1,218 @@
+// Replays turns the person stops or loses mid-answer (werk-flow/werkflow-planning#609,
+// B13 and B14 of werk-flow/werkflow-planning#20): the real stop route, turn
+// route, harness, AI SDK and replay provider over the in-memory database.
+// Each block states one invariant; a failing assert names it.
+import assert from 'node:assert/strict';
+import { AI_MODEL_PRICE, costMicroUsd } from '@/lib/ai/cost';
+import { AI_TURN_LIMITS } from '@/lib/ai/limits';
+import { kiLiveEventSchema } from '@/lib/ai/live/events';
+import { z } from '@/lib/zod';
+import { ORGANIZATION_A, ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
+import {
+  OTHER_USER_ID,
+  THREAD_ID,
+  installAiTurnWorld,
+  postStop,
+  postTurn,
+  readTurn,
+  resetAiTables,
+  stopAnswer,
+} from './ai-turn-world';
+
+const world = await installAiTurnWorld();
+const rows = (table: string) => tableRows(world, table);
+const answerItem = () => rows('ai_thread_items').find((row) => row.kind === 'assistant_message');
+const runStatus = () => rows('ai_runs').map((row) => row.status);
+const lastAttempt = () => rows('ai_run_attempts').at(-1);
+const streamedText = (events: Awaited<ReturnType<typeof readTurn>>) =>
+  events.flatMap((event) => (event.type === 'text' ? [event.delta] : [])).join('');
+const liveEvents = (sends = world.liveSends) =>
+  sends.flatMap((send) => send.events.map((event) => kiLiveEventSchema.parse(event)));
+const textOf = (body: unknown): string => z.object({ text: z.string() }).parse(body).text;
+/** The whole answer of the `langsam` transcript, had nothing stopped it. */
+const FULL_SLOW_ANSWER = 60 * 'Schritt 1: Druck am Manometer prüfen und notieren. '.length;
+/** An aborted attempt reports no usage, so it is charged at least every output token it may have used. */
+const outputCap = costMicroUsd(
+  {
+    inputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: AI_TURN_LIMITS.chat.maxOutputTokens,
+  },
+  AI_MODEL_PRICE,
+);
+
+// „Antwort anhalten“ mid-answer: the next partial save refuses, which aborts the provider request.
+// The answer keeps the text of its last save, the run settles at what the attempt may have cost, and
+// the live channel's end cuts every tab back to the saved text.
+{
+  const command = crypto.randomUUID();
+  const stops: Response[] = [];
+  // The stop goes once a live message says a partial save holds text.
+  world.onLiveSend = async (events) => {
+    const saved = liveEvents([{ topic: '', events }]).some(
+      (event) => event.type === 'text' && event.saved > 0,
+    );
+    if (stops.length === 0 && saved) stops.push(await postStop(command));
+  };
+  const events = await readTurn(
+    world,
+    await postTurn('[replay:langsam] Wie prüfe ich den Druck?', { commandId: command }),
+  );
+  world.onLiveSend = null;
+  assert.equal(stops.length, 1, 'the stop was sent while the answer was written');
+  assert.deepEqual(await stops[0]?.json(), { verdict: 'stopped' });
+  assert.equal(world.streamSignals.at(-1)?.aborted, true, 'a stop must end the provider request');
+  assert.deepEqual(events.at(-1), {
+    type: 'end',
+    status: 'cancelled',
+    failure: 'stopped',
+    message: 'Du hast die Antwort angehalten.',
+  });
+  const kept = textOf(answerItem()?.body);
+  assert.ok(kept.length > 0, 'the stopped answer keeps the text of its last partial save');
+  assert.ok(streamedText(events).startsWith(kept));
+  assert.ok(streamedText(events).length < FULL_SLOW_ANSWER, 'the stopped answer was not written to its end');
+  assert.equal(answerItem()?.status, 'cancelled');
+  assert.deepEqual(runStatus(), ['cancelled'], 'a stopped run settles at once');
+  assert.equal(lastAttempt()?.p_outcome, 'stopped');
+  assert.ok(
+    Number(lastAttempt()?.p_cost_micro_usd) >= outputCap,
+    'a stopped attempt is charged never less than it spent',
+  );
+  const ends = liveEvents().filter((event) => event.type === 'end');
+  assert.deepEqual(
+    ends.map((event) => event.type === 'end' && [event.status, event.length]),
+    [['cancelled', kept.length]],
+    'every tab learns the stop and cuts the answer back to its saved text',
+  );
+  assert.deepEqual(
+    await (await postStop(command)).json(),
+    { verdict: 'finished' },
+    'a repeated stop changes nothing',
+  );
+  assert.equal(answerItem()?.status, 'cancelled');
+}
+
+// A stop while the model still thinks: a save of the unchanged text sees it, so thinking stops too.
+{
+  resetAiTables(world);
+  const command = crypto.randomUUID();
+  world.onLiveSend = async () => {
+    world.onLiveSend = null;
+    await postStop(command);
+  };
+  const events = await readTurn(
+    world,
+    await postTurn('[replay:gruebeln] Wie entlüfte ich?', { commandId: command }),
+  );
+  assert.equal(
+    world.streamSignals.at(-1)?.aborted,
+    true,
+    'a stop while the model thinks must end the request',
+  );
+  assert.equal(streamedText(events), '', 'a stopped answer writes nothing after the stop');
+  assert.equal(events.at(-1)?.failure, 'stopped');
+  assert.deepEqual(runStatus(), ['cancelled']);
+  assert.ok(Number(lastAttempt()?.p_cost_micro_usd) >= outputCap);
+}
+
+// A stop that lands between two model steps: the step gate reads it, and no further step starts.
+{
+  resetAiTables(world);
+  world.afterAttempt = (current) => {
+    world.afterAttempt = null;
+    const item = tableRows(current, 'ai_thread_items').find((row) => row.kind === 'assistant_message');
+    if (item) stopAnswer(item);
+  };
+  const events = await readTurn(world, await postTurn('[replay:zwei-schritte] Lies den Auftrag.'));
+  assert.equal(world.streamRequests.length, 1, 'a stop between two steps must start no further step');
+  assert.equal(events.at(-1)?.failure, 'stopped');
+  assert.deepEqual(runStatus(), ['cancelled']);
+  assert.equal(rows('ai_run_attempts').length, 1, 'the step that ran is in the ledger');
+}
+
+// A stop that lands after the answer's last partial save is first seen by the final save: the turn
+// ends as stopped with the saved text, never as a whole answer.
+{
+  resetAiTables(world);
+  const answer = world.rpc;
+  world.rpc = (call) => {
+    if (call.name === 'update_ai_thread_item' && call.args.p_status !== 'streaming') {
+      const item = answerItem();
+      if (item?.status === 'streaming') stopAnswer(item);
+    }
+    return answer(call);
+  };
+  const events = await readTurn(world, await postTurn('Wie lege ich einen Auftrag an?'));
+  world.rpc = answer;
+  assert.equal(
+    events.at(-1)?.failure,
+    'stopped',
+    'a stop seen only by the final save still ends the answer as stopped',
+  );
+  assert.deepEqual(answerItem()?.body, { text: '', failure: 'stopped' });
+  assert.deepEqual(runStatus(), ['cancelled']);
+  assert.ok(Number(lastAttempt()?.p_cost_micro_usd) > 0, 'the finished attempt keeps its real cost');
+}
+
+// Only the author stops, in their own organization: a stop that names another organization is
+// refused before any database call, a signed-out or cross-site one too, and another person's thread
+// stays closed.
+{
+  resetAiTables(world);
+  const command = crypto.randomUUID();
+  const calls = world.rpcCalls.length;
+  assert.equal((await postStop(command, { organizationId: ORGANIZATION_B })).status, 403);
+  world.callerId = null;
+  assert.equal((await postStop(command)).status, 401);
+  signInAs(world, 'employee');
+  assert.equal(world.rpcCalls.length, calls, 'a refused caller must reach no database function');
+  rows('ai_threads').push({ id: THREAD_ID, organization_id: ORGANIZATION_A, user_id: OTHER_USER_ID });
+  rows('ai_thread_items').push({
+    id: 'item-other',
+    organization_id: ORGANIZATION_A,
+    thread_id: THREAD_ID,
+    kind: 'assistant_message',
+    status: 'streaming',
+    body: { text: 'Erst' },
+    idempotency_key: `${command}:assistant`,
+  });
+  assert.equal((await postStop(command)).status, 404, "another person's answer must not stop");
+  assert.equal(answerItem()?.status, 'streaming');
+}
+
+// An author who loses access mid-answer: the save's refusal ends the turn at once. The provider
+// request aborts, the sending tab gets no text past the refused save, and the run settles at what
+// was spent.
+{
+  resetAiTables(world);
+  const answer = world.rpc;
+  let partialSaves = 0;
+  let refusedText: string | null = null;
+  world.rpc = (call) => {
+    if (call.name === 'update_ai_thread_item' && call.args.p_status === 'streaming') {
+      partialSaves += 1;
+      if (partialSaves > 1) {
+        refusedText ??= textOf(call.args.p_body);
+        return { data: null, error: { message: 'ai_actor_without_access' } };
+      }
+    }
+    return answer(call);
+  };
+  const events = await readTurn(world, await postTurn('[replay:langsam] Und der Rücklauf?'));
+  world.rpc = answer;
+  assert.ok(refusedText !== null, 'a partial save was refused');
+  assert.equal(world.streamSignals.at(-1)?.aborted, true, 'a lost thread must end the provider request');
+  assert.ok(
+    streamedText(events).length <= String(refusedText).length,
+    'a lost thread must stop the sending tab’s stream at once',
+  );
+  assert.equal(events.at(-1)?.failure, 'revoked');
+  assert.deepEqual(runStatus(), ['cancelled'], 'a run whose author lost access settles at once');
+  assert.equal(lastAttempt()?.p_outcome, 'revoked');
+  assert.ok(
+    Number(lastAttempt()?.p_cost_micro_usd) >= outputCap,
+    'a revoked attempt is charged never less than it spent',
+  );
+}

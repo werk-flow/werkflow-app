@@ -26,9 +26,45 @@ function sendsOnEnter(event: React.KeyboardEvent<HTMLTextAreaElement>): boolean 
   );
 }
 
+/**
+ * Send, or „Antwort anhalten“ while an answer is written. Two elements, not
+ * one that changes its type: a click that stops the answer must not end as a
+ * submit of the button it re-rendered into.
+ */
+function ComposerAction({
+  running,
+  stopping,
+  onStop,
+}: {
+  running: boolean;
+  stopping: boolean;
+  onStop: () => void;
+}): React.JSX.Element {
+  return running ? (
+    <Button
+      key="stop"
+      type="button"
+      size="icon"
+      variant="outline"
+      className="size-11"
+      pending={stopping}
+      onClick={onStop}
+    >
+      <Square />
+      <span className="sr-only">Antwort anhalten</span>
+    </Button>
+  ) : (
+    <Button key="send" type="submit" size="icon" className="size-11">
+      <ArrowUp />
+      <span className="sr-only">Senden</span>
+    </Button>
+  );
+}
+
 export const KiComposer = memo(function KiComposer({
   draft,
   running,
+  stopping,
   error,
   onSend,
   onStop,
@@ -37,6 +73,8 @@ export const KiComposer = memo(function KiComposer({
   draft: string;
   /** An answer is being written: the composer offers to stop it instead of sending. */
   running: boolean;
+  /** The person stopped the answer: the server ends it. */
+  stopping: boolean;
   error: string | null;
   /** Sends the text of the draft under `draft`; the composer has already cleared it. */
   onSend: (text: string, draft: string) => void;
@@ -87,19 +125,7 @@ export const KiComposer = memo(function KiComposer({
             }}
           />
         </Field>
-        {/* Two elements, not one that changes its type: a click that stops the answer must not
-            end as a submit of the button it re-rendered into. */}
-        {running ? (
-          <Button key="stop" type="button" size="icon" variant="outline" className="size-11" onClick={onStop}>
-            <Square />
-            <span className="sr-only">Antwort anhalten</span>
-          </Button>
-        ) : (
-          <Button key="send" type="submit" size="icon" className="size-11">
-            <ArrowUp />
-            <span className="sr-only">Senden</span>
-          </Button>
-        )}
+        <ComposerAction running={running} stopping={stopping} onStop={onStop} />
       </div>
       {error && <ErrorText>{error}</ErrorText>}
       <p className="text-xs text-muted-foreground">

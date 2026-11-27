@@ -2,7 +2,8 @@
 -- werk-flow/werkflow-planning#559): a turn starts in one call that writes
 -- once per command; an open run counts at its reserved amount until it
 -- settles; the job settles a stale run at its reserved amount and finishes
--- the answer it left streaming. Runs in one transaction and rolls back.
+-- the answer it left streaming; only the author stops an answer (migration
+-- 20270504100000). Runs in one transaction and rolls back.
 begin;
 
 do $$
@@ -333,6 +334,108 @@ begin
   if verdict is distinct from 'budget_exhausted' then
     raise exception 'A run open across the month start held less than its reservation: %', verdict;
   end if;
+end;
+$$;
+
+-- The stop (werk-flow/werkflow-planning#609): only the author stops their
+-- answer, under the turn's command id. It keeps the last saved text, says it
+-- was stopped, refuses the running turn's next save as stopped, and a repeat
+-- changes nothing. Client roles cannot stop anything.
+do $$
+declare
+  api_role text;
+begin
+  foreach api_role in array array['anon', 'authenticated'] loop
+    if has_function_privilege(api_role, 'public.cancel_ai_turn(uuid, uuid, uuid, text)', 'execute') then
+      raise exception 'A client role may stop a WerkFlow KI answer: %', api_role;
+    end if;
+  end loop;
+  if not has_function_privilege('service_role', 'public.cancel_ai_turn(uuid, uuid, uuid, text)', 'execute') then
+    raise exception 'service_role lost execute on cancel_ai_turn';
+  end if;
+end;
+$$;
+select public.create_ai_thread('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000001',
+  'af000000-0000-4000-8000-000000000025', 'Anhalten');
+select public.append_ai_thread_item('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000001',
+  'af000000-0000-4000-8000-000000000025', 'user_message', 'complete', '{"text":"Wie entlüfte ich?"}', 'stop-cmd:user');
+select public.append_ai_thread_item('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000001',
+  'af000000-0000-4000-8000-000000000025', 'assistant_message', 'streaming', '{"text":"Erst das Ventil"}',
+  'stop-cmd:assistant');
+do $$
+declare
+  verdict text;
+  answer_id uuid := (select id from public.ai_thread_items where idempotency_key = 'stop-cmd:assistant'
+    and thread_id = 'af000000-0000-4000-8000-000000000025');
+begin
+  -- Another member of the organization, a person outside it and the author in another organization stop nothing.
+  begin
+    perform public.cancel_ai_turn('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000002',
+      'af000000-0000-4000-8000-000000000025', 'stop-cmd');
+    raise exception 'Another member stopped the author''s WerkFlow KI answer';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_thread_not_found' then raise; end if;
+  end;
+  begin
+    perform public.cancel_ai_turn('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000003',
+      'af000000-0000-4000-8000-000000000025', 'stop-cmd');
+    raise exception 'A person outside the organization stopped a WerkFlow KI answer';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_actor_without_access' then raise; end if;
+  end;
+  begin
+    perform public.cancel_ai_turn('af000000-0000-4000-8000-000000000011', 'af000000-0000-4000-8000-000000000003',
+      'af000000-0000-4000-8000-000000000025', 'stop-cmd');
+    raise exception 'A foreign organization stopped a WerkFlow KI answer';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_thread_not_found' then raise; end if;
+  end;
+  if (select status::text from public.ai_thread_items where id = answer_id) is distinct from 'streaming' then
+    raise exception 'A refused stop changed the answer';
+  end if;
+
+  verdict := public.cancel_ai_turn('af000000-0000-4000-8000-000000000010',
+    'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000025', 'stop-cmd');
+  if verdict is distinct from 'stopped'
+    or (select status::text || body::text from public.ai_thread_items where id = answer_id)
+      is distinct from 'cancelled{"text": "Erst das Ventil", "failure": "stopped"}' then
+    raise exception 'The author''s stop did not keep the saved text and say it was stopped: %', verdict;
+  end if;
+  begin
+    perform public.update_ai_thread_item('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000001', answer_id, 'streaming', '{"text":"Erst das Ventil öffnen"}');
+    raise exception 'The running turn saved into a stopped answer';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_thread_item_stopped' then raise; end if;
+  end;
+  if public.cancel_ai_turn('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000025', 'stop-cmd')
+      is distinct from 'finished'
+    or (select status::text || body::text from public.ai_thread_items where id = answer_id)
+      is distinct from 'cancelled{"text": "Erst das Ventil", "failure": "stopped"}'
+    or public.cancel_ai_turn('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000025', 'kein-befehl')
+      is distinct from 'not_found' then
+    raise exception 'A repeated stop changed the answer, or an unknown command did not answer not_found';
+  end if;
+end;
+$$;
+
+-- An answer the run finished itself still refuses a later save as finished, not as stopped.
+do $$
+declare
+  done_id uuid;
+begin
+  select item_id into done_id from public.append_ai_thread_item('af000000-0000-4000-8000-000000000010',
+    'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000025', 'assistant_message',
+    'cancelled', '{"text":"Bis hier","failure":"timeout"}', 'done-cmd:assistant');
+  begin
+    perform public.update_ai_thread_item('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000001', done_id, 'cancelled', '{"text":"Bis hier","failure":"timeout"}');
+    raise exception 'A finished answer took a second save';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_thread_item_finished' then raise; end if;
+  end;
 end;
 $$;
 

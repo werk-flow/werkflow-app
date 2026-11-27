@@ -18,6 +18,9 @@ type HeldTurn = {
   calls: { threadId: string; commandId: string; text: string }[];
   emit: ((event: TurnEvent) => void) | null;
   resolve: ((outcome: TurnOutcome) => void) | null;
+  /** Each „Antwort anhalten“ the page sent, and whether the server takes the next one. */
+  stops: { threadId: string; commandId: string }[];
+  stopTaken: boolean;
 };
 
 declare global {
@@ -41,7 +44,7 @@ declare global {
   }
 }
 
-window.uiContractKiTurn = { calls: [], emit: null, resolve: null };
+window.uiContractKiTurn = { calls: [], emit: null, resolve: null, stops: [], stopTaken: true };
 window.uiContractKiReadsFail = false;
 window.uiContractKiHeldReads = null;
 window.uiContractKiWindows = {};
@@ -106,6 +109,12 @@ export function sendTurn(input: {
     };
     input.signal.addEventListener('abort', () => held.resolve?.({ kind: 'stopped' }));
   });
+}
+
+export function stopTurn(input: { threadId: string; commandId: string }): Promise<boolean> {
+  const held = window.uiContractKiTurn;
+  held.stops.push({ threadId: input.threadId, commandId: input.commandId });
+  return Promise.resolve(held.stopTaken);
 }
 
 export const KI_CONTRACT_THREADS = [
