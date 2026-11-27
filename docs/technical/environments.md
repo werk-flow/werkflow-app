@@ -69,7 +69,7 @@ This table is the one home of every deployment and workflow credential. No check
 | `SUPPORT_USER_IDS` | Vercel, Production and Preview (PROD ids, DEV ids) | [Support allowlist](../features/problem-reports.md#current-product-baseline) | Never | Set, redeploy. |
 | `POSTHOG_PROJECT_API_KEY`, `POSTHOG_ORGANIZATION_IDS` | Vercel | [Usage statistics](security.md#mail-and-providers) | Never | Rotate in PostHog, redeploy. |
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
-| `RESEND_API_KEY`, `FROM_EMAIL` | Supabase secrets, one key per project; Vercel | Mail functions; `lib/delivery/send-email.ts` | Never | Resend, API keys: a sending key per project; set it everywhere that key is read, the project's Supabase secrets in its dashboard and Vercel, redeploy, then delete the old one. |
+| `RESEND_API_KEY`, `FROM_EMAIL` | Supabase secrets, one key per project; Vercel | Mail functions; `lib/delivery/send-email.ts` | Never | Resend: new sending key per project, set in Supabase secrets and Vercel, redeploy, delete the old. |
 | `WERKFLOW_ALARM_EMAIL`, `WERKFLOW_BILLING_REPLY_TO`, `RESEND_WEBHOOK_SECRET` | Vercel | Alarm, reply-to, webhook | Never | Set, redeploy. |
 | `WERKFLOW_KI_ANTHROPIC_KEY` | Vercel, Sensitive | [KI model calls](../features/ai-automations.md#current-product-baseline) | Never | Anthropic Console: new key, redeploy, revoke old. |
 
