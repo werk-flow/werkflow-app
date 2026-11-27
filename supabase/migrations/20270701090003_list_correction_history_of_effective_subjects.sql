@@ -1,12 +1,15 @@
--- The correction history lists only the requests whose subject still holds
--- the employee record the request was filed on. A request of a record its
--- person no longer holds (the record lost its login, or the login moved to a
--- new record) is retained data of a removed employee
--- (docs/technical/security.md, "Calendar correction input boundary"). The
--- approval queue and „Vorgemerkte Zeit“ apply the same rule on the server
--- (`hasEffectiveSubject`, lib/time-corrections/request-list.ts); the history
--- applies it here, before the count and the page boundary, so a page stays
--- full and its total true.
+-- A correction request belongs to the employee record it was filed on. When
+-- its subject no longer holds that record (the record lost its login, or the
+-- login moved to a new record), the request is retained data of a removed
+-- employee to that person (docs/technical/security.md, "Calendar correction
+-- input boundary"): the history no longer lists it for its subject, nor for
+-- its requester through `own`. An approver still lists it through `all` or
+-- the employee subjects of `own_and_employee_subjects`: an open request
+-- blocks its month's close, and a correction filed before an offboarding
+-- still counts for payroll. The server applies the same rule to the approval
+-- queue and „Vorgemerkte Zeit“ (`hydrateCorrectionRequests`,
+-- lib/time-corrections/request-list.ts); the history applies it here, before
+-- the count and the page boundary, so a page stays full and its total true.
 --
 -- Same signature, visibilities and result shape as
 -- 20261004160100_paginate_time_correction_history.sql, so the previous
@@ -21,22 +24,30 @@ create or replace function public.list_time_correction_history_page(
   with visible as materialized (
     select request.id, request.created_at
     from public.time_correction_requests request
-    join public.employee_records subject_record
-      on subject_record.id = request.subject_employee_record_id
-     and subject_record.organization_id = request.organization_id
-     and subject_record.user_id = request.subject_user_id
+    cross join lateral (
+      select exists (
+        select 1 from public.employee_records subject_record
+        where subject_record.id = request.subject_employee_record_id
+          and subject_record.organization_id = request.organization_id
+          and subject_record.user_id = request.subject_user_id
+      ) as held
+    ) subject
     where request.organization_id = p_organization_id
       and case p_visibility
-        when 'all' then true
-        when 'own' then request.requested_by = p_caller_user_id or request.subject_user_id = p_caller_user_id
+        when 'all' then request.subject_user_id <> p_caller_user_id or subject.held
+        when 'own' then
+          (request.requested_by = p_caller_user_id or request.subject_user_id = p_caller_user_id)
+          and subject.held
         when 'own_and_employee_subjects' then
-          request.requested_by = p_caller_user_id
-          or request.subject_user_id = p_caller_user_id
-          or exists (
-            select 1 from public.organization_members member
-            where member.organization_id = p_organization_id
-              and member.user_id = request.subject_user_id
-              and member.role = 'employee'
+          ((request.requested_by = p_caller_user_id or request.subject_user_id = p_caller_user_id) and subject.held)
+          or (
+            request.subject_user_id <> p_caller_user_id
+            and exists (
+              select 1 from public.organization_members member
+              where member.organization_id = p_organization_id
+                and member.user_id = request.subject_user_id
+                and member.role = 'employee'
+            )
           )
         else false
       end

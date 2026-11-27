@@ -2,8 +2,8 @@
 -- caller class resolves to, the count and the page boundary apply in the
 -- database, more than 1,000 requests stay reachable newest first, a foreign
 -- organization neither counts nor matches, a request of a record its subject
--- no longer holds lists for nobody, and browser roles cannot execute the
--- reader.
+-- no longer holds lists only for approvers of others, and browser roles
+-- cannot execute the reader.
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
 insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
@@ -32,8 +32,6 @@ insert into public.organization_members(organization_id,user_id,role) values
 -- * 1052..1054: the Büro member about themself;
 -- * 1055..1056: the caller (employee) about themself;
 -- * 1057: the admin about a former member, who no longer belongs to the organization.
--- The caller's old record lost its login; a request filed on it later than
--- all others lists for nobody.
 set local session_replication_role = replica;
 insert into public.employee_records(id,organization_id,user_id,first_name,last_name) values
 ('77000000-0000-4000-8000-0000000000a5','77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000005','History','Former'),
@@ -59,8 +57,6 @@ from (
 ) seeded;
 insert into public.time_correction_requests(id,organization_id,subject_employee_record_id,subject_user_id,requested_by,kind,status,source_scope_key) values
 ('77000000-0000-4000-8000-000000000090','77000000-0000-4000-8000-000000000011','77000000-0000-4000-8000-000000000091','77000000-0000-4000-8000-000000000003','77000000-0000-4000-8000-000000000003','add','withdrawn',md5('tc-foreign-a')||md5('tc-foreign-b'));
-insert into public.time_correction_requests(id,organization_id,subject_employee_record_id,subject_user_id,requested_by,kind,status,source_scope_key,created_at) values
-('77000000-0000-4000-8000-000000000095','77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-0000000000a7','77000000-0000-4000-8000-000000000003','77000000-0000-4000-8000-000000000003','add','withdrawn',md5('tc-removed-a')||md5('tc-removed-b'),'2037-12-31');
 set local session_replication_role = origin;
 
 set local role service_role;
@@ -95,13 +91,6 @@ begin
   result := public.list_time_correction_history_page(org_id,caller,'everything');
   if (result->>'total')::int is distinct from 0 or result->'ids' is distinct from '[]'::jsonb then raise exception 'an unknown visibility lists requests'; end if;
 
-  -- The caller's request on the record they no longer hold lists for nobody and counts nowhere (the totals above).
-  if exists(
-    select 1 from (values ('all'),('own'),('own_and_employee_subjects')) visibility(name),
-      jsonb_array_elements_text(public.list_time_correction_history_page(org_id,caller,visibility.name)->'ids') listed(id)
-    where id='77000000-0000-4000-8000-000000000095'
-  ) then raise exception 'history lists a request of a record its subject no longer holds'; end if;
-
   -- Bounds: at most 100 rows, at least one row, never a page before the first, empty past the end.
   if jsonb_array_length(public.list_time_correction_history_page(org_id,caller,'all',1,100000)->'ids') is distinct from 100 then raise exception 'history page size is not capped at 100'; end if;
   if jsonb_array_length(public.list_time_correction_history_page(org_id,caller,'all',1,0)->'ids') is distinct from 1 then raise exception 'history page size has no lower bound'; end if;
@@ -130,6 +119,31 @@ do $$ begin
     or public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000005','own',2,1)->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000082'::uuid) then
     raise exception 'identical filing times lost the id order';
   end if;
+end $$;
+
+-- The caller's old record lost its login. A request they filed on it, newest
+-- of all, no longer lists for them under any visibility; an approver of
+-- others still lists it, since an open request blocks its month's close.
+reset role;
+set local session_replication_role = replica;
+insert into public.time_correction_requests(id,organization_id,subject_employee_record_id,subject_user_id,requested_by,kind,status,source_scope_key,created_at) values
+('77000000-0000-4000-8000-000000000095','77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-0000000000a7','77000000-0000-4000-8000-000000000003','77000000-0000-4000-8000-000000000003','add','withdrawn',md5('tc-removed-a')||md5('tc-removed-b'),'2037-12-31');
+set local session_replication_role = origin;
+set local role service_role;
+do $$ declare
+  org_id uuid := '77000000-0000-4000-8000-000000000010';
+  caller uuid := '77000000-0000-4000-8000-000000000003';
+  buero uuid := '77000000-0000-4000-8000-000000000002';
+  removed text := '77000000-0000-4000-8000-000000000095';
+  result jsonb;
+begin
+  result := public.list_time_correction_history_page(org_id,caller,'own');
+  if (result->>'total')::int is distinct from 2 or result->'ids' ? removed then raise exception 'own history lists a request of a record its subject no longer holds: %',result; end if;
+  if public.list_time_correction_history_page(org_id,caller,'own_and_employee_subjects')->'ids' ? removed then raise exception 'delegated history lists the caller''s request of a record they no longer hold'; end if;
+  if public.list_time_correction_history_page(org_id,caller,'all')->'ids' ? removed then raise exception 'full history lists the caller''s request of a record they no longer hold'; end if;
+  result := public.list_time_correction_history_page(org_id,buero,'all');
+  if (result->>'total')::int is distinct from 1060 or result->'ids'->>0 is distinct from removed then raise exception 'an approver''s history lost a request of a record its subject no longer holds: %',result->>'total'; end if;
+  if public.list_time_correction_history_page(org_id,buero,'own_and_employee_subjects')->'ids'->>0 is distinct from removed then raise exception 'an employee-subject approver''s history lost a request of a record its subject no longer holds'; end if;
 end $$;
 
 -- A browser session cannot execute the reader, even for its own organization.

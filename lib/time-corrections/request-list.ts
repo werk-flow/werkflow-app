@@ -91,13 +91,17 @@ export async function readCorrectionRequestList(input: {
     logReadFailure('getTimeCorrectionRequests: requests failed', error);
     return { success: false, error: 'fetch_failed' };
   }
+  // One person's requests are their time: only the record they hold now counts, for every caller.
+  const listed = filter.subjectUserId
+    ? roots.filter((request) => hasEffectiveSubject(request, state.recordByUser))
+    : roots;
   return hydrateCorrectionRequests({
     admin,
     organizationId,
     callerUserId,
     callerRole,
     holder,
-    roots,
+    roots: listed,
     recordByUser: state.recordByUser,
   });
 }
@@ -162,9 +166,8 @@ async function readRequestDetails(
 /**
  * Whether the request's subject still holds the employee record it was filed
  * on (`isEffectiveFact`). A request of a record its person no longer holds is
- * retained data of a removed employee (docs/technical/security.md, "Calendar
- * correction input boundary"); `list_time_correction_history_page` applies
- * the same rule to the history in the database.
+ * retained data of a removed employee to that person (docs/technical/security.md,
+ * "Calendar correction input boundary").
  */
 function hasEffectiveSubject(request: RequestRow, recordByUser: ReadonlyMap<string, string>): boolean {
   return isEffectiveFact(
@@ -236,8 +239,14 @@ function toCorrectionRequest(
 /**
  * The selected requests with names, the current revision and the caller's
  * review and withdraw rights, in the selection order, limited to the ones
- * the caller may see and whose subject holds their record now
- * (`hasEffectiveSubject`). A missing or unreadable revision fails the read.
+ * the caller may see. A missing or unreadable revision fails the read.
+ *
+ * A request belongs to the record it was filed on. Its subject sees it only
+ * while they hold that record (`hasEffectiveSubject`), and so does its
+ * requester. An approver sees it whoever holds the record now: every open
+ * request blocks its month's close (`findPendingCorrectionRequest`), and a
+ * correction filed before an offboarding still counts for payroll.
+ * `list_time_correction_history_page` applies the same rule in the database.
  */
 export async function hydrateCorrectionRequests(
   input: CallerView & {
@@ -252,14 +261,12 @@ export async function hydrateCorrectionRequests(
   if (!roots.length) return { success: true, requests: [] };
   const details = await readRequestDetails(admin, organizationId, roots);
   if (!details) return { success: false, error: 'fetch_failed' };
-  const visible = roots.filter(
-    (request) =>
-      hasEffectiveSubject(request, input.recordByUser) &&
-      (input.callerRole !== 'employee' ||
-        request.requested_by === input.callerUserId ||
-        request.subject_user_id === input.callerUserId ||
-        holderCovers(input, request, details)),
-  );
+  const visible = roots.filter((request) => {
+    const effective = hasEffectiveSubject(request, input.recordByUser);
+    if (request.subject_user_id === input.callerUserId) return effective;
+    if (input.callerRole !== 'employee' || holderCovers(input, request, details)) return true;
+    return request.requested_by === input.callerUserId && effective;
+  });
   const requests: TimeCorrectionRequest[] = [];
   for (const request of visible) {
     const hydrated = toCorrectionRequest(input, request, details);
