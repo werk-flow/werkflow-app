@@ -1,24 +1,18 @@
 import { beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { temporaryDirectory } from './temporary-directory';
 import { FULL_RUN_SLOTS } from './ci/full-run';
 import { CLOCK_WORK } from './ci/schedule';
-import { workflowsFolder } from './ci-workflow';
+import { readWorkflow, workflowsFolder } from './ci-workflow';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
-const holdScript = join(repositoryRoot, '.github/scripts/hold-until.sh');
-const holdSource = readFileSync(holdScript, 'utf8');
 const candidateScript = join(repositoryRoot, '.github/scripts/release-candidate.sh');
-const HOUR = 3600;
-const LEG = 345 * 60;
 
 // The owner's target (2026-11-07): PROD is live by 05:00 Berlin on every weekday.
 const LIVE_BY = '05:00';
 const RELEASE_DECIDES = '03:30';
-// GitHub starts this repository's scheduled runs up to 10 hours late (werk-flow/werkflow-app#184).
-const GITHUB_DELAY_MAX_MINUTES = 10 * 60;
 // The longest start delay measured on an evening line (#184): 440 minutes.
 const GITHUB_DELAY_MEASURED_MINUTES = 440;
 // A full run, nightly or the release's own: 23 to 29 minutes since 2026-10-31, plus headroom.
@@ -27,6 +21,8 @@ const FULL_RUN_MINUTES = 45;
 const SLOWEST_FULL_RUN_MINUTES = 62;
 // From a green full run to a promoted build: under 7 minutes in the releases so far.
 const SHIP_MINUTES = 10;
+// ci-alert.timer passes every 10 minutes (werk-flow/werkflow-planning ops/ci-alert.timer).
+const TIMER_PASS_MINUTES = 10;
 
 const releaseWorkflow = readFileSync(join(repositoryRoot, workflowsFolder(), 'release.yml'), 'utf8');
 const nightlyWorkflow = readFileSync(join(repositoryRoot, workflowsFolder(), 'nightly.yml'), 'utf8');
@@ -40,23 +36,7 @@ let stub = '';
 
 beforeEach(() => {
   stub = temporaryDirectory('ci-schedule-');
-  writeFileSync(join(stub, 'date'), '#!/usr/bin/env bash\necho "$NOW"\n');
-  writeFileSync(join(stub, 'sleep'), '#!/usr/bin/env bash\necho "$1" > "$STUB/slept"\n');
-  chmodSync(join(stub, 'date'), 0o755);
-  chmodSync(join(stub, 'sleep'), 0o755);
 });
-
-/** The seconds one leg of the hold sleeps when it starts at `instant`. */
-function secondsHeldFrom(instant: string) {
-  rmSync(join(stub, 'slept'), { force: true });
-  const now = Date.parse(instant) / 1000;
-  const result = spawnSync('bash', [holdScript, RELEASE_DECIDES], {
-    encoding: 'utf8',
-    env: { NODE_ENV: 'test', PATH: `${stub}:${process.env.PATH}`, STUB: stub, NOW: String(now) },
-  });
-  expect(result.status).toBe(0);
-  return existsSync(join(stub, 'slept')) ? Number(readFileSync(join(stub, 'slept'), 'utf8')) : 0;
-}
 
 /** Minutes after Berlin midnight of an `HH:MM` time. */
 function minutesOf(clock: string) {
@@ -64,93 +44,38 @@ function minutesOf(clock: string) {
   return (hours ?? 0) * 60 + (minutes ?? 0);
 }
 
-test('PROD is live by 05:00 even when GitHub starts the release 10 hours late', () => {
-  const cron = /- cron: '(\d+) (\d+) \* \* 0-4'\n {6}timezone: Europe\/Berlin/.exec(releaseWorkflow);
+test('a release the ci-alert timer dispatches on time at 03:30 is live by 05:00, even with its own slowest full run', () => {
+  expect(CLOCK_WORK.release.time).toBe(RELEASE_DECIDES);
+  // The timer's pass, then the release's own full run when it finds none, then the ship.
+  const liveAt = (ownRun: number) => minutesOf(RELEASE_DECIDES) + TIMER_PASS_MINUTES + ownRun + SHIP_MINUTES;
+  expect(liveAt(FULL_RUN_MINUTES)).toBeLessThanOrEqual(minutesOf(LIVE_BY));
+  expect(liveAt(SLOWEST_FULL_RUN_MINUTES)).toBeLessThanOrEqual(minutesOf(LIVE_BY));
+});
+
+test('no cron and no hold job: the release waits for a dispatch, and the timer finds its own by name', () => {
+  // A cron run starts up to 10 hours late and held a runner until 03:30 (werk-flow/werkflow-planning#503).
+  expect(Object.keys(readWorkflow('release.yml').at('on') ?? {})).toEqual(['workflow_dispatch']);
+  expect(releaseWorkflow).not.toContain('hold-until');
+  expect(readWorkflow('release.yml').at('jobs', 'candidate', 'needs')).toBeUndefined();
+  // The timer's dispatch (-f scheduled=true) decides as a scheduled run, every other one as asked.
+  expect(readWorkflow('release.yml').text('jobs', 'candidate', 'steps', 1, 'env', 'MODE')).toBe(
+    "${{ inputs.dry_run && 'dry-run' || inputs.scheduled && 'scheduled' || 'manual' }}",
+  );
+  // ops/ci-alert.py counts a run of this name as the night's release, and no other dispatch. It
+  // dispatches only while it finds this exact line in the raw file, so a folded block would stop it.
+  expect(releaseWorkflow).toContain(
+    "\nrun-name: ${{ inputs.scheduled && 'Scheduled release' || 'release' }}\n",
+  );
+});
+
+test("the nightly's full run usually ends before the release decides, so the release reuses it", () => {
+  const cron = /- cron: '(\d+) (\d+) \* \* \*'\n {6}timezone: Europe\/Berlin/.exec(nightlyWorkflow);
   expect(cron).not.toBeNull();
   const firesAt = Number(cron?.[2]) * 60 + Number(cron?.[1]);
-  /** When PROD is live: the release starts `delay` late, and the nightly shares its line, so it starts
-   * no later. ci.yml queues full runs on one commit, so the release's own run may wait for the nightly. */
-  const liveAt = (delay: number, nightly: number, ownRun: number) => {
-    const latestStart = firesAt + delay - 24 * 60;
-    const decides = Math.max(latestStart, minutesOf(RELEASE_DECIDES));
-    return Math.max(decides, latestStart + nightly) + ownRun + SHIP_MINUTES;
-  };
-  // GitHub's stated worst delay with today's full runs (23 to 29 minutes since 2026-10-31), with margin.
-  expect(liveAt(GITHUB_DELAY_MAX_MINUTES, FULL_RUN_MINUTES, FULL_RUN_MINUTES)).toBeLessThanOrEqual(
-    minutesOf(LIVE_BY),
+  // The worst delay measured on an evening line with the slowest full run on record.
+  expect(firesAt + GITHUB_DELAY_MEASURED_MINUTES + SLOWEST_FULL_RUN_MINUTES - 24 * 60).toBeLessThanOrEqual(
+    minutesOf(RELEASE_DECIDES),
   );
-  // The worst delay measured on an evening line with the slowest full runs on record (62 minutes, 2026-10-30).
-  expect(
-    liveAt(GITHUB_DELAY_MEASURED_MINUTES, SLOWEST_FULL_RUN_MINUTES, SLOWEST_FULL_RUN_MINUTES),
-  ).toBeLessThanOrEqual(minutesOf(LIVE_BY));
-  expect(releaseWorkflow).toContain(`run: bash .github/scripts/hold-until.sh ${RELEASE_DECIDES}`);
-});
-
-test('a run that starts in the night holds exactly until 03:30 Berlin', () => {
-  expect(secondsHeldFrom('2026-11-10T01:00:00Z')).toBe(1.5 * HOUR);
-  // GitHub's worst delay on this line, 10 hours after 17:00, still arrives before 03:30.
-  expect(secondsHeldFrom('2026-11-10T02:00:00Z')).toBe(0.5 * HOUR);
-});
-
-test('03:30 stays 03:30 Berlin across both clock changes', () => {
-  // Winter 02:30 UTC, summer 01:30 UTC.
-  expect(secondsHeldFrom('2026-07-01T00:00:00Z')).toBe(1.5 * HOUR);
-  // From 19:00 Berlin, the night of 2027-03-28 lasts an hour less, the night of 2026-10-25 an hour more.
-  // Both are Saturday nights, which hold no release (Sunday to Thursday evenings).
-  expect(secondsHeldFrom('2027-03-27T18:00:00Z')).toBe(LEG);
-  expect(secondsHeldFrom(new Date(Date.parse('2027-03-27T18:00:00Z') + LEG * 1000).toISOString())).toBe(
-    7.5 * HOUR - LEG,
-  );
-  expect(secondsHeldFrom('2026-10-25T00:00:00Z')).toBe(2.5 * HOUR);
-  expect(secondsHeldFrom('2026-10-24T17:00:00Z')).toBe(LEG);
-  expect(secondsHeldFrom(new Date(Date.parse('2026-10-24T17:00:00Z') + LEG * 1000).toISOString())).toBe(
-    9.5 * HOUR - LEG,
-  );
-});
-
-test('a run GitHub starts on time holds through both legs and no further', () => {
-  // 17:00 Berlin: 10.5 hours to 03:30, more than one leg may last.
-  const start = Date.parse('2026-11-09T16:00:00Z');
-  expect(secondsHeldFrom('2026-11-09T16:00:00Z')).toBe(LEG);
-  const second = new Date(start + LEG * 1000).toISOString();
-  expect(secondsHeldFrom(second)).toBe(10.5 * HOUR - LEG);
-  expect(secondsHeldFrom('2026-11-10T02:30:00Z')).toBe(0);
-});
-
-test('a run that arrives after 03:30 goes on at once instead of waiting a day', () => {
-  expect(secondsHeldFrom('2026-11-10T02:31:00Z')).toBe(0);
-  expect(secondsHeldFrom('2026-11-10T13:40:00Z')).toBe(0);
-});
-
-test('the release waits for its hold, and only a schedule event holds', () => {
-  expect(releaseWorkflow).toMatch(/\n {2}candidate:\n {4}name: .+\n {4}needs: hold\n/);
-  const holdSteps = releaseWorkflow.slice(
-    releaseWorkflow.indexOf('\n  hold:'),
-    releaseWorkflow.indexOf('\n  candidate:'),
-  );
-  expect(holdSteps.match(/- uses:|- name:/g)).toHaveLength(2);
-  expect(holdSteps.match(/if: github\.event_name == 'schedule'/g)).toHaveLength(2);
-  // A skipped job would skip the gate jobs behind it, so the job itself always runs.
-  expect(holdSteps).not.toMatch(/\n {4}if:/);
-  // The CI scheduler's dispatch (scripts/ci/schedule.ts) decides as a scheduled run, without the hold.
-  expect(releaseWorkflow).toContain("(github.event_name == 'schedule' || inputs.scheduled) && 'scheduled'");
-  expect(releaseWorkflow).toContain('needs: [hold, candidate, full, dev, release, smoke, proof]');
-});
-
-test("the CI scheduler dispatches the release when the held run decides, on the cron's weekdays, and goes on as late as a held run would", () => {
-  expect(CLOCK_WORK.release.time).toBe(RELEASE_DECIDES);
-  // The cron fires Sunday to Thursday evenings, so the release decides Monday to Friday (0 is Monday).
-  expect(releaseWorkflow).toContain("- cron: '0 17 * * 0-4'");
-  expect(CLOCK_WORK.release.weekdays).toEqual([0, 1, 2, 3, 4]);
-  // hold-until.sh lets a run go on at once while 03:30 is more than WINDOW ahead: up to 24 h - WINDOW late.
-  const window = Number(/WINDOW=\$\(\((\d+) \* 3600\)\)/.exec(holdSource)?.[1]);
-  expect(CLOCK_WORK.release.lateMs).toBe((24 - window) * HOUR * 1000);
-});
-
-test('the nightly shares the release cron line, so the release usually reuses its run', () => {
-  const cronLine = (workflow: string) => /- cron: '(\d+ \d+) /.exec(workflow)?.[1];
-  expect(cronLine(nightlyWorkflow)).toBe(cronLine(releaseWorkflow));
-  expect(nightlyWorkflow).toMatch(/- cron: '\d+ \d+ \* \* \*'\n {6}timezone: Europe\/Berlin/);
 });
 
 test('main gets a full run for landed changes every 6 hours from 06:00 to 20:00 Berlin, and no job waits for it', () => {
@@ -173,7 +98,7 @@ test('main gets a full run for landed changes every 6 hours from 06:00 to 20:00 
   );
 });
 
-test('a held run whose commit production already passed ends quietly with nothing to do', () => {
+test('a scheduled run whose commit production already passed ends quietly with nothing to do', () => {
   const repository = join(stub, 'repository');
   const git = (...args: string[]) => {
     const result = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.test', ...args], {
