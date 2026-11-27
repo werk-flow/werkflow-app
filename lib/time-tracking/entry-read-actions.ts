@@ -179,7 +179,6 @@ export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<G
         to: normalizedTo,
         readTo,
         status,
-        callerId: user.id,
         effectiveUserId,
       }),
     ]);

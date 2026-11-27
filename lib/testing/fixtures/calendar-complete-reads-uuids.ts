@@ -116,8 +116,6 @@ mock.module('@/lib/data/cached', () => ({
   getCachedMemberships: async () => [{ orgId: organizationId, role }],
   getCachedOrganizationSettings: async () => ({}),
   getCachedOrganizationCalendar: async () => ({}),
-  // The facts below name each person's record by their user id.
-  getOwnEmployeeRecordId: async () => callerId,
 }));
 mock.module('@/lib/time-corrections/approved-projection', () => ({
   loadApprovedCorrectionProjection: async () => {
@@ -204,7 +202,13 @@ provisionalFailure = false;
 tables.time_entries = [];
 
 // A correction's original request belongs to another employee. The effective
-// facts belong to the recipient; filter after applying that history.
+// facts belong to the recipient; filter after applying that history. Each fact
+// names the record its person holds now.
+tables.employee_records = [callerId, 'other'].map((userId) => ({
+  id: `record-${userId}`,
+  user_id: userId,
+  organization_id: organizationId,
+}));
 approvedApplications = [
   {
     applicationId: 'reassigned',
@@ -217,7 +221,7 @@ approvedApplications = [
       schemaVersion: 1,
       facts: [callerId, 'other'].map((userId) => ({
         factId: userId,
-        employeeRecordId: userId,
+        employeeRecordId: `record-${userId}`,
         userId,
         entryType: 'clock_in',
         timestamp: '2026-06-15T08:00:00.000Z',

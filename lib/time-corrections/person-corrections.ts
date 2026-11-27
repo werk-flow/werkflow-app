@@ -5,13 +5,32 @@ import { loadApprovedCorrectionProjection } from './approved-projection';
 import type { TimeCorrectionApplicationProjection } from './types';
 
 /**
- * One person's approved corrections of a window, as the views of their time
- * count them. Each application keeps every source it replaces, and only the
- * facts of the person's effective employee record: a fact that names their
- * user on a record they no longer hold is retained data of a removed employee
- * (docs/technical/security.md, "Calendar correction input boundary"). Without
- * an effective record no fact counts. The caller authorized the person and
- * resolves the record; its read runs beside the correction read.
+ * The applications with only the facts of each person's effective employee
+ * record, the one `recordByUser` names for them now. Each application keeps
+ * every source it replaces. A fact that names a person on a record they no
+ * longer hold is retained data of a removed employee
+ * (docs/technical/security.md, "Calendar correction input boundary"); a
+ * person without a record keeps no fact.
+ */
+export function keepEffectiveFacts(
+  applications: readonly TimeCorrectionApplicationProjection[],
+  recordByUser: ReadonlyMap<string, string>,
+): TimeCorrectionApplicationProjection[] {
+  return applications.map((application) => ({
+    ...application,
+    snapshot: {
+      ...application.snapshot,
+      facts: application.snapshot.facts.filter(
+        (fact) => recordByUser.get(fact.userId) === fact.employeeRecordId,
+      ),
+    },
+  }));
+}
+
+/**
+ * One person's approved corrections of a window, with only the facts of their
+ * effective employee record (`keepEffectiveFacts`). The caller authorized the
+ * person and resolves the record; its read runs beside the correction read.
  */
 export async function loadPersonCorrections(
   admin: SupabaseClient<Database>,
@@ -32,16 +51,8 @@ export async function loadPersonCorrections(
       to: input.to,
     }),
   ]);
-  return applications.map((application) => ({
-    ...application,
-    snapshot: {
-      ...application.snapshot,
-      facts: application.snapshot.facts.filter(
-        (fact) =>
-          employeeRecordId !== null &&
-          fact.employeeRecordId === employeeRecordId &&
-          fact.userId === input.userId,
-      ),
-    },
-  }));
+  return keepEffectiveFacts(
+    applications,
+    new Map(employeeRecordId === null ? [] : [[input.userId, employeeRecordId]]),
+  );
 }

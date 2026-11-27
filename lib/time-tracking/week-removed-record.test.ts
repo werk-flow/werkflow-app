@@ -77,7 +77,6 @@ async function runFixture(): Promise<void> {
     CACHE_TAGS: {},
     getAuthenticatedUser: async () => ({ id: caller.id }),
     getCachedMemberships: async () => [{ orgId: organization, role: caller.role }],
-    getOwnEmployeeRecordId: async (userId: string) => (userId === employee ? currentRecord : null),
   }));
   // As read_time_correction_applications filters by person: every application with one of their facts.
   mock.module('@/lib/time-corrections/approved-projection', () => ({
@@ -91,12 +90,13 @@ async function runFixture(): Promise<void> {
   }));
   const { getTimeEntries } = await import('./entry-read-actions');
 
-  const correctionIds = async (): Promise<string[]> => {
+  /** The week of the employee, or with `whole` the organization's, as the member status reads it. */
+  const correctionIds = async (whole = false): Promise<string[]> => {
     const result = await getTimeEntries({
       organizationId: organization,
       from: MONDAY,
       to: SUNDAY_END,
-      userId: employee,
+      ...(whole ? {} : { userId: employee }),
     });
     assert.ok(result.success, 'the week reads');
     return result.entries.map((entry) => entry.id).sort();
@@ -106,10 +106,17 @@ async function runFixture(): Promise<void> {
   // Zeiterfassung: the employee's own week.
   assert.deepEqual(await correctionIds(), currentFacts, 'the own week counts no fact of the removed record');
 
-  // Mitarbeiter detail: the office's view of the employee.
+  // Mitarbeiter detail: the office's week of the employee.
   caller = { id: admin, role: 'admin' };
   assert.deepEqual(
     await correctionIds(),
+    currentFacts,
+    'the member week counts no fact of the removed record',
+  );
+
+  // Mitarbeiter list and detail status: the office reads the whole organization's day.
+  assert.deepEqual(
+    await correctionIds(true),
     currentFacts,
     'the member status counts no fact of the removed record',
   );
@@ -117,6 +124,11 @@ async function runFixture(): Promise<void> {
   // Without a record the member holds now, no fact counts.
   tables.employee_records = [{ id: removedRecord, organization_id: organization, user_id: null }];
   assert.deepEqual(await correctionIds(), [], 'a member without a record shows no correction fact');
+  assert.deepEqual(
+    await correctionIds(true),
+    [],
+    'the organization shows no fact of a person without a record',
+  );
 }
 
 if (process.env[FIXTURE_FLAG] === '1') {
