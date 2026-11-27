@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
+import { MailFields, mailErrors, sendBanner } from '@/components/delivery/mail-fields';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,91 +18,15 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
-import {
-  DELIVERY_LIMITS,
-  recipientSchema,
-  type DeliveryMailDefaults,
-  type DeliveryState,
-} from '@/lib/delivery/delivery-types';
-import { deliveryFailureAdvice } from '@/lib/delivery/failure-advice';
+import { DELIVERY_LIMITS, type DeliveryMailDefaults } from '@/lib/delivery/delivery-types';
 import { markInvoiceSentManually, sendInvoiceEmail } from '@/lib/invoices/delivery-actions';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { DELIVERY_FAILURE_MESSAGES } from './invoice-delivery-messages';
 
 const SEND_FAILED = 'Die E-Mail konnte nicht versendet werden. Bitte versuche es erneut.';
 const RECORD_FAILED = 'Der Versand konnte nicht vermerkt werden. Bitte versuche es erneut.';
-
-function mailErrors(form: DeliveryMailDefaults): Record<string, string | undefined> {
-  return {
-    'delivery-recipient': recipientSchema.safeParse(form.recipient.trim()).success
-      ? undefined
-      : 'Gib eine E-Mail-Adresse ein, zum Beispiel buchhaltung@kunde.de.',
-    'delivery-subject': form.subject.trim() ? undefined : 'Gib einen Betreff ein.',
-  };
-}
-
-/** The banner after a send: sent, still sending, or refused by the provider. */
-function sendBanner(
-  result: { state: DeliveryState; failureCode: string | null },
-  invoiceNumber: string,
-  recipient: string,
-): { variant: 'success' | 'info' | 'error'; message: string } {
-  const { state } = result;
-  if (state === 'failed') {
-    return {
-      variant: 'error',
-      message: deliveryFailureAdvice(result.failureCode, 'Unter „Versand“ kannst du sie erneut senden.'),
-    };
-  }
-  return state === 'sent'
-    ? { variant: 'success', message: `Rechnung ${invoiceNumber} ist an ${recipient} versendet.` }
-    : { variant: 'info', message: `Rechnung ${invoiceNumber} wird versendet.` };
-}
-
-/** Recipient, subject and text of the email. */
-function MailFields({
-  form,
-  errors,
-  change,
-}: {
-  form: DeliveryMailDefaults;
-  errors: Record<string, string | undefined>;
-  change: (patch: Partial<DeliveryMailDefaults>) => void;
-}) {
-  return (
-    <>
-      <Field label="Empfänger" htmlFor="delivery-recipient" required error={errors['delivery-recipient']}>
-        <Input
-          type="email"
-          autoComplete="email"
-          value={form.recipient}
-          onChange={(event) => change({ recipient: event.target.value })}
-          maxLength={254}
-          required
-        />
-      </Field>
-      <Field label="Betreff" htmlFor="delivery-subject" required error={errors['delivery-subject']}>
-        <Input
-          value={form.subject}
-          onChange={(event) => change({ subject: event.target.value })}
-          maxLength={DELIVERY_LIMITS.subject}
-          required
-        />
-      </Field>
-      <Field label="Nachricht" htmlFor="delivery-text">
-        <Textarea
-          value={form.text}
-          onChange={(event) => change({ text: event.target.value })}
-          maxLength={DELIVERY_LIMITS.text}
-          rows={7}
-        />
-      </Field>
-    </>
-  );
-}
 
 /**
  * „Per E-Mail senden“: the invoice's filed original to one recipient, with
@@ -144,7 +69,7 @@ export function SendInvoiceEmailDialog({
     if (!result.success)
       return setError(describeFailure(result.error, DELIVERY_FAILURE_MESSAGES, SEND_FAILED));
     onClose();
-    showBanner(sendBanner(result, invoiceNumber, form.recipient.trim()));
+    showBanner(sendBanner(result, `Rechnung ${invoiceNumber}`, form.recipient.trim()));
     router.refresh();
   };
   return (
