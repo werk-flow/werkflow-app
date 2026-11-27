@@ -1,4 +1,4 @@
-import { formatDelegationDate, personName } from '@/components/settings/responsibility-display';
+import { personName } from '@/components/settings/responsibility-display';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { ResponsibilityPreview } from '@/lib/responsibilities/actions';
 import {
@@ -8,6 +8,7 @@ import {
   type ResponsibilityPerson,
 } from '@/lib/responsibilities/types';
 import { ROLE_LABELS } from '@/lib/roles';
+import { formatGermanDate } from '@/lib/utils';
 
 export function ResponsibilityHolderChecklist({
   responsibility,
@@ -62,7 +63,7 @@ export function ResponsibilityEffectPreview({
       <div>
         <p className="text-sm font-medium">Wirkung ab heute</p>
         <p className="text-xs text-muted-foreground">
-          {formatDelegationDate(preview.businessDate)} · erst nach Bestätigung
+          {formatGermanDate(preview.businessDate)} · erst nach Bestätigung
         </p>
       </div>
       <PreviewNames

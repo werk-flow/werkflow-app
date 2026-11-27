@@ -25,6 +25,15 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
   },
   { sourceType: 'organization_join_request', sourceId: 'join-1', personName: 'Jo Neu', email: null },
   {
+    sourceType: 'maintenance_due',
+    sourceId: 'maintenance-1',
+    equipmentLabel: 'Gasbrennwertkessel',
+    siteName: 'Heizzentrale Lindenhof',
+    dueDate: '2026-11-20',
+    overdue: true,
+    href: '/service/wartung?q=WPL-1',
+  },
+  {
     sourceType: 'job_past_last_visit',
     sourceId: 'job-overdue-1',
     jobLabel: 'A-3 · Bad',
@@ -180,13 +189,14 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
 ];
 
 describe('groupAttentionTasks', () => {
-  test('overdue callbacks lead; time approvals, vacation requests, visits to replan, jobs past their last visit and open Anfragen follow; handovers last', () => {
+  test('overdue callbacks lead; time approvals, vacation requests, visits to replan, jobs past their last visit, due maintenance and open Anfragen follow; handovers last', () => {
     expect(groupAttentionTasks(TASK_OF_EVERY_KIND).map((section) => section.key)).toEqual([
       'callback',
       'time',
       'vacation',
       'visitReplan',
       'overdueJob',
+      'dueMaintenance',
       'request',
       'joinRequest',
       'siteAccess',

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { isMaintenanceDueOverdue } from './overdue';
+import { isMaintenanceDueForAufgaben, isMaintenanceDueOverdue } from './overdue';
 import type { MaintenanceDueStatus } from './types';
 
 describe('a due item is überfällig only when owed and due before today in Berlin', () => {
@@ -18,5 +18,29 @@ describe('a due item is überfällig only when owed and due before today in Berl
   ];
   test.each(cases)('%s', (_name, dueDate, status, today, expected) => {
     expect(isMaintenanceDueOverdue({ dueDate, status }, today)).toBe(expected);
+  });
+});
+
+describe('an open due item reaches Aufgaben when überfällig or due within the 14-day lead time', () => {
+  const cases: Array<[string, string, MaintenanceDueStatus, string, boolean]> = [
+    ['due today itself', '2026-11-26', 'open', '2026-11-26', true],
+    ['due in the past', '2026-01-15', 'open', '2026-11-26', true],
+    ['due on the last day of the lead time', '2026-12-10', 'open', '2026-11-26', true],
+    ['due the day after the lead time', '2026-12-11', 'open', '2026-11-26', false],
+    ['the lead time across a month end', '2026-12-14', 'open', '2026-11-30', true],
+    ['one day past it across a month end', '2026-12-15', 'open', '2026-11-30', false],
+    ['the lead time over a leap day', '2028-03-01', 'open', '2028-02-16', true],
+    ['one day past it over a leap day', '2028-03-02', 'open', '2028-02-16', false],
+    ['due on a leap day, seen two weeks ahead', '2028-02-29', 'open', '2028-02-15', true],
+    ['the lead time across a year end', '2027-01-07', 'open', '2026-12-24', true],
+    ['overdue but with a visit job', '2026-01-15', 'visit_created', '2026-11-26', false],
+    ['due today with a visit job', '2026-11-26', 'visit_created', '2026-11-26', false],
+    ['completed in the past', '2026-01-15', 'completed', '2026-11-26', false],
+    ['skipped in the past', '2026-01-15', 'skipped', '2026-11-26', false],
+    ['cancelled within the lead time', '2026-11-30', 'cancelled', '2026-11-26', false],
+    ['superseded within the lead time', '2026-11-30', 'superseded', '2026-11-26', false],
+  ];
+  test.each(cases)('%s', (_name, dueDate, status, today, expected) => {
+    expect(isMaintenanceDueForAufgaben({ dueDate, status }, today)).toBe(expected);
   });
 });

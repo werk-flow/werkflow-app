@@ -4,12 +4,13 @@ import { useCallback, useRef } from 'react';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import type { WeeklyTimeDataPoint, WeeklyTimeLabel } from '@/lib/time-tracking/types';
-import type { DailyTarget } from '@/lib/personnel/targets';
+import { DAILY_TARGET_LIVE_TABLES, type DailyTarget } from '@/lib/personnel/targets';
 import {
   buildWeeklyTimeData,
   computeWeekLabel,
   getTodayIndex,
   getWeekBounds,
+  targetsOfWeek,
 } from '@/lib/time-tracking/weekly';
 import { breakPolicyKey, type BreakPolicy } from '@/lib/time-tracking/settings';
 
@@ -93,15 +94,10 @@ export function useWeeklyTimeData({
       'time_entries',
       'time_sessions',
       'time_segments',
-      // Targets change with schedules, conditions, the holiday region, and
-      // closure days — refresh the week when any of them move.
-      'work_schedules',
-      'employment_conditions',
-      'organization_closure_days',
-      // A Berufsschule day the office records credits the day's target.
-      'school_days',
-      // The holiday region; a saved break rule also reads the week again through the policy view.
-      'organization_settings',
+      // Every source of a daily target, approved vacation and sickness and the
+      // entry and exit dates included. A saved break rule also reads the week
+      // again through the policy view.
+      ...DAILY_TARGET_LIVE_TABLES,
     ],
     read: async ({ signal }): Promise<LiveViewResult<WeekSnapshot>> => {
       // Recompute week bounds fresh on every read so we never use stale dates
@@ -129,7 +125,9 @@ export function useWeeklyTimeData({
         return { ok: false, error: result.error };
       }
 
-      const nextTargets = targetsResult.success ? targetsResult.targets : lastKnownTargetsRef.current;
+      const nextTargets = targetsResult.success
+        ? targetsResult.targets
+        : targetsOfWeek(lastKnownTargetsRef.current, monday);
       lastKnownTargetsRef.current = nextTargets;
 
       const weekData = buildWeeklyTimeData(result.entries || [], monday, livePolicy, nextTargets);

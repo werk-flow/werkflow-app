@@ -51,6 +51,12 @@ const AUFGABEN_OVERVIEW_TABLES = [
   'jobs',
   'projects',
   'work_handover_packages',
+  // A visit job, an exception, a completion or a plan revision moves due maintenance;
+  // a renamed Anlage or Einsatzort renames its task.
+  'maintenance_plans',
+  'maintenance_due_work',
+  'installed_equipment',
+  'client_sites',
   'attention_read_states',
   'organization_responsibility_configurations',
   'organization_responsibility_assignments',
@@ -98,7 +104,7 @@ export function useLiveAttentionOverview() {
       return result.success ? { ok: true, data: result.overview } : { ok: false };
     },
   });
-  // A new Berlin day moves jobs past their last visit into Aufgaben.
+  // A new Berlin day moves jobs past their last visit and due maintenance into Aufgaben.
   useBusinessDayRefresh(view.refresh);
   // A promised callback that passes moves its request into „Rückruf überfällig“.
   useDeadlineRefresh(nextCallbackDeadline(view.data?.tasks ?? []), view.refresh);

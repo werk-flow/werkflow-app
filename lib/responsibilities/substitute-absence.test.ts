@@ -82,9 +82,9 @@ describe('the substitute picker and the dialog copy', () => {
 
   test('the effect sentence reads „vom … bis einschließlich …“, or „am …“ for one day', () => {
     expect(delegationPeriodText('2026-11-02', '2026-11-06')).toBe(
-      'vom 2.11.2026 bis einschließlich 6.11.2026',
+      'vom 02.11.2026 bis einschließlich 06.11.2026',
     );
-    expect(delegationPeriodText('2026-11-02', '2026-11-02')).toBe('am 2.11.2026');
+    expect(delegationPeriodText('2026-11-02', '2026-11-02')).toBe('am 02.11.2026');
   });
 
   test('holders follow the name order of the people list in every section', () => {

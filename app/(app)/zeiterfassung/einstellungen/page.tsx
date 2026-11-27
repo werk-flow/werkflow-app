@@ -9,9 +9,11 @@ import {
   EmployeeTimePolicyAssignmentCard,
   PendingTimeAccountAdjustments,
 } from '@/components/zeiterfassung/time-account-settings-sections';
+import { LiveRouteRefresh } from '@/components/shared/live-route-refresh';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SubpageHeader } from '@/components/shared/subpage-header';
 import { getTimeAccountAccess } from '@/lib/time-accounts/actions';
+import { TIME_ACCOUNT_SETTINGS_LIVE_TABLES } from '@/lib/time-accounts/live-tables';
 import { getTimeAccountSettings, type TimeAccountSettingsData } from '@/lib/time-accounts/queries';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 
@@ -74,6 +76,7 @@ export default async function TimeAccountSettingsPage() {
   const [settings, access] = await Promise.all([getTimeAccountSettings(), getTimeAccountAccess()]);
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
+      <LiveRouteRefresh tables={TIME_ACCOUNT_SETTINGS_LIVE_TABLES} />
       <SubpageHeader
         title="Zeitregeln & Lohnexport"
         description="Jede Änderung gilt ab einem Datum. Frühere Versionen bleiben nachvollziehbar."

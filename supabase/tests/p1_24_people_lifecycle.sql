@@ -686,6 +686,291 @@ begin
 end;
 $$;
 
+-- Employment dates (werk-flow/werkflow-planning#350): withdrawing a planned
+-- step restores the entry and exit dates it wrote, and a step that acts at
+-- once refuses a future date. Replay (werk-flow/werkflow-planning#352): the
+-- stored request hash decides, the open-work inventory does not.
+insert into public.employee_records (id, organization_id, first_name, last_name, entry_date, exit_date) values
+('24000000-0000-0000-0000-000000000060', '24000000-0000-0000-0000-000000000010', 'Geplant', 'Austritt', '2024-01-01', null),
+('24000000-0000-0000-0000-000000000061', '24000000-0000-0000-0000-000000000010', 'Wieder', 'Eintritt', '2020-01-01', '2025-06-30'),
+('24000000-0000-0000-0000-000000000062', '24000000-0000-0000-0000-000000000010', 'Sofort', 'Schritt', '2024-01-01', null),
+('24000000-0000-0000-0000-000000000063', '24000000-0000-0000-0000-000000000010', 'Geändert', 'Austritt', '2024-01-01', null),
+('24000000-0000-0000-0000-000000000064', '24000000-0000-0000-0000-000000000010', 'Neu', 'Geplant', '2024-01-01', null),
+('24000000-0000-0000-0000-000000000065', '24000000-0000-0000-0000-000000000010', 'Überholt', 'Austritt', '2024-01-01',
+ (clock_timestamp() at time zone 'Europe/Berlin')::date + 20),
+('24000000-0000-0000-0000-000000000066', '24000000-0000-0000-0000-000000000010', 'Später', 'Eintritt',
+ (clock_timestamp() at time zone 'Europe/Berlin')::date + 30, null),
+('24000000-0000-0000-0000-000000000067', '24000000-0000-0000-0000-000000000010', 'Rückkehr', 'Verschoben', '2020-01-01', '2025-06-30');
+
+do $$
+declare
+  test_organization_id constant uuid := '24000000-0000-0000-0000-000000000010';
+  actor_id constant uuid := '24000000-0000-0000-0000-000000000001';
+  leaver_id constant uuid := '24000000-0000-0000-0000-000000000060';
+  rehire_id constant uuid := '24000000-0000-0000-0000-000000000061';
+  immediate_id constant uuid := '24000000-0000-0000-0000-000000000062';
+  edited_id constant uuid := '24000000-0000-0000-0000-000000000063';
+  replanned_id constant uuid := '24000000-0000-0000-0000-000000000064';
+  overtaken_id constant uuid := '24000000-0000-0000-0000-000000000065';
+  conflicting_id constant uuid := '24000000-0000-0000-0000-000000000066';
+  returning_id constant uuid := '24000000-0000-0000-0000-000000000067';
+  buero_record_id uuid;
+  co_holder_record_id uuid;
+  transition_source text;
+  configuration_id uuid;
+  today constant date := (clock_timestamp() at time zone 'Europe/Berlin')::date;
+  lifecycle_id uuid;
+  replayed_id uuid;
+  kind public.personnel_employment_transition_kind;
+begin
+  -- A withdrawn planned exit leaves no exit date behind, also after a second plan moved it.
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, leaver_id, 0, 'plan_exit', today + 30,
+    'Austritt geplant', '[]'::jsonb, '24000000-0000-0000-0000-000000000070', repeat('a', 64)
+  );
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, leaver_id, 1, 'plan_exit', today + 40,
+    'Austritt verschoben', '[]'::jsonb, '24000000-0000-0000-0000-000000000071', repeat('b', 64)
+  );
+  if (select exit_date from public.employee_records where id = leaver_id) is distinct from today + 40
+    then raise exception 'planned exit did not write its exit date'; end if;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, leaver_id, 2, 'cancel_scheduled', today,
+    'Austritt zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-000000000072', repeat('c', 64)
+  );
+  if (select exit_date from public.employee_records where id = leaver_id) is not null
+    then raise exception 'withdrawn planned exit kept its exit date'; end if;
+  if (select entry_date from public.employee_records where id = leaver_id) is distinct from '2024-01-01'::date
+    then raise exception 'withdrawn planned exit changed the entry date'; end if;
+
+  -- A withdrawn planned return restores the earlier entry and exit dates.
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, rehire_id, 0, 'plan_start', today + 14,
+    'Wiedereintritt geplant', '[]'::jsonb, '24000000-0000-0000-0000-000000000073', repeat('d', 64)
+  );
+  if exists (
+    select 1 from public.employee_records
+    where id = rehire_id and (entry_date is distinct from today + 14 or exit_date is not null)
+  ) then raise exception 'planned start did not write its entry date'; end if;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, rehire_id, 1, 'cancel_scheduled', today,
+    'Wiedereintritt zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-000000000074', repeat('e', 64)
+  );
+  if exists (
+    select 1 from public.employee_records
+    where id = rehire_id
+      and (entry_date is distinct from '2020-01-01'::date or exit_date is distinct from '2025-06-30'::date)
+  ) then raise exception 'withdrawn planned start kept its dates'; end if;
+  -- The state follows the restored dates: an exit date of the past is an exit.
+  if (select state from public.personnel_employment_lifecycles where employee_record_id = rehire_id)
+     is distinct from 'exited'
+    then raise exception 'withdrawn planned return kept the person planned after a past exit date'; end if;
+
+  -- A date the office changed on the record after the plan stays when the plan is withdrawn.
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, edited_id, 0, 'plan_exit', today + 30,
+    'Austritt geplant', '[]'::jsonb, '24000000-0000-0000-0000-000000000075', repeat('f', 64)
+  );
+  update public.employee_records set exit_date = today + 60 where id = edited_id;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, edited_id, 1, 'cancel_scheduled', today,
+    'Austritt zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-000000000076', repeat('0', 64)
+  );
+  if (select exit_date from public.employee_records where id = edited_id) is distinct from today + 60
+    then raise exception 'withdrawing a plan overwrote an exit date changed after it'; end if;
+
+  -- An edit between two plans is what the second plan replaced, and what its withdrawal restores.
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, replanned_id, 0, 'plan_exit', today + 30,
+    'Austritt geplant', '[]'::jsonb, '24000000-0000-0000-0000-000000000078', repeat('4', 64)
+  );
+  update public.employee_records set exit_date = today + 60 where id = replanned_id;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, replanned_id, 1, 'plan_exit', today + 40,
+    'Austritt neu geplant', '[]'::jsonb, '24000000-0000-0000-0000-000000000079', repeat('5', 64)
+  );
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, replanned_id, 2, 'cancel_scheduled', today,
+    'Austritt zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-00000000007a', repeat('6', 64)
+  );
+  if (select exit_date from public.employee_records where id = replanned_id) is distinct from today + 60
+    then raise exception 'withdrawing a second plan dropped the exit date edited before it'; end if;
+
+  -- An earlier exit that an edited entry date overtook does not return, and the withdrawal still succeeds.
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, overtaken_id, 0, 'plan_exit', today + 30,
+    'Austritt geplant', '[]'::jsonb, '24000000-0000-0000-0000-00000000007b', repeat('7', 64)
+  );
+  update public.employee_records set entry_date = today + 25 where id = overtaken_id;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, overtaken_id, 1, 'cancel_scheduled', today,
+    'Austritt zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-00000000007c', repeat('8', 64)
+  );
+  if exists (
+    select 1 from public.employee_records
+    where id = overtaken_id and (entry_date is distinct from today + 25 or exit_date is not null)
+  ) then raise exception 'withdrawing a plan restored an exit before the edited entry date'; end if;
+
+  -- A withdrawn return keeps an entry date edited since, and an earlier exit it overtook does not return.
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, returning_id, 0, 'plan_start', today + 14,
+    'Rückkehr geplant', '[]'::jsonb, '24000000-0000-0000-0000-000000000081', repeat('d', 64)
+  );
+  update public.employee_records set entry_date = today + 20 where id = returning_id;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, returning_id, 1, 'cancel_scheduled', today,
+    'Rückkehr zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-000000000082', repeat('e', 64)
+  );
+  if exists (
+    select 1 from public.employee_records
+    where id = returning_id and (entry_date is distinct from today + 20 or exit_date is not null)
+  ) then raise exception 'withdrawing a return restored an exit before the edited entry date'; end if;
+
+  -- An earlier entry after an exit date set since cannot return: the withdrawal is refused and the plan stays.
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, conflicting_id, 0, 'plan_start', today + 14,
+    'Eintritt vorgezogen', '[]'::jsonb, '24000000-0000-0000-0000-00000000007f', repeat('b', 64)
+  );
+  update public.employee_records set exit_date = today + 21 where id = conflicting_id;
+  begin
+    perform public.set_personnel_employment_transition(
+      actor_id, test_organization_id, conflicting_id, 1, 'cancel_scheduled', today,
+      'Eintritt zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-000000000080', repeat('c', 64)
+    );
+    raise exception 'withdrawing a plan left its entry date before an exit date set since';
+  exception when others then
+    if sqlerrm not like '%withdrawal_dates_conflict%' then raise; end if;
+  end;
+  if (select scheduled_for from public.personnel_employment_lifecycles where employee_record_id = conflicting_id)
+     is distinct from today + 14
+    then raise exception 'a refused withdrawal dropped the plan'; end if;
+
+  -- Withdrawing a planned return restores the exit date, so it may not leave a selected group without a holder.
+  select id into buero_record_id from public.employee_records
+  where organization_id = test_organization_id and user_id = '24000000-0000-0000-0000-000000000002';
+  update public.employee_records set entry_date = '2020-01-01', exit_date = '2025-06-30'
+  where id = buero_record_id;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, buero_record_id, 0, 'plan_start', today + 14,
+    'Rückkehr geplant', '[]'::jsonb, '24000000-0000-0000-0000-00000000007d', repeat('9', 64)
+  );
+  -- After the organization's role-default configurations this transaction created.
+  insert into public.organization_responsibility_configurations (
+    organization_id, responsibility, mode, created_by, effective_from
+  ) values (test_organization_id, 'time_approval', 'selected', actor_id, clock_timestamp())
+  returning id into configuration_id;
+  -- The employee's access is not configured here, so they cannot approve and count as no holder.
+  select id into co_holder_record_id from public.employee_records
+  where organization_id = test_organization_id and user_id = '24000000-0000-0000-0000-000000000003';
+  if app_private.p1_24_has_effective_access(test_organization_id, '24000000-0000-0000-0000-000000000003')
+    then raise exception 'the co-holder of the last-holder case has effective access'; end if;
+  insert into public.organization_responsibility_assignments (organization_id, configuration_id, employee_record_id, source)
+  values (test_organization_id, configuration_id, buero_record_id, 'direct'),
+         (test_organization_id, configuration_id, co_holder_record_id, 'direct');
+  begin
+    perform public.set_personnel_employment_transition(
+      actor_id, test_organization_id, buero_record_id, 1, 'cancel_scheduled', today,
+      'Rückkehr zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-00000000007e', repeat('a', 64)
+    );
+    raise exception 'withdrawing a planned return left a selected group without an effective holder';
+  exception when others then
+    if sqlerrm not like '%last_responsibility_holder%' then raise; end if;
+  end;
+  if (select exit_date from public.employee_records where id = buero_record_id) is not null
+    then raise exception 'a refused withdrawal restored the exit date'; end if;
+  -- With a holder who has effective access beside them, the withdrawal goes through.
+  insert into public.organization_responsibility_assignments (organization_id, configuration_id, employee_record_id, source)
+  select test_organization_id, configuration_id, id, 'direct' from public.employee_records
+  where organization_id = test_organization_id and user_id = actor_id;
+  perform public.set_personnel_employment_transition(
+    actor_id, test_organization_id, buero_record_id, 1, 'cancel_scheduled', today,
+    'Rückkehr zurückgenommen', '[]'::jsonb, '24000000-0000-0000-0000-000000000083', repeat('a', 64)
+  );
+  if not exists (
+    select 1 from public.employee_records record
+    join public.personnel_employment_lifecycles lifecycle on lifecycle.employee_record_id = record.id
+    where record.id = buero_record_id and record.exit_date = '2025-06-30'::date
+      and lifecycle.state = 'exited' and lifecycle.scheduled_state is null
+  ) then raise exception 'withdrawing a planned return beside an effective holder did not restore the exit'; end if;
+
+  -- The per-person lock comes before the current date is read, so a wait
+  -- across Berlin midnight cannot leave a due plan open to withdrawal.
+  transition_source := pg_get_functiondef(
+    'public.set_personnel_employment_transition(uuid,uuid,uuid,bigint,public.personnel_employment_transition_kind,date,text,jsonb,uuid,text)'::regprocedure);
+  if strpos(transition_source, 'today := ') = 0
+     or strpos(transition_source, 'today := ') < strpos(transition_source, ':p1-24-employment:')
+  then raise exception 'an employment transition reads the current date before the per-person lock'; end if;
+
+  -- A step that acts at once refuses a future date and changes nothing. The
+  -- date lies days ahead, so a run across Berlin midnight still sees it as future.
+  foreach kind in array array['start', 'mark_inactive', 'exit', 'reactivate']::public.personnel_employment_transition_kind[] loop
+    begin
+      perform public.set_personnel_employment_transition(
+        actor_id, test_organization_id, immediate_id, 0, kind, today + 7,
+        'Sofortiger Schritt in der Zukunft', '[]'::jsonb, gen_random_uuid(), repeat('1', 64)
+      );
+      raise exception 'immediate step % accepted a future date', kind;
+    exception when others then
+      if sqlerrm not like '%immediate_effective_date_required%' then raise; end if;
+    end;
+  end loop;
+  -- A planned step takes only a later date.
+  begin
+    perform public.set_personnel_employment_transition(
+      actor_id, test_organization_id, immediate_id, 0, 'plan_exit', today,
+      'Geplanter Austritt heute', '[]'::jsonb, gen_random_uuid(), repeat('1', 64)
+    );
+    raise exception 'planned exit accepted today';
+  exception when others then
+    if sqlerrm not like '%future_effective_date_required%' then raise; end if;
+  end;
+  if exists (select 1 from public.personnel_employment_lifecycles where employee_record_id = immediate_id)
+     or (select exit_date from public.employee_records where id = immediate_id) is not null
+    then raise exception 'a refused immediate step changed the employment'; end if;
+  lifecycle_id := public.set_personnel_employment_transition(
+    actor_id, test_organization_id, immediate_id, 0, 'exit', today,
+    'Austritt heute', '[{"kind":"job_assignment","id":"a"}]'::jsonb,
+    '24000000-0000-0000-0000-000000000077', repeat('2', 64)
+  );
+  if (select exit_date from public.employee_records where id = immediate_id) is distinct from today
+    then raise exception 'an exit of today was not recorded'; end if;
+
+  -- The identical retry returns the stored result although the open work changed since.
+  replayed_id := public.set_personnel_employment_transition(
+    actor_id, test_organization_id, immediate_id, 0, 'exit', today,
+    'Austritt heute', '[]'::jsonb,
+    '24000000-0000-0000-0000-000000000077', repeat('2', 64)
+  );
+  if replayed_id is distinct from lifecycle_id then raise exception 'employment replay changed identity'; end if;
+  if (
+    select count(*) from public.personnel_employment_transitions
+    where employee_record_id = immediate_id and organization_id = test_organization_id
+  ) <> 1 then raise exception 'employment replay recorded a second transition'; end if;
+  -- Only an Admin gets the stored result.
+  begin
+    perform public.set_personnel_employment_transition(
+      '24000000-0000-0000-0000-000000000002', test_organization_id, immediate_id, 0, 'exit', today,
+      'Austritt heute', '[]'::jsonb,
+      '24000000-0000-0000-0000-000000000077', repeat('2', 64)
+    );
+    raise exception 'Büro replayed a recorded employment transition';
+  exception when others then
+    if sqlerrm not like '%forbidden%' then raise; end if;
+  end;
+  -- The same operation with another request is refused.
+  begin
+    perform public.set_personnel_employment_transition(
+      actor_id, test_organization_id, immediate_id, 1, 'reactivate', today,
+      'Anderer Schritt', '[]'::jsonb,
+      '24000000-0000-0000-0000-000000000077', repeat('3', 64)
+    );
+    raise exception 'employment idempotency conflict was accepted';
+  exception when others then
+    if sqlerrm not like '%operation_id_conflict%' then raise; end if;
+  end;
+end;
+$$;
+
 delete from public.organizations where id = '24000000-0000-0000-0000-000000000010';
 
 do $$

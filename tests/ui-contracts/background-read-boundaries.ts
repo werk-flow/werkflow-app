@@ -14,7 +14,11 @@ import { readPlannedVisitsContract } from './correction-timeline-boundaries';
 import { readSignatureViewContract, readWorkArtifactDetailContract } from './work-artifact-boundaries';
 import { readDraftJobAccessContract } from './device-draft-boundaries';
 import { readRequestWorkTargetsContract } from './request-attach-boundaries';
-import { readBreakRuleWeekEntries, readBreakRuleWeekPolicy } from './break-rule-week-boundaries';
+import {
+  readBreakRuleWeekEntries,
+  readBreakRuleWeekPolicy,
+  readBreakRuleWeekTargets,
+} from './break-rule-week-boundaries';
 import { readGlobalSearchContract } from './global-search-boundaries';
 import { readOnCallOverviewContract } from './worker-start-service-boundaries';
 import { readKiThreadWindowContract } from './ki-chat-boundaries';
@@ -45,8 +49,8 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
     return readAffectedVisitsContract(absenceAffectedVisitsInputSchema.parse(input));
   if (kind === 'time-entries') return readBreakRuleWeekEntries(input);
   if (kind === 'break-policy') return readBreakRuleWeekPolicy();
-  // The week views fall back to their default targets; the break rule does not depend on them.
-  if (kind === 'weekly-targets') return { success: false, error: 'fetch_failed' };
+  // The week views read their targets: without them a week owes no overtime.
+  if (kind === 'weekly-targets') return readBreakRuleWeekTargets();
   if (kind === 'work-artifact-detail') return readWorkArtifactDetailContract();
   if (kind === 'work-artifacts') return readDraftJobAccessContract();
   if (kind === 'document-view-url') return readSignatureViewContract();

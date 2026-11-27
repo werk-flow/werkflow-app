@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { parseSignedHoursMinutes } from './balance-input';
+import { adjustmentHoursError, HOURS_INPUT_ERROR, parseSignedHoursMinutes } from './balance-input';
 import { formatMinutes } from './presentation';
 
 describe('parseSignedHoursMinutes: an opening balance is typed as ±HH:MM', () => {
@@ -34,5 +34,22 @@ describe('parseSignedHoursMinutes: an opening balance is typed as ±HH:MM', () =
   test('a value that is no hours-and-minutes time is refused', () => {
     for (const input of ['', '12:60', '12:5', '12,5', '+-1:00', '1:00:00', '12345:00', 'abc', ':30'])
       expect(parseSignedHoursMinutes(input)).toBeNull();
+  });
+});
+
+describe('adjustmentHoursError: a correction, expiry or payout takes the same ±HH:MM', () => {
+  test('signed hours and minutes pass', () => {
+    for (const input of ['+12:30', '-3:15', '−0:01', '1:00 Std.'])
+      expect(adjustmentHoursError(input)).toBeNull();
+  });
+
+  test('plain minutes and other text name the format', () => {
+    for (const input of ['750', '', '12,5', '1:75'])
+      expect(adjustmentHoursError(input)).toBe(HOURS_INPUT_ERROR);
+  });
+
+  test('zero changes no balance and is refused with its own reason', () => {
+    expect(adjustmentHoursError('0:00')).toBe('Eine Korrektur von 0:00 ändert den Saldo nicht.');
+    expect(adjustmentHoursError('-0:00')).toBe('Eine Korrektur von 0:00 ändert den Saldo nicht.');
   });
 });

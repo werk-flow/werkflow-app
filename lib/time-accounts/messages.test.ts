@@ -1,8 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 
+import ts from 'typescript';
+
 import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
+import { parseProductSource } from '@/lib/conventions/product-sources';
 import { REALTIME_TABLES } from '@/lib/realtime/tables';
-import { TIME_PERIOD_DETAIL_LIVE_TABLES, TIME_PERIOD_LIST_LIVE_TABLES } from './live-tables';
+import {
+  TIME_ACCOUNT_SETTINGS_LIVE_TABLES,
+  TIME_PERIOD_DETAIL_LIVE_TABLES,
+  TIME_PERIOD_LIST_LIVE_TABLES,
+} from './live-tables';
 import {
   getClosePeriodFailureMessage,
   getTimeAccountFailureMessage,
@@ -160,5 +167,47 @@ describe('period page live tables', () => {
 
   test('every table is published', () => {
     for (const table of TIME_PERIOD_DETAIL_LIVE_TABLES) expect(REALTIME_TABLES).toContain(table);
+  });
+});
+
+describe('Regeln & Export live tables', () => {
+  test('the page re-reads when another session saves what it shows', () => {
+    // Rules and their versions, assignments, openings and opening-date
+    // corrections, adjustment requests and their decisions, closed months
+    // (which lock opening dates), the people listed and their names (werk-flow/werkflow-planning#360).
+    for (const table of [
+      'time_account_policies',
+      'time_account_policy_assignments',
+      'time_accounts',
+      'time_account_adjustment_requests',
+      'time_periods',
+      'employee_records',
+      'profiles',
+    ] as const)
+      expect(TIME_ACCOUNT_SETTINGS_LIVE_TABLES).toContain(table);
+    for (const table of TIME_ACCOUNT_SETTINGS_LIVE_TABLES) expect(REALTIME_TABLES).toContain(table);
+  });
+
+  test('the page subscribes to them', () => {
+    // The page's syntax tree, so formatting and attribute order do not matter.
+    const subscribed: string[] = [];
+    const visit = (node: ts.Node): void => {
+      const element = ts.isJsxSelfClosingElement(node)
+        ? node
+        : ts.isJsxElement(node)
+          ? node.openingElement
+          : null;
+      if (element?.tagName.getText() === 'LiveRouteRefresh') {
+        for (const attribute of element.attributes.properties) {
+          if (!ts.isJsxAttribute(attribute) || attribute.name.getText() !== 'tables') continue;
+          const value = attribute.initializer;
+          if (value && ts.isJsxExpression(value) && value.expression)
+            subscribed.push(value.expression.getText());
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(parseProductSource('app/(app)/zeiterfassung/einstellungen/page.tsx'));
+    expect(subscribed).toEqual(['TIME_ACCOUNT_SETTINGS_LIVE_TABLES']);
   });
 });

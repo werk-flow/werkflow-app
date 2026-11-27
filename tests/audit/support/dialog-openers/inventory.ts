@@ -33,10 +33,22 @@ import {
 import { worldName } from '../../../../lib/testing/seed-world-plan';
 import type { DialogOpener } from '../dialog-opener';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
+import { invoiceDeliverySeed, parseDeliverySeed } from '../invoice-delivery-fixtures';
 import { invoiceChainSeed, parseInvoiceChain } from '../invoice-chain-fixtures';
 import type { TestWorld } from '../../../golden/support/world';
 
 type ItemDialogPicker = Parameters<typeof itemDialogPicker>[1];
+
+/** An issued invoice that was never sent, opened unless it is the page already, and its „Versand“ action. */
+async function invoiceDeliveryButton(
+  { page, world }: SurfaceContext,
+  name: 'Per E-Mail senden' | 'Als manuell versendet markieren',
+): Promise<Locator> {
+  const seed = invoiceDeliverySeed(world, 'fresh');
+  const { id } = parseDeliverySeed(await surfaceFixture(world, seed.name, seed.create));
+  if (!page.url().endsWith(`/rechnungen/${id}`)) await page.goto(`/rechnungen/${id}`);
+  return page.getByRole('main').getByRole('button', { name, exact: true });
+}
 
 /** The world's issued invoice, opened unless it is the page already, and its header action. */
 async function issuedInvoiceButton(page: Page, world: TestWorld, name: 'Stornieren' | 'Korrigieren') {
@@ -342,6 +354,14 @@ export const COMMERCIAL_OPENERS = {
     trigger: async ({ page }) =>
       page.getByRole('main').getByRole('button', { name: 'Entwurf löschen', exact: true }),
     layer: (page) => page.getByRole('alertdialog', { name: /^Entwurf für „.+“ löschen\?$/ }),
+  },
+  'commercial.invoice-send': {
+    trigger: async (context) => invoiceDeliveryButton(context, 'Per E-Mail senden'),
+    layer: (page) => page.getByRole('dialog', { name: 'Rechnung per E-Mail senden', exact: true }),
+  },
+  'commercial.invoice-sent-manually': {
+    trigger: async (context) => invoiceDeliveryButton(context, 'Als manuell versendet markieren'),
+    layer: (page) => page.getByRole('dialog', { name: 'Als manuell versendet markieren', exact: true }),
   },
   'commercial.invoice-cancel': {
     trigger: async ({ page, world }) => issuedInvoiceButton(page, world, 'Stornieren'),

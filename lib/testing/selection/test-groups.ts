@@ -323,10 +323,9 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
     'security/offline-visit.spec.ts',
     ['standalone', 'work', 'time', 'documents', 'planning'],
   ],
-  // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
+  // Problem reports: the screenshot redraw (problem-report-scrubbing.md), a redacted report, support's queue.
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
   ['problem-reports:report', 'problem-reports/report-a-problem.spec.ts', ['*']],
-  // Support triages a report and answers, the reporter reads it live; support files a report for a caller.
   ['problem-reports:support', 'problem-reports/support-queue.spec.ts', ['*']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
   // Measured navigation and view switches against the typical data profile (Step 2).
@@ -444,6 +443,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['offers', ['offers.sql', 'offers_concurrency.sql'], ['commercial', 'customers']],
   ['invoice-drafts', ['invoice_drafts.sql', 'invoice_line_sources.sql'], ['commercial', 'customers']],
   ['invoice-issue', ['invoice_issue.sql', 'invoice_issue_concurrency.sql'], ['commercial', 'documents']],
+  ['document-deliveries', ['document_deliveries.sql'], ['commercial', 'documents']],
   ['invoice-cancel', ['invoice_cancel.sql'], ['commercial', 'documents']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
@@ -464,7 +464,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['work-leads', ['work_leads.sql'], ['work', 'personnel']],
   ['on-call-shifts', ['on_call_shifts.sql'], ['service', 'personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
-  ['rate-limits', ['rate_limits.sql', 'ai_threads.sql'], ['*']],
+  ['rate-limits', ['rate_limits.sql', 'ai_threads.sql', 'ai_turn_charges.sql'], ['*']],
   ['werkflow-billing-signals', ['werkflow_billing_signals.sql'], ['*']],
   ['werkflow-billing-mails', ['werkflow_billing_mails.sql', 'werkflow_billing_reconciliations.sql'], ['*']],
   ['resend-webhook-events', ['resend_webhook_events.sql'], ['*']],

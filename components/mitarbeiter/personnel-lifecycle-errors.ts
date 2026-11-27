@@ -24,6 +24,10 @@ export const ERROR_MESSAGES = {
   immediate_effective_at_required:
     'Für diese Aktion gilt der aktuelle Zeitpunkt. Wähle für eine spätere Sperre den geplanten Übergang.',
   future_effective_date_required: 'Wähle für eine Planung ein Datum in der Zukunft.',
+  immediate_effective_date_required:
+    'Dieser Übergang gilt sofort, das Datum darf nicht nach heute liegen. Für einen späteren Eintritt oder Austritt wähle „Eintritt planen“ oder „Austritt planen“.',
+  withdrawal_dates_conflict:
+    'Das frühere Eintrittsdatum liegt nach dem Austrittsdatum in der Personalakte. Korrigiere dort zuerst die Daten und nimm die Planung dann zurück.',
   no_scheduled_transition: 'Es gibt keinen geplanten Übergang, der zurückgenommen werden kann.',
   access_requirements_incomplete:
     'Mindestens eine ausdrücklich zugangsblockierende Anforderung ist noch offen.',

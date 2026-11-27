@@ -23,7 +23,7 @@ import type {
   FieldHistoryVisit,
 } from '@/lib/installed-equipment/field-history-reads';
 import { MAINTENANCE_SCOPE_OUTCOME_LABELS } from '@/lib/maintenance/types';
-import { formatBerlin } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 import {
   DEFECT_SEVERITY_LABELS,
   DEFECT_STATE_LABELS,
@@ -186,7 +186,7 @@ function VisitEntry({ visit }: { visit: FieldHistoryVisit }): ReactElement {
   return (
     <div className="space-y-2 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-medium">Wartungsbesuch am {formatBerlin(visit.date, 'numericDate')}</p>
+        <p className="font-medium">Wartungsbesuch am {formatGermanDate(visit.date)}</p>
         <Badge variant={visit.outcome === 'complete' ? 'success' : 'warning'}>
           {MAINTENANCE_SCOPE_OUTCOME_LABELS[visit.outcome]}
         </Badge>
@@ -243,7 +243,7 @@ function ReplacementEntry({
 }): ReactElement {
   return (
     <div className="space-y-1 text-sm">
-      <p className="font-medium">Austausch am {formatBerlin(entry.date, 'numericDate')}</p>
+      <p className="font-medium">Austausch am {formatGermanDate(entry.date)}</p>
       <p className="text-muted-foreground">
         {equipmentLabel(entry.predecessor)}
         {entry.successor ? ` ersetzt durch ${entry.successor.equipmentNumber} · ${entry.successor.name}` : ''}

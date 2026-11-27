@@ -12,8 +12,8 @@ import type { CalendarDispatchState } from '@/lib/calendar/board';
 // Every kind that storage may key on stays in the CHECK constraints of
 // attention_read_states and attention_events (latest in migration
 // 20261201100004); a later slice extends this union plus the CHECK and never
-// adds parallel storage. The overdue job kind takes no marker or event, so
-// the CHECK leaves it out until one does.
+// adds parallel storage. The overdue job and due maintenance kinds take no
+// marker or event, so the CHECK leaves them out until one does.
 type AttentionSourceType =
   | 'time_session_approval'
   | 'time_change_request_approval'
@@ -38,7 +38,8 @@ type AttentionSourceType =
   | 'organization_join_request'
   | 'planning_visit_replan'
   | 'site_access_proposal'
-  | 'job_past_last_visit';
+  | 'job_past_last_visit'
+  | 'maintenance_due';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -258,6 +259,23 @@ export type AttentionTask =
       jobHref: string;
       /** Berlin date of the last scheduled visit's last day. */
       lastVisitDate: string;
+    }
+  // An open due maintenance item without a visit job that is überfällig or
+  // due within the lead time (lib/maintenance/overdue.ts). Admin and Büro get
+  // it; the due item is the identity. A visit job, an exception or a
+  // completion resolves it.
+  | {
+      sourceType: 'maintenance_due';
+      sourceId: string;
+      /** The Anlagen of the item, else its plan. */
+      equipmentLabel: string;
+      /** The plan's Einsatzort; null when the site is not readable. */
+      siteName: string | null;
+      dueDate: string;
+      /** Due before the Berlin day of the overview. */
+      overdue: boolean;
+      /** The Wartung workspace, searched for the item's plan. */
+      href: string;
     };
 
 // Informational notices, deduplicated per source record: a domain state

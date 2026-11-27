@@ -4,6 +4,18 @@ import type { AttentionTask } from '@/lib/attention/types';
 
 const BUSINESS_DATE = '2026-11-19';
 
+function maintenance(sourceId: string, dueDate: string, overdue: boolean): AttentionTask {
+  return {
+    sourceType: 'maintenance_due',
+    sourceId,
+    equipmentLabel: 'Gasbrennwertkessel',
+    siteName: 'Heizzentrale Lindenhof',
+    dueDate,
+    overdue,
+    href: '/service/wartung?q=WPL-2026-0007',
+  };
+}
+
 function callback(sourceId: string, requestNumber: string, callbackDueAt: string): AttentionTask {
   return {
     sourceType: 'client_request_callback_overdue',
@@ -22,8 +34,9 @@ function callback(sourceId: string, requestNumber: string, callbackDueAt: string
  * Admin's Aufgaben on Thursday, 19 November 2026: an overdue callback past the
  * threshold and one inside it, four Übergaben completed on 2 November, two
  * corrections and a vacation request Admin approves, a session approval, a
- * blocker past its review date and an open dispatch question. Only the
- * exceptions reach the owner start.
+ * blocker past its review date, an open dispatch question, and a Wartung
+ * overdue since 12 November beside one due next week. Only the exceptions
+ * reach the owner start.
  */
 const TASKS: AttentionTask[] = [
   callback('00000000-0000-4000-8000-000000000101', 'AN-2026-101', '2026-11-12T09:00:00.000Z'),
@@ -92,11 +105,14 @@ const TASKS: AttentionTask[] = [
     acknowledgementId: '00000000-0000-4000-8000-000000000502',
     stateVersion: '1',
   },
+  maintenance('00000000-0000-4000-8000-000000000601', '2026-11-12', true),
+  maintenance('00000000-0000-4000-8000-000000000602', '2026-11-25', false),
 ];
 
-/** A task that is no exception yet: a callback overdue for one workday. */
+/** Tasks that are no exception yet: a callback overdue for one workday and a Wartung due next week. */
 const NO_EXCEPTIONS: AttentionTask[] = [
   callback('00000000-0000-4000-8000-000000000102', 'AN-2026-102', '2026-11-18T09:00:00.000Z'),
+  maintenance('00000000-0000-4000-8000-000000000602', '2026-11-25', false),
 ];
 
 const refresh = () => Promise.resolve();
@@ -113,19 +129,19 @@ function read<T>(state: 'current' | 'stale' | 'loading' | 'failed', data: T): Of
 const attention = (tasks: AttentionTask[]) => ({ tasks, businessDate: BUSINESS_DATE });
 
 const CASES = [
-  ['filled', read('current', attention(TASKS)), read('current', 2)],
-  ['empty', read('current', attention(NO_EXCEPTIONS)), read('current', 0)],
-  ['attention-failed', read('failed', attention([])), read('current', 2)],
-  ['attention-loading', read('loading', attention([])), read('current', 0)],
-  ['attention-stale-empty', read('stale', attention([])), read('current', 0)],
+  ['filled', read('current', attention(TASKS))],
+  ['empty', read('current', attention(NO_EXCEPTIONS))],
+  ['attention-failed', read('failed', attention([]))],
+  ['attention-loading', read('loading', attention([]))],
+  ['attention-stale-empty', read('stale', attention([]))],
 ] as const;
 
 export function OwnerStartContractFixture() {
   return (
     <>
-      {CASES.map(([name, attentionRead, maintenance]) => (
+      {CASES.map(([name, attentionRead]) => (
         <div key={name} data-testid={`owner-start-${name}`}>
-          <OwnerStartView attention={attentionRead} maintenance={maintenance} />
+          <OwnerStartView attention={attentionRead} />
         </div>
       ))}
     </>

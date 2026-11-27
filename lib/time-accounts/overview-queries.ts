@@ -4,12 +4,19 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import { requireAuth } from './access';
+import {
+  type PeriodResultRow,
+  toPeriodOutcomesByCalculation,
+  type UncomputedResultCause,
+} from './period-results';
 import { requirePeriodRows } from './period-sources';
 import type { TimePeriodState } from './presentation';
 import { readRegion, type ReaderContext, requireRead, type TimeAccountRead } from './read-support';
 
 // The caller's own Zeitkonto: balance, newest account events and the periods
-// calculated for them.
+// calculated for them. A month the preparation could not calculate for the
+// caller (no Arbeitszeitregel or no opened Zeitkonto) carries no minutes: its
+// stored zeros are placeholders (werk-flow/werkflow-planning#264).
 
 export type TimeAccountOverview = {
   account: {
@@ -29,10 +36,7 @@ export type TimeAccountOverview = {
     startDate: string;
     endDate: string;
     state: TimePeriodState;
-    targetMinutes: number;
-    creditedMinutes: number;
-    deltaMinutes: number;
-    closingBalanceMinutes: number;
+    outcome: PeriodResultRow['outcome'];
   }>;
   /** More account events exist than `events` shows. */
   hasMoreEvents: boolean;
@@ -84,15 +88,25 @@ async function readTimeAccountOverview(context: ReaderContext): Promise<TimeAcco
   const currentCalculationIds = periods.flatMap((period) =>
     period.current_calculation_id ? [period.current_calculation_id] : [],
   );
-  const [{ data: results }, events] = await Promise.all([
+  const [{ data: results }, { data: findings }, events] = await Promise.all([
     readInBatches(currentCalculationIds, (batch) =>
       admin
         .from('time_period_employee_results')
         .select(
-          'target_minutes, credited_minutes, period_delta_minutes, closing_balance_minutes, calculation_id',
+          'employee_record_id, target_minutes, credited_minutes, period_delta_minutes, closing_balance_minutes, authoritative_targets, calculation_id',
         )
         .eq('organization_id', context.orgId)
         .eq('employee_record_id', employee.id)
+        .in('calculation_id', [...batch]),
+    ).then(requirePeriodRows),
+    // Only the caller's setup-gap findings: they mark a month as not calculated.
+    readInBatches(currentCalculationIds, (batch) =>
+      admin
+        .from('time_period_findings')
+        .select('employee_record_id, finding_kind, calculation_id')
+        .eq('organization_id', context.orgId)
+        .eq('employee_record_id', employee.id)
+        .in('finding_kind', SETUP_GAP_KINDS)
         .in('calculation_id', [...batch]),
     ).then(requirePeriodRows),
     account
@@ -111,10 +125,12 @@ async function readTimeAccountOverview(context: ReaderContext): Promise<TimeAcco
     account,
     periods,
     hasMorePeriods: periodRows.length > OVERVIEW_PERIOD_LIMIT,
-    results,
+    outcomes: toPeriodOutcomesByCalculation(results, findings),
     events,
   });
 }
+
+const SETUP_GAP_KINDS: UncomputedResultCause[] = ['missing_policy', 'missing_opening_balance'];
 
 function toTimeAccountOverview(input: {
   account: Pick<Tables<'time_accounts'>, 'id' | 'opened_on' | 'current_balance_minutes'> | null;
@@ -123,25 +139,13 @@ function toTimeAccountOverview(input: {
     'id' | 'period_start_date' | 'period_end_date' | 'state' | 'current_calculation_id'
   >[];
   hasMorePeriods: boolean;
-  results: Pick<
-    Tables<'time_period_employee_results'>,
-    | 'target_minutes'
-    | 'credited_minutes'
-    | 'period_delta_minutes'
-    | 'closing_balance_minutes'
-    | 'calculation_id'
-  >[];
+  outcomes: ReadonlyMap<string, PeriodResultRow['outcome']>;
   events: Pick<
     Tables<'time_account_events'>,
     'id' | 'event_kind' | 'effective_date' | 'minutes' | 'reason'
   >[];
 }): TimeAccountOverview {
-  const { account, periods, hasMorePeriods, results, events } = input;
-  const periodByCalculation = new Map(
-    periods.flatMap((period) =>
-      period.current_calculation_id ? [[period.current_calculation_id, period] as const] : [],
-    ),
-  );
+  const { account, periods, hasMorePeriods, outcomes, events } = input;
   return {
     account: account
       ? {
@@ -159,19 +163,17 @@ function toTimeAccountOverview(input: {
       minutes: event.minutes,
       reason: event.reason,
     })),
-    periods: results.flatMap((result) => {
-      const period = periodByCalculation.get(result.calculation_id);
-      return period
+    // Newest first, as read; a period without a result row for the caller is not theirs.
+    periods: periods.flatMap((period) => {
+      const outcome = period.current_calculation_id ? outcomes.get(period.current_calculation_id) : undefined;
+      return outcome
         ? [
             {
               id: period.id,
               startDate: period.period_start_date,
               endDate: period.period_end_date,
               state: period.state,
-              targetMinutes: result.target_minutes,
-              creditedMinutes: result.credited_minutes,
-              deltaMinutes: result.period_delta_minutes,
-              closingBalanceMinutes: result.closing_balance_minutes,
+              outcome,
             },
           ]
         : [];

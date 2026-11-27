@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 
 import { expectDefined } from '../../lib/testing/spec-support/expect-defined';
+import { formatGermanDate } from '../../lib/utils';
 import {
   beginWorkArtifact,
   fillWorkArtifactVisit,
@@ -81,7 +82,7 @@ test.describe('P1-20 maintenance plan to completed visit @P1-20 @GG-06', () => {
     const instructionsFragment = testData`Messwerte vollständig erfassen`;
     // Completion is bounded by the operating date, so the first visit is due on
     // the business date while the coverage dates keep P1-20's owned window.
-    const firstDueLabel = new Intl.DateTimeFormat('de-DE').format(new Date(`${businessDate}T12:00:00Z`));
+    const firstDueLabel = formatGermanDate(businessDate);
 
     const clientId = await test.step('Seed the customer site, equipment and published template', async () => {
       const customer = await seedCustomer({

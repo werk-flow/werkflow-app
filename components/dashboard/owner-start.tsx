@@ -15,7 +15,7 @@ import {
   type AttentionTaskSectionKey,
 } from '@/lib/attention/task-sections';
 import type { AttentionOverview } from '@/lib/attention/types';
-import { OverdueMaintenanceRegion, StartTaskSection, type OfficeStartRead } from './office-start-sections';
+import { StartTaskSection, type OfficeStartRead } from './office-start-sections';
 
 type OwnerAttention = Pick<AttentionOverview, 'tasks' | 'businessDate'>;
 
@@ -24,25 +24,19 @@ const SECTION_NOTES: Partial<Record<AttentionTaskSectionKey, string>> = {
   callback: `Seit mehr als ${OWNER_EXCEPTION_THRESHOLDS.callbackOverdueWorkdays} Werktagen überfällig`,
   parkingReview: 'Wiedervorlage verstrichen',
   handover: `Seit mehr als ${OWNER_EXCEPTION_THRESHOLDS.handoverWaitingWorkdays} Werktagen nach Abschluss offen`,
+  dueMaintenance: 'Überfällig und noch ohne Wartungsbesuch',
 };
 
 /**
  * What needs the owner's decision, from Admin's Aufgaben (rules in
- * `lib/attention/owner-exceptions.ts`) and the überfällig maintenance. It
- * shares both reads with the office start below it.
+ * `lib/attention/owner-exceptions.ts`), überfällige Wartung included. It
+ * shares the read with the office start below it.
  */
-export function OwnerStartView({
-  attention,
-  maintenance,
-}: {
-  attention: OfficeStartRead<OwnerAttention>;
-  maintenance: OfficeStartRead<number>;
-}) {
+export function OwnerStartView({ attention }: { attention: OfficeStartRead<OwnerAttention> }) {
   const sections = attention.data
     ? groupOwnerExceptions(attention.data.tasks, attention.data.businessDate)
     : null;
-  const nothingOpen =
-    sections?.length === 0 && !attention.isStale && maintenance.data === 0 && !maintenance.isStale;
+  const nothingOpen = sections?.length === 0 && !attention.isStale;
   return (
     <section
       className="mx-auto max-w-3xl space-y-6"
@@ -60,7 +54,6 @@ export function OwnerStartView({
         />
       )}
       <ExceptionRegion attention={attention} sections={sections} />
-      <OverdueMaintenanceRegion maintenance={maintenance} testIdPrefix="owner-start" />
     </section>
   );
 }

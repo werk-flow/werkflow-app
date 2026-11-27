@@ -133,6 +133,35 @@ export function allowedEmploymentSteps(input: {
   return canWithdraw ? [...steps, 'cancel_scheduled'] : steps;
 }
 
+/** Employment steps that act at once: the database refuses a date after today (`immediate_effective_date_required`). */
+const IMMEDIATE_EMPLOYMENT_STEPS: ReadonlySet<PersonnelEmploymentTransitionKind> = new Set([
+  'start',
+  'mark_inactive',
+  'exit',
+  'reactivate',
+]);
+
+/** Employment steps that act on a later date: the database refuses today or earlier (`future_effective_date_required`). */
+const PLANNED_EMPLOYMENT_STEPS: ReadonlySet<PersonnelEmploymentTransitionKind> = new Set([
+  'plan_start',
+  'plan_exit',
+]);
+
+/**
+ * The refusal the database function gives the step's effective date on the
+ * Berlin date `today`, or null when the date fits: a step that acts at once
+ * takes no later date, a planned step only a later one. Both are ISO dates.
+ */
+export function employmentDateRefusal(
+  kind: PersonnelEmploymentTransitionKind,
+  effectiveOn: string,
+  today: string,
+): 'immediate_effective_date_required' | 'future_effective_date_required' | null {
+  if (IMMEDIATE_EMPLOYMENT_STEPS.has(kind) && effectiveOn > today) return 'immediate_effective_date_required';
+  if (PLANNED_EMPLOYMENT_STEPS.has(kind) && effectiveOn <= today) return 'future_effective_date_required';
+  return null;
+}
+
 /** The name of each access step, in the dialog and the Verlauf. */
 export const ACCESS_STEP_LABELS: Record<PersonnelAccessTransitionKind, string> = {
   schedule_activation: 'Zugang planen',

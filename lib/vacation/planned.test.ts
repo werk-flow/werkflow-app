@@ -5,7 +5,12 @@ import { plannedVacationDays } from './planned';
 import type { VacationRequest } from './types';
 
 // No schedule: the labeled default counts Monday to Friday.
-const context: VacationCountingContext = { schedules: [], conditions: [], calendar: EMPTY_HOLIDAY_CALENDAR };
+const context: VacationCountingContext = {
+  schedules: [],
+  conditions: [],
+  calendar: EMPTY_HOLIDAY_CALENDAR,
+  employment: { entryDate: null, exitDate: null },
+};
 // Wednesday.
 const today = '2026-10-28';
 

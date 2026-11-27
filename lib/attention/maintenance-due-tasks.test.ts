@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 
-test('a Position from an article answers only Admin and Büro, and the save keeps the cost the server read', async () => {
+test('open due maintenance, overdue or due within 14 days, is a task of Admin and Büro of its own organization, never of a field worker, and an overflow fails', async () => {
   const child = Bun.spawn(
-    [process.execPath, resolve(import.meta.dir, '../testing/fixtures/offer-article-position-boundaries.ts')],
+    [process.execPath, resolve(import.meta.dir, '../testing/fixtures/maintenance-due-tasks.ts')],
     { cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },
   );
   const [code, stdout, stderr] = await Promise.all([

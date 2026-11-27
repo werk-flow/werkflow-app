@@ -51,7 +51,7 @@ describe('a Verlauf entry of a lifecycle transition says what changed and why', 
           transitionKind: 'exit',
           fromState: 'notice',
           toState: 'exited',
-          effectiveOn: '2026-10-31',
+          effectiveOn: '2026-09-03',
           reason: 'Eigene Kündigung',
           unresolvedWork: [],
         },
@@ -59,7 +59,8 @@ describe('a Verlauf entry of a lifecycle transition says what changed and why', 
     ).toEqual([
       { label: 'Übergang', text: 'Austritt festhalten' },
       { label: 'Beschäftigung', text: 'Austritt vorgemerkt → Ausgeschieden' },
-      { label: 'Wirksam ab', text: '31.10.2026' },
+      // Padded like every date (werk-flow/werkflow-planning#397), never „3.9.2026“.
+      { label: 'Wirksam ab', text: '03.09.2026' },
       { label: 'Grund', text: 'Eigene Kündigung' },
     ]);
   });

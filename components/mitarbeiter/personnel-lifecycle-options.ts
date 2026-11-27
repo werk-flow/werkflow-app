@@ -28,7 +28,8 @@ const EMPLOYMENT_STEP_EFFECTS: Record<PersonnelEmploymentTransitionKind, string>
   plan_exit: 'Die Person bleibt bis dahin beschäftigt und ist ab dem gewählten Datum ausgeschieden.',
   mark_inactive: 'Die Beschäftigung ruht sofort, etwa bei einer Freistellung, ohne Austritt.',
   exit: 'Für einen Austritt, der schon wirksam ist: Die Person gilt sofort als ausgeschieden.',
-  cancel_scheduled: 'Der geplante Übergang tritt nicht automatisch ein, der Status bleibt, wie er jetzt ist.',
+  cancel_scheduled:
+    'Der geplante Übergang tritt nicht ein. Eintritts- und Austrittsdatum gelten wieder wie vor der Planung, außer du hast eines seitdem geändert.',
   reverse:
     'Korrigiert einen irrtümlich erfassten Übergang: Die Person ist wieder aktiv beschäftigt, ohne Austrittsdatum.',
   reactivate:

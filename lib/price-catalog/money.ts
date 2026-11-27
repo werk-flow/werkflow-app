@@ -11,17 +11,18 @@ const PLAIN_WITH_DOT = /^(\d+)(?:\.(\d{1,2}))?$/;
 
 /**
  * Cents of a typed non-negative euro amount: `null` for empty text,
- * `undefined` for text that is no such amount or exceeds `MAX_PRICE_CENTS`.
+ * `undefined` for text that is no such amount or exceeds `max` (a price's
+ * `MAX_PRICE_CENTS` unless the caller names another bound).
  * „1.234“ is refused: it reads as 1234 € and as 1,234 €.
  */
-export function parseEuroCents(value: string): number | null | undefined {
+export function parseEuroCents(value: string, max: number = MAX_PRICE_CENTS): number | null | undefined {
   const text = value.trim().replace(/\s*€$/, '');
   if (text === '') return null;
   const match = text.includes(',') ? GROUPED_WITH_COMMA.exec(text) : PLAIN_WITH_DOT.exec(text);
   if (!match) return undefined;
   const [, whole = '0', fraction = ''] = match;
   const cents = Number(whole.replaceAll('.', '')) * 100 + Number(fraction.padEnd(2, '0'));
-  return Number.isSafeInteger(cents) && cents <= MAX_PRICE_CENTS ? cents : undefined;
+  return Number.isSafeInteger(cents) && cents <= max ? cents : undefined;
 }
 
 /** The text an amount field starts with: „1234,50“. */

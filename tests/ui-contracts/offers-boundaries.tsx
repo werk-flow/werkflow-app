@@ -5,7 +5,7 @@ import { OfferContentEditor } from '@/components/angebote/editor/offer-content-e
 import { EditOfferHeaderButton } from '@/components/angebote/offer-header-dialog';
 import { BannerProvider } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
-import type { OfferDetail, OfferStoredSection } from '@/lib/offers/types';
+import type { OfferCostedSection, OfferWithCosts } from '@/lib/offers/types';
 
 // „Angebot anlegen“: a press without title or customer marks both fields,
 // focuses the first and sends nothing. „Angebotskopf bearbeiten“ of a draft
@@ -16,11 +16,11 @@ import type { OfferDetail, OfferStoredSection } from '@/lib/offers/types';
 declare global {
   interface Window {
     uiContractOfferServerRender: ((version: number) => void) | null;
-    uiContractOfferContentRender: ((contentVersion: number, sections: OfferStoredSection[]) => void) | null;
+    uiContractOfferContentRender: ((contentVersion: number, sections: OfferCostedSection[]) => void) | null;
   }
 }
 
-const OFFER: OfferDetail = {
+const OFFER: OfferWithCosts = {
   id: '95000000-0000-4000-8000-000000000001',
   offerNumber: 'ANG-2026-001',
   title: 'Austausch Gastherme',
