@@ -113,7 +113,10 @@ function EmailStep({
     <form onSubmit={submit} className="contents" noValidate aria-busy={isPending || undefined}>
       <DialogBody className="space-y-4 py-1">
         {sentBefore && <p className="text-sm text-muted-foreground">{sentBefore}</p>}
-        <MailFields form={form} errors={errors} change={change} />
+        {/* The fields keep the pressed mail until its answer, so a lost answer is pressed again unchanged. */}
+        <fieldset disabled={isPending} className="contents">
+          <MailFields form={form} errors={errors} change={change} />
+        </fieldset>
         <ErrorText>{error}</ErrorText>
       </DialogBody>
       <DialogFooter>

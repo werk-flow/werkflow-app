@@ -29,6 +29,7 @@ const jobId = '98300000-0000-4000-8000-000000000301';
 const clientId = '98300000-0000-4000-8000-000000000401';
 const contactId = '98300000-0000-4000-8000-000000000501';
 const otherClientId = '98300000-0000-4000-8000-000000000409';
+const planId = '98300000-0000-4000-8000-000000000701';
 const reportPath = `${ORGANIZATION_A}/service-reports/${dueWorkId}/${reportId}.pdf`;
 const pdf = new TextEncoder().encode('%PDF-1.7 Servicebericht A-2037-0042');
 const contentHash = createHash('sha256').update(pdf).digest('hex');
@@ -73,7 +74,13 @@ const world = installActionWorld({
     },
   ],
   maintenance_due_work: [
-    { id: dueWorkId, organization_id: ORGANIZATION_A, completed_on: '2037-11-12', job_id: jobId },
+    {
+      id: dueWorkId,
+      organization_id: ORGANIZATION_A,
+      completed_on: '2037-11-12',
+      job_id: jobId,
+      maintenance_plan_id: planId,
+    },
   ],
   jobs: [
     {
@@ -88,15 +95,8 @@ const world = installActionWorld({
     { id: clientId, organization_id: ORGANIZATION_A, email: 'verwaltung@lindenhof.example' },
     { id: otherClientId, organization_id: ORGANIZATION_A, email: 'einkauf@sonnenhof.example' },
   ],
-  // The filed report's customer link (register_maintenance_service_report).
-  document_links: [
-    {
-      id: crypto.randomUUID(),
-      organization_id: ORGANIZATION_A,
-      document_id: documentId,
-      client_id: clientId,
-    },
-  ],
+  // The report's customer: its plan's (register_maintenance_service_report).
+  maintenance_plans: [{ id: planId, organization_id: ORGANIZATION_A, client_id: clientId }],
   client_contacts: [
     {
       id: contactId,

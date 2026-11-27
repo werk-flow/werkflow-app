@@ -60,7 +60,7 @@ async function readReportMailDefaults(
     'readReportMailDefaults: visit read failed',
     context.admin
       .from('maintenance_due_work')
-      .select('completed_on, job_id')
+      .select('completed_on, job_id, maintenance_plan_id')
       .eq('organization_id', context.organizationId)
       .eq('id', report.maintenance_due_work_id)
       .maybeSingle(),
@@ -79,23 +79,24 @@ async function readReportMailDefaults(
       )
     : { data: null, error: null };
   if (job.error) throw new Error('report_job_read_failed');
-  // The report's own customer link (register_maintenance_service_report), so an
-  // edited job never proposes another customer's address for this report.
-  const reportClient = await loggedRead(
-    'readReportMailDefaults: report customer read failed',
-    context.admin
-      .from('document_links')
-      .select('client_id')
-      .eq('organization_id', context.organizationId)
-      .eq('document_id', report.document_id)
-      .not('client_id', 'is', null)
-      .limit(1)
-      .maybeSingle(),
-  );
-  if (reportClient.error) throw new Error('report_customer_read_failed');
+  // The report's customer is its plan's, as register_maintenance_service_report
+  // filed it, so an edited job never proposes another customer's address.
+  const planId = due.data?.maintenance_plan_id;
+  const plan = planId
+    ? await loggedRead(
+        'readReportMailDefaults: plan read failed',
+        context.admin
+          .from('maintenance_plans')
+          .select('client_id')
+          .eq('organization_id', context.organizationId)
+          .eq('id', planId)
+          .maybeSingle(),
+      )
+    : { data: null, error: null };
+  if (plan.error) throw new Error('report_plan_read_failed');
   const clientId = job.data?.client_id;
   const [recipient, sender] = await Promise.all([
-    clientId && clientId === reportClient.data?.client_id
+    clientId && clientId === plan.data?.client_id
       ? readRecipientEmail(context.organizationId, { clientId, contactId: job.data?.contact_id ?? null })
       : '',
     readDeliverySender(deliveryCallerOf(context)),
