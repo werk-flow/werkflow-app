@@ -78,6 +78,26 @@ const { monday } = getWeekBounds();
 const totals = computeZeiterfassungLiveTotals(idle, 0, todayTarget?.targetMinutes, NOW.getTime());
 const retry = async () => {};
 
+/**
+ * The markup of the element that carries `marker`, up to its own closing tag:
+ * open and close tags are counted from the element's start, self-closing ones
+ * skipped. React escapes `>` inside attribute values, so a tag ends at its `>`.
+ */
+function elementHtml(html: string, marker: string): string {
+  const at = html.indexOf(marker);
+  if (at < 0) throw new Error(`No element carries ${marker}`);
+  const start = html.lastIndexOf('<', at);
+  const tag = /<(\/?)[a-zA-Z][\w-]*[^>]*?(\/?)>/g;
+  tag.lastIndex = start;
+  let depth = 0;
+  for (let match = tag.exec(html); match; match = tag.exec(html)) {
+    if (match[2] === '/') continue;
+    depth += match[1] === '/' ? -1 : 1;
+    if (depth === 0) return html.slice(start, tag.lastIndex);
+  }
+  throw new Error(`The element that carries ${marker} never closes`);
+}
+
 function renderHero(targetsStale: boolean, target: DailyTarget | undefined) {
   return renderToStaticMarkup(
     <ZeiterfassungDashboardHero
@@ -117,7 +137,7 @@ describe("the Zeiterfassung's target after a failed targets read", () => {
     expect(stale).toContain(TARGET_NOTICE);
     expect(stale).toContain('Erneut laden');
     // The ring and today's overtime measure against the same target: they sit inside the region.
-    const region = stale.slice(stale.indexOf('data-stale="true"'));
+    const region = elementHtml(stale, 'data-stale="true"');
     expect(region).toContain('Gesamtzeit');
     expect(region).toContain('Überstunden heute');
     expect(renderHero(false, todayTarget)).not.toContain(TARGET_NOTICE);
