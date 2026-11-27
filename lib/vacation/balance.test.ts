@@ -6,6 +6,7 @@ import type { WorkSchedule } from '@/lib/personnel/schedule';
 import {
   EMPTY_HOLIDAY_CALENDAR,
   resolveDailyTarget,
+  type EmploymentInterval,
   type OrganizationHolidayCalendar,
 } from '@/lib/personnel/targets';
 import {
@@ -13,6 +14,7 @@ import {
   countCalendarDaysInRange,
   countVacationDays,
   countVacationDaysByYear,
+  doesDateConsumeVacation,
   formatVacationDays,
   listIsoDatesInRange,
   MAX_VACATION_RANGE_DAYS,
@@ -83,10 +85,13 @@ const FULL_TIME = [480, 480, 480, 480, 480, 0, 0];
 // Mo/Mi/Fr part-time pattern: Tuesday and Thursday are schedule-free.
 const THREE_DAY_WEEK = [240, 0, 240, 0, 240, 0, 0];
 
+const OPEN_EMPLOYMENT: EmploymentInterval = { entryDate: null, exitDate: null };
+
 const FULL_TIME_CONTEXT: VacationCountingContext = {
   schedules: [makeSchedule('2026-01-01', FULL_TIME)],
   conditions: [],
   calendar: EMPTY_HOLIDAY_CALENDAR,
+  employment: OPEN_EMPLOYMENT,
 };
 
 const BAVARIA_CALENDAR: OrganizationHolidayCalendar = {
@@ -182,6 +187,7 @@ describe('countVacationDaysByYear', () => {
           schedules: [makeSchedule('2026-01-01', THREE_DAY_WEEK)],
           conditions: [],
           calendar: EMPTY_HOLIDAY_CALENDAR,
+          employment: OPEN_EMPLOYMENT,
         },
       ),
     ).toBe(3);
@@ -196,6 +202,7 @@ describe('countVacationDaysByYear', () => {
         schedules: [makeSchedule('2026-01-01', FULL_TIME)],
         conditions: [],
         calendar: BAVARIA_CALENDAR,
+        employment: OPEN_EMPLOYMENT,
       },
     );
     // Mo–Fr week containing the Thursday holiday: 4 instead of 5.
@@ -212,6 +219,7 @@ describe('countVacationDaysByYear', () => {
           ...EMPTY_HOLIDAY_CALENDAR,
           closureDays: [{ closureDate: '2026-08-05', label: 'Betriebsruhe' }],
         },
+        employment: OPEN_EMPLOYMENT,
       },
     );
     expect(consumed).toBe(4);
@@ -223,7 +231,7 @@ describe('countVacationDaysByYear', () => {
     expect(
       countVacationDays(
         { startDate: '2026-08-03', endDate: '2026-08-09', dayPortion: 'full' },
-        { schedules: [], conditions: [], calendar: EMPTY_HOLIDAY_CALENDAR },
+        { schedules: [], conditions: [], calendar: EMPTY_HOLIDAY_CALENDAR, employment: OPEN_EMPLOYMENT },
       ),
     ).toBe(5);
   });
@@ -236,6 +244,7 @@ describe('countVacationDaysByYear', () => {
           schedules: [],
           conditions: [makeCondition('2026-01-01', 30, 20)],
           calendar: EMPTY_HOLIDAY_CALENDAR,
+          employment: OPEN_EMPLOYMENT,
         },
       ),
     ).toBe(5);
@@ -259,6 +268,7 @@ describe('countVacationDaysByYear', () => {
           schedules: [makeSchedule('2026-01-01', THREE_DAY_WEEK)],
           conditions: [],
           calendar: EMPTY_HOLIDAY_CALENDAR,
+          employment: OPEN_EMPLOYMENT,
         },
       ),
     ).toBe(0);
@@ -279,7 +289,7 @@ describe('absence-extended resolveDailyTarget', () => {
     schedules: [makeSchedule('2026-01-01', FULL_TIME)],
     conditions: [],
     calendar: EMPTY_HOLIDAY_CALENDAR,
-    employment: { entryDate: null, exitDate: null },
+    employment: OPEN_EMPLOYMENT,
   };
   const vacationSpan = {
     type: 'vacation' as const,
@@ -346,11 +356,39 @@ describe('absence-extended resolveDailyTarget', () => {
   });
 });
 
+describe('vacation days outside employment', () => {
+  // 2026-08-06 Thursday … 2026-08-12 Wednesday: five Montag–Freitag days.
+  const range = { startDate: '2026-08-06', endDate: '2026-08-12', dayPortion: 'full' } as const;
+
+  test('a day after the exit date costs no entitlement; the exit day itself does', () => {
+    const context: VacationCountingContext = {
+      ...FULL_TIME_CONTEXT,
+      employment: { entryDate: null, exitDate: '2026-08-10' },
+    };
+    // Thu, Fri and the exit Monday consume; Tue and Wed lie after the exit.
+    expect(countVacationDays(range, context)).toBe(3);
+    expect(doesDateConsumeVacation('2026-08-10', context)).toBe(true);
+    expect(doesDateConsumeVacation('2026-08-11', context)).toBe(false);
+  });
+
+  test('a day before the entry date costs no entitlement; the entry day itself does', () => {
+    const context: VacationCountingContext = {
+      ...FULL_TIME_CONTEXT,
+      employment: { entryDate: '2026-08-07', exitDate: null },
+    };
+    // Thursday lies before the entry; Fri, Mon, Tue and Wed consume.
+    expect(countVacationDays(range, context)).toBe(4);
+    expect(doesDateConsumeVacation('2026-08-06', context)).toBe(false);
+    expect(doesDateConsumeVacation('2026-08-07', context)).toBe(true);
+  });
+});
+
 describe('computeVacationBalance', () => {
   const context: VacationCountingContext = {
     schedules: [makeSchedule('2026-01-01', FULL_TIME)],
     conditions: [makeCondition('2026-01-01', 30)],
     calendar: EMPTY_HOLIDAY_CALENDAR,
+    employment: OPEN_EMPLOYMENT,
   };
 
   test('approved requests consume their approval-time snapshot', () => {

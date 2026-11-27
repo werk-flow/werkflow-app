@@ -1,6 +1,11 @@
 import type { TimeEntry, WeeklyTimeDataPoint, WeeklyTimeLabel } from './types';
 import type { DailyTarget } from '@/lib/personnel/targets';
-import { calculateBreakMinutes, calculateTotalMinutes, groupEntriesByDate } from './helpers';
+import {
+  calculateBreakMinutes,
+  calculateTotalMinutes,
+  computeTimeBreakdown,
+  groupEntriesByDate,
+} from './helpers';
 import { computeBreakdownForSettings, resolveBreakPolicyAtTimestamp, type BreakPolicy } from './settings';
 import { calculateBreakSessions, calculateWorkSessions } from './work-sessions';
 import {
@@ -55,6 +60,15 @@ export function computeWeekLabel(monday: Date): WeeklyTimeLabel {
   };
 }
 
+/**
+ * Targets kept from an earlier read, only while they belong to the week that
+ * starts on `monday`: after the week turns, last week's holidays and absences
+ * must never stand in for this week's days.
+ */
+export function targetsOfWeek(targets: DailyTarget[] | undefined, monday: Date): DailyTarget[] | undefined {
+  return targets?.[0]?.date === formatBerlinLocalDate(monday) ? targets : undefined;
+}
+
 export function buildWeeklyTimeData(
   entries: TimeEntry[],
   monday: Date,
@@ -80,16 +94,23 @@ export function buildWeeklyTimeData(
       workSessions.filter((session) => session.clockIn?.activityKind === 'standby'),
     );
     const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
+    // The break steps count the day's presence without standby.
     const policyMinutes = productiveMinutes + trackedBreakMinutes;
     const totalMinutes = policyMinutes + standbyMinutes;
     const referenceTimestamp = dayEntries[dayEntries.length - 1]?.timestamp ?? null;
     const effectiveSettings = resolveBreakPolicyAtTimestamp(settings, referenceTimestamp);
     const target = weekTargets?.[i];
-    const breakdown = computeBreakdownForSettings(
+    const { breakMinutes } = computeBreakdownForSettings(
       policyMinutes,
       trackedBreakMinutes,
       effectiveSettings,
-      target?.targetMinutes,
+    );
+    // Standby is working time, as in the day: it counts toward the target and
+    // overtime. An unknown target owes no overtime, never an assumed 8 hours.
+    const breakdown = computeTimeBreakdown(
+      totalMinutes,
+      breakMinutes,
+      target?.targetMinutes ?? Number.POSITIVE_INFINITY,
     );
 
     days.push({
@@ -100,7 +121,7 @@ export function buildWeeklyTimeData(
       breakMinutes: breakdown.breakMinutes,
       overtimeMinutes: breakdown.overtimeMinutes,
       // Category minutes explain totalMinutes; they do not add to it. Travel,
-      // call-out and internal activity are productive, while standby is not.
+      // standby, call-out and internal activity are parts of the working time.
       travelMinutes: calculateTotalMinutes(
         workSessions.filter((session) => session.clockIn?.activityKind === 'travel'),
       ),
