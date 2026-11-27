@@ -57,11 +57,18 @@ export function deliveryOutcome(
   entry: Pick<DeliveryEntry, 'failureCode' | 'outcomeUnknown'>,
   retryStep: string | null,
 ): string {
-  const reason =
+  const code = entry.failureCode;
+  if (!entry.outcomeUnknown || outcomeUnknown(code)) {
+    return retryStep === null ? deliveryFailureSentence(code) : deliveryFailureAdvice(code, retryStep);
+  }
+  // A retry repeats the same mail, which the provider sends once; a new email could be a second one.
+  const step =
     retryStep === null
-      ? deliveryFailureSentence(entry.failureCode)
-      : deliveryFailureAdvice(entry.failureCode, retryStep);
-  if (!entry.outcomeUnknown || outcomeUnknown(entry.failureCode)) return reason;
+      ? ''
+      : refusedByProvider(code)
+        ? 'Frag beim Kunden nach, ob die frühere E-Mail ankam, bevor du über „Per E-Mail senden“ eine neue an die richtige Adresse sendest.'
+        : nextStep(code, retryStep);
+  const reason = [deliveryFailureSentence(code), step].filter(Boolean).join(' ');
   return `Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: ${reason}`;
 }
 

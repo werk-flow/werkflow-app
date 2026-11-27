@@ -88,23 +88,24 @@ test('an issued invoice keeps a send unclear when an unanswered attempt was foll
   ).toBeVisible();
 });
 
-// A retry of such a send fails again: its message keeps the send unclear, and once the refreshed
-// row shows the new attempt, the row alone says what happened.
+// A retry of such a send fails for another reason: its outcome replaces the stored one at once and
+// keeps the send unclear, and once the refreshed row shows the new attempt, the row alone says it.
 test('a failed retry of a send that may have gone out stays unclear and gives way to the refreshed row', async ({
   page,
 }) => {
   await openContractFixture(page, 'invoice-deliveries-retry');
   const unclear = 'Ob die E-Mail rausging, ist unklar';
-  await expect(textInDom(page, unclear)).toHaveCount(1);
+  const refused = 'Letzter Versuch: Der Mailanbieter hat die E-Mail abgelehnt. Frag beim Kunden nach';
+  await expect(textInDom(page, 'Letzter Versuch: Die E-Mail ist nicht rausgegangen.')).toHaveCount(1);
   await page.getByRole('button', { name: 'Erneut senden' }).click();
   await expectHeldWrite(page, 'retryInvoiceDelivery');
   await answerHeldWrite(page, null);
-  await expect(
-    visibleText(page, 'Letzter Versuch: Die E-Mail ist nicht rausgegangen. Versuche es später erneut.'),
-  ).toBeVisible();
+  await expect(visibleText(page, refused)).toBeVisible();
+  await expect(textInDom(page, 'Die E-Mail ist nicht rausgegangen.')).toHaveCount(0);
+  await expect(textInDom(page, unclear)).toHaveCount(1);
   await page.evaluate(() => window.uiContractDeliveryRefresh?.());
   await expect(visibleText(page, '3 Versuche')).toBeVisible();
-  await expect(textInDom(page, 'Versuche es später erneut.')).toHaveCount(0);
+  await expect(textInDom(page, refused)).toHaveCount(1);
   await expect(textInDom(page, unclear)).toHaveCount(1);
 });
 

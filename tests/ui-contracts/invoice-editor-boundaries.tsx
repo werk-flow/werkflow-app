@@ -21,7 +21,7 @@ declare global {
     uiContractInvoiceIssuedElsewhere: (() => void) | null;
     /** Renders the settings page again as read after New Year's midnight: the series restarts at 1. */
     uiContractInvoiceSettingsNewYear: (() => void) | null;
-    /** Renders „Versand“ again as read after the retry: one more attempt. */
+    /** Renders „Versand“ again as read after the retry: one more attempt, refused by the provider. */
     uiContractDeliveryRefresh: (() => void) | null;
     /** What React reported while it hydrated the server-rendered „Versand“, such as a mismatch. */
     uiContractHydrationErrors: string[];
@@ -239,12 +239,16 @@ const UNCLEAR_FAILED: DeliveryEntry = {
   retryUntil: new Date(Date.now() + HOUR).toISOString(),
 };
 
-/** „Versand“ of an issued invoice with that email; a refresh brings one more attempt. */
+/** „Versand“ of an issued invoice with that email; a refresh brings one more attempt, which the provider refused. */
 export function InvoiceDeliveryRetryContractFixture(): React.JSX.Element {
   const [entry, setEntry] = useState(UNCLEAR_FAILED);
   useEffect(() => {
     window.uiContractDeliveryRefresh = () =>
-      setEntry((current) => ({ ...current, attempts: current.attempts + 1 }));
+      setEntry((current) => ({
+        ...current,
+        attempts: current.attempts + 1,
+        failureCode: 'email_provider_422',
+      }));
   }, []);
   return <InvoiceDeliveriesContractFixture cancelled={false} list={{ total: 1, entries: [entry] }} />;
 }

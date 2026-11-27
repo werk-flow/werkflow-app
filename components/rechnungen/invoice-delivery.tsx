@@ -85,13 +85,15 @@ function DeliveryRow({
   const router = useRouter();
   const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(retryInvoiceDelivery);
-  // A retry's message belongs to the attempt it started from; the refreshed row tells a later one.
-  const [error, setError] = useState<{ attempt: number; message: string } | null>(null);
+  // A retry's message belongs to the attempt it started from, and the refreshed row tells a later
+  // one; a failed retry's outcome stands in for the stored one until that row arrives.
+  const [error, setError] = useState<{ attempt: number; message: string; outcome: boolean } | null>(null);
   const { retryable, unanswered } =
     now === null ? { retryable: false, unanswered: false } : retryWindowAt(entry, now);
+  const local = sendable && error?.attempt === entry.attempts && entry.state !== 'sent' ? error : null;
   const retry = async () => {
     const attempt = entry.attempts;
-    const fail = (message: string) => setError({ attempt, message });
+    const fail = (message: string, outcome = false) => setError({ attempt, message, outcome });
     setError(null);
     const result = await run({ deliveryId: entry.id, expectedAttempt: attempt }).catch(() => null);
     if (!result) return fail(RETRY_FAILED);
@@ -103,6 +105,7 @@ function DeliveryRow({
           { failureCode: result.failureCode, outcomeUnknown: entry.outcomeUnknown || unanswered },
           'Versuche es später erneut.',
         ),
+        true,
       );
     else if (result.state === 'sent')
       showBanner({ variant: 'success', message: `E-Mail an ${entry.recipient ?? ''} versendet.` });
@@ -118,7 +121,7 @@ function DeliveryRow({
         <div className="min-w-0 flex-1 space-y-0.5">
           <p className="text-sm font-medium wrap-anywhere">{deliveryTitle(entry)}</p>
           <p className="text-xs text-muted-foreground wrap-anywhere">{deliveryMeta(entry)}</p>
-          {(entry.state === 'failed' || unanswered) && (
+          {(entry.state === 'failed' || unanswered) && !local?.outcome && (
             <p className="text-sm text-destructive">
               {deliveryOutcome(
                 unanswered ? { failureCode: 'email_provider_unreachable', outcomeUnknown: true } : entry,
@@ -127,9 +130,7 @@ function DeliveryRow({
             </p>
           )}
           {/* A later attempt or a cancel, here or in another session, makes a retry's error stale. */}
-          <ErrorText>
-            {sendable && error?.attempt === entry.attempts && entry.state !== 'sent' ? error.message : null}
-          </ErrorText>
+          <ErrorText>{local?.message}</ErrorText>
         </div>
       </div>
       {sendable && retryable && (

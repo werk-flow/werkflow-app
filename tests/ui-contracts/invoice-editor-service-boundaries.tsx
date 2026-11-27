@@ -28,11 +28,11 @@ export async function saveInvoiceSettings(input: SaveInvoiceSettingsInput) {
   return refusal ? { success: false as const, error: refusal } : { success: true as const, version: 2 };
 }
 
-/** A retry the spec accepts fails before the provider, as an unavailable provider answers. */
+/** A retry the spec accepts fails: the provider refuses the mail. */
 export async function retryInvoiceDelivery(input: { deliveryId: string; expectedAttempt: number }) {
   const refusal = await holdWrite('retryInvoiceDelivery', input);
   if (refusal) return { success: false as const, error: refusal };
-  return { success: true as const, state: 'failed' as const, failureCode: 'email_provider_503' };
+  return { success: true as const, state: 'failed' as const, failureCode: 'email_provider_422' };
 }
 
 export const issueInvoice = unexpectedWrite;

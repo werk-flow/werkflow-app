@@ -37,8 +37,17 @@ test('a failed delivery keeps its last reason and says when an earlier attempt m
     'Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: Die E-Mail ist nicht rausgegangen.',
   );
   // An invoice that can still be sent keeps the last attempt's step after it.
+  expect(
+    deliveryOutcome(
+      { failureCode: 'email_provider_503', outcomeUnknown: true },
+      'Versuche es später erneut.',
+    ),
+  ).toBe(
+    'Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: Die E-Mail ist nicht rausgegangen. Versuche es später erneut.',
+  );
+  // A new email to a corrected address could be a second one: the customer is asked first.
   expect(deliveryOutcome({ failureCode: 'email_provider_422', outcomeUnknown: true }, '')).toBe(
-    'Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: Der Mailanbieter hat die E-Mail abgelehnt. Prüfe die Adresse und sende über „Per E-Mail senden“ eine neue E-Mail an die richtige Adresse.',
+    'Ob die E-Mail rausging, ist unklar: Ein früherer Versuch blieb ohne klare Antwort. Letzter Versuch: Der Mailanbieter hat die E-Mail abgelehnt. Frag beim Kunden nach, ob die frühere E-Mail ankam, bevor du über „Per E-Mail senden“ eine neue an die richtige Adresse sendest.',
   );
   // The last attempt itself got no usable answer: its reason already says so, once.
   expect(deliveryOutcome({ failureCode: 'email_provider_invalid_response', outcomeUnknown: true }, '')).toBe(
