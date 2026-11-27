@@ -193,6 +193,9 @@ async function recordToolItem(world: AiTurnWorld, args: Row): Promise<Outcome> {
   );
   if (!run) return raise('ai_run_not_found');
   if (args.p_ledger_key !== undefined) {
+    const claimed = tableRows(world, 'ai_run_attempts').some(
+      (row) => row.organization_id === args.p_organization_id && row.idempotency_key === args.p_ledger_key,
+    );
     const ledger = await world.rpc({
       name: 'record_ai_run_attempt',
       args: {
@@ -210,6 +213,8 @@ async function recordToolItem(world: AiTurnWorld, args: Row): Promise<Outcome> {
       },
     });
     if (ledger.error) return { data: null, error: ledger.error };
+    // The first write under a ledger key claims the call's outcome; a later one writes no row.
+    if (claimed) return ok(null);
   }
   const all = tableRows(world, 'ai_thread_items');
   const items = all.filter((row) => row.thread_id === run.thread_id);

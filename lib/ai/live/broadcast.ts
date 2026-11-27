@@ -79,12 +79,7 @@ export type KiLiveBroadcast = {
   end: (end: AiTurnEnd) => Promise<void>;
 };
 
-function endMessage(
-  command: string,
-  end: AiTurnEnd,
-  length: number,
-  rows: { key: string; revision: number }[],
-): KiLiveMessage {
+function endMessage(command: string, end: AiTurnEnd, length: number, rows: AiThreadRow[]): KiLiveMessage {
   return {
     type: 'end',
     command,
@@ -104,17 +99,17 @@ function createOutbox(command: string) {
   let rows: KiLiveMessage[] = [];
   let sent = 0;
   let saved = 0;
-  const revisions = new Map<string, number>();
+  const latest = new Map<string, AiThreadRow>();
   return {
     text(delta: string): void {
       pending += delta;
     },
     row(row: AiThreadRow): void {
       rows.push({ type: 'row', command, row });
-      revisions.set(row.key, Math.max(row.revision, revisions.get(row.key) ?? 0));
+      if (row.revision >= (latest.get(row.key)?.revision ?? 0)) latest.set(row.key, row);
     },
-    /** Each row of the turn at its latest saved revision. */
-    rows: () => [...revisions].map(([key, revision]) => ({ key, revision })),
+    /** The turn's latest rows, each at its highest saved revision, at most the end's cap. */
+    rows: (): AiThreadRow[] => [...latest.values()].slice(-50),
     saved(length: number): void {
       saved = length;
     },

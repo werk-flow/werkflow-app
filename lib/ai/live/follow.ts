@@ -114,14 +114,6 @@ export function mergeWindow(previous: AiThreadWindow | null, next: AiThreadWindo
   };
 }
 
-/** Whether the window lacks one of these rows, or holds it at an older revision. */
-function missesRows(window: AiThreadWindow, rows: readonly { key: string; revision: number }[]): boolean {
-  return rows.some(({ key, revision }) => {
-    const held = window.messages.find((message) => message.key === key);
-    return !held || isChatMessage(held) || held.revision < revision;
-  });
-}
-
 /**
  * One live event applied to a thread's window. `applied: false` means the
  * window lacks what the event builds on (its answer, or text before its
@@ -181,11 +173,18 @@ function applyKiLiveEvent(
     if (!fresh) return unchanged;
     next = { ...answer, text: answer.text + fresh };
   } else {
-    // The answer's end with text or a row this page never received: the saved thread holds them, and
-    // the cursor stays at the answer, before every row of its turn.
-    if (answer.text.length < event.length || missesRows(window, event.rows ?? []))
-      return { window, applied: false };
-    next = { ...answer, status: event.status, failure: event.failure };
+    // The end carries the turn's rows as saved, so a row whose send this page missed lands with it.
+    const placed = (event.rows ?? []).reduce(placeRow, window);
+    // The answer's end with text this page never received: the saved answer holds it.
+    if (answer.text.length < event.length) return { window: placed, applied: false };
+    const ended = { ...answer, status: event.status, failure: event.failure };
+    return {
+      window: {
+        ...placed,
+        messages: placed.messages.map((message) => (message === answer ? ended : message)),
+      },
+      applied: true,
+    };
   }
   return {
     window: { ...window, messages: window.messages.map((message) => (message === answer ? next : message)) },

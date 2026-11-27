@@ -7,9 +7,11 @@
 -- (brief non-negotiable 5). Only the author reads either: the item policy
 -- covers the new column.
 --
--- A tool call's row and its ledger row are written in one call. A row changes
--- only to a higher revision, so a late repeat of an older write never
--- overwrites a newer one.
+-- A tool call's row and its ledger row are written in one call, and the first
+-- such call claims the tool call's outcome: a later one under the same ledger
+-- key, such as the failed row the harness writes for a call still running
+-- when its turn ends, writes no row. A row changes only to a higher revision,
+-- so a late repeat of an older write never overwrites a newer one.
 
 alter table public.ai_thread_items add column detail jsonb;
 -- @destructive: after release 8a73d1d0aa07fd5f17dd05cb04d2a8e06f3b8f7b: the rule binds only the new column, which older code never writes
@@ -21,7 +23,8 @@ alter table public.ai_thread_items add constraint ai_thread_items_detail_check
 -- thread. A new key takes the thread's next sequence; a known key keeps its
 -- place and changes only to a higher revision. With a ledger key, the tool
 -- call's ledger row (ids and its outcome, nil cost) is written in the same
--- transaction. Returns the row's sequence.
+-- transaction; a ledger key already recorded writes nothing and returns null.
+-- Returns the row's sequence.
 create function public.record_ai_tool_item(
   p_organization_id uuid,
   p_user_id uuid,
@@ -57,6 +60,16 @@ begin
   select thread.last_sequence into v_sequence from public.ai_threads thread
   where thread.id = v_thread_id and thread.organization_id = p_organization_id
   for update;
+
+  -- Under the thread lock, the first call that recorded this tool call's outcome is the only one.
+  if p_ledger_key is not null and exists (
+    select 1 from public.ai_run_attempts attempt
+    where attempt.organization_id = p_organization_id and attempt.idempotency_key = p_ledger_key
+  ) then
+    perform public.record_ai_run_attempt(p_organization_id, p_run_id, p_ledger_key, p_model_id,
+      p_prompt_version, 0, 0, 0, 0, 0, p_outcome);
+    return null;
+  end if;
 
   select * into v_item from public.ai_thread_items item
   where item.thread_id = v_thread_id and item.idempotency_key = p_item_key;

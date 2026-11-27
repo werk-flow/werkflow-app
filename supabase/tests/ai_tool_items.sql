@@ -101,6 +101,16 @@ begin
     raise exception 'A later to-do call did not replace its list in place';
   end if;
 
+  -- A call's outcome is claimed once: a later write under its ledger key, such as the failed row for a
+  -- call still running when its turn ended, writes no row.
+  v_again := public.record_ai_tool_item(v_org, v_author, v_run, 'tool_call', 'failed', 'turn-1:tool:3',
+    '{"revision":2,"label":"Plan zeigen","control":"read","outcome":"failed"}', null, 'turn-1:tool:3',
+    'claude-haiku-5-5', 'v1', 'tool_call_plan_zeigen_failed');
+  if v_again is not null or exists (select 1 from public.ai_thread_items
+      where organization_id = v_org and idempotency_key = 'turn-1:tool:3') then
+    raise exception 'A second outcome of one tool call wrote a row';
+  end if;
+
   -- A key of another kind is a conflict.
   begin
     perform public.record_ai_tool_item(v_org, v_author, v_run, 'question', 'complete', 'turn-1:plan',

@@ -38,9 +38,9 @@ function inline(text: string, links = true): ReactNode[] {
         );
       else nodes.push(bang === '' ? `${label} (${href})` : whole);
     } else if (strong !== undefined || strongAlt !== undefined)
-      nodes.push(<strong key={key}>{inline(strong ?? strongAlt ?? '')}</strong>);
+      nodes.push(<strong key={key}>{inline(strong ?? strongAlt ?? '', links)}</strong>);
     else if (em !== undefined || emAlt !== undefined)
-      nodes.push(<em key={key}>{inline(em ?? emAlt ?? '')}</em>);
+      nodes.push(<em key={key}>{inline(em ?? emAlt ?? '', links)}</em>);
     else nodes.push(whole);
   }
   nodes.push(text.slice(last));

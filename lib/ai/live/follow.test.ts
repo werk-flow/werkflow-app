@@ -246,7 +246,7 @@ test('a live row lands at its place, and a later save of it replaces it while an
   );
 });
 
-test("an end that lists a row revision the page missed waits until a read from the answer's place fills it", () => {
+test("an end carries the turn's rows, so a row whose send the page missed lands with it", () => {
   const window: AiThreadWindow = {
     hasOlder: false,
     messages: [
@@ -262,12 +262,14 @@ test("an end that lists a row revision the page missed waits until a read from t
     status: 'complete',
     failure: null,
     length: 7,
-    rows: [{ key: `${command}:tool:1`, revision: 2 }],
+    rows: [toolRow(`${command}:tool:1`, 3, 2), toolRow(`${command}:tool:2`, 4, 2)],
   };
-  const waiting = applyKiLiveEvents(window, [ended]);
-  expect(waiting.held).toEqual([ended]);
-  expect(kiLiveGapFillable(waiting.held)).toBe(true);
-  expect(kiLiveCursor(waiting.window), 'the read starts at the answer, before every row of its turn').toBe(2);
-  const read = placeRow(waiting.window, toolRow(`${command}:tool:1`, 3, 2));
-  expect(applyKiLiveEvents(read, waiting.held).held).toEqual([]);
+  const result = applyKiLiveEvents(window, [ended]);
+  expect(result.held).toEqual([]);
+  expect(result.window.messages.map((entry) => [entry.key, entry.status])).toEqual([
+    [`${command}:user`, 'complete'],
+    [`${command}:assistant`, 'complete'],
+    [`${command}:tool:1`, 'complete'],
+    [`${command}:tool:2`, 'complete'],
+  ]);
 });

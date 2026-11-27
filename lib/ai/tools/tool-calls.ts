@@ -307,7 +307,8 @@ async function writeRow(
             : {}),
         })
         .abortSignal(signal);
-      if (!answer.error) sequence = answer.data;
+      // A null sequence: an earlier write already recorded this call's outcome, so nothing changed.
+      if (!answer.error && typeof answer.data === 'number') sequence = answer.data;
       return answer;
     },
   );

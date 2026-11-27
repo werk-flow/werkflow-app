@@ -31,12 +31,16 @@ export function timelineOrder<Entry extends AiThreadEntry>(entries: readonly Ent
   });
 }
 
+const answerOf = (entries: readonly AiThreadEntry[], key: string): AiThreadEntry | undefined =>
+  entries.find((entry) => entry.role === 'assistant' && commandOf(entry.key) === commandOf(key));
+
 /**
  * What a question's row shows: the person's answer is their next message, so
- * a question with a message after it is answered with that text. Only the
- * thread's last question without one waits for an answer, and only once the
- * turn that asked has ended, on every tab: a reply sent before would find
- * that turn's run still open.
+ * a question with a message after it that got its own turn is answered with
+ * that text. A reply refused before its turn started (another answer was
+ * still being written) leaves the question open, and tapping again sends the
+ * same command. Only the thread's last question without an answer waits for
+ * one, and only once the turn that asked has ended, on every tab.
  */
 export function questionAnswer(
   entries: readonly AiThreadEntry[],
@@ -44,10 +48,8 @@ export function questionAnswer(
 ): { answered: string } | 'open' | 'closed' {
   const after = entries.filter((entry) => entry.sequence > question.sequence);
   const reply = after.find((entry) => entry.role === 'user');
-  if (reply?.role === 'user') return { answered: reply.text };
-  const asking = entries.find(
-    (entry) => entry.role === 'assistant' && commandOf(entry.key) === commandOf(question.key),
-  );
+  if (reply?.role === 'user' && answerOf(entries, reply.key)) return { answered: reply.text };
+  const asking = answerOf(entries, question.key);
   const settled = asking !== undefined && asking.status !== 'streaming';
   return settled && !after.some((entry) => entry.role === 'question') ? 'open' : 'closed';
 }

@@ -192,6 +192,11 @@ export const KiQuestion = memo(function KiQuestion({
           </Button>
         ))}
       </div>
+      {answered !== null && !row.options.includes(answered) && (
+        <p className="text-sm text-muted-foreground">
+          Deine Antwort: <AiInlineText text={answered} />
+        </p>
+      )}
     </li>
   );
 });

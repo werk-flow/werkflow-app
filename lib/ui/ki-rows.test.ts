@@ -61,9 +61,12 @@ test('a question waits for an answer once its turn ended, until a message follow
     ),
   ).toBe('closed');
   expect(questionAnswer(thread, asked)).toBe('open');
-  expect(questionAnswer([...thread, message('c2:user', 4, { text: 'Müller Bau' })], asked)).toEqual({
+  const reply = message('c2:user', 4, { text: 'Müller Bau' });
+  expect(questionAnswer([...thread, reply, message('c2:assistant', 5)], asked)).toEqual({
     answered: 'Müller Bau',
   });
+  // A reply refused before its turn started leaves the question open, so a tap sends it again.
+  expect(questionAnswer([...thread, reply], asked)).toBe('open');
   expect(questionAnswer([...thread, question('c1:tool:2', 4)], asked)).toBe('closed');
 });
 
