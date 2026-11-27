@@ -65,6 +65,21 @@ type DialogInitialFocus = 'first-control' | 'dialog';
 const TABBABLE =
   'a[href], button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
+function firstFocusable(content: HTMLElement): HTMLElement | null {
+  for (const element of content.querySelectorAll<HTMLElement>(TABBABLE)) {
+    if (
+      element.tabIndex < 0 ||
+      (element instanceof HTMLInputElement && element.type === 'hidden') ||
+      element.closest('[hidden], [inert]') !== null ||
+      element.getClientRects().length === 0
+    ) {
+      continue;
+    }
+    return element;
+  }
+  return null;
+}
+
 /**
  * Where focus lands when the dialog opens. Radix focuses the first control
  * that exists and is enabled at that moment; while the fields still load (a
@@ -73,6 +88,8 @@ const TABBABLE =
  * the fields arrived (rendered dialog audit). Such a dialog, and one that asks
  * for it with `initialFocus="dialog"`, focuses itself instead: the first Tab
  * then reaches its first control.
+ * The first control now gets focus without its text selected, since Radix's
+ * default selects it and one keystroke replaced a prefilled value.
  */
 function focusDialogInstead(event: Event, initialFocus: DialogInitialFocus): void {
   if (event.defaultPrevented) return;
@@ -80,9 +97,12 @@ function focusDialogInstead(event: Event, initialFocus: DialogInitialFocus): voi
   if (!(content instanceof HTMLElement)) return;
   const fieldsPending =
     content.querySelector('[data-slot="skeleton"]') !== null ||
-    content.querySelector(TABBABLE)?.getAttribute('data-slot') === 'dialog-close';
-  if (initialFocus === 'first-control' && !fieldsPending) return;
+    firstFocusable(content)?.getAttribute('data-slot') === 'dialog-close';
   event.preventDefault();
+  if (initialFocus === 'first-control' && !fieldsPending) {
+    (firstFocusable(content) ?? content).focus({ preventScroll: true });
+    return;
+  }
   content.focus();
 }
 
