@@ -1,11 +1,10 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { PDFDocument } from 'pdf-lib';
 import { extractText, getDocumentProxy } from 'unpdf';
 
 import { offerLetterhead } from './letterhead';
 import { EMPTY_COMPANY_PROFILE_DETAILS, missingLetterDetails, type CompanyProfileDetails } from './profile';
 
-mock.module('server-only', () => ({}));
 const { renderBusinessDocument } = await import('@/lib/document-rendering/render');
 const { sampleOffer } = await import('@/lib/document-rendering/sample-offer');
 

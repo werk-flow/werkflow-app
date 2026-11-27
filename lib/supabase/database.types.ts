@@ -1687,6 +1687,7 @@ export type Database = {
           recipient_email: string | null;
           reply_to: string | null;
           sender_name: string | null;
+          service_report_id: string | null;
           state: string;
           subject_kind: string;
           updated_at: string;
@@ -1713,6 +1714,7 @@ export type Database = {
           recipient_email?: string | null;
           reply_to?: string | null;
           sender_name?: string | null;
+          service_report_id?: string | null;
           state: string;
           subject_kind: string;
           updated_at?: string;
@@ -1739,6 +1741,7 @@ export type Database = {
           recipient_email?: string | null;
           reply_to?: string | null;
           sender_name?: string | null;
+          service_report_id?: string | null;
           state?: string;
           subject_kind?: string;
           updated_at?: string;
@@ -1771,6 +1774,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_deliveries_service_report_fk";
+            columns: ["service_report_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_service_reports";
+            referencedColumns: ["id", "organization_id"];
           },
         ];
       };
@@ -21468,6 +21478,7 @@ export type Database = {
       register_maintenance_service_report: {
         Args: {
           p_actor_id: string;
+          p_content_hash?: string;
           p_document_id: string;
           p_file_name: string;
           p_maintenance_due_work_id: string;

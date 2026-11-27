@@ -20,7 +20,6 @@ const tables = {
   employee_records: [{ id: RECORD, organization_id: ORGANIZATION, user_id: USER }],
   organization_members: [{ organization_id: ORGANIZATION, user_id: USER, role: 'employee' }],
 };
-mock.module('server-only', () => ({}));
 mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => createInMemoryAdmin(tables) }));
 const { proposeSubmission, submissionShapeError } = await import('./submission');
 

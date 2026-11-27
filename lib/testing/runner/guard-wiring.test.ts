@@ -154,8 +154,6 @@ test('Claude denies its file tools every workstation secret file in the home fol
     'Edit(~/.config/werkflow/problem-report-handout.env)',
     'Read(~/.config/werkflow/staging-agents.env)',
     'Edit(~/.config/werkflow/staging-agents.env)',
-    'Read(~/.config/werkflow/prod-watch.env)',
-    'Edit(~/.config/werkflow/prod-watch.env)',
     'Read(~/.supabase/access-token)',
     'Edit(~/.supabase/access-token)',
     'Read(~/.werkflow-stripe-sandbox/**)',

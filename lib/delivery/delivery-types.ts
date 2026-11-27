@@ -5,8 +5,8 @@ import { z } from '@/lib/zod';
 // send and record actions (supabase/migrations/20270310100000_record_document_deliveries.sql).
 // The table checks repeat the limits.
 
-/** What a delivery sends. Invoices now; offers and service reports join as kinds. */
-export type DeliverySubject = { kind: 'invoice'; id: string };
+/** What a delivery sends: an issued invoice's original or a filed Servicebericht. Offers join as a kind. */
+export type DeliverySubject = { kind: 'invoice' | 'service_report'; id: string };
 
 export const DELIVERY_STATES = ['sending', 'sent', 'failed'] as const;
 export type DeliveryState = (typeof DELIVERY_STATES)[number];

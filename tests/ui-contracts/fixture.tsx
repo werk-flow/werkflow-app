@@ -94,6 +94,7 @@ import {
   InvoiceSettingsContractFixture,
 } from './invoice-editor-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
+import { ServiceReportDeliveryContractFixture } from './service-report-delivery-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
@@ -686,6 +687,8 @@ createRoot(root).render(
     <InvoiceDeliveriesContractFixture cancelled={false} />
   ) : window.uiContractFixture === 'invoice-deliveries-cancelled' ? (
     <InvoiceDeliveriesContractFixture cancelled />
+  ) : window.uiContractFixture === 'service-report-delivery' ? (
+    <ServiceReportDeliveryContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>

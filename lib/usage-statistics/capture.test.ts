@@ -9,7 +9,6 @@ const ALLOWED_ORG = '0a000001-0000-0000-0000-000000000001';
 const UNSIGNED_ORG = '0a000002-0000-0000-0000-000000000002';
 const TEST_KEY = 'phc_synthetic_test_key';
 
-mock.module('server-only', () => ({}));
 // Runs the deferred send at once, so the test sees what would leave the server.
 const deferred: Array<() => Promise<void>> = [];
 mock.module('next/server', () => ({ after: (task: () => Promise<void>) => deferred.push(task) }));

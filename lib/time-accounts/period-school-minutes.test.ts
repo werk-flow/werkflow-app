@@ -22,7 +22,6 @@ const fullDay = (type: ApprovedAbsenceSpan['type']): ApprovedAbsenceSpan => ({
 let vacationSpans: ApprovedAbsenceSpan[] = [];
 let treatment: TimeAccountPolicy['vacationTreatment'] = 'paid';
 
-mock.module('server-only', () => ({}));
 mock.module('@/lib/data/cached', () => ({
   getCachedOrganizationCalendar: async () => ({
     holidayRegion: null,

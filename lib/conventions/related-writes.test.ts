@@ -51,6 +51,8 @@ const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
     'Documented recovery: the export is reserved, its file stored and the export finalized; a failed step marks the reservation failed, and recover_failed_payroll_exports resolves the rest.',
   'lib/invoices/delivery-actions.ts::sendInvoiceEmail': DOCUMENT_MAIL_ORDER,
   'lib/invoices/delivery-actions.ts::retryInvoiceDelivery': DOCUMENT_MAIL_ORDER,
+  'lib/service-reports/delivery-actions.ts::sendServiceReportEmail': DOCUMENT_MAIL_ORDER,
+  'lib/service-reports/delivery-actions.ts::retryServiceReportDelivery': DOCUMENT_MAIL_ORDER,
   'lib/personnel/actions.ts::sendPersonnelInvite':
     'Ordered around a mail: the invite is written in one transaction before the mail, and the append-only „Einladung versendet“ history row only after the mail went out, because a mail cannot join a transaction.',
   'lib/invites/actions.ts::sendOrgInvite':
