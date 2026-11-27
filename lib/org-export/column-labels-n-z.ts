@@ -193,6 +193,8 @@ export const COLUMN_LABELS_N_TO_Z = {
   renderer_version: 'Darstellungsversion',
   renewal_date: 'Verlängerungsdatum',
   renewal_due_date: 'Verlängerung fällig am',
+  replaced_entry_date: 'Eintrittsdatum vor der Planung',
+  replaced_exit_date: 'Austrittsdatum vor der Planung',
   replaces_report_id: 'Ersetzter Bericht (ID)',
   reply_to: 'Antwortadresse',
   report_number: 'Berichtsnummer',
