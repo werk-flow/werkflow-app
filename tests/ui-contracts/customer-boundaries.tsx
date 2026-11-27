@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { KundenContent } from '@/components/kunden/kunden-content';
 import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 import { BannerProvider } from '@/components/ui/banner';
+import { ClientActionsMenu } from '@/components/kunden/client-actions-menu';
 import { clientCreations, CreateClientDialog } from '@/components/kunden/create-client-dialog';
 import type { Client } from '@/lib/jobs/types';
 
@@ -103,6 +104,50 @@ export function CreateClientContractFixture(): React.JSX.Element {
       <main>
         <h1>Komponentenverträge</h1>
         <CreateClientDialog />
+      </main>
+    </BannerProvider>
+  );
+}
+
+declare global {
+  interface Window {
+    /** Each move of focus out of a dialog, named by the control it went to. */
+    uiContractDialogFocusLeaks: string[] | undefined;
+  }
+}
+
+/**
+ * Records each move of focus out of a dialog. A modal dialog's trap takes
+ * focus back while it leaves, so the control outside never holds it: only the
+ * focusout from the dialog shows the move.
+ */
+function recordDialogFocusLeaks(): void {
+  if (window.uiContractDialogFocusLeaks) return;
+  const leaks: string[] = [];
+  window.uiContractDialogFocusLeaks = leaks;
+  document.addEventListener('focusout', (event) => {
+    const from = event.target instanceof Element ? event.target.closest('[role="dialog"]') : null;
+    const to = event.relatedTarget instanceof Element ? event.relatedTarget : null;
+    if (from && to && !from.contains(to)) leaks.push(to.textContent ?? '');
+  });
+}
+
+/** A customer row's actions menu and the edit dialog its „Bearbeiten“ opens. */
+export function CustomerMenuEditContractFixture(): React.JSX.Element {
+  recordDialogFocusLeaks();
+  return (
+    <BannerProvider>
+      <main>
+        <h1>Komponentenverträge</h1>
+        <ClientActionsMenu
+          client={customerContractRow('Heizungsbau Weber')}
+          actions={{
+            isArchivedView: false,
+            onSaved: () => undefined,
+            onRequestRemoval: () => undefined,
+            onRestore: async () => undefined,
+          }}
+        />
       </main>
     </BannerProvider>
   );

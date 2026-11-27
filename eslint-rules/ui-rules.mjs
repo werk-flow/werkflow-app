@@ -571,6 +571,19 @@ const iconButtonNeedsNameRule = {
  */
 const TEXT_INPUT_TYPES = new Set(['text', 'search', 'email', 'tel', 'url', 'password']);
 
+/**
+ * A file input on screen shows the browser's own „Choose File No file chosen“
+ * in the browser's language. A picker hidden behind a button proves it by a
+ * static `hidden` or `sr-only` class or the `hidden` attribute: a class built
+ * at runtime or a responsive `md:hidden` may show it. `aria-hidden` hides it
+ * from assistive technology only, not from the eye, so it does not count.
+ */
+function isHiddenFileInput(node) {
+  if (jsxAttribute(node, 'hidden')) return true;
+  const classes = staticAttributeValue(jsxAttribute(node, 'className'));
+  return classes !== null && classes.split(/\s+/).some((token) => token === 'hidden' || token === 'sr-only');
+}
+
 const noRawControlsRule = {
   meta: {
     type: 'problem',
@@ -579,7 +592,8 @@ const noRawControlsRule = {
       button:
         'Raw <button> outside components/ui: use Button for an action or PlainButton (components/ui/plain-button) for a clickable region. Both set the type and the focus ring.',
       input:
-        'Raw text <input> outside components/ui: use Input inside Field (components/ui/input, components/ui/field). Only file and hidden inputs stay raw.',
+        'Raw text <input> outside components/ui: use Input inside Field (components/ui/input, components/ui/field). Only hidden inputs and hidden file pickers stay raw.',
+      file: 'A visible file input reads „Choose File No file chosen“ in the browser\'s language: use FileInput inside Field (components/ui/file-input). A picker behind its own button stays a raw <input type="file"> with className "hidden" or "sr-only".',
     },
   },
   create(context) {
@@ -590,11 +604,18 @@ const noRawControlsRule = {
           context.report({ node, messageId: 'button' });
           return;
         }
-        if (node.name.name !== 'input') return;
+        if (node.name.name !== 'input' && node.name.name !== 'Input') return;
         // The other native types (date, number, checkbox, ...) have their own
         // registry bans; a dynamic type is left to review.
         const typeAttribute = jsxAttribute(node, 'type');
         const type = staticAttributeValue(typeAttribute);
+        if (type === 'file') {
+          // The registry Input always renders a visible box.
+          if (node.name.name === 'Input' || !isHiddenFileInput(node))
+            context.report({ node, messageId: 'file' });
+          return;
+        }
+        if (node.name.name === 'Input') return;
         // An empty static type falls back to text in the browser.
         if (typeAttribute ? type === '' || TEXT_INPUT_TYPES.has(type) : true)
           context.report({ node, messageId: 'input' });

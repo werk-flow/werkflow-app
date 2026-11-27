@@ -1,7 +1,11 @@
 import { PlanningOptionContractFixture } from './planning-option-boundaries';
 import { RouteRefreshFixture } from './route-refresh-boundaries';
 import { PresentationFixture } from './presentation-fixture';
-import { CreateClientContractFixture, CustomerContractFixture } from './customer-boundaries';
+import {
+  CreateClientContractFixture,
+  CustomerContractFixture,
+  CustomerMenuEditContractFixture,
+} from './customer-boundaries';
 import { RequestCaptureContractFixture } from './request-capture-boundaries';
 import { RequestAttachContractFixture } from './request-attach-boundaries';
 import { GlobalSearchContractFixture } from './global-search-boundaries';
@@ -647,6 +651,8 @@ createRoot(root).render(
     <CustomerContractFixture />
   ) : window.uiContractFixture === 'customer-create' ? (
     <CreateClientContractFixture />
+  ) : window.uiContractFixture === 'customer-menu-edit' ? (
+    <CustomerMenuEditContractFixture />
   ) : window.uiContractFixture === 'request-capture' ? (
     <RequestCaptureContractFixture />
   ) : window.uiContractFixture === 'request-attach' ? (
