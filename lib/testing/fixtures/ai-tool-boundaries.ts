@@ -8,7 +8,14 @@ import type { AI_TOOLS as RegisteredTools } from '@/lib/ai/tools/registry';
 import { missingBoundaryCases } from '@/lib/testing/ai-tool-walk';
 import { CALLER_ID, ORGANIZATION_A, signInAs, tableRows } from './action-boundary-world';
 import { toolCallOutcomes } from './ai-turn-world';
-import { IDS, SALE_PRICE_CENTS, callTool, installAiToolWorld, offeredTools } from './ai-tool-world';
+import {
+  IDS,
+  OFFICE_ONLY,
+  SALE_PRICE_CENTS,
+  callTool,
+  installAiToolWorld,
+  offeredTools,
+} from './ai-tool-world';
 
 type Input = Record<string, unknown>;
 type AiToolName = (typeof RegisteredTools)[number]['name'];
@@ -35,13 +42,15 @@ async function call(tool: AiToolName, input: Input) {
   return callTool(world, tool, input);
 }
 
-/** A suspended member's turn is refused at the route: no tool runs and no reader is reached. */
-async function suspendedMember(tool: AiToolName, input: Input, reader: string): Promise<void> {
+/** A suspended member's turn is refused at the route: no tool runs and no table or reader is read. */
+async function suspendedMember(tool: AiToolName, input: Input): Promise<void> {
   signInAs(world, 'admin');
   world.memberships = [{ orgId: ORGANIZATION_A, role: 'admin', accessState: 'suspended' }];
+  world.rowsRead = 0;
   const { status } = await call(tool, input);
   assert.equal(status, 403, `${tool}: a suspended member's turn must be refused`);
-  assert.equal(readerCalls(reader).length, 0, `${tool}: no reader may run for a suspended member`);
+  assert.deepEqual(world.rpcCalls, [], `${tool}: no reader may run for a suspended member`);
+  assert.equal(world.rowsRead, 0, `${tool}: no row may be read for a suspended member`);
   assert.equal(tableRows(world, 'ai_runs').length, 0, `${tool}: no run may start for a suspended member`);
 }
 
@@ -95,7 +104,51 @@ const CASES = {
       assert.equal(shows(output, 'Heizung Müller warten'), true, 'an employee finds assigned work');
       assert.equal(shows(output, 'Heizung Keller tauschen'), false, "a coworker's job must stay hidden");
     },
-    suspendedMember: () => suspendedMember('auftraege_finden', { suche: 'Heizung' }, 'list_job_entries_page'),
+    suspendedMember: () => suspendedMember('auftraege_finden', { suche: 'Heizung' }),
+  },
+  auftrag_lesen: {
+    // The model names org B's job number: the read keeps to A and finds none. The office reads
+    // A's job in full, but never the page's billing parties or work leads.
+    async foreignOrganization() {
+      signInAs(world, 'admin');
+      const foreign = await call('auftrag_lesen', { nummer: 'A-3' });
+      assert.deepEqual(foreign.output, { type: 'json', value: { auftrag: null } });
+      const own = await call('auftrag_lesen', { nummer: 'A-1' });
+      assert.equal(shows(own.output, 'Heizung Müller warten'), true, 'the office reads its job');
+      assert.equal(shows(own.output, 'Lindenstraße 1'), true, "the office reads the customer's address");
+      assert.equal(shows(own.output, 'Max Kollege'), true, 'the team is named');
+      assert.equal(shows(own.output, 'max@example.test'), false, 'a teammate is named, never mailed');
+      for (const officeOnly of Object.values(OFFICE_ONLY)) {
+        assert.equal(
+          shows(own.output, officeOnly),
+          false,
+          `${officeOnly}: billing parties and work leads stay out`,
+        );
+      }
+      assert.deepEqual(toolCallOutcomes(world), ['tool_call_auftrag_lesen_ok']);
+    },
+    // An employee reads an assigned job in the field view, and is refused a coworker's.
+    async lowerRole() {
+      signInAs(world, 'employee');
+      const own = await call('auftrag_lesen', { nummer: 'A-1' });
+      assert.equal(
+        shows(own.output, 'Schlüssel beim Hausmeister'),
+        true,
+        'an employee reads the access note',
+      );
+      assert.equal(shows(own.output, '0170 5678'), true, "an employee reads the contact's phone");
+      for (const officeFact of ['Lindenstraße 1', 'K-1001', 'Interne', 'anna@example.test']) {
+        assert.equal(shows(own.output, officeFact), false, `${officeFact}: the field view must leave it out`);
+      }
+      const coworkers = await call('auftrag_lesen', { nummer: 'A-2' });
+      assert.deepEqual(
+        coworkers.output,
+        { type: 'json', value: { status: 'refused' } },
+        "a coworker's job must be refused",
+      );
+      assert.deepEqual(toolCallOutcomes(world), ['tool_call_auftrag_lesen_refused']);
+    },
+    suspendedMember: () => suspendedMember('auftrag_lesen', { nummer: 'A-1' }),
   },
   kunden_finden: {
     async foreignOrganization() {
@@ -106,7 +159,7 @@ const CASES = {
       assert.equal(shows(output, 'Müller Bau'), false, "another organization's customer must stay hidden");
     },
     lowerRole: () => notOfferedTo('kunden_finden', { suche: 'Müller' }, 'list_customer_page'),
-    suspendedMember: () => suspendedMember('kunden_finden', { suche: 'Müller' }, 'list_customer_page'),
+    suspendedMember: () => suspendedMember('kunden_finden', { suche: 'Müller' }),
   },
   artikel_finden: {
     // Reads A's articles only, with supplier terms and no price, and writes no default.
@@ -125,7 +178,7 @@ const CASES = {
       assert.equal(readerCalls('ensure_inventory_defaults').length, 0, 'a read tool writes no default');
     },
     lowerRole: () => notOfferedTo('artikel_finden', { suche: 'Kupferrohr' }, 'list_inventory_page'),
-    suspendedMember: () => suspendedMember('artikel_finden', { suche: 'Kupferrohr' }, 'list_inventory_page'),
+    suspendedMember: () => suspendedMember('artikel_finden', { suche: 'Kupferrohr' }),
   },
 } satisfies Record<
   AiToolName,

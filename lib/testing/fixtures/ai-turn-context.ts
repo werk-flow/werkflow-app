@@ -64,8 +64,8 @@ const streamedText = (events: Awaited<ReturnType<typeof readTurn>>) =>
 // A role-play request the model falls for changes neither its instructions nor its tools, and the
 // tool it asks for never runs (B6, B21).
 const ROLE_TOOLS = {
-  employee: ['auftraege_finden'],
-  admin: ['artikel_finden', 'auftraege_finden', 'kunden_finden'],
+  employee: ['auftraege_finden', 'auftrag_lesen'],
+  admin: ['artikel_finden', 'auftraege_finden', 'auftrag_lesen', 'kunden_finden'],
 } as const;
 for (const role of ['employee', 'admin'] as const) {
   resetAiTables(world);

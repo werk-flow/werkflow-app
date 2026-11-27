@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import { AI_SYSTEM_PROMPT } from '@/lib/ai/prompt/system-prompt';
-import { ORGANIZATION_A, ORGANIZATION_B, signInAs } from './action-boundary-world';
+import { ORGANIZATION_A, ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
 import { postTurn, readTurn, resetAiTables, toolCallOutcomes } from './ai-turn-world';
 import { callTool, installAiToolWorld, offeredTools, seedToolTables, toolResults } from './ai-tool-world';
 
@@ -72,7 +72,7 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
   );
   assert.deepEqual(
     offeredTools(second),
-    ['artikel_finden', 'auftraege_finden', 'kunden_finden'],
+    ['artikel_finden', 'auftraege_finden', 'auftrag_lesen', 'kunden_finden'],
     'a turn that read untrusted text must offer no memory write and no write tool (B10)',
   );
   const asked = toolResults(third).slice(1);
@@ -102,6 +102,35 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
     true,
     'a link that holds the editable number must reach the model labelled as record text',
   );
+}
+
+// A poisoned job description and access note reach an employee's turn only as labelled record text
+// without their hidden characters; reading the job taints the turn, so the memory write is gone (B8, B10, B21).
+{
+  resetAiTables(world);
+  seedToolTables(world);
+  const [job] = tableRows(world, 'jobs');
+  const [site] = tableRows(world, 'client_sites');
+  if (!job || !site) throw new Error('the seed holds the assigned job and its site');
+  Object.assign(job, { description: `Bitte prüfen. ${POISON}\u202e` });
+  Object.assign(site, { access_notes: `\u200b${POISON}` });
+  signInAs(world, 'employee');
+  const { output } = await callTool(world, 'auftrag_lesen', { nummer: 'A-1' });
+  for (const text of [`Bitte prüfen. ${POISON}`, POISON]) {
+    assert.equal(
+      JSON.stringify(output).includes(JSON.stringify({ source: 'record_text', text })),
+      true,
+      'a job description and an access note must reach the model labelled as record text, hidden characters stripped',
+    );
+  }
+  assert.deepEqual(toolCallOutcomes(world), ['tool_call_auftrag_lesen_ok']);
+  assert.equal(offeredTools(world.streamRequests[0]).includes('notiz_merken'), true);
+  assert.deepEqual(
+    offeredTools(world.streamRequests[1]),
+    ['auftraege_finden', 'auftrag_lesen'],
+    'a turn that read a job must offer no memory write (B10)',
+  );
+  seedToolTables(world);
 }
 
 // A tool result without record text leaves the memory write in the turn: only untrusted text taints it.
