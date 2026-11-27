@@ -8,52 +8,68 @@ function bindingOf(sourceCode, node) {
   }
 }
 
-function importedFromFs(sourceCode, node) {
-  if (node?.type !== 'Identifier') return false;
-  return bindingOf(sourceCode, node)?.defs.some(
-    (definition) => definition.type === 'ImportBinding' && FILE_MODULES.has(definition.parent.source.value),
-  );
+function propertyName(node, computed = false) {
+  if (node?.type === 'Literal') return node.value;
+  if (!computed && node?.type === 'Identifier') return node.name;
+}
+
+// A named reader, or * for the fs namespace, resolved at the lexical binding.
+function fsBinding(sourceCode, node) {
+  if (node?.type !== 'Identifier') return;
+  for (const definition of bindingOf(sourceCode, node)?.defs ?? []) {
+    if (definition.type === 'ImportBinding' && FILE_MODULES.has(definition.parent.source.value)) {
+      return definition.node.type === 'ImportSpecifier' ? propertyName(definition.node.imported) : '*';
+    }
+    if (definition.type !== 'Variable') continue;
+    const declaration = definition.node;
+    const init = declaration.init?.type === 'AwaitExpression' ? declaration.init.argument : null;
+    if (init?.type !== 'ImportExpression' || !FILE_MODULES.has(init.source.value)) continue;
+    if (declaration.id.type === 'Identifier') return '*';
+    if (declaration.id.type !== 'ObjectPattern') continue;
+    const property = declaration.id.properties.find(
+      (entry) =>
+        entry.type === 'Property' && entry.value.type === 'Identifier' && entry.value.name === node.name,
+    );
+    if (property) return propertyName(property.key, property.computed);
+  }
 }
 
 function isFileRead(sourceCode, callee) {
-  if (callee.type === 'Identifier') {
-    return bindingOf(sourceCode, callee)?.defs.some(
-      (definition) =>
-        definition.type === 'ImportBinding' &&
-        definition.node.type === 'ImportSpecifier' &&
-        FILE_MODULES.has(definition.parent.source.value) &&
-        READS.has(definition.node.imported.name),
-    );
-  }
-  if (callee.type !== 'MemberExpression' || callee.computed || !READS.has(callee.property.name)) return false;
+  if (callee.type === 'Identifier') return READS.has(fsBinding(sourceCode, callee));
+  if (callee.type !== 'MemberExpression' || !READS.has(propertyName(callee.property, callee.computed)))
+    return false;
   const object = callee.object;
-  if (importedFromFs(sourceCode, object)) return true;
+  if (fsBinding(sourceCode, object) === '*') return true;
   return (
     object.type === 'MemberExpression' &&
-    !object.computed &&
-    object.property.name === 'promises' &&
-    importedFromFs(sourceCode, object.object)
+    propertyName(object.property, object.computed) === 'promises' &&
+    fsBinding(sourceCode, object.object) === '*'
   );
 }
 
-function isImportMetaUrl(sourceCode, node, seen = new Set()) {
+function isImportMetaUrl(sourceCode, node, before = node?.range[0], seen = new Set()) {
   if (node?.type === 'Identifier') {
     const variable = bindingOf(sourceCode, node);
     if (!variable || seen.has(variable)) return false;
     seen.add(variable);
-    return (
-      variable.defs.some(
-        (definition) =>
-          definition.type === 'Variable' && isImportMetaUrl(sourceCode, definition.node.init, seen),
-      ) || variable.references.some((reference) => isImportMetaUrl(sourceCode, reference.writeExpr, seen))
-    );
+    return variable.references.some((reference) => {
+      const target = reference.identifier.parent;
+      const wholeValue =
+        (target.type === 'VariableDeclarator' && target.id.type === 'Identifier') ||
+        (target.type === 'AssignmentExpression' && target.left.type === 'Identifier');
+      return (
+        wholeValue &&
+        reference.writeExpr &&
+        reference.writeExpr.range[0] < before &&
+        isImportMetaUrl(sourceCode, reference.writeExpr, reference.writeExpr.range[0], new Set(seen))
+      );
+    });
   }
   if (node?.type !== 'NewExpression' || node.callee.name !== 'URL') return false;
   const base = node.arguments[1];
   return (
     base?.type === 'MemberExpression' &&
-    !base.computed &&
-    base.property.name === 'url' &&
+    propertyName(base.property, base.computed) === 'url' &&
     base.object.type === 'MetaProperty' &&
     base.object.meta.name === 'import' &&
     base.object.property.name === 'meta'
