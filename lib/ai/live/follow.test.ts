@@ -142,6 +142,23 @@ test('the cursor starts at the first answer still being written, else after the 
   expect(kiLiveCursor(applyKiLiveEvent(earlier, started).window)).toBe(4);
 });
 
+test('the cursor stops at the first sequence missing between held messages, even when a later turn settled', () => {
+  const later: AiThreadWindow = {
+    hasOlder: false,
+    messages: [...earlier.messages, message('c5:user', 5, { role: 'user' }), message('c5:assistant', 6)],
+  };
+  expect(kiLiveCursor(later)).toBe(3);
+});
+
+test('a new turn that starts while an older answer still shows as written asks for one catch-up', () => {
+  const stuck: AiThreadWindow = {
+    hasOlder: false,
+    messages: [message('c0:user', 1, { role: 'user' }), message('c0:assistant', 2, { status: 'streaming' })],
+  };
+  expect(applyKiLiveEvents(stuck, [started]).stale).toBe(true);
+  expect(applyKiLiveEvents(earlier, [started]).stale).toBe(false);
+});
+
 test('a catch-up keeps every message the page holds and adds the newer ones', () => {
   const merged = mergeNewer(earlier, {
     hasOlder: false,

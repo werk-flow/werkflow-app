@@ -666,3 +666,39 @@ test("a sending tab whose own stream breaks keeps the answer open and follows th
   await expect(timeline(page).getByText('Erst das Ventil.', { exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toHaveCount(0);
 });
+
+test('an answer the channel brought to its end stays finished when the sending tab’s own stream breaks after it', async ({
+  page,
+}) => {
+  await openChat(page);
+  await showThreadA(page, { messages: [], hasOlder: false });
+  await expect.poll(() => liveThread(page)).toBe(THREAD_A);
+  await composer(page).fill('Wie entlüfte ich?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  const [turn] = await page.evaluate(() => window.uiContractKiTurn.calls);
+  const command = turn?.commandId ?? '';
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await emit(page, { type: 'text', delta: 'Erst ' });
+  const v = KI_LIVE_PROTOCOL;
+  await liveEmit(page, {
+    v,
+    type: 'started',
+    command,
+    user: { sequence: 1, text: 'Wie entlüfte ich?' },
+    answer: { sequence: 2 },
+  });
+  await liveEmit(page, { v, type: 'text', command, at: 0, delta: 'Erst das Ventil.', saved: 16 });
+  await liveEmit(page, { v, type: 'end', command, status: 'complete', failure: null, length: 16 });
+  await page.evaluate(() =>
+    window.uiContractKiTurn.resolve?.({
+      kind: 'refused',
+      message: 'WerkFlow KI ist gerade nicht erreichbar.',
+    }),
+  );
+  await expect(timeline(page).getByText('Erst das Ventil.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveCount(0);
+});

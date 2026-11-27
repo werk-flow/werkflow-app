@@ -115,6 +115,26 @@ test('the end goes out again when its first send fails, and the topic names the 
   expect(new Set(sent.map((entry) => entry.topic))).toEqual(new Set([`ki-thread:${input.threadId}`]));
 });
 
+test('an end whose first send stalls goes out on its second try within the time limit', async () => {
+  const tries: string[] = [];
+  const live = createKiLiveBroadcast(
+    input,
+    (_topic, events, signal) => {
+      if (events[0]?.type !== 'end') return Promise.resolve(true);
+      tries.push('end');
+      if (tries.length > 1) return Promise.resolve(true);
+      // The first try hangs until its share of the limit aborts it.
+      return new Promise<boolean>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    },
+    manualSchedule().schedule,
+  );
+  live.start(started);
+  await live.end({ status: 'complete' });
+  expect(tries).toEqual(['end', 'end']);
+});
+
 test('a save that says the author lost access stops every further send, the end included', async () => {
   const clock = manualSchedule();
   const sent: string[] = [];

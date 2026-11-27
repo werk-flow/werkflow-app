@@ -25,6 +25,8 @@ import { z } from '@/lib/zod';
 
 /** How many earlier messages of the thread the model sees, newest first, within the input cap. */
 const HISTORY_MESSAGES = 20;
+/** A save refused for these says the author lost the thread: the live channel sends nothing more (KI-6). */
+const LOST_ACCESS = new Set(['ai_actor_without_access', 'ai_thread_not_found', 'ai_thread_item_not_found']);
 /** Saves of a streaming answer: at most one per interval (brief non-negotiable 4). */
 const PARTIAL_SAVE_INTERVAL_MS = 750;
 
@@ -381,7 +383,10 @@ async function saveAnswer(
           p_body: body,
         })
         .abortSignal(signal),
-    (message) => message === 'ai_thread_item_finished',
+    (message) => {
+      if (LOST_ACCESS.has(message)) context.sink.revoked?.();
+      return message === 'ai_thread_item_finished';
+    },
   );
 }
 
@@ -586,8 +591,7 @@ function savePartial(context: RunContext, answer: Answer): void {
     if (!error) context.sink.saved?.(answer.savedText.length);
     else {
       logError('aiTurn: partial save failed', error);
-      if (error.message === 'ai_actor_without_access' || error.message === 'ai_thread_not_found')
-        context.sink.revoked?.();
+      if (LOST_ACCESS.has(error.message)) context.sink.revoked?.();
     }
     answer.saving = null;
   })();

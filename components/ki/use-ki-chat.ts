@@ -11,7 +11,7 @@ import {
   kiLiveGapFillable,
   mergeNewer,
 } from '@/lib/ai/live/follow';
-import type { AiThreadSummary, AiThreadWindow } from '@/lib/ai/thread-types';
+import type { AiChatMessage, AiThreadSummary, AiThreadWindow } from '@/lib/ai/thread-types';
 import { readInBackground } from '@/lib/data/background-read-client';
 import {
   draftKey,
@@ -281,15 +281,21 @@ function useThreadViews(
     },
     [readWindow, update],
   );
-  /** Puts a turn's messages into its thread, in place of earlier copies under the same keys. */
+  /** Puts a turn's messages into its thread, in place of earlier copies under the same keys, unless those are further on. */
   const settle = useCallback(
     (id: string, turn: readonly TimelineMessage[], confirmed: boolean) => {
       update((all) => {
         // A thread that just took its first message exists from now on; a known one keeps its state.
         if (turn.length === 0 && all[id]) return all;
         const window = all[id]?.window ?? EMPTY_WINDOW;
+        const held = new Map(window.messages.map((message) => [message.key, message]));
+        // The channel may have brought this turn further than this page's own copy.
+        const settled = turn.map((message) => {
+          const known = held.get(message.key);
+          return known ? fresherMessage<AiChatMessage>(known, message) : message;
+        });
         const keys = new Set(turn.map((message) => message.key));
-        const messages = [...window.messages.filter((message) => !keys.has(message.key)), ...turn];
+        const messages = [...window.messages.filter((message) => !keys.has(message.key)), ...settled];
         return { ...all, [id]: { window: { ...window, messages }, confirmed, failed: false } };
       });
     },
@@ -334,7 +340,7 @@ function useLiveFollow(
           const view = all[id];
           return view ? { ...all, [id]: { ...view, window: result.window } } : all;
         });
-      return kiLiveGapFillable(result.held);
+      return result.stale || kiLiveGapFillable(result.held);
     },
     [viewsRef, update],
   );

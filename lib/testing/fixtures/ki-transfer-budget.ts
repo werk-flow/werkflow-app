@@ -233,19 +233,25 @@ assert.ok(opened.window.messages.length <= 40, 'a thread opens with at most 40 m
 }
 
 // An author who loses access in the middle of an answer: Realtime may keep their join, so once a
-// partial save says the access is gone, the channel starts no further send.
-{
-  const command = crypto.randomUUID();
+// save says the access or the thread is gone, the channel starts no further send, the end included.
+// A removed membership cascades the thread away, so a partial save finds no item; a suspension
+// that lands at the very end is first seen by the final save.
+for (const loss of [
+  { refusal: 'ai_actor_without_access', from: 'second partial save' },
+  { refusal: 'ai_thread_item_not_found', from: 'second partial save' },
+  { refusal: 'ai_actor_without_access', from: 'final save' },
+] as const) {
   const answer = world.rpc;
-  let saves = 0;
+  let partialSaves = 0;
   let sendsStarted = 0;
   let startedAtRefusal: number | null = null;
   world.rpc = (call) => {
-    if (call.name === 'update_ai_thread_item' && call.args.p_status === 'streaming') {
-      saves += 1;
-      if (saves > 1) {
+    if (call.name === 'update_ai_thread_item') {
+      const partial = call.args.p_status === 'streaming';
+      if (partial) partialSaves += 1;
+      if (loss.from === 'final save' ? !partial : partialSaves > 1) {
         startedAtRefusal ??= sendsStarted;
-        return { data: null, error: { message: 'ai_actor_without_access' } };
+        return { data: null, error: { message: loss.refusal } };
       }
     }
     return answer(call);
@@ -253,17 +259,20 @@ assert.ok(opened.window.messages.length <= 40, 'a thread opens with at most 40 m
   world.onLiveSend = () => {
     sendsStarted += 1;
   };
-  await readTurn(world, await postTurn('[replay:langsam] Und der Rücklauf?', { commandId: command }));
+  await readTurn(
+    world,
+    await postTurn('[replay:langsam] Und der Rücklauf?', { commandId: crypto.randomUUID() }),
+  );
   world.onLiveSend = null;
   world.rpc = answer;
   assert.ok(
     startedAtRefusal !== null && startedAtRefusal > 1,
-    'the channel carried the answer while the access held',
+    `the channel carried the answer while the access held (${loss.refusal}, ${loss.from})`,
   );
   assert.equal(
     sendsStarted,
     startedAtRefusal,
-    'after a save refused for lost access, the channel must start no further send, the end included',
+    `after a ${loss.from} refused with ${loss.refusal}, the channel must start no further send, the end included`,
   );
 }
 

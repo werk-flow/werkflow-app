@@ -16,9 +16,9 @@ create policy ai_thread_live_select_author on realtime.messages
   for select to authenticated
   using (
     realtime.messages.extension = 'broadcast'
-    and (select realtime.topic()) ~ '^ki-thread:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     and exists (
       select 1 from public.ai_threads thread
+      -- Any other topic names no thread, so it opens nothing; the guard keeps the cast from failing.
       where thread.id = (
           case
             when (select realtime.topic()) ~ '^ki-thread:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'

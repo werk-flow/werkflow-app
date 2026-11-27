@@ -46,7 +46,7 @@ const sendThroughRest: KiLiveSend = async (topic, events, signal) => {
 
 /**
  * Sends a turn's messages under their time limit, the answer's end with a
- * second try inside it: a follower that misses the end shows the answer as
+ * second try inside it, each try with half of it: a follower that misses the end shows the answer as
  * still written until it reads the thread again. A failure costs only
  * freshness, so it is logged once per turn: a channel that fails once usually
  * fails for every message.
@@ -59,11 +59,11 @@ function createPost(
   let failureLogged = false;
   return async (messages, tries = 1) => {
     const events = messages.map((message): KiLiveEvent => ({ ...message, v: KI_LIVE_PROTOCOL }));
-    const signal = AbortSignal.timeout(timeoutMs);
     let failure: unknown = 'timeout';
-    for (let attempt = 0; attempt < tries && !signal.aborted; attempt += 1) {
+    for (let attempt = 0; attempt < tries; attempt += 1) {
       try {
-        if (await send(topic, events, signal)) return;
+        // Each try has its share of the limit, so a stalled first try leaves the second its time.
+        if (await send(topic, events, AbortSignal.timeout(timeoutMs / tries))) return;
         failure = 'not_accepted';
       } catch (error) {
         failure = error;

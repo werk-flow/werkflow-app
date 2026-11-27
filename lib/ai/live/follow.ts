@@ -35,14 +35,24 @@ function withMessages(window: AiThreadWindow, messages: AiChatMessage[]): AiThre
 }
 
 /**
- * Where a catch-up read starts: the first answer still being written, or
- * after the last message the page holds. Everything before it is final.
+ * Where a catch-up read starts: the first answer still being written, the
+ * first sequence missing between messages the page holds (a turn of another
+ * device it never saw, even when its own later turn settled after it), or
+ * after the last message. Everything before it is final.
  */
 export function kiLiveCursor(window: AiThreadWindow | null): number {
   const messages = window?.messages ?? [];
-  const writing = messages.find((message) => message.status === 'streaming');
-  if (writing) return writing.sequence;
-  return Math.max(0, ...messages.map((message) => message.sequence)) + 1;
+  const sequences = messages.map((message) => message.sequence).toSorted((left, right) => left - right);
+  let firstMissing = (sequences.at(-1) ?? 0) + 1;
+  for (let index = 1; index < sequences.length; index += 1) {
+    const previous = sequences[index - 1] ?? 0;
+    if ((sequences[index] ?? 0) > previous + 1) {
+      firstMissing = previous + 1;
+      break;
+    }
+  }
+  const writing = messages.find((message) => message.status === 'streaming')?.sequence;
+  return Math.min(writing ?? firstMissing, firstMissing);
 }
 
 /** A read of the messages from the cursor on, joined with what the page holds: nothing held is dropped. */
@@ -132,17 +142,27 @@ export function kiLiveGapFillable(held: readonly KiLiveEvent[]): boolean {
 /** Events a tab holds while it waits to fill a gap: about two minutes of a fast answer. */
 const KI_LIVE_HELD_EVENTS = 500;
 
-/** Applies held events in order; the ones the window cannot take yet stay held, at most `KI_LIVE_HELD_EVENTS`. */
+/**
+ * Applies held events in order; the ones the window cannot take yet stay held,
+ * at most `KI_LIVE_HELD_EVENTS`. `stale` says that a new turn started while an
+ * older answer still shows as written, so a catch-up read settles that one.
+ */
 export function applyKiLiveEvents(
   window: AiThreadWindow,
   events: readonly KiLiveEvent[],
-): { window: AiThreadWindow; held: KiLiveEvent[] } {
+): { window: AiThreadWindow; held: KiLiveEvent[]; stale: boolean } {
   let current = window;
   const held: KiLiveEvent[] = [];
+  let stale = false;
   for (const event of events) {
+    // A new turn starts while an older answer still shows as written: that answer's end never came.
+    if (event.type === 'started')
+      stale ||= current.messages.some(
+        (message) => message.status === 'streaming' && message.key !== answerKey(event.command),
+      );
     const result = applyKiLiveEvent(current, event);
     current = result.window;
     if (!result.applied) held.push(event);
   }
-  return { window: current, held: held.slice(-KI_LIVE_HELD_EVENTS) };
+  return { window: current, held: held.slice(-KI_LIVE_HELD_EVENTS), stale };
 }
