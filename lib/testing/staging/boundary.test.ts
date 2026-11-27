@@ -9,6 +9,7 @@ import {
   refusalOf,
   refusedOrigin,
   requestVerdict,
+  strayPageCloser,
   type BrowserRequest,
 } from './boundary';
 
@@ -160,5 +161,50 @@ describe('what a refusal does', () => {
       expect(refusalOf(asset('https://pay.google.com/gp/p/js/pay.js'), inJourneyPage)).toBe('block');
       expect(refusalOf(embedded('https://pay.google.com/'), inJourneyPage)).toBe('block');
     }
+  });
+});
+
+describe('closing a stray page', () => {
+  /** Pages by name, and each request's page once the fake browser has reported it. */
+  const browser = () => {
+    const owners = new Map<string, string>();
+    const closed: string[] = [];
+    const closer = strayPageCloser<string, string>({
+      pageOf: (request) => owners.get(request) ?? null,
+      journeyPage: () => 'journey',
+      close: (page) => closed.push(page),
+    });
+    return { owners, closed, closer };
+  };
+
+  test('a refused popup closes, and only that popup: other pages stay open', () => {
+    const { owners, closed, closer } = browser();
+    owners.set('stripe-popup-load', 'stripe-popup');
+    owners.set('checkout-popup-load', 'checkout-popup');
+    closer.refused('stripe-popup-load');
+    closer.pageOpened();
+    expect(closed).toEqual(['stripe-popup']);
+  });
+
+  test("a popup's first page, refused before its page is reported, closes that page once it is", () => {
+    const { owners, closed, closer } = browser();
+    closer.refused('stripe-popup-load');
+    expect(closed).toEqual([]);
+    // Another page opens first: it is not the refused request's page, so it stays.
+    owners.set('other-load', 'other-popup');
+    closer.pageOpened();
+    expect(closed).toEqual([]);
+    owners.set('stripe-popup-load', 'stripe-popup');
+    closer.pageOpened();
+    closer.pageOpened();
+    expect(closed).toEqual(['stripe-popup']);
+  });
+
+  test("the journey's own page never closes", () => {
+    const { owners, closed, closer } = browser();
+    owners.set('journey-load', 'journey');
+    closer.refused('journey-load');
+    closer.pageOpened();
+    expect(closed).toEqual([]);
   });
 });

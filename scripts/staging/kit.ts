@@ -11,6 +11,7 @@ import {
   refusalOf,
   refusedOrigin,
   requestVerdict,
+  strayPageCloser,
   type BrowserRequest,
 } from '../../lib/testing/staging/boundary';
 import { sendThroughBoundary } from '../../lib/testing/staging/route';
@@ -342,8 +343,8 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
   const browser = await chromium.launch({ channel: 'chromium' });
   const refused = new Set<string>();
   const blocked = new Set<string>();
-  // The page the journey drives, and whether another page had a page refused.
-  const own: { page: Page | null; strayRefused: boolean } = { page: null, strayRefused: false };
+  // The page the journey drives.
+  const own: { page: Page | null } = { page: null };
   let outcome: { result: T } | { error: unknown };
   try {
     // No service worker: its requests pass no route, so they would miss the bypass.
@@ -353,13 +354,12 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
       locale: 'de-DE',
       timezoneId: 'Europe/Berlin',
     });
-    const closeStray = (opened: Page) => {
-      if (own.page && opened !== own.page) void opened.close().catch(() => undefined);
-    };
-    // A popup's first page is refused before its page is reported, so it closes when it opens.
-    context.on('page', (opened) => {
-      if (own.strayRefused) closeStray(opened);
+    const strays = strayPageCloser<Request, Page>({
+      pageOf,
+      journeyPage: () => own.page,
+      close: (stray) => void stray.close().catch(() => undefined),
     });
+    context.on('page', () => strays.pageOpened());
     const secret = kit.keys.VERCEL_STAGING_BYPASS_SECRET;
     await context.route('**/*', async (route) => {
       const request = route.request();
@@ -368,13 +368,10 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
         navigation: request.isNavigationRequest(),
         mainFrame: isMainFrame(request),
       };
-      const owner = pageOf(request);
       const refuse = (hop: BrowserRequest) => {
-        const refusal = refusalOf(hop, owner !== null && owner === own.page);
+        const refusal = refusalOf(hop, pageOf(request) === own.page);
         (refusal === 'fail' ? refused : blocked).add(refusedOrigin(hop.url));
-        if (refusal !== 'close') return;
-        own.strayRefused = true;
-        for (const open of context.pages()) closeStray(open);
+        if (refusal === 'close') strays.refused(request);
       };
       try {
         await sendThroughBoundary(
@@ -436,7 +433,10 @@ function isMainFrame(request: Request): boolean {
   }
 }
 
-/** The page a request belongs to, or null for a popup's first navigation, which has no frame yet. */
+/**
+ * The page a request belongs to, or null for a popup's first navigation, routed before Playwright
+ * reported its page; once the popup is reported, the same request names it.
+ */
 function pageOf(request: Request): Page | null {
   try {
     return request.frame().page();
