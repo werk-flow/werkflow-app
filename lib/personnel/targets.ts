@@ -173,18 +173,22 @@ export type ResolveDailyTargetInput = {
 /**
  * The published tables behind each input of a daily target. A live view that
  * shows targets refreshes when any of them moves; keyed by the resolver's
- * inputs, a new input does not compile until its tables are named.
+ * inputs, a new input does not compile until its tables are named. Each input
+ * names a table every viewer of a target hears of: only Admin and Büro read
+ * personnel records and employment conditions, so the person themselves hears
+ * of those through their own `employment_target_signals` row.
  */
 const DAILY_TARGET_INPUT_TABLES = {
   schedules: ['work_schedules'],
-  conditions: ['employment_conditions'],
+  conditions: ['employment_conditions', 'employment_target_signals'],
   calendar: ['organization_settings', 'organization_closure_days'],
-  employment: ['employee_records'],
+  employment: ['employee_records', 'employment_target_signals'],
   absences: ['vacation_requests', 'sickness_reports', 'school_days'],
 } as const satisfies Record<Exclude<keyof ResolveDailyTargetInput, 'dateIso'>, readonly RealtimeTable[]>;
 
-export const DAILY_TARGET_LIVE_TABLES: readonly RealtimeTable[] =
-  Object.values(DAILY_TARGET_INPUT_TABLES).flat();
+export const DAILY_TARGET_LIVE_TABLES: readonly RealtimeTable[] = [
+  ...new Set(Object.values(DAILY_TARGET_INPUT_TABLES).flat()),
+];
 
 function resolveOutsideEmployment(
   employment: EmploymentInterval,

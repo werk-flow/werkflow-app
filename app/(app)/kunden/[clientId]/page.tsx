@@ -20,6 +20,8 @@ import { SITE_ACCESS_REVIEW_PARAM } from '@/lib/site-access-proposals/types';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { logError } from '@/lib/logging';
 import { readOfferPage } from '@/lib/offers/reads';
+import { readCustomerConditions } from '@/lib/price-catalog/customer-prices';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import KundenDetailLoading from './loading';
 
 /** The newest offers the customer's page lists; a link opens the rest. */
@@ -48,6 +50,10 @@ function readKundenDetail(clientId: string, activeOrgId: string, userId: string)
         return null;
       },
     ),
+    readCustomerConditions(activeOrgId, clientId, getBusinessTodayIso()).catch((error: unknown) => {
+      logError('kunde.conditions_read_failed', error);
+      return null;
+    }),
   ]);
 }
 
@@ -87,6 +93,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     { visibleColumns },
     siteRolesResult,
     offers,
+    conditions,
   ] = await readKundenDetail(clientId, activeOrgId, user.id);
 
   // A missing or forbidden client leaves the page; a failed read must not look like one.
@@ -147,6 +154,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
       equipment={equipmentResult.success ? equipmentResult.equipment : []}
       equipmentLoadFailed={!equipmentResult.success}
       offers={offers}
+      conditions={conditions}
     />
   );
 }

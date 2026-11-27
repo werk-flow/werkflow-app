@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useClientRead } from '@/hooks/use-client-read';
+import { usePayloadAttemptKey, type PayloadAttemptKey } from '@/hooks/use-payload-attempt-key';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionResult } from '@/lib/action-result';
@@ -82,32 +83,6 @@ type StepAction<Action extends (...args: never[]) => Promise<unknown>> = {
 };
 
 const NO_MANUAL: RecordManual = async () => ({ success: false, error: 'not_authorized' });
-
-/** The attempt key of what the office last pressed, until the server answers it. */
-type PayloadAttemptKey = {
-  /** The key for `payload`: the pressed one's again when it is unchanged, else a new one. */
-  keyFor: (payload: string) => string;
-  /** The server answered: the next press is a new send. */
-  settle: () => void;
-};
-
-/**
- * Kept by the dialog, so „Zurück“ and reopening a step keep it: an unchanged
- * send pressed again after a lost answer replays the same attempt in the
- * database instead of sending or recording twice.
- */
-function usePayloadAttemptKey(): PayloadAttemptKey {
-  const [pressed, setPressed] = useState<{ payload: string; key: string } | null>(null);
-  return {
-    keyFor: (payload) => {
-      if (pressed?.payload === payload) return pressed.key;
-      const key = crypto.randomUUID();
-      setPressed({ payload, key });
-      return key;
-    },
-    settle: () => setPressed(null),
-  };
-}
 
 /** The manual step's note and its attempt key, kept by the dialog until the record is confirmed. */
 type NoteDraft = { value: string; set: (note: string) => void; attempt: PayloadAttemptKey };

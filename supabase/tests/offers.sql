@@ -871,7 +871,9 @@ begin
     raise exception 'the offer read answers a cost: %', v_read;
   end if;
   if public.get_offer_with_costs(v_org, v_offer) is distinct from jsonb_build_object('offer', v_read,
-      'costs', '[[{"amountCents": 4180, "priceQuantity": 1}, null, {"amountCents": 0, "priceQuantity": 100}]]'::jsonb)
+      'costs', '[[{"amountCents": 4180, "priceQuantity": 1}, null, {"amountCents": 0, "priceQuantity": 100}]]'::jsonb,
+      -- Saved without a price source (client_price_conditions.sql proves the sources).
+      'priceSources', '[[null, null, null]]'::jsonb)
   then
     raise exception 'the offer with costs reads %', public.get_offer_with_costs(v_org, v_offer);
   end if;

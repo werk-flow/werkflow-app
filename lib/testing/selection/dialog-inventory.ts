@@ -321,6 +321,10 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.site' }],
     },
+  "components/kunden/client-condition-dialog.tsx#ClientConditionDialog|{newest ? 'Konditionen ändern' : 'Konditionen festlegen'}":
+    {
+      audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.conditions' }],
+    },
   'components/kunden/client-site-roles-dialog.tsx#ClientSiteRolesDialog|Rollen am Einsatzort': {
     audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.site-roles' }],
   },

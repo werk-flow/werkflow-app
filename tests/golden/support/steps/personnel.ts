@@ -979,7 +979,9 @@ export async function uploadProtectedPersonnelFile(
   await lifecycle.getByRole('button', { name: LIFECYCLE_CONTROLS.file, exact: true }).click();
   const dialog = page.getByRole('dialog', { name: LIFECYCLE_CONTROLS.uploadDialog });
   const chooser = page.waitForEvent('filechooser');
-  await dialog.getByRole('button', { name: LIFECYCLE_CONTROLS.file, exact: true }).click();
+  await dialog
+    .getByRole('button', { name: `${LIFECYCLE_CONTROLS.file} Datei auswählen`, exact: true })
+    .click();
   await (
     await chooser
   ).setFiles({ name: input.fileName, mimeType: 'text/plain', buffer: Buffer.from(input.content) });

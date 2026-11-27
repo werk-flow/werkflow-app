@@ -21,6 +21,7 @@ import {
   parseContentForm,
   type SectionForm,
 } from '@/lib/offers/content-form';
+import type { SaveOfferContentInput } from '@/lib/offers/action-schemas';
 import type { OfferCalculation } from '@/lib/offers/calculation';
 import type { OfferWithCosts } from '@/lib/offers/types';
 import { ownWrites } from '@/lib/realtime/own-writes';
@@ -152,17 +153,12 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
     void run(async () => {
       setError(null);
       const since = settle.markChange();
-      // Recorded, so this tab skips the Realtime echo of its own save (lib/realtime/own-writes.ts).
-      const result = await ownWrites
-        .track(
-          saveOfferContent({
-            offerId: offer.id,
-            expectedContentVersion: draft.baseVersion,
-            attemptKey: draft.attemptKey,
-            sections: parsed.sections,
-          }),
-        )
-        .catch(() => null);
+      const result = await saveTrackedContent({
+        offerId: offer.id,
+        expectedContentVersion: draft.baseVersion,
+        attemptKey: draft.attemptKey,
+        sections: parsed.sections,
+      }).catch(() => null);
       if (!result?.success) {
         setError(failureSentence(result?.error ?? null, draft.edited));
         return;
@@ -191,6 +187,7 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
         </ReloadNotice>
       )}
       <OfferSectionList
+        offerId={offer.id}
         sections={sections}
         calculation={figures?.calculation ?? null}
         onChange={(next) => {
@@ -207,6 +204,11 @@ export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
       <SaveRow error={error} pending={pending} />
     </form>
   );
+}
+
+/** One content save, recorded so this tab skips the Realtime echo of it (lib/realtime/own-writes.ts). */
+function saveTrackedContent(input: SaveOfferContentInput) {
+  return ownWrites.track(saveOfferContent(input));
 }
 
 /** The save's failure sentence beside „Speichern“. */
@@ -236,6 +238,7 @@ function ReloadNotice({ children, onReload }: { children: React.ReactNode; onRel
 
 /** The Titel in order, or the first step while there is none, and adding a Titel. */
 function OfferSectionList({
+  offerId,
   sections,
   calculation,
   onChange,
@@ -243,6 +246,7 @@ function OfferSectionList({
   errors,
   disabled,
 }: {
+  offerId: string;
   sections: SectionForm[];
   calculation: OfferCalculation | null;
   onChange: (sections: SetStateAction<SectionForm[]>) => void;
@@ -263,6 +267,7 @@ function OfferSectionList({
           {sections.map((section, index) => (
             <OfferSectionFields
               key={section.key}
+              offerId={offerId}
               index={index}
               count={sections.length}
               section={section}

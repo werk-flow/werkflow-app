@@ -42,6 +42,7 @@ test('a content save takes a cost per a price quantity of a price, and refuses a
             taxRateBasisPoints: 1900,
             source: null,
             cost,
+            priceSource: { kind: 'manuell' },
           },
         ],
       },
@@ -79,8 +80,47 @@ test('a content save whose priced Position names no cost is refused, not taken a
     priceQuantity: 1,
     taxRateBasisPoints: 1900,
     source: null,
+    priceSource: { kind: 'manuell' },
   };
   const content = (positions: unknown[]) => ({ ...save('', 0), sections: [{ title: 'Montage', positions }] });
   expect(saveOfferContentSchema.safeParse(content([position])).success).toBe(false);
   expect(saveOfferContentSchema.safeParse(content([{ ...position, cost: null }])).success).toBe(true);
+});
+
+// Likewise a tab older than price sources sends none: its save is refused, so it
+// never turns a source the office's Positionen keep into „manuell“.
+test('a content save whose priced Position names no price source is refused', () => {
+  const position = {
+    kind: 'free',
+    name: 'Monteurstunde',
+    description: '',
+    quantity: '1',
+    unit: 'hour',
+    unitPriceCents: 6800,
+    priceQuantity: 1,
+    taxRateBasisPoints: 1900,
+    source: { kind: 'leistung', id: '97000000-0000-4000-8000-000000000001' },
+    cost: null,
+  };
+  const content = (positions: unknown[]) => ({ ...save('', 0), sections: [{ title: 'Montage', positions }] });
+  const conditionId = '98000000-0000-4000-8000-000000000002';
+  // A base64url HMAC-SHA256 of the server (lib/price-catalog/price-source-proof.ts).
+  const proof = 'p'.repeat(43);
+  expect(saveOfferContentSchema.safeParse(content([position])).success).toBe(false);
+  for (const priceSource of [
+    { kind: 'manuell' },
+    { kind: 'listenpreis', proof },
+    { kind: 'kundenkondition', conditionId, proof },
+  ]) {
+    expect(saveOfferContentSchema.safeParse(content([{ ...position, priceSource }])).success).toBe(true);
+  }
+  for (const priceSource of [
+    { kind: 'kundenkondition', proof },
+    { kind: 'kundenkondition', conditionId: 'K-2', proof },
+    { kind: 'listenpreis' },
+    { kind: 'listenpreis', proof: 'kurz' },
+    { kind: 'rabatt', proof },
+  ]) {
+    expect(saveOfferContentSchema.safeParse(content([{ ...position, priceSource }])).success).toBe(false);
+  }
 });

@@ -14,7 +14,8 @@ begin
     join pg_class c on c.relnamespace=n.oid and c.relname=p.tablename
     -- The own-user tables of lib/realtime/tables.ts (OWN_USER_REALTIME_TABLES)
     -- carry no deletion notice; it would reach every member of the organization.
-    where p.pubname='supabase_realtime' and p.tablename not in ('realtime_deletions', 'problem_report_signals')
+    where p.pubname='supabase_realtime'
+      and p.tablename not in ('realtime_deletions', 'problem_report_signals', 'employment_target_signals')
       and not exists(select 1 from pg_trigger t where t.tgrelid=c.oid
         and t.tgname='emit_realtime_deletion' and t.tgenabled='O' and t.tgtype=9
         and t.tgfoid='app_private.emit_realtime_deletion()'::regprocedure)
@@ -26,7 +27,8 @@ begin
       and t.tgrelid <> 'public.profiles'::regclass
       and pg_get_triggerdef(t.oid) not like '% WHEN (%app.deleting_organization_ids%) EXECUTE %')
   then raise exception 'deletion_trigger_runs_during_organization_deletion'; end if;
-  if exists (select 1 from pg_trigger t where t.tgrelid='public.problem_report_signals'::regclass
+  if exists (select 1 from pg_trigger t
+      where t.tgrelid in ('public.problem_report_signals'::regclass, 'public.employment_target_signals'::regclass)
       and t.tgfoid='app_private.emit_realtime_deletion()'::regprocedure)
   then raise exception 'own_user_table_notifies_its_organization'; end if;
   if not exists(select 1 from cron.job where jobname='werkflow-realtime-deletions-cleanup'

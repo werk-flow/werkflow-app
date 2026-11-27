@@ -1,5 +1,6 @@
 import type { PriceQuantity } from '@/lib/inventory/line-amount';
 import type { InventoryUnitCode } from '@/lib/inventory/units';
+import type { CatalogPriceSource } from '@/lib/price-catalog/customer-conditions';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import type { InvoiceLineValues, InvoiceTaxRate } from './types';
@@ -50,11 +51,14 @@ export type InvoiceCatalogLine = {
  * outside the list („Einheit prüfen“), which the offer editor asks for before
  * it saves, and with the entry's net cost per price quantity on the same day
  * (an article's purchase price, a Leistung's cost rate), null when it keeps
- * none. An invoice line never carries a cost.
+ * none, and where its price came from: the list price or the offer's
+ * customer's condition. An invoice line never carries a cost.
  */
 export type OfferCatalogLine = Omit<InvoiceCatalogLine, 'unit'> & {
   unit: InventoryUnitCode | null;
   cost: { amountCents: number; priceQuantity: PriceQuantity } | null;
+  /** With the server's proof, which a save needs to keep the source (lib/price-catalog/price-source-proof.ts). */
+  priceSource: CatalogPriceSource & { proof: string };
 };
 
 /** „Leistung L-7 · Monteurstunde“ */

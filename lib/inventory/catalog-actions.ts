@@ -15,13 +15,9 @@ import {
   type RemoveArticleSupplierInput,
   type SaveArticleSupplierInput,
 } from './action-schemas';
-import {
-  loadActiveInventoryLocations,
-  loadArticleTermsPage,
-  loadInventoryMovementPage,
-  loadInventoryOverviewLists,
-} from './catalog-reads';
-import { inventoryPageQuerySchema, inventoryPageResultSchema } from './list-page';
+import { loadActiveInventoryLocations, loadInventoryMovementPage } from './catalog-reads';
+import { inventoryPageQuerySchema } from './list-page';
+import { readInventoryOverview } from './overview-read';
 import type { UpsertInventoryItemInput } from './action-inputs';
 import type { InventoryItem, InventoryLocation, InventoryMovementPage, InventoryOverview } from './types';
 import { toInventoryItem } from './types';
@@ -62,44 +58,11 @@ export async function getInventoryOverview(
   if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
   const parsedQuery = inventoryPageQuerySchema.safeParse(input);
   if (!parsedQuery.success) return { success: false, error: 'inventory_failed' };
-  const query = parsedQuery.data;
   const admin = createSupabaseAdminClient();
-  const { orgId } = auth.context;
   await ensureInventoryDefaults(admin, auth.context);
-  const pageResult = await admin.rpc('list_inventory_page', { p_organization_id: orgId, p_query: query });
-  if (pageResult.error) {
-    logReadErrors('getInventoryOverview: read failed', pageResult.error);
-    return { success: false, error: 'inventory_failed' };
-  }
-  const parsedPage = inventoryPageResultSchema.safeParse(pageResult.data);
-  if (!parsedPage.success) return { success: false, error: 'inventory_failed' };
-  const page = parsedPage.data;
-  const [lists, articleTerms] = await Promise.all([
-    loadInventoryOverviewLists(admin, orgId, page),
-    loadArticleTermsPage(admin, orgId, page.ids),
-  ]);
-  if (!lists.success) return lists;
-
-  const summary = page.summary;
-
-  return {
-    success: true,
-    overview: {
-      categories: lists.categories,
-      locations: lists.locations,
-      suppliers: lists.suppliers,
-      items: lists.items,
-      articleTerms,
-      summary,
-      page: {
-        query,
-        ids: page.ids,
-        total: page.total,
-        locationIds: page.locationIds,
-        locationCounts: page.locationCounts,
-      },
-    },
-  };
+  const overview = await readInventoryOverview(admin, auth.context.orgId, parsedQuery.data);
+  if (overview === 'inventory_failed') return { success: false, error: 'inventory_failed' };
+  return { success: true, overview };
 }
 
 /**
