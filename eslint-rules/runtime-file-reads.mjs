@@ -42,7 +42,7 @@ function isFileRead(sourceCode, callee) {
   );
 }
 
-// A direct declaration or assignment in the read's block supersedes earlier writes.
+// A direct declaration or plain = assignment in the read's block supersedes earlier writes.
 // Conditional writes after it still count: source order alone cannot prove which branch ran.
 function writesBeforeRead(variable, node, before) {
   let block = node.parent;
@@ -55,9 +55,12 @@ function writesBeforeRead(variable, node, before) {
     return wholeValue && reference.writeExpr && reference.writeExpr.range[0] < before;
   });
   const definite = writes.findLast((reference) => {
-    const statement = reference.identifier.parent.parent;
+    const target = reference.identifier.parent;
+    const statement = target.parent;
     return (
-      ['VariableDeclaration', 'ExpressionStatement'].includes(statement.type) && statement.parent === block
+      (target.type === 'VariableDeclarator' || target.operator === '=') &&
+      ['VariableDeclaration', 'ExpressionStatement'].includes(statement.type) &&
+      statement.parent === block
     );
   });
   return writes.filter(

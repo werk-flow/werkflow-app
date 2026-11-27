@@ -6,6 +6,8 @@ const eslint = createProbeLinter();
 const ruleId = 'quality/no-import-meta-file-read';
 
 const unsafeReads = [
+  `import { readFile } from 'node:fs/promises'; let path = new URL('./a', import.meta.url); path ??= new URL('file:///a'); readFile(path);`,
+  `import { readFile } from 'node:fs/promises'; let path = new URL('./a', import.meta.url); path ||= new URL('file:///a'); readFile(path);`,
   `import { readFile } from 'node:fs/promises'; let path = new URL('./a', import.meta.url); if (condition) { path = new URL('file:///a'); } readFile(path);`,
   `import { readFile } from 'node:fs/promises'; let path = new URL('file:///a'); if (condition) { path = new URL('./a', import.meta.url); } readFile(path);`,
   `import { promises as fs } from 'node:fs'; fs.readFile(new URL('./font.ttf', import.meta.url));`,
