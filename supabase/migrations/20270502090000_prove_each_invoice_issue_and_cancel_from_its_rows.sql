@@ -7,8 +7,8 @@
 --
 -- 1. guard_invoice_series: from the first issue on, the number moves only by
 --    one step past the number an issued invoice of this organization holds,
---    in that invoice's year. At rest no issued invoice holds the series' next
---    number, so no direct write moves it.
+--    in that invoice's year, and stays with its organization. At rest no
+--    issued invoice holds the series' next number, so no direct write moves it.
 -- 2. advance_invoice_series: the step itself. Issuing a draft moves the
 --    series in the same statement, under its row lock, and only when the
 --    invoice took the series' next number in a year the series has not left.
@@ -21,7 +21,10 @@
 --    and Ausgestellt to Storniert, only as cancel_invoice leaves them: its
 --    history entry, written first, names the Stornorechnung and the
 --    correction, and the Stornorechnung is issued before the original turns.
--- 4. issue_invoice and cancel_invoice write their history entry first and
+-- 4. check_invoice_history_kept: at commit, an issue's or a cancel's history
+--    entry stands only beside the rows it names, so a half-done issue or
+--    cancel rolls back.
+-- 5. issue_invoice and cancel_invoice write their history entry first and
 --    no longer set a flag; issue_invoice leaves the series to step 2.
 --
 -- A direct write passes a guard only by leaving every row the function
@@ -29,8 +32,8 @@
 -- checks of the snapshot and the rendered original stay the server's, as they
 -- were.
 --
--- Expand-only: replaced guards and functions with their signatures, one new
--- trigger function, two new triggers.
+-- Expand-only: replaced guards and functions with their signatures, two new
+-- trigger functions, three new triggers.
 --
 -- Prevention: Tier 1 (the guards), Tier 2 supabase/tests/invoice_issue.sql
 -- and supabase/tests/invoice_cancel.sql.
@@ -59,6 +62,10 @@ begin
       raise exception 'invoice_numbers_fixed';
     end if;
     return new;
+  end if;
+  -- The series stays with its organization.
+  if new.organization_id is distinct from old.organization_id then
+    raise exception 'invoice_numbers_fixed';
   end if;
   -- Before the first issue the Admin sets the series freely.
   if old.first_issued_at is null and new.first_issued_at is null then
@@ -217,16 +224,18 @@ begin
     if new.status = 'entwurf' then
       return new;
     end if;
-    -- The issue, as issue_invoice leaves it: its history entry first, today's Berlin day, a complete
-    -- draft, the checked snapshot's parts, only the issue columns. advance_invoice_series checks the number.
-    select * into v_event from public.invoice_events event
-    where event.organization_id = old.organization_id and event.invoice_id = old.id
-      and event.event_type = 'issued' and event.version = new.version;
+    -- The series' row lock first, as issue_invoice takes it, before this row takes its number.
+    perform 1 from public.invoice_settings settings where settings.organization_id = old.organization_id for update;
+    -- Today's Berlin day, as issue_invoice checked it under that lock: past midnight the server checks again.
+    if new.issue_date is distinct from (clock_timestamp() at time zone 'Europe/Berlin')::date then
+      raise exception 'invoice_number_moved';
+    end if;
+    -- The issue, as issue_invoice leaves it: its history entry first, a complete draft, the checked
+    -- snapshot's parts, only the issue columns. advance_invoice_series checks the number.
     if new.status <> 'ausgestellt' or new.version <> old.version + 1
       or to_jsonb(new) - v_issue is distinct from to_jsonb(old) - v_issue
       or new.issued_by is null or new.updated_by is distinct from new.issued_by
       or new.issued_at is distinct from now()
-      or new.issue_date is distinct from (clock_timestamp() at time zone 'Europe/Berlin')::date
       or jsonb_typeof(new.issue_snapshot -> 'profile') is distinct from 'object'
       or jsonb_typeof(new.issue_snapshot -> 'buyer') is distinct from 'object'
       or jsonb_typeof(new.issue_snapshot -> 'files') is distinct from 'object'
@@ -234,25 +243,33 @@ begin
       or not exists (
         select 1 from public.invoice_lines line
         where line.invoice_id = old.id and line.organization_id = old.organization_id)
-      or v_event.id is null
-      or (v_event.status, v_event.actor_id) is distinct from ('ausgestellt', new.issued_by)
-      or v_event.payload -> 'invoiceNumber' is distinct from to_jsonb(new.invoice_number)
-      or v_event.payload -> 'issueDate' is distinct from to_jsonb(new.issue_date)
-      or v_event.payload -> 'grossCents' is distinct from to_jsonb(new.gross_cents)
+      or not exists (
+        select 1 from public.invoice_events event
+        where event.organization_id = old.organization_id and event.invoice_id = old.id
+          and event.event_type = 'issued' and event.status = 'ausgestellt' and event.version = new.version
+          and event.actor_id = new.issued_by
+          and event.payload -> 'invoiceNumber' = to_jsonb(new.invoice_number)
+          and event.payload -> 'issueDate' = to_jsonb(new.issue_date)
+          and event.payload -> 'grossCents' = to_jsonb(new.gross_cents))
     then
       raise exception 'invoice_issued';
     end if;
     perform app_private.lock_office_actor(old.organization_id, new.issued_by);
-    -- A Stornorechnung is the invoice it cancels negated, still issued, with its parties, period and snapshot.
+    -- A Stornorechnung is the invoice it cancels negated, still issued, with its parties, work, period,
+    -- references and snapshot, nothing due and no texts, as cancel_invoice writes it.
     if new.cancels_invoice_id is not null then
       select * into v_cancelled from public.invoices cancelled
       where cancelled.id = new.cancels_invoice_id and cancelled.organization_id = new.organization_id;
       if v_cancelled.status is distinct from 'ausgestellt'
-        or (new.client_id, new.recipient_client_id, new.service_start, new.service_end, new.issue_snapshot,
+        or (new.client_id, new.recipient_client_id, new.job_id, new.project_id, new.service_case_id,
+            new.service_start, new.service_end, new.order_reference, new.buyer_reference, new.issue_snapshot,
             -new.line_net_cents, -new.tax_cents, -new.gross_cents)
-          is distinct from (v_cancelled.client_id, v_cancelled.recipient_client_id, v_cancelled.service_start,
-            v_cancelled.service_end, v_cancelled.issue_snapshot, v_cancelled.line_net_cents, v_cancelled.tax_cents,
-            v_cancelled.gross_cents)
+          is distinct from (v_cancelled.client_id, v_cancelled.recipient_client_id, v_cancelled.job_id,
+            v_cancelled.project_id, v_cancelled.service_case_id, v_cancelled.service_start, v_cancelled.service_end,
+            v_cancelled.order_reference, v_cancelled.buyer_reference, v_cancelled.issue_snapshot,
+            v_cancelled.line_net_cents, v_cancelled.tax_cents, v_cancelled.gross_cents)
+        or (new.payment_due_days, new.discount_days, new.discount_basis_points, new.opening_text, new.closing_text)
+          is distinct from (0, null::integer, null::integer, '', '')
         or exists (
           (select line.position, line.name, line.description, -line.quantity, line.unit, line.unit_price_cents,
               line.price_quantity, line.tax_category, line.tax_rate_basis_points, -line.net_cents
@@ -342,7 +359,54 @@ end;
 $$;
 revoke all on function app_private.guard_issued_invoice() from public, anon, authenticated, service_role;
 
--- 4. As in 20270205090000_issue_invoices_with_gapless_numbers.sql, except
+-- 4. An issue's or a cancel's history entry, written first, stands only beside the rows it names: checked
+-- at commit, so a transaction that wrote the entry but left the issue or cancel unfinished rolls back. A
+-- cancel's entry names its Storniert invoice, its issued Stornorechnung with that number and day, and the
+-- correction draft it opened, if any. Refusal: invoice_history_unkept.
+create function app_private.check_invoice_history_kept()
+returns trigger
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+begin
+  if new.event_type = 'issued' and not exists (
+    select 1 from public.invoices invoice
+    where invoice.id = new.invoice_id and invoice.organization_id = new.organization_id
+      and invoice.status <> 'entwurf' and invoice.issued_by is not distinct from new.actor_id
+      and new.payload -> 'invoiceNumber' = to_jsonb(invoice.invoice_number)
+      and new.payload -> 'issueDate' = to_jsonb(invoice.issue_date))
+  then
+    raise exception 'invoice_history_unkept';
+  end if;
+  if new.event_type = 'cancelled' and (
+    not exists (
+      select 1 from public.invoices original
+      where original.id = new.invoice_id and original.organization_id = new.organization_id
+        and original.status = 'storniert')
+    or not exists (
+      select 1 from public.invoices storno
+      where storno.id::text = new.payload ->> 'stornoId' and storno.organization_id = new.organization_id
+        and storno.cancels_invoice_id = new.invoice_id and storno.status = 'ausgestellt'
+        and new.payload -> 'stornoNumber' = to_jsonb(storno.invoice_number)
+        and new.payload -> 'issueDate' = to_jsonb(storno.issue_date))
+    or (coalesce(new.payload -> 'correctionId', 'null') <> 'null' and not exists (
+      select 1 from public.invoices correction
+      where correction.id::text = new.payload ->> 'correctionId' and correction.organization_id = new.organization_id
+        and correction.corrects_invoice_id = new.invoice_id)))
+  then
+    raise exception 'invoice_history_unkept';
+  end if;
+  return null;
+end;
+$$;
+revoke all on function app_private.check_invoice_history_kept() from public, anon, authenticated, service_role;
+create constraint trigger invoice_history_kept after insert on public.invoice_events
+  deferrable initially deferred
+  for each row when (new.event_type in ('issued', 'cancelled'))
+  execute function app_private.check_invoice_history_kept();
+
+-- 5. As in 20270205090000_issue_invoices_with_gapless_numbers.sql, except
 -- that the history entry comes first, as guard_issued_invoice requires, and
 -- the issue's own update moves the series (advance_invoice_series).
 create or replace function public.issue_invoice(

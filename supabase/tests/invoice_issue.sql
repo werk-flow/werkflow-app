@@ -455,16 +455,24 @@ from (values
     update public.invoice_settings set number_year = number_year + 1, next_number = 2
     where organization_id = '38060000-0000-4000-8000-000000000010' and exists (select 1 from flag)$sql$,
     'invoice_numbers_fixed'),
+  ('move the series to another organization', $sql$update public.invoice_settings
+    set organization_id = '38060000-0000-4000-8000-000000000011'
+    where organization_id = '38060000-0000-4000-8000-000000000010'$sql$, 'invoice_numbers_fixed'),
   ('issue a draft directly under the series'' next number', pg_temp.issue_directly('RG10236'), 'invoice_issued'),
   ('issue a draft directly with its history entry under a number the series has not reached',
     format('do $x$ begin %s; %s; end $x$', pg_temp.issued_event('RG10237'), pg_temp.issue_directly('RG10237')),
     'invoice_number_moved'),
+  -- The history entry stands only beside its issue, checked at commit (here at once).
+  ('an issue''s history entry without its issue', format(
+    'do $x$ begin %s; set constraints invoice_history_kept immediate; end $x$', pg_temp.issued_event('RG10236')),
+    'invoice_history_unkept'),
   ('insert an issued invoice', format($sql$insert into public.invoices (organization_id, client_id,
       recipient_client_id, status, invoice_number, issue_date, issued_at, issue_snapshot)
     values (%L, %L, %L, 'ausgestellt', 'RG10236', (now() at time zone 'Europe/Berlin')::date, now(), '{}')$sql$,
     '38060000-0000-4000-8000-000000000010', '38060000-0000-4000-8000-000000000020',
     '38060000-0000-4000-8000-000000000020'), 'invoice_issued')
 ) as cases(label, statement, refusal);
+set constraints invoice_history_kept deferred;
 -- The refused writes left the series, the draft and the history as they were, and an issue retried under its
 -- first key answers the first issue even with the empty number the server sends for a used-up series.
 do $$
@@ -718,6 +726,9 @@ begin
   end if;
 end;
 $$;
+
+-- Every issue's history entry stands beside its issue.
+set constraints invoice_history_kept immediate;
 
 -- Deleting an organization removes its issued invoices, series and originals with it.
 delete from public.organizations where id = '38060000-0000-4000-8000-000000000010';
