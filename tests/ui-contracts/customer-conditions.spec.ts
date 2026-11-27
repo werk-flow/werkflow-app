@@ -44,6 +44,8 @@ test('a save holds the dialog, keeps its values after a refusal and closes after
   await save.click();
   await expectHeldWrite(page, 'record-customer-condition');
   await expect(save).toBeDisabled();
+  // No field takes an edit the running save would not carry.
+  await expect(material).toBeDisabled();
   expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toEqual([
     {
       validFrom: '2026-11-27',
@@ -54,18 +56,44 @@ test('a save holds the dialog, keeps its values after a refusal and closes after
     expect.any(String),
   ]);
 
-  await answerHeldWrite(page, 'condition_changed');
+  // A failure that may have lost the answer of a stored version.
+  await answerHeldWrite(page, 'save_failed');
   await expect(
-    dialog.getByText('Jemand hat die Konditionen gerade geändert.', { exact: false }),
+    dialog.getByText('Die Konditionen konnten nicht gespeichert werden. Versuche es erneut.'),
   ).toBeVisible();
   await expect(material).toHaveValue('12,5');
+  await expect(material).toBeEnabled();
   await expect(save).toBeEnabled();
 
-  // The retry carries the same key, so a save that landed before a lost answer is not recorded twice.
+  // The retry of the same values carries the same key, so a version stored before the lost answer
+  // answers again instead of being recorded twice.
   await save.click();
   await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
   const [first, second] = await page.evaluate(() => window.uiContractWrites.calls.map((call) => call.input));
   expect(Array.isArray(second) && Array.isArray(first) && second[2] === first[2]).toBe(true);
   await answerHeldWrite(page, null);
   await expect(dialog).toHaveCount(0);
+});
+
+// Changed values are a new version and take a new key, so a retry never answers with a version of
+// other values. Another session's newer version refuses the form; it says to start from that one.
+test('changed values after a refused save take a new retry key', async ({ page }) => {
+  const dialog = page.getByRole('dialog', { name: 'Konditionen ändern' });
+  const save = dialog.getByRole('button', { name: 'Konditionen speichern', exact: true });
+  await save.click();
+  await expectHeldWrite(page, 'record-customer-condition');
+  await answerHeldWrite(page, 'condition_changed');
+  await expect(
+    dialog.getByText('Jemand hat die Konditionen gerade geändert.', { exact: false }),
+  ).toBeVisible();
+  await expect(save).toBeEnabled();
+
+  await dialog.getByRole('textbox', { name: 'Material' }).fill('15');
+  await save.click();
+  await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
+  const keys = await page.evaluate(() =>
+    window.uiContractWrites.calls.map((call) => (Array.isArray(call.input) ? call.input[2] : null)),
+  );
+  expect(keys).toHaveLength(2);
+  expect(keys[1]).not.toBe(keys[0]);
 });

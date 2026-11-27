@@ -62,14 +62,15 @@ end;
 $$;
 grant execute on function pg_temp.expect_refusal(text, text, text) to service_role, authenticated;
 
--- Grants: no client role writes a condition, reads an own price or runs a function; a signed-in
--- role may only select a version row, which RLS limits to Admin and Büro.
+-- Grants: no client role reads or writes a condition or an own price, or runs a function; no signed-in
+-- role reads no row of either table.
 do $$
 declare
   v_role text;
 begin
   foreach v_role in array array['anon', 'authenticated'] loop
-    if has_table_privilege(v_role, 'public.client_price_conditions', 'INSERT')
+    if has_table_privilege(v_role, 'public.client_price_conditions', 'SELECT')
+      or has_table_privilege(v_role, 'public.client_price_conditions', 'INSERT')
       or has_table_privilege(v_role, 'public.client_price_conditions', 'UPDATE')
       or has_table_privilege(v_role, 'public.client_price_conditions', 'DELETE')
       or has_table_privilege(v_role, 'public.client_price_condition_leistungen', 'SELECT')
@@ -78,15 +79,14 @@ begin
     end if;
     if has_function_privilege(v_role,
         'public.record_client_price_condition(uuid,uuid,uuid,integer,uuid,date,integer,integer,integer,jsonb)', 'EXECUTE')
-      or has_function_privilege(v_role, 'public.list_client_price_conditions(uuid,uuid)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.list_client_price_conditions(uuid,uuid,date,integer)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.offer_price_condition_on_day(uuid,uuid,date,uuid)', 'EXECUTE')
+      or has_function_privilege(v_role, 'app_private.client_price_condition_on_day(uuid,uuid,date)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.save_offer_content(uuid,uuid,uuid,integer,uuid,jsonb,jsonb)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.get_offer_with_costs(uuid,uuid)', 'EXECUTE') then
       raise exception '% can execute a condition function', v_role;
     end if;
   end loop;
-  if has_table_privilege('anon', 'public.client_price_conditions', 'SELECT') then
-    raise exception 'anon can select conditions';
-  end if;
   if has_table_privilege('service_role', 'public.client_price_conditions', 'UPDATE')
     or has_table_privilege('service_role', 'public.client_price_conditions', 'DELETE')
     or has_table_privilege('service_role', 'public.client_price_condition_leistungen', 'UPDATE')
@@ -117,14 +117,14 @@ declare
   v_condition public.client_price_conditions;
 begin
   v_first := pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000020', 0,
-    '38440000-0000-4000-8000-000000000101', '2037-01-01', 100,
+    '38440000-0000-4000-8000-000000000101', '2037-01-02', 100,
     '[{"leistungId": "38440000-0000-4000-8000-000000000080", "salePriceCents": 6800}]');
   if (v_first ->> 'version')::integer is distinct from 1 then
     raise exception 'the first version is %', v_first;
   end if;
   select * into v_condition from public.client_price_conditions where id = (v_first ->> 'conditionId')::uuid;
   if v_condition.client_id is distinct from '38440000-0000-4000-8000-000000000020'::uuid
-    or v_condition.valid_from is distinct from '2037-01-01'::date
+    or v_condition.valid_from is distinct from '2037-01-02'::date
     or v_condition.material_discount_tenths is distinct from 100
     or v_condition.arbeit_discount_tenths is distinct from 50
     or v_condition.anfahrt_discount_tenths is distinct from 0
@@ -136,7 +136,7 @@ begin
     raise exception 'the first version kept other own prices';
   end if;
   if pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000020', 0,
-      '38440000-0000-4000-8000-000000000101', '2037-01-01', 100, '[]') is distinct from v_first then
+      '38440000-0000-4000-8000-000000000101', '2037-01-02', 100, '[]') is distinct from v_first then
     raise exception 'a repeat under the same key did not answer the first version';
   end if;
   if (select count(*) from public.client_price_conditions
@@ -164,56 +164,88 @@ $$;
 -- customer are refused; a key reused for another customer is no repeat.
 select pg_temp.expect_refusal('a foreign customer', $sql$
   select pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000029', 0,
-    gen_random_uuid(), '2037-01-01', 100, '[]')
+    gen_random_uuid(), '2037-01-02', 100, '[]')
 $sql$, 'client_not_found');
 select pg_temp.expect_refusal('a foreign Leistung', $sql$
   select pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000021', 0,
-    gen_random_uuid(), '2037-01-01', 100,
+    gen_random_uuid(), '2037-01-02', 100,
     '[{"leistungId": "38440000-0000-4000-8000-000000000089", "salePriceCents": 6800}]')
 $sql$, 'leistung_not_found');
 select pg_temp.expect_refusal('a field worker', $sql$
   select pg_temp.record('38440000-0000-4000-8000-000000000003', '38440000-0000-4000-8000-000000000021', 0,
-    gen_random_uuid(), '2037-01-01', 100, '[]')
+    gen_random_uuid(), '2037-01-02', 100, '[]')
 $sql$, 'not_authorized');
 select pg_temp.expect_refusal('an outsider', $sql$
   select pg_temp.record('38440000-0000-4000-8000-000000000004', '38440000-0000-4000-8000-000000000021', 0,
-    gen_random_uuid(), '2037-01-01', 100, '[]')
+    gen_random_uuid(), '2037-01-02', 100, '[]')
 $sql$, 'not_authorized');
 select pg_temp.expect_refusal('an archived customer', $sql$
   select pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000022', 0,
-    gen_random_uuid(), '2037-01-01', 100, '[]')
+    gen_random_uuid(), '2037-01-02', 100, '[]')
 $sql$, 'client_archived');
 select pg_temp.expect_refusal('a key of another customer', $sql$
   select pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000021', 0,
-    '38440000-0000-4000-8000-000000000101', '2037-01-01', 100, '[]')
+    '38440000-0000-4000-8000-000000000101', '2037-01-02', 100, '[]')
 $sql$, 'invalid_input');
 select pg_temp.expect_refusal('one Leistung twice', $sql$
   select pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000021', 0,
-    gen_random_uuid(), '2037-01-01', 100,
+    gen_random_uuid(), '2037-01-02', 100,
     '[{"leistungId": "38440000-0000-4000-8000-000000000080", "salePriceCents": 6800},
       {"leistungId": "38440000-0000-4000-8000-000000000080", "salePriceCents": 6900}]')
 $sql$, 'invalid_input');
 select pg_temp.expect_refusal('a discount above 100 %', $sql$
   select pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000021', 0,
-    gen_random_uuid(), '2037-01-01', 1001, '[]')
+    gen_random_uuid(), '2037-01-02', 1001, '[]')
 $sql$, '23514');
 
--- The list answers the organization's customer's versions, the newest first, with each own
--- price's Leistung; another organization's customer answers none.
+-- The list answers the organization's customer's newest versions, the newest first, with each
+-- own price's Leistung, how many there are and the one that applies on the day: the latest first
+-- day up to it. A limit leaves older versions out and still counts them. Another organization's
+-- customer answers none.
+create function pg_temp.list(p_client uuid, p_on date, p_limit integer default 20) returns jsonb language sql as $$
+  select public.list_client_price_conditions('38440000-0000-4000-8000-000000000010', p_client, p_on, p_limit);
+$$;
 do $$
 declare
-  v_list jsonb := public.list_client_price_conditions('38440000-0000-4000-8000-000000000010',
-    '38440000-0000-4000-8000-000000000020');
+  v_list jsonb := pg_temp.list('38440000-0000-4000-8000-000000000020', '2037-02-28');
 begin
-  if jsonb_array_length(v_list) is distinct from 2 or (v_list -> 0 ->> 'version')::integer is distinct from 2
-    or (v_list -> 1 ->> 'materialDiscountTenths')::integer is distinct from 100
-    or v_list -> 1 -> 'leistungPrices' -> 0 ->> 'number' is distinct from 'L-7'
-    or (v_list -> 1 -> 'leistungPrices' -> 0 ->> 'salePriceCents')::integer is distinct from 6800 then
+  if (v_list ->> 'total')::integer is distinct from 2
+    or jsonb_array_length(v_list -> 'versions') is distinct from 2
+    or (v_list -> 'versions' -> 0 ->> 'version')::integer is distinct from 2
+    or (v_list -> 'versions' -> 1 ->> 'materialDiscountTenths')::integer is distinct from 100
+    or v_list -> 'versions' -> 1 -> 'leistungPrices' -> 0 ->> 'number' is distinct from 'L-7'
+    or (v_list -> 'versions' -> 1 -> 'leistungPrices' -> 0 ->> 'salePriceCents')::integer is distinct from 6800
+    or v_list ->> 'applyingId' is distinct from v_list -> 'versions' -> 1 ->> 'id' then
     raise exception 'the list answered %', v_list;
   end if;
-  if public.list_client_price_conditions('38440000-0000-4000-8000-000000000010',
-      '38440000-0000-4000-8000-000000000029') is distinct from '[]'::jsonb then
+  if pg_temp.list('38440000-0000-4000-8000-000000000020', '2037-03-01') ->> 'applyingId'
+      is distinct from v_list -> 'versions' -> 0 ->> 'id'
+    or pg_temp.list('38440000-0000-4000-8000-000000000020', '2037-01-01') -> 'applyingId' is distinct from 'null'::jsonb then
+    raise exception 'the list applies another version on its first days';
+  end if;
+  v_list := pg_temp.list('38440000-0000-4000-8000-000000000020', '2037-02-28', 1);
+  if (v_list ->> 'total')::integer is distinct from 2 or jsonb_array_length(v_list -> 'versions') is distinct from 1 then
+    raise exception 'a limited list answered %', v_list;
+  end if;
+  if pg_temp.list('38440000-0000-4000-8000-000000000029', '2037-02-28')
+      is distinct from '{"total": 0, "applyingId": null, "versions": []}'::jsonb then
     raise exception 'another organization''s customer answered conditions';
+  end if;
+end;
+$$;
+
+-- The customer's row, which open pages listen to, changes with each new version.
+do $$
+declare
+  v_before tid := (select ctid from public.clients where id = '38440000-0000-4000-8000-000000000023');
+begin
+  perform pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000023', 0,
+    gen_random_uuid(), '2037-01-02', 100, '[]');
+  if (select ctid from public.clients where id = '38440000-0000-4000-8000-000000000023') = v_before then
+    raise exception 'a new version left the customer''s row as it was';
+  end if;
+  if exists (select 1 from public.client_master_events where client_id = '38440000-0000-4000-8000-000000000023') then
+    raise exception 'a new version wrote master data history';
   end if;
 end;
 $$;
@@ -234,38 +266,25 @@ select pg_temp.expect_refusal('a changed own price',
 select pg_temp.expect_refusal('a deleted own price',
   'delete from public.client_price_condition_leistungen', 'client_price_condition_is_immutable');
 
--- Admin and Büro read their organization's version rows, to hear of a new one; a field worker
--- and another organization read none, and no signed-in role reads an own price.
-create function pg_temp.versions_read_by(p_user uuid) returns bigint language plpgsql as $$
-declare
-  v_count bigint;
+-- No signed-in role reads a version, an own price or a condition read: Admin and Büro see them
+-- through the server only.
+create function pg_temp.conditions_read_by(p_user uuid) returns void language plpgsql as $$
 begin
   perform set_config('request.jwt.claims', json_build_object('sub', p_user, 'role', 'authenticated')::text, true);
   execute 'set local role authenticated';
-  select count(*) into v_count from public.client_price_conditions;
+  perform pg_temp.expect_refusal('version read', 'select count(*) from public.client_price_conditions', '42501');
   perform pg_temp.expect_refusal('own price read', 'select count(*) from public.client_price_condition_leistungen',
     '42501');
   perform pg_temp.expect_refusal('condition list',
-    format('select public.list_client_price_conditions(%L, %L)', '38440000-0000-4000-8000-000000000010',
-      '38440000-0000-4000-8000-000000000020'), '42501');
+    format('select public.list_client_price_conditions(%L, %L, %L)', '38440000-0000-4000-8000-000000000010',
+      '38440000-0000-4000-8000-000000000020', '2037-02-28'), '42501');
   execute 'reset role';
-  return v_count;
 end;
 $$;
-do $$
-begin
-  if pg_temp.versions_read_by('38440000-0000-4000-8000-000000000002') is distinct from 2
-    or pg_temp.versions_read_by('38440000-0000-4000-8000-000000000001') is distinct from 2 then
-    raise exception 'Admin or Büro do not read their versions';
-  end if;
-  if pg_temp.versions_read_by('38440000-0000-4000-8000-000000000003') is distinct from 0 then
-    raise exception 'a field worker reads a condition';
-  end if;
-  if pg_temp.versions_read_by('38440000-0000-4000-8000-000000000004') is distinct from 0 then
-    raise exception 'another organization reads a condition';
-  end if;
-end;
-$$;
+select pg_temp.conditions_read_by('38440000-0000-4000-8000-000000000001');
+select pg_temp.conditions_read_by('38440000-0000-4000-8000-000000000002');
+select pg_temp.conditions_read_by('38440000-0000-4000-8000-000000000003');
+select pg_temp.conditions_read_by('38440000-0000-4000-8000-000000000004');
 
 -- An offer of the customer and one of another customer.
 set local role service_role;
@@ -282,6 +301,42 @@ select
   (select id from public.client_price_conditions where client_id = '38440000-0000-4000-8000-000000000020'
     and version = 2) as condition;
 grant select on ids to service_role;
+
+-- A new Position of an offer is priced by its customer's version of the day, with that version's
+-- own price of the one Leistung it takes; a customer without a version and an article get none;
+-- an offer of another organization answers nothing.
+create function pg_temp.on_day(p_organization uuid, p_offer uuid, p_on date, p_leistung uuid) returns jsonb
+language sql as $$
+  select public.offer_price_condition_on_day(p_organization, p_offer, p_on, p_leistung);
+$$;
+do $$
+declare
+  v_day jsonb := pg_temp.on_day('38440000-0000-4000-8000-000000000010', (select own_offer from ids), '2037-02-28',
+    '38440000-0000-4000-8000-000000000080');
+begin
+  if (v_day -> 'condition' ->> 'version')::integer is distinct from 1
+    or (v_day -> 'condition' ->> 'ownPriceCents')::integer is distinct from 6800
+    or (v_day -> 'condition' ->> 'materialDiscountTenths')::integer is distinct from 100 then
+    raise exception 'the offer''s day condition is %', v_day;
+  end if;
+  if pg_temp.on_day('38440000-0000-4000-8000-000000000010', (select own_offer from ids), '2037-03-01', null)
+      -> 'condition' ->> 'id' is distinct from (select condition::text from ids)
+    or pg_temp.on_day('38440000-0000-4000-8000-000000000010', (select own_offer from ids), '2037-03-01', null)
+      -> 'condition' -> 'ownPriceCents' is distinct from 'null'::jsonb then
+    raise exception 'an article on the second version''s first day is priced otherwise';
+  end if;
+  if pg_temp.on_day('38440000-0000-4000-8000-000000000010', (select own_offer from ids), '2037-01-01', null)
+      is distinct from '{"condition": null}'::jsonb
+    or pg_temp.on_day('38440000-0000-4000-8000-000000000010', (select other_offer from ids), '2037-02-28', null)
+      is distinct from '{"condition": null}'::jsonb then
+    raise exception 'a day without a version answered a condition';
+  end if;
+  if pg_temp.on_day('38440000-0000-4000-8000-000000000011', (select own_offer from ids), '2037-02-28', null)
+      is not null then
+    raise exception 'another organization read the offer''s condition';
+  end if;
+end;
+$$;
 
 -- One Monteurstunde at the customer's price, one at the list price, one typed by hand.
 create function pg_temp.content(p_condition uuid) returns jsonb language sql as $$
@@ -354,8 +409,11 @@ begin
 end;
 $$;
 
--- A new version changes no stored Position.
+-- A new version changes no stored Position: not its price, amount or source.
 do $$
+declare
+  v_before jsonb := (select jsonb_agg(to_jsonb(line) - 'id' order by line.position) from public.offer_positions line
+    where line.offer_id = (select own_offer from ids));
 begin
   perform pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000020', 2,
     gen_random_uuid(), '2037-03-01', 0, '[]');
@@ -363,14 +421,34 @@ begin
       where offer_id = (select own_offer from ids) and position = 1) is distinct from (select condition from ids) then
     raise exception 'a new version changed a Position';
   end if;
+  if (select jsonb_agg(to_jsonb(line) - 'id' order by line.position) from public.offer_positions line
+      where line.offer_id = (select own_offer from ids)) is distinct from v_before then
+    raise exception 'a new version repriced the offer''s Positionen';
+  end if;
+  -- Version 3 shares version 2's first day: the higher number applies from then on.
+  if (pg_temp.on_day('38440000-0000-4000-8000-000000000010', (select own_offer from ids), '2037-03-15', null)
+      -> 'condition' ->> 'version')::integer is distinct from 3 then
+    raise exception 'the newer version of one first day does not apply';
+  end if;
 end;
 $$;
+
+-- A price source the check does not know, or a version without its source, is refused also
+-- when written past the save (the check holds for every operand, never as unknown).
+reset role;
+select pg_temp.expect_refusal('a version without a source', format(
+  'update public.offer_positions set price_source = null where offer_id = %L and position = 1',
+  (select own_offer from ids)), '23514');
+select pg_temp.expect_refusal('an unknown source', format(
+  'update public.offer_positions set price_source = %L where offer_id = %L and position = 3', 'rabatt',
+  (select own_offer from ids)), '23514');
+set local role service_role;
 
 -- A customer deleted as a mistaken entry takes its conditions with it.
 do $$
 begin
-  perform pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000023', 0,
-    gen_random_uuid(), '2037-01-01', 100,
+  perform pg_temp.record('38440000-0000-4000-8000-000000000002', '38440000-0000-4000-8000-000000000023', 1,
+    gen_random_uuid(), '2037-01-02', 100,
     '[{"leistungId": "38440000-0000-4000-8000-000000000080", "salePriceCents": 6500}]');
 end;
 $$;

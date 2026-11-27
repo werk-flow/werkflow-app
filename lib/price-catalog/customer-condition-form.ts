@@ -1,6 +1,7 @@
 import {
   CONDITION_LINE_KINDS,
   discountText,
+  MAX_CONDITION_LEISTUNG_PRICES,
   MAX_DISCOUNT_TENTHS,
   type ConditionLineKind,
   type CustomerCondition,
@@ -98,6 +99,11 @@ export function parseConditionForm(
     } else if (row.leistungId) {
       leistungPrices.push({ leistungId: row.leistungId, salePriceCents: cents });
     }
+  }
+  // The dialog offers no further row at the limit; a longer list is never sent.
+  if (form.prices.length > MAX_CONDITION_LEISTUNG_PRICES) {
+    errors[conditionFieldId.price(form.prices.at(-1)?.key ?? '')] =
+      `Ein Stand hat höchstens ${String(MAX_CONDITION_LEISTUNG_PRICES)} eigene Preise.`;
   }
   return Object.keys(errors).length > 0
     ? { ok: false, errors }

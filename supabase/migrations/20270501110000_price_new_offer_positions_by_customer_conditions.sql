@@ -5,8 +5,9 @@
 --    customer, each with its first valid day and a discount in tenths of a
 --    percent on material, on Arbeit and on Anfahrt. The conditions key on the
 --    kind of line, never on an article category. A version never changes; a
---    new one is the whole set again. Among versions of the same first day the
---    higher number applies (lib/price-catalog/customer-conditions.ts picks it).
+--    new one is the whole set again. The version with the latest first day up
+--    to a day applies on it; among versions of one first day the higher number
+--    (app_private.client_price_condition_on_day, the one home of that rule).
 -- 2. client_price_condition_leistungen: a version's own net price for a named
 --    Leistung, per one unit of it.
 -- 3. offer_positions.price_source and price_condition_id: the snapshot of
@@ -15,16 +16,20 @@
 --    Position.
 -- 4. record_client_price_condition: a new version with its own prices, in one
 --    call, under the customer's row lock, at the version the form was filled
---    from, with a retry key.
--- 5. list_client_price_conditions: every version of a customer with its own prices.
+--    from, with a retry key. It touches the customer's row, the published
+--    owning root, so an open customer page hears of the new version.
+-- 5. list_client_price_conditions: a customer's newest versions with their
+--    own prices, how many there are and which applies on a day.
+--    offer_price_condition_on_day: what prices a new Position of an offer on
+--    a day: the version of its customer and that version's own price of one
+--    Leistung.
 -- 6. save_offer_content as in 20270501090000, with each priced Position's
 --    price source; a condition must be one of the offer's customer.
 -- 7. get_offer_with_costs as in 20270501090000, with each priced Position's
 --    price source beside its cost. get_offer, which a document reads, stays.
 --
--- Sale prices and discounts are office facts. A manager's session may read a
--- version row only to hear of a change (Realtime); a field worker reads no
--- row. The own prices are server-only. lib/price-catalog/ resolves every price
+-- Sale prices and discounts are office facts. Both tables are server-only: no
+-- client role holds a grant, so a field worker reads no row. lib/price-catalog/ resolves every price
 -- and lib/offers/ computes every amount; no SQL here computes one.
 --
 -- Expand-only: two new tables, two nullable columns with a NOT VALID check,
@@ -86,6 +91,8 @@ create index client_price_condition_leistungen_condition_idx
   on public.client_price_condition_leistungen (condition_id, organization_id);
 create index client_price_condition_leistungen_leistung_idx
   on public.client_price_condition_leistungen (leistung_id, organization_id);
+create index client_price_condition_leistungen_organization_idx
+  on public.client_price_condition_leistungen (organization_id);
 
 -- A version and its prices outlive every direct UPDATE and DELETE; only the
 -- cascade of a deleted customer or organization removes them, and a deleted
@@ -112,45 +119,33 @@ create trigger client_price_condition_leistungen_keep_history
 before update or delete on public.client_price_condition_leistungen
 for each row execute function app_private.keep_client_price_condition_history();
 
--- A manager's session reads a version row only to hear of a new one; the
--- server reads and writes both tables. A field worker reads no row.
+-- RLS without a policy: client roles see no row even if a grant appeared later.
 alter table public.client_price_conditions enable row level security;
 alter table public.client_price_condition_leistungen enable row level security;
-create policy "Managers can view client price conditions in their orgs" on public.client_price_conditions
-  for select to authenticated
-  using (organization_id in (select app_private.get_user_admin_or_manager_org_ids((select auth.uid()))));
 
 revoke all on table public.client_price_conditions from public, anon, authenticated, service_role;
 revoke all on table public.client_price_condition_leistungen from public, anon, authenticated, service_role;
-grant select on table public.client_price_conditions to authenticated;
 grant select, insert on table public.client_price_conditions to service_role;
 grant select, insert on table public.client_price_condition_leistungen to service_role;
-
-alter table public.client_price_conditions
-  replica identity using index client_price_conditions_id_organization_key;
-alter publication supabase_realtime add table public.client_price_conditions;
-create trigger emit_realtime_deletion after delete on public.client_price_conditions
-  for each row
-  when (not coalesce(old.organization_id::text = any (pg_catalog.string_to_array(
-    pg_catalog.current_setting('app.deleting_organization_ids', true), ',')), false))
-  execute function app_private.emit_realtime_deletion();
 
 -- 3. A priced Position's price source.
 alter table public.offer_positions add column price_source text;
 alter table public.offer_positions add column price_condition_id uuid;
 -- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no offer content table yet; the rule binds only the new column, which older code never writes
+-- Not valid: every existing row has no version, so no scan under the lock is needed.
 alter table public.offer_positions add constraint offer_positions_price_condition_fk
   foreign key (price_condition_id, organization_id)
-  references public.client_price_conditions (id, organization_id);
+  references public.client_price_conditions (id, organization_id) not valid;
 -- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no offer content table yet; the rule binds only the new columns, which older code never writes
 -- A Position saved before this migration, or by older code, keeps no source.
+-- Every operand of the second branch is non-null there, so no row passes as unknown.
 alter table public.offer_positions add constraint offer_positions_price_source_check check (
   (price_source is null and price_condition_id is null)
-  or (kind = 'free' and price_source = 'manuell' and price_condition_id is null)
-  or (kind = 'free' and price_source = 'listenpreis' and price_condition_id is null
-    and (item_id is not null or leistung_id is not null))
-  or (kind = 'free' and price_source = 'kundenkondition' and price_condition_id is not null
-    and (item_id is not null or leistung_id is not null))
+  or (price_source is not null and kind = 'free' and case price_source
+    when 'manuell' then price_condition_id is null
+    when 'listenpreis' then price_condition_id is null and (item_id is not null or leistung_id is not null)
+    when 'kundenkondition' then price_condition_id is not null and (item_id is not null or leistung_id is not null)
+    else false end)
 ) not valid;
 
 create index offer_positions_price_condition_idx on public.offer_positions (price_condition_id, organization_id)
@@ -235,6 +230,10 @@ begin
   insert into public.client_price_condition_leistungen (organization_id, condition_id, leistung_id, sale_price_cents)
   select p_organization_id, v_condition_id, (entry ->> 'leistungId')::uuid, (entry ->> 'salePriceCents')::integer
   from jsonb_array_elements(p_leistung_prices) entry;
+  -- The customer's row is the published owning root: its change tells open pages of the new version.
+  -- No master data field changes, so the master history records nothing.
+  update public.clients client set updated_at = now()
+  where client.organization_id = p_organization_id and client.id = p_client_id;
   return jsonb_build_object('conditionId', v_condition_id, 'version', v_newest + 1);
 end;
 $$;
@@ -243,41 +242,93 @@ revoke all on function public.record_client_price_condition(uuid, uuid, uuid, in
 grant execute on function public.record_client_price_condition(uuid, uuid, uuid, integer, uuid, date, integer, integer, integer, jsonb)
   to service_role;
 
--- 5. Every version of one customer of the organization, the newest first,
--- each with its own prices and the Leistung's number, name, unit and archive
--- state. A customer's versions grow by one per change the office records, so
--- the answer is bounded by the office's own entries. An empty array for a
--- customer without one or of another organization.
-create function public.list_client_price_conditions(p_organization_id uuid, p_client_id uuid)
-returns jsonb language sql stable security invoker set search_path = '' as $$
-  select coalesce(jsonb_agg(jsonb_build_object(
-      'id', condition.id,
-      'version', condition.version,
-      'validFrom', condition.valid_from,
-      'materialDiscountTenths', condition.material_discount_tenths,
-      'arbeitDiscountTenths', condition.arbeit_discount_tenths,
-      'anfahrtDiscountTenths', condition.anfahrt_discount_tenths,
-      'recordedAt', condition.created_at,
-      'leistungPrices', coalesce((
-        select jsonb_agg(jsonb_build_object(
-            'leistungId', leistung.id,
-            'number', leistung.leistung_number,
-            'name', leistung.name,
-            'unit', leistung.unit,
-            'archived', leistung.archived_at is not null,
-            'salePriceCents', price.sale_price_cents
-          ) order by lower(leistung.name), leistung.id)
-        from public.client_price_condition_leistungen price
-        join public.leistungen leistung
-          on leistung.id = price.leistung_id and leistung.organization_id = p_organization_id
-        where price.condition_id = condition.id and price.organization_id = p_organization_id
-      ), '[]'::jsonb)
-    ) order by condition.version desc), '[]'::jsonb)
-  from public.client_price_conditions condition
-  where condition.organization_id = p_organization_id and condition.client_id = p_client_id;
+-- 5. The version of a customer that applies on a day: the latest first day up
+-- to that day, the higher number among versions of one first day. Null before
+-- the first one starts.
+create function app_private.client_price_condition_on_day(
+  p_organization_id uuid, p_client_id uuid, p_on_date date
+) returns uuid language sql stable security invoker set search_path = '' as $$
+  select condition.id from public.client_price_conditions condition
+  where condition.organization_id = p_organization_id and condition.client_id = p_client_id
+    and condition.valid_from <= p_on_date
+  order by condition.valid_from desc, condition.version desc
+  limit 1;
 $$;
-revoke all on function public.list_client_price_conditions(uuid, uuid) from public, anon, authenticated;
-grant execute on function public.list_client_price_conditions(uuid, uuid) to service_role;
+revoke all on function app_private.client_price_condition_on_day(uuid, uuid, date) from public, anon, authenticated;
+grant execute on function app_private.client_price_condition_on_day(uuid, uuid, date) to service_role;
+
+-- The customer's newest versions (at most p_limit, the newest number first),
+-- each with its own prices and the Leistung's number, name, unit and archive
+-- state; how many versions it has; and the one that applies on p_on_date. A
+-- customer without one, or of another organization, answers none.
+create function public.list_client_price_conditions(
+  p_organization_id uuid, p_client_id uuid, p_on_date date, p_limit integer default 20
+) returns jsonb language sql stable security invoker set search_path = '' as $$
+  select jsonb_build_object(
+    'total', (select count(*) from public.client_price_conditions condition
+      where condition.organization_id = p_organization_id and condition.client_id = p_client_id),
+    'applyingId', app_private.client_price_condition_on_day(p_organization_id, p_client_id, p_on_date),
+    'versions', coalesce((
+      select jsonb_agg(jsonb_build_object(
+          'id', newest.id,
+          'version', newest.version,
+          'validFrom', newest.valid_from,
+          'materialDiscountTenths', newest.material_discount_tenths,
+          'arbeitDiscountTenths', newest.arbeit_discount_tenths,
+          'anfahrtDiscountTenths', newest.anfahrt_discount_tenths,
+          'leistungPrices', coalesce((
+            select jsonb_agg(jsonb_build_object(
+                'leistungId', leistung.id,
+                'number', leistung.leistung_number,
+                'name', leistung.name,
+                'unit', leistung.unit,
+                'archived', leistung.archived_at is not null,
+                'salePriceCents', price.sale_price_cents
+              ) order by lower(leistung.name), leistung.id)
+            from public.client_price_condition_leistungen price
+            join public.leistungen leistung
+              on leistung.id = price.leistung_id and leistung.organization_id = p_organization_id
+            where price.condition_id = newest.id and price.organization_id = p_organization_id
+          ), '[]'::jsonb)
+        ) order by newest.version desc)
+      from (
+        select * from public.client_price_conditions condition
+        where condition.organization_id = p_organization_id and condition.client_id = p_client_id
+        order by condition.version desc
+        limit least(greatest(p_limit, 1), 100)
+      ) newest
+    ), '[]'::jsonb)
+  );
+$$;
+revoke all on function public.list_client_price_conditions(uuid, uuid, date, integer) from public, anon, authenticated;
+grant execute on function public.list_client_price_conditions(uuid, uuid, date, integer) to service_role;
+
+-- What prices a new Position of an offer of the organization on a day: null
+-- for no such offer; else the version of its customer that applies on the
+-- day, or null, with that version's own price of p_leistung_id (null for an
+-- article or a Leistung without one).
+create function public.offer_price_condition_on_day(
+  p_organization_id uuid, p_offer_id uuid, p_on_date date, p_leistung_id uuid default null
+) returns jsonb language sql stable security invoker set search_path = '' as $$
+  select jsonb_build_object('condition', (
+      select jsonb_build_object(
+        'id', condition.id,
+        'version', condition.version,
+        'validFrom', condition.valid_from,
+        'materialDiscountTenths', condition.material_discount_tenths,
+        'arbeitDiscountTenths', condition.arbeit_discount_tenths,
+        'anfahrtDiscountTenths', condition.anfahrt_discount_tenths,
+        'ownPriceCents', (select price.sale_price_cents from public.client_price_condition_leistungen price
+          where price.condition_id = condition.id and price.organization_id = p_organization_id
+            and price.leistung_id = p_leistung_id))
+      from public.client_price_conditions condition
+      where condition.organization_id = p_organization_id
+        and condition.id = app_private.client_price_condition_on_day(p_organization_id, offer.client_id, p_on_date)))
+  from public.offers offer
+  where offer.organization_id = p_organization_id and offer.id = p_offer_id;
+$$;
+revoke all on function public.offer_price_condition_on_day(uuid, uuid, date, uuid) from public, anon, authenticated;
+grant execute on function public.offer_price_condition_on_day(uuid, uuid, date, uuid) to service_role;
 
 -- 6. p_sections as in 20270501090000; a priced Position may also carry
 -- priceSource {kind: 'listenpreis' | 'kundenkondition' | 'manuell',

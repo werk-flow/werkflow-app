@@ -7,12 +7,14 @@ import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
+import { signPriceSource } from '@/lib/price-catalog/price-source-proof';
 import { positionCostSchema, storedSectionSchema } from './action-schemas';
 import type { OfferListQuery, OfferPage } from './list-page';
 import {
   OFFER_STATUSES,
   offerWorkKindSchema,
   type OfferDetail,
+  type OfferFreePosition,
   type OfferPriceSource,
   type OfferWithCosts,
   type OfferWorkKind,
@@ -146,18 +148,27 @@ const offerWithCostsSchema = z.object({
 });
 
 /**
- * A stored price source as the editor holds it: a source names the price it
- * answered, which a save keeps only while the Position still has it. A
- * Position saved before sources were kept reads as „manuell“.
+ * A stored price source as the editor holds it, signed again for this
+ * Position's entry and price, so the next save keeps it while the Position
+ * does. A Position saved before sources were kept reads as „manuell“.
  */
 function priceSourceOf(
   stored: z.infer<typeof priceSourceSchema> | null,
-  unitPriceCents: number,
+  position: Pick<OfferFreePosition, 'source' | 'unitPriceCents' | 'priceQuantity'>,
+  scope: { organizationId: string; offerId: string },
 ): OfferPriceSource {
-  if (!stored || stored.kind === 'manuell') return { kind: 'manuell' };
+  if (!stored || stored.kind === 'manuell' || !position.source) return { kind: 'manuell' };
+  const proof = signPriceSource({
+    ...scope,
+    entry: { kind: position.source.kind, id: position.source.id },
+    kind: stored.kind,
+    conditionId: stored.condition?.id ?? null,
+    unitPriceCents: position.unitPriceCents,
+    priceQuantity: position.priceQuantity,
+  });
   return stored.kind === 'listenpreis'
-    ? { kind: 'listenpreis', unitPriceCents }
-    : { kind: 'kundenkondition', condition: stored.condition, unitPriceCents };
+    ? { kind: 'listenpreis', proof }
+    : { kind: 'kundenkondition', condition: stored.condition, proof };
 }
 
 /**
@@ -191,7 +202,11 @@ export async function readOfferWithCosts(
         const priceSource = priceSources[sectionIndex]?.[positionIndex];
         // The answers come from one statement: a missing entry is a broken read, never a cost of zero.
         if (cost === undefined || priceSource === undefined) throw new Error('offer_read_failed');
-        return { ...position, cost, priceSource: priceSourceOf(priceSource, position.unitPriceCents) };
+        return {
+          ...position,
+          cost,
+          priceSource: priceSourceOf(priceSource, position, { organizationId, offerId }),
+        };
       }),
     })),
   };

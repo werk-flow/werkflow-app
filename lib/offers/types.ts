@@ -55,9 +55,9 @@ export type OfferPositionCost = { amountCents: number; priceQuantity: PriceQuant
 /**
  * Where a priced Position's price came from, as the office's editor shows it:
  * the office's own („manuell“), or the list price or a customer's condition
- * with the price it answered when the Position was added. Office-only.
+ * with the server's proof that it priced this Position. Office-only.
  */
-export type OfferPriceSource = { kind: 'manuell' } | (CatalogPriceSource & { unitPriceCents: number });
+export type OfferPriceSource = { kind: 'manuell' } | (CatalogPriceSource & { proof: string });
 
 /**
  * A priced Position: Bezeichnung, Beschreibung, quantity in a unit of the

@@ -21,9 +21,9 @@ import type { ConditionInput } from '@/lib/price-catalog/customer-condition-form
 import {
   CONDITION_LINE_KINDS,
   CONDITION_LINE_KIND_LABELS,
-  conditionOnDay,
   discountText,
   type CustomerCondition,
+  type CustomerConditions,
 } from '@/lib/price-catalog/customer-conditions';
 import { formatGermanDate } from '@/lib/utils';
 import { ClientConditionDialog } from './client-condition-dialog';
@@ -40,12 +40,11 @@ const VERSION_BADGES: Record<VersionState, { label: string; variant: 'success' |
 
 function versionState(
   condition: CustomerCondition,
-  conditions: readonly CustomerCondition[],
-  applying: CustomerCondition | null,
+  conditions: CustomerConditions,
   today: string,
 ): VersionState {
-  if (condition.id === applying?.id) return 'aktuell';
-  const replaced = conditions.some(
+  if (condition.id === conditions.applyingId) return 'aktuell';
+  const replaced = conditions.versions.some(
     (other) => other.validFrom === condition.validFrom && other.version > condition.version,
   );
   if (replaced) return 'ersetzt';
@@ -102,8 +101,32 @@ function ConditionVersion({ condition, state }: { condition: CustomerCondition; 
   );
 }
 
+/** The newest versions, and how many older ones the list leaves out. */
+function ConditionVersions({ conditions, today }: { conditions: CustomerConditions; today: string }) {
+  const left = conditions.total - conditions.versions.length;
+  return (
+    <div className="space-y-2">
+      <ul className="divide-y rounded-lg border p-3 sm:p-4">
+        {conditions.versions.map((condition) => (
+          <ConditionVersion
+            key={condition.id}
+            condition={condition}
+            state={versionState(condition, conditions, today)}
+          />
+        ))}
+      </ul>
+      {left > 0 && (
+        <p className="text-sm text-muted-foreground">
+          Dazu {left === 1 ? 'kommt ein älterer Stand' : `kommen ${String(left)} ältere Stände`}, die hier
+          nicht stehen.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /**
- * The customer's Kundenkonditionen: every version, the one that applies
+ * The customer's Kundenkonditionen: the newest versions, the one that applies
  * today marked, and „Konditionen ändern“, which records a new version from
  * its first day on. A new offer Position takes its price from the version of
  * its day; a recorded version never changes. Admin and Büro only, like the page.
@@ -116,8 +139,8 @@ export function ClientConditionsSection({
   clientId: string;
   /** An archived customer takes no new version. */
   archived: boolean;
-  /** Newest first; null for a failed read. */
-  conditions: CustomerCondition[] | null;
+  /** The newest versions first; null for a failed read. */
+  conditions: CustomerConditions | null;
 }) {
   const [open, setOpen] = useState(false);
   const { showBanner } = useBanner();
@@ -142,8 +165,7 @@ export function ClientConditionsSection({
     return result;
   };
 
-  const newest = conditions?.[0] ?? null;
-  const applying = conditions ? conditionOnDay(conditions, today) : null;
+  const newest = conditions?.versions[0] ?? null;
   const change = !archived && conditions && (
     <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
       {newest ? 'Konditionen ändern' : 'Konditionen festlegen'}
@@ -170,15 +192,7 @@ export function ClientConditionsSection({
           action={change}
         />
       ) : (
-        <ul className="divide-y rounded-lg border p-3 sm:p-4">
-          {conditions.map((condition) => (
-            <ConditionVersion
-              key={condition.id}
-              condition={condition}
-              state={versionState(condition, conditions, applying, today)}
-            />
-          ))}
-        </ul>
+        <ConditionVersions conditions={conditions} today={today} />
       )}
       {open && (
         <ClientConditionDialog

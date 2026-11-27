@@ -19,7 +19,6 @@ const newest: CustomerCondition = {
       salePriceCents: 6800,
     },
   ],
-  recordedAt: '2026-11-27T08:00:00Z',
 };
 
 describe('the conditions dialog', () => {
@@ -58,6 +57,21 @@ describe('the conditions dialog', () => {
       discounts: { material: '10 %', arbeit: '2.5', anfahrt: '100' },
     });
     expect(parsed.ok && parsed.input.discountTenths).toEqual({ material: 100, arbeit: 25, anfahrt: 1000 });
+  });
+
+  test('a version keeps at most 200 own prices', () => {
+    const prices = Array.from({ length: 201 }, (_row, index) => ({
+      key: String(index),
+      leistungId: `97000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+      price: '10,00',
+    }));
+    const parsed = parseConditionForm({ ...conditionFormOf(null, '2026-11-27'), prices });
+    expect(parsed.ok ? {} : parsed.errors).toEqual({
+      [conditionFieldId.price('200')]: 'Ein Stand hat höchstens 200 eigene Preise.',
+    });
+    expect(parseConditionForm({ ...conditionFormOf(null, '2026-11-27'), prices: prices.slice(1) }).ok).toBe(
+      true,
+    );
   });
 
   test('every field at fault names its sentence at its control', () => {

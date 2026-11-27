@@ -55,6 +55,8 @@ export const positionCostSchema = z.object({
 });
 
 const priceCents = z.number().int().min(0).max(MAX_PRICE_CENTS);
+/** A base64url HMAC-SHA256 (lib/price-catalog/price-source-proof.ts). */
+const proofSchema = z.string().regex(/^[\w-]{43}$/);
 
 /** A priced position, with the limits of an invoice line; a negative quantity credits. */
 const freePositionSchema = z.object({
@@ -73,13 +75,13 @@ const freePositionSchema = z.object({
    */
   cost: positionCostSchema.nullable(),
   /**
-   * Where the price came from, with the price that source answered; the save
-   * stores „manuell“ for any other price (savedPriceSource). Required like the cost.
+   * Where the price came from, with the server's proof; the save stores
+   * „manuell“ for a source it did not prove (content-writes.ts). Required like the cost.
    */
   priceSource: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('manuell') }),
-    z.object({ kind: z.literal('listenpreis'), unitPriceCents: priceCents }),
-    z.object({ kind: z.literal('kundenkondition'), conditionId: uuidSchema, unitPriceCents: priceCents }),
+    z.object({ kind: z.literal('listenpreis'), proof: proofSchema }),
+    z.object({ kind: z.literal('kundenkondition'), conditionId: uuidSchema, proof: proofSchema }),
   ]),
 });
 

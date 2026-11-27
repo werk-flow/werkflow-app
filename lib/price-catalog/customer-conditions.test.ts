@@ -3,35 +3,21 @@ import { describe, expect, test } from 'bun:test';
 import { lineAmountCents } from '@/lib/inventory/line-amount';
 import {
   conditionLineKind,
-  conditionOnDay,
-  discountedPriceCents,
   discountText,
   resolveCatalogPrice,
-  savedPriceSource,
-  type CustomerCondition,
+  type DayCondition,
 } from './customer-conditions';
 
-const MONTEURSTUNDE = '97000000-0000-4000-8000-000000000001';
-const ANFAHRT = '97000000-0000-4000-8000-000000000002';
-
-const condition = (fields: Partial<CustomerCondition> = {}): CustomerCondition => ({
+/** Version 2 of a customer's conditions with 68,00 € per Monteurstunde; the Leistung priced decides `ownPriceCents`. */
+const condition = (fields: Partial<DayCondition> = {}): DayCondition => ({
   id: '98000000-0000-4000-8000-000000000002',
   version: 2,
   validFrom: '2027-01-01',
   discountTenths: { material: 100, arbeit: 50, anfahrt: 0 },
-  leistungPrices: [
-    {
-      leistungId: MONTEURSTUNDE,
-      number: 'L-7',
-      name: 'Monteurstunde',
-      unit: 'hour',
-      archived: false,
-      salePriceCents: 6800,
-    },
-  ],
-  recordedAt: '2026-11-27T08:00:00Z',
+  ownPriceCents: null,
   ...fields,
 });
+const OWN_HOUR = { ownPriceCents: 6800 };
 const fromVersion2 = {
   kind: 'kundenkondition',
   condition: { id: '98000000-0000-4000-8000-000000000002', version: 2, validFrom: '2027-01-01' },
@@ -46,7 +32,6 @@ describe('resolveCatalogPrice', () => {
       {
         listPrice: { amountCents: 7250, priceQuantity: 1 },
         lineKind: 'arbeit',
-        leistungId: MONTEURSTUNDE,
         condition: null,
       },
       { amountCents: 7250, priceQuantity: 1, source: { kind: 'listenpreis' } },
@@ -56,22 +41,20 @@ describe('resolveCatalogPrice', () => {
       {
         listPrice: { amountCents: 7250, priceQuantity: 1 },
         lineKind: 'arbeit',
-        leistungId: MONTEURSTUNDE,
-        condition: condition(),
+        condition: condition(OWN_HOUR),
       },
       { amountCents: 6800, priceQuantity: 1, source: fromVersion2 },
     ],
     [
       'an own price applies even while the Leistung has no list price',
-      { listPrice: null, lineKind: 'arbeit', leistungId: MONTEURSTUNDE, condition: condition() },
+      { listPrice: null, lineKind: 'arbeit', condition: condition(OWN_HOUR) },
       { amountCents: 6800, priceQuantity: 1, source: fromVersion2 },
     ],
     [
-      "another Leistung's own price does not apply; the discount of its kind does",
+      'a Leistung without an own price takes the discount of its kind',
       {
         listPrice: { amountCents: 7250, priceQuantity: 1 },
         lineKind: 'arbeit',
-        leistungId: ANFAHRT,
         condition: condition(),
       },
       // 7250 × 0,95 = 6887,5 → 6888
@@ -82,7 +65,6 @@ describe('resolveCatalogPrice', () => {
       {
         listPrice: { amountCents: 1234, priceQuantity: 1 },
         lineKind: 'material',
-        leistungId: null,
         condition: condition(),
       },
       // 1234 × 0,9 = 1110,6 → 1111
@@ -93,7 +75,6 @@ describe('resolveCatalogPrice', () => {
       {
         listPrice: { amountCents: 1890, priceQuantity: 100 },
         lineKind: 'material',
-        leistungId: null,
         condition: condition({ discountTenths: { material: 125, arbeit: 0, anfahrt: 0 } }),
       },
       // 1890 × 0,875 = 1653,75 → 1654 per 100
@@ -104,7 +85,6 @@ describe('resolveCatalogPrice', () => {
       {
         listPrice: { amountCents: 4500, priceQuantity: 1 },
         lineKind: 'anfahrt',
-        leistungId: ANFAHRT,
         condition: condition(),
       },
       { amountCents: 4500, priceQuantity: 1, source: { kind: 'listenpreis' } },
@@ -114,14 +94,22 @@ describe('resolveCatalogPrice', () => {
       {
         listPrice: { amountCents: 15000, priceQuantity: 1 },
         lineKind: null,
-        leistungId: ANFAHRT,
         condition: condition({ discountTenths: { material: 100, arbeit: 100, anfahrt: 100 } }),
       },
       { amountCents: 15000, priceQuantity: 1, source: { kind: 'listenpreis' } },
     ],
     [
+      'a discount of 100 % prices at zero',
+      {
+        listPrice: { amountCents: 1234, priceQuantity: 1 },
+        lineKind: 'material',
+        condition: condition({ discountTenths: { material: 1000, arbeit: 0, anfahrt: 0 } }),
+      },
+      { amountCents: 0, priceQuantity: 1, source: fromVersion2 },
+    ],
+    [
       'neither an own price nor a list price: nothing to resolve',
-      { listPrice: null, lineKind: 'arbeit', leistungId: ANFAHRT, condition: condition() },
+      { listPrice: null, lineKind: 'arbeit', condition: condition() },
       null,
     ],
   ];
@@ -134,7 +122,6 @@ describe('resolveCatalogPrice', () => {
     const resolved = resolveCatalogPrice({
       listPrice: { amountCents: 1001, priceQuantity: 1 },
       lineKind: 'material',
-      leistungId: null,
       condition: condition({ discountTenths: { material: 50, arbeit: 0, anfahrt: 0 } }),
     });
     expect(resolved?.amountCents).toBe(951);
@@ -142,35 +129,6 @@ describe('resolveCatalogPrice', () => {
     // 250 pieces at 1654 per 100 = 4135; 2,125 m at 1111 = 2360,875 → 2361.
     expect(lineAmountCents('250', 1654, 100)).toBe(4135);
     expect(lineAmountCents('2.125', 1111, 1)).toBe(2361);
-  });
-});
-
-describe('discountedPriceCents', () => {
-  test('0 and 100 % are the bounds', () => {
-    expect(discountedPriceCents(1234, 0)).toBe(1234);
-    expect(discountedPriceCents(1234, 1000)).toBe(0);
-    expect(() => discountedPriceCents(1234, 1001)).toThrow(RangeError);
-    expect(() => discountedPriceCents(1234, -1)).toThrow(RangeError);
-    expect(() => discountedPriceCents(1234, 12.5)).toThrow(RangeError);
-  });
-});
-
-describe('conditionOnDay', () => {
-  const version = (number: number, validFrom: string) =>
-    condition({ id: `98000000-0000-4000-8000-00000000000${String(number)}`, version: number, validFrom });
-  const versions = [version(3, '2027-03-01'), version(2, '2027-01-01'), version(1, '2026-12-01')];
-
-  test('the version valid on the offer’s date applies', () => {
-    expect(conditionOnDay(versions, '2026-11-30')).toBeNull();
-    expect(conditionOnDay(versions, '2026-12-01')?.version).toBe(1);
-    expect(conditionOnDay(versions, '2027-02-28')?.version).toBe(2);
-    expect(conditionOnDay(versions, '2027-03-01')?.version).toBe(3);
-  });
-
-  test('of two versions with the same first day the newer applies, in any order', () => {
-    const same = [version(4, '2027-01-01'), ...versions];
-    expect(conditionOnDay(same, '2027-01-15')?.version).toBe(4);
-    expect(conditionOnDay([...same].reverse(), '2027-01-15')?.version).toBe(4);
   });
 });
 
@@ -182,45 +140,6 @@ describe('conditionLineKind', () => {
     for (const leistungKind of ['pauschale', 'gebuehr', 'fremdleistung'] as const) {
       expect(conditionLineKind({ kind: 'leistung', leistungKind })).toBeNull();
     }
-  });
-});
-
-describe('savedPriceSource', () => {
-  const article = { kind: 'article', id: '96000000-0000-4000-8000-000000000001' } as const;
-  test('a source stays while the price is the one it answered', () => {
-    expect(savedPriceSource({ kind: 'listenpreis', unitPriceCents: 1234 }, article, 1234)).toEqual({
-      kind: 'listenpreis',
-      conditionId: null,
-    });
-    expect(
-      savedPriceSource(
-        { kind: 'kundenkondition', conditionId: fromVersion2.condition.id, unitPriceCents: 1111 },
-        article,
-        1111,
-      ),
-    ).toEqual({ kind: 'kundenkondition', conditionId: fromVersion2.condition.id });
-  });
-
-  test('manual stays manual, and a changed price or a missing catalog entry becomes manual', () => {
-    expect(savedPriceSource({ kind: 'manuell' }, article, 1234)).toEqual({
-      kind: 'manuell',
-      conditionId: null,
-    });
-    expect(savedPriceSource({ kind: 'listenpreis', unitPriceCents: 1234 }, article, 1300)).toEqual({
-      kind: 'manuell',
-      conditionId: null,
-    });
-    expect(
-      savedPriceSource(
-        { kind: 'kundenkondition', conditionId: fromVersion2.condition.id, unitPriceCents: 1111 },
-        article,
-        1234,
-      ),
-    ).toEqual({ kind: 'manuell', conditionId: null });
-    expect(savedPriceSource({ kind: 'listenpreis', unitPriceCents: 1234 }, null, 1234)).toEqual({
-      kind: 'manuell',
-      conditionId: null,
-    });
   });
 });
 

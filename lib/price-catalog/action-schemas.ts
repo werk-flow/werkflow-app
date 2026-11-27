@@ -1,7 +1,7 @@
 import { OFFERED_INVENTORY_UNITS } from '@/lib/inventory/units';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
-import { MAX_DISCOUNT_TENTHS } from './customer-conditions';
+import { MAX_CONDITION_LEISTUNG_PRICES, MAX_DISCOUNT_TENTHS } from './customer-conditions';
 import { MAX_PRICE_CENTS } from './money';
 import { LEISTUNG_TAX_RATES, leistungKindSchema } from './types';
 
@@ -36,9 +36,6 @@ export const addLeistungPriceSchema = priceFieldsSchema.extend({ leistungId: uui
 export const setLeistungArchivedSchema = z.object({ leistungId: uuidSchema, archived: z.boolean() });
 
 const discountTenths = z.number().int().min(0).max(MAX_DISCOUNT_TENTHS);
-
-/** The most own Leistung prices one version of a customer's conditions keeps. */
-const MAX_CONDITION_LEISTUNG_PRICES = 200;
 
 /** A new version of a customer's conditions: the whole set, from its first day on. */
 export const recordCustomerConditionSchema = z.object({

@@ -9,7 +9,8 @@ import type { LeistungKind } from './types';
 // named Leistung. The conditions key on the kind of line, never on an
 // article category. This module is the one rule that prices a new offer
 // Position by them; lib/price-catalog/customer-prices.ts reads its input on
-// the server.
+// the server, and the database picks the version of a day
+// (app_private.client_price_condition_on_day).
 
 /** The kinds of line a discount applies to: an article is material, a Leistung of kind Arbeit or Anfahrt its kind. */
 export const CONDITION_LINE_KINDS = ['material', 'arbeit', 'anfahrt'] as const;
@@ -23,6 +24,9 @@ export const CONDITION_LINE_KIND_LABELS: Record<ConditionLineKind, string> = {
 
 /** The largest discount, in tenths of a percent: 100 %. */
 export const MAX_DISCOUNT_TENTHS = 1000;
+
+/** The most own Leistung prices one version keeps. */
+export const MAX_CONDITION_LEISTUNG_PRICES = 200;
 
 /** A version's own net price for one Leistung, per one unit of it. */
 type CustomerLeistungPrice = {
@@ -46,31 +50,16 @@ export type CustomerCondition = {
   discountTenths: Record<ConditionLineKind, number>;
   /** By Leistung name. */
   leistungPrices: CustomerLeistungPrice[];
-  recordedAt: string;
 };
 
-/**
- * The version that applies on `day` (`YYYY-MM-DD`): the latest first day up
- * to that day, and among versions of the same first day the newest. Null
- * before the first one starts.
- */
-export function conditionOnDay(
-  conditions: readonly CustomerCondition[],
-  day: string,
-): CustomerCondition | null {
-  let applying: CustomerCondition | null = null;
-  for (const condition of conditions) {
-    if (condition.validFrom > day) continue;
-    if (
-      !applying ||
-      condition.validFrom > applying.validFrom ||
-      (condition.validFrom === applying.validFrom && condition.version > applying.version)
-    ) {
-      applying = condition;
-    }
-  }
-  return applying;
-}
+/** A customer's newest versions, how many it has and the one that applies today. */
+export type CustomerConditions = {
+  /** At most the newest 20, the newest first. */
+  versions: CustomerCondition[];
+  total: number;
+  /** The version that applies today; null before the first one starts. */
+  applyingId: string | null;
+};
 
 /** The kind of line of a catalog entry; a Leistung of another kind takes no discount. */
 export function conditionLineKind(
@@ -84,7 +73,7 @@ export function conditionLineKind(
  * A net price per its price quantity less a discount, rounded half away from
  * zero once by the shared line rule: the price per 100 keeps its precision.
  */
-export function discountedPriceCents(amountCents: number, discountTenths: number): number {
+function discountedPriceCents(amountCents: number, discountTenths: number): number {
   if (!Number.isInteger(discountTenths) || discountTenths < 0 || discountTenths > MAX_DISCOUNT_TENTHS) {
     throw new RangeError('A discount is between 0 and 100 percent in tenths.');
   }
@@ -97,6 +86,13 @@ export type PriceSourceKind = 'listenpreis' | 'kundenkondition' | 'manuell';
 
 /** The version of a customer's conditions a price came from. */
 type ConditionRef = { id: string; version: number; validFrom: string };
+
+/** What prices a new Position for a customer on a day: its version, the discounts and the entry's own price. */
+export type DayCondition = ConditionRef & {
+  discountTenths: Record<ConditionLineKind, number>;
+  /** The version's own price of the Leistung the Position takes; null for an article or without one. */
+  ownPriceCents: number | null;
+};
 
 /** Where the resolver took a price from; only a customer's condition names its version. */
 export type CatalogPriceSource =
@@ -116,19 +112,17 @@ export type ResolvedPrice = { amountCents: number; priceQuantity: PriceQuantity;
 export function resolveCatalogPrice(input: {
   listPrice: { amountCents: number; priceQuantity: PriceQuantity } | null;
   lineKind: ConditionLineKind | null;
-  /** The Leistung the entry is, null for an article. */
-  leistungId: string | null;
-  condition: CustomerCondition | null;
+  condition: DayCondition | null;
 }): ResolvedPrice | null {
-  const { listPrice, lineKind, leistungId, condition } = input;
+  const { listPrice, lineKind, condition } = input;
   const atListPrice = listPrice && { ...listPrice, source: { kind: 'listenpreis' as const } };
   if (!condition) return atListPrice;
   const source = {
     kind: 'kundenkondition' as const,
     condition: { id: condition.id, version: condition.version, validFrom: condition.validFrom },
   };
-  const ownPrice = condition.leistungPrices.find((price) => price.leistungId === leistungId);
-  if (ownPrice) return { amountCents: ownPrice.salePriceCents, priceQuantity: 1, source };
+  if (condition.ownPriceCents !== null)
+    return { amountCents: condition.ownPriceCents, priceQuantity: 1, source };
   const discount = lineKind ? condition.discountTenths[lineKind] : 0;
   if (!listPrice || discount === 0) return atListPrice;
   return {
@@ -139,31 +133,14 @@ export function resolveCatalogPrice(input: {
 }
 
 /**
- * What a save says of a priced Position's price: manual, or the source with
- * the price it answered when the Position was added.
+ * What a save says of a priced Position's price: manual, or a source with the
+ * server's proof that it answered this Position's entry and price
+ * (lib/price-catalog/price-source-proof.ts).
  */
 export type PriceSourceClaim =
   | { kind: 'manuell' }
-  | { kind: 'listenpreis'; unitPriceCents: number }
-  | { kind: 'kundenkondition'; conditionId: string; unitPriceCents: number };
-
-/**
- * The price source a save stores: a source stays only while the Position
- * still names its catalog entry and has the price that source answered; any
- * other price is the office's own, „manuell“.
- */
-export function savedPriceSource(
-  claim: PriceSourceClaim,
-  catalogEntry: { kind: 'article' | 'leistung'; id: string } | null,
-  unitPriceCents: number,
-): { kind: PriceSourceKind; conditionId: string | null } {
-  if (claim.kind === 'manuell' || !catalogEntry || claim.unitPriceCents !== unitPriceCents) {
-    return { kind: 'manuell', conditionId: null };
-  }
-  return claim.kind === 'kundenkondition'
-    ? { kind: 'kundenkondition', conditionId: claim.conditionId }
-    : { kind: 'listenpreis', conditionId: null };
-}
+  | { kind: 'listenpreis'; proof: string }
+  | { kind: 'kundenkondition'; conditionId: string; proof: string };
 
 /** „12,5“ of tenths of a percent. */
 export function discountText(tenths: number): string {

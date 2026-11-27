@@ -255,7 +255,7 @@ test('a Position from an article with an unknown unit asks for a unit before it 
             unit: 'piece',
             unitPriceCents: 495,
             source: { kind: 'article', id: 'contract-article' },
-            priceSource: { kind: 'listenpreis', unitPriceCents: 495 },
+            priceSource: { kind: 'listenpreis', proof: 'contract-proof' },
           },
         ],
       },

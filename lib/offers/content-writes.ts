@@ -1,13 +1,14 @@
 import 'server-only';
 
 import type { ActionResult } from '@/lib/action-result';
-import { savedPriceSource } from '@/lib/price-catalog/customer-conditions';
+import { isProvenPriceSource } from '@/lib/price-catalog/price-source-proof';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
 import { z } from '@/lib/zod';
 import { saveOfferContentSchema, type SaveOfferContentInput } from './action-schemas';
 import { offerContentArgument } from './amounts';
+import type { OfferFreePosition } from './types';
 
 // The one write of an offer's Titel and Positionen, for the editor's action
 // and for server callers that act for the office (werk-flow/werkflow-planning#541).
@@ -18,8 +19,8 @@ import { offerContentArgument } from './amounts';
 // Beside each priced Position it stores the Position's own cost, hidden from
 // every client role: the cost the office took over with an article or a
 // Leistung, or typed (20270501090000_calculate_offers_with_leistungen_and_costs.sql),
-// and where its price came from: a source stays only while the Position has
-// the price it answered, any other price is „manuell“
+// and where its price came from: a source stays only with the server's proof
+// for this offer, entry, price and price quantity; any other price is „manuell“
 // (20270501110000_price_new_offer_positions_by_customer_conditions.sql).
 
 const contentRefusal = writeRefusalFor(
@@ -38,6 +39,27 @@ const contentRefusal = writeRefusalFor(
 const savedContentSchema = z.object({ contentVersion: z.number().int().positive(), updatedAt: z.string() });
 
 type OfficeActor = { orgId: string; userId: string };
+
+const MANUAL = { kind: 'manuell', conditionId: null } as const;
+
+/** The price source the save stores: the claimed one if the server proved it, else „manuell“. */
+function storedPriceSource(
+  position: OfferFreePosition,
+  scope: { organizationId: string; offerId: string },
+): { kind: 'listenpreis' | 'kundenkondition' | 'manuell'; conditionId: string | null } {
+  const claim = position.priceSource;
+  if (claim.kind === 'manuell' || !position.source) return MANUAL;
+  const conditionId = claim.kind === 'kundenkondition' ? claim.conditionId : null;
+  const proven = isProvenPriceSource(claim.proof, {
+    ...scope,
+    entry: position.source,
+    kind: claim.kind,
+    conditionId,
+    unitPriceCents: position.unitPriceCents,
+    priceQuantity: position.priceQuantity,
+  });
+  return proven ? { kind: claim.kind, conditionId } : MANUAL;
+}
 
 /**
  * Replaces the Titel and Positionen of an offer in „Entwurf“ that is still at
@@ -60,12 +82,13 @@ export async function writeOfferContent(
     ...section,
     positions: section.positions.map((position) => {
       if (position.kind === 'text') return position;
-      const { cost, priceSource, ...values } = position;
-      return {
-        ...values,
-        purchaseCost: cost,
-        priceSource: savedPriceSource(priceSource, values.source, values.unitPriceCents),
-      };
+      const { cost, ...values } = position;
+      // The stored source replaces the claim, and never without the server's proof.
+      const priceSource = storedPriceSource(position, {
+        organizationId: actor.orgId,
+        offerId: input.offerId,
+      });
+      return { ...values, purchaseCost: cost, priceSource };
     }),
   }));
   const { data, error } = await createSupabaseAdminClient().rpc(

@@ -10,9 +10,11 @@ import { resolveActionContext } from '@/lib/org/action-context';
 import {
   conditionLineKind,
   resolveCatalogPrice,
-  type CustomerCondition,
+  type CatalogPriceSource,
+  type DayCondition,
 } from '@/lib/price-catalog/customer-conditions';
 import { readOfferConditionOnDay } from '@/lib/price-catalog/customer-prices';
+import { signPriceSource } from '@/lib/price-catalog/price-source-proof';
 import { readLeistungPrices } from '@/lib/price-catalog/leistung-prices';
 import { LEISTUNG_KINDS, type LeistungKind } from '@/lib/price-catalog/types';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -36,11 +38,15 @@ import { INVOICE_TAX_RATES, type InvoiceTaxRate } from './types';
 // readOfferLeistungLine), so offers and invoices price an entry alike, except
 // that an offer's customer's conditions apply (lib/price-catalog/
 // customer-conditions.ts, resolveCatalogPrice): the offer's answer names
-// where its price came from, and adds the entry's cost, for the office's
+// where its price came from, with the server's proof of it
+// (price-source-proof.ts), and adds the entry's cost, for the office's
 // calculation. An invoice line keeps the list price.
 
 type CatalogLineResult = ActionResult<{ line: InvoiceCatalogLine }>;
 type OfferCatalogLineResult = ActionResult<{ line: OfferCatalogLine }>;
+/** A line before an offer's proof: invoices drop the source, offers sign it. */
+type CatalogLine = Omit<OfferCatalogLine, 'priceSource'> & { priceSource: CatalogPriceSource };
+type CatalogLineRead = ActionResult<{ line: CatalogLine; organizationId: string }>;
 /** A unit outside the list: an invoice refuses the entry, an offer asks the office for a unit. */
 type UnitOutsideList = 'refuse' | 'ask';
 
@@ -78,15 +84,14 @@ function catalogLine(
   facts: SourceFacts,
   price: SourcePrice,
   unitOutsideList: UnitOutsideList,
-  condition: CustomerCondition | null,
-): OfferCatalogLineResult {
+  condition: DayCondition | null,
+): ActionResult<{ line: CatalogLine }> {
   if (facts.archived) return { success: false, error: 'source_archived' };
   const resolved = resolveCatalogPrice({
     listPrice: price.salePrice,
     lineKind: conditionLineKind(
       facts.leistungKind ? { kind: 'leistung', leistungKind: facts.leistungKind } : { kind: 'article' },
     ),
-    leistungId: ref.kind === 'leistung' ? ref.id : null,
     condition,
   });
   if (!resolved) return { success: false, error: 'source_unpriced' };
@@ -171,7 +176,7 @@ async function readCatalogLine(
   unitOutsideList: UnitOutsideList,
   action: string,
   offerId: string | null,
-): Promise<OfferCatalogLineResult> {
+): Promise<CatalogLineRead> {
   try {
     const caller = await resolveActionContext();
     if (!caller.success) return caller;
@@ -182,7 +187,9 @@ async function readCatalogLine(
       ref.kind === 'leistung' ? leistungFacts(orgId, ref.id) : articleFacts(orgId, ref.id),
       sourcePrice(ref, today),
       offerId
-        ? readOfferConditionOnDay(orgId, offerId, today).catch(() => 'failed' as const)
+        ? readOfferConditionOnDay(orgId, offerId, today, ref.kind === 'leistung' ? ref.id : null).catch(
+            () => 'failed' as const,
+          )
         : { condition: null },
     ]);
     if (facts === 'failed' || price === 'failed' || customer === 'failed') {
@@ -191,11 +198,33 @@ async function readCatalogLine(
     }
     if (customer === 'offer_not_found') return { success: false, error: 'offer_not_found' };
     if (!facts || !price) return { success: false, error: 'source_not_found' };
-    return catalogLine(ref, facts, price, unitOutsideList, customer.condition);
+    const line = catalogLine(ref, facts, price, unitOutsideList, customer.condition);
+    return line.success ? { ...line, organizationId: orgId } : line;
   } catch (error) {
     logError(`${action}: unexpected error`, error);
     return { success: false, error: 'unexpected_error' };
   }
+}
+
+/** An offer's line from the entry, with the server's proof of its price source. */
+async function readOfferCatalogLine(
+  ref: InvoiceLineSourceRef,
+  offerId: string,
+  action: string,
+): Promise<OfferCatalogLineResult> {
+  const read = await readCatalogLine(ref, 'ask', action, offerId);
+  if (!read.success) return read;
+  const { line, organizationId } = read;
+  const proof = signPriceSource({
+    organizationId,
+    offerId,
+    entry: { kind: ref.kind, id: ref.id },
+    kind: line.priceSource.kind,
+    conditionId: line.priceSource.kind === 'kundenkondition' ? line.priceSource.condition.id : null,
+    unitPriceCents: line.unitPriceCents,
+    priceQuantity: line.priceQuantity,
+  });
+  return { success: true, line: { ...line, priceSource: { ...line.priceSource, proof } } };
 }
 
 /**
@@ -236,7 +265,7 @@ export async function readOfferArticleLine(rawInput: {
   const parsed = z.object({ offerId: uuidSchema, articleId: uuidSchema }).safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const { offerId, articleId } = parsed.data;
-  return readCatalogLine({ kind: 'article', id: articleId }, 'ask', 'readOfferArticleLine', offerId);
+  return readOfferCatalogLine({ kind: 'article', id: articleId }, offerId, 'readOfferArticleLine');
 }
 
 /**
@@ -251,5 +280,5 @@ export async function readOfferLeistungLine(rawInput: {
   const parsed = z.object({ offerId: uuidSchema, leistungId: uuidSchema }).safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const { offerId, leistungId } = parsed.data;
-  return readCatalogLine({ kind: 'leistung', id: leistungId }, 'ask', 'readOfferLeistungLine', offerId);
+  return readOfferCatalogLine({ kind: 'leistung', id: leistungId }, offerId, 'readOfferLeistungLine');
 }

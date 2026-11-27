@@ -124,7 +124,7 @@ export function catalogPositionForm(key: string, line: OfferCatalogLine): Positi
     priceQuantity: line.priceQuantity,
     taxRateBasisPoints: line.taxRateBasisPoints,
     source: line.source,
-    priceSource: { ...line.priceSource, unitPriceCents: line.unitPriceCents },
+    priceSource: line.priceSource,
   };
 }
 
@@ -240,7 +240,7 @@ function priceSourceClaim(priceSource: OfferPriceSource): PriceSourceClaim {
   return {
     kind: 'kundenkondition',
     conditionId: priceSource.condition.id,
-    unitPriceCents: priceSource.unitPriceCents,
+    proof: priceSource.proof,
   };
 }
 

@@ -25,7 +25,6 @@ const newest: CustomerCondition = {
       salePriceCents: 6800,
     },
   ],
-  recordedAt: '2025-12-20T08:00:00.000Z',
 };
 
 export function CustomerConditionsContractFixture(): React.JSX.Element {

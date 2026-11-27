@@ -57,7 +57,8 @@ export type InvoiceCatalogLine = {
 export type OfferCatalogLine = Omit<InvoiceCatalogLine, 'unit'> & {
   unit: InventoryUnitCode | null;
   cost: { amountCents: number; priceQuantity: PriceQuantity } | null;
-  priceSource: CatalogPriceSource;
+  /** With the server's proof, which a save needs to keep the source (lib/price-catalog/price-source-proof.ts). */
+  priceSource: CatalogPriceSource & { proof: string };
 };
 
 /** „Leistung L-7 · Monteurstunde“ */

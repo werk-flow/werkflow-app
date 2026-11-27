@@ -1,7 +1,7 @@
 'use client';
 
 import { Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -33,6 +33,7 @@ import {
 import {
   CONDITION_LINE_KINDS,
   CONDITION_LINE_KIND_LABELS,
+  MAX_CONDITION_LEISTUNG_PRICES,
   type CustomerCondition,
 } from '@/lib/price-catalog/customer-conditions';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
@@ -114,6 +115,26 @@ type FormPartProps = {
   errors: Record<string, string | undefined>;
 };
 
+/** The first day the new version applies. */
+function ValidFromField({ form, onChange, errors }: FormPartProps) {
+  return (
+    <Field
+      label="Gültig ab"
+      htmlFor={conditionFieldId.validFrom}
+      required
+      error={errors[conditionFieldId.validFrom]}
+    >
+      <DatePicker
+        id={conditionFieldId.validFrom}
+        ariaLabel="Gültig ab"
+        value={parseIsoLocalDate(form.validFrom)}
+        // The picker answers the local midnight of the chosen day: keep that calendar day.
+        onChange={(date) => onChange({ ...form, validFrom: date ? toLocalDateString(date) : '' })}
+      />
+    </Field>
+  );
+}
+
 /** A discount in percent on the list price per kind of line. */
 function DiscountFields({ form, onChange, errors }: FormPartProps) {
   return (
@@ -171,30 +192,49 @@ function OwnPriceFields({ form, onChange, errors }: FormPartProps) {
           ))}
         </ul>
       )}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() =>
-          onChange({
-            ...form,
-            prices: [...form.prices, { key: crypto.randomUUID(), leistungId: '', price: '' }],
-          })
-        }
-      >
-        <Plus className="size-4" />
-        Eigenen Preis hinzufügen
-      </Button>
+      {form.prices.length < MAX_CONDITION_LEISTUNG_PRICES ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            onChange({
+              ...form,
+              prices: [...form.prices, { key: crypto.randomUUID(), leistungId: '', price: '' }],
+            })
+          }
+        >
+          <Plus className="size-4" />
+          Eigenen Preis hinzufügen
+        </Button>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Ein Stand hat höchstens {MAX_CONDITION_LEISTUNG_PRICES} eigene Preise.
+        </p>
+      )}
     </fieldset>
   );
+}
+
+/**
+ * One retry key per payload: a retry of the same values answers the first
+ * save, whose answer may have been lost; changed values are a new version.
+ */
+function useAttemptKey(): (payload: ConditionInput) => string {
+  const attempt = useRef<{ key: string; payload: string } | null>(null);
+  return (payload) => {
+    const text = JSON.stringify(payload);
+    if (attempt.current?.payload !== text) attempt.current = { key: crypto.randomUUID(), payload: text };
+    return attempt.current.key;
+  };
 }
 
 /**
  * Records a new version of a customer's conditions, filled from the newest
  * one: its first day, a discount per kind of line and own Leistung prices.
  * The version it was filled from goes with the save, so another session's
- * version meanwhile refuses this one; one key per opening makes a retried
- * press answer with the first version.
+ * version meanwhile refuses this one; one key per payload makes a retried
+ * press of the same values answer with the first version.
  */
 export function ClientConditionDialog({
   newest,
@@ -209,7 +249,7 @@ export function ClientConditionDialog({
 }) {
   const [form, setForm] = useState<ConditionForm>(() => conditionFormOf(newest, today));
   const [expectedVersion] = useState(() => newest?.version ?? 0);
-  const [attemptKey] = useState(() => crypto.randomUUID());
+  const attemptKeyFor = useAttemptKey();
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { run, isPending: pending } = usePendingTask();
@@ -225,7 +265,8 @@ export function ClientConditionDialog({
     }
     void run(async () => {
       setError(null);
-      const result = await onRecord(parsed.input, expectedVersion, attemptKey).catch(() => null);
+      const key = attemptKeyFor(parsed.input);
+      const result = await onRecord(parsed.input, expectedVersion, key).catch(() => null);
       if (!result?.success) {
         setError(result ? describeFailure(result.error, FAILURE_MESSAGES, SAVE_FAILED) : SAVE_FAILED);
         return;
@@ -244,24 +285,14 @@ export function ClientConditionDialog({
               gibt, behalten ihren Preis.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-6">
-            <Field
-              label="Gültig ab"
-              htmlFor={conditionFieldId.validFrom}
-              required
-              error={errors[conditionFieldId.validFrom]}
-            >
-              <DatePicker
-                id={conditionFieldId.validFrom}
-                ariaLabel="Gültig ab"
-                value={parseIsoLocalDate(form.validFrom)}
-                // The picker answers the local midnight of the chosen day: keep that calendar day.
-                onChange={(date) => setForm({ ...form, validFrom: date ? toLocalDateString(date) : '' })}
-              />
-            </Field>
-            <DiscountFields form={form} onChange={setForm} errors={errors} />
-            <OwnPriceFields form={form} onChange={setForm} errors={errors} />
-            <ErrorText>{error}</ErrorText>
+          <DialogBody>
+            {/* While the save runs, no field takes an edit the save would not carry. */}
+            <fieldset disabled={pending} className="space-y-6">
+              <ValidFromField form={form} onChange={setForm} errors={errors} />
+              <DiscountFields form={form} onChange={setForm} errors={errors} />
+              <OwnPriceFields form={form} onChange={setForm} errors={errors} />
+              <ErrorText>{error}</ErrorText>
+            </fieldset>
           </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={pending}>

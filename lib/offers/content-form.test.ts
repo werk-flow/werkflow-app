@@ -101,7 +101,7 @@ describe('catalogPositionForm', () => {
     taxRateBasisPoints: 700 as const,
     source,
     cost: { amountCents: 812, priceQuantity: 10 as const },
-    priceSource: { kind: 'listenpreis' as const },
+    priceSource: { kind: 'listenpreis' as const, proof: 'listenpreis-proof' },
   };
 
   test('the reader answer fills one unit of the article at its price and cost per price quantity', () => {
@@ -120,7 +120,7 @@ describe('catalogPositionForm', () => {
       cost: '8,12',
       costPriceQuantity: 10,
       markup: '',
-      priceSource: { kind: 'listenpreis', unitPriceCents: 1234 },
+      priceSource: { kind: 'listenpreis', proof: 'listenpreis-proof' },
     });
     const parsed = parseContentForm([{ key: 's', title: 'Material', positions: [position] }]);
     expect(parsed.ok && parsed.sections[0]?.positions[0]).toEqual({
@@ -134,7 +134,7 @@ describe('catalogPositionForm', () => {
       taxRateBasisPoints: 700,
       source: { kind: 'article', id: source.id },
       cost: { amountCents: 812, priceQuantity: 10 },
-      priceSource: { kind: 'listenpreis', unitPriceCents: 1234 },
+      priceSource: { kind: 'listenpreis', proof: 'listenpreis-proof' },
     });
   });
 
@@ -145,14 +145,14 @@ describe('catalogPositionForm', () => {
     const position = catalogPositionForm('a', {
       ...line,
       unitPriceCents: 1111,
-      priceSource: { kind: 'kundenkondition', condition },
+      priceSource: { kind: 'kundenkondition', condition, proof: 'condition-proof' },
     });
     const parse = (form: typeof position) =>
       parseContentForm([{ key: 's', title: 'Material', positions: [form] }]);
     const parsed = parse(position);
     expect(parsed.ok && parsed.sections[0]?.positions[0]).toMatchObject({
       unitPriceCents: 1111,
-      priceSource: { kind: 'kundenkondition', conditionId: condition.id, unitPriceCents: 1111 },
+      priceSource: { kind: 'kundenkondition', conditionId: condition.id, proof: 'condition-proof' },
     });
     // Typing the same price again is still the office's own price.
     const typed = withTypedPrice(position, '11,11');
@@ -216,7 +216,7 @@ describe('catalogPositionForm', () => {
             taxRateBasisPoints: 700,
             source: { ...source, archived: true },
             cost: { amountCents: 812, priceQuantity: 100 },
-            priceSource: { kind: 'listenpreis', unitPriceCents: 1234 },
+            priceSource: { kind: 'listenpreis', proof: 'listenpreis-proof' },
           },
         ],
       },
@@ -227,7 +227,7 @@ describe('catalogPositionForm', () => {
       quantity: '2.5',
       source: { kind: 'article', id: source.id },
       cost: { amountCents: 812, priceQuantity: 100 },
-      priceSource: { kind: 'listenpreis', unitPriceCents: 1234 },
+      priceSource: { kind: 'listenpreis', proof: 'listenpreis-proof' },
     });
   });
 });

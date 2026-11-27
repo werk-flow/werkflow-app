@@ -10,6 +10,8 @@
 // supabase/tests/offers.sql and client_price_conditions.sql prove the stored
 // source, the hidden cost, the conditions and the refusals.
 import assert from 'node:assert/strict';
+
+process.env.SUPABASE_SECRET_KEY = 'fixture-secret-key';
 import { mock } from 'bun:test';
 import {
   CALLER_ID,
@@ -97,17 +99,6 @@ const CONDITION = {
   materialDiscountTenths: 100,
   arbeitDiscountTenths: 50,
   anfahrtDiscountTenths: 0,
-  recordedAt: '2025-12-20T08:00:00Z',
-  leistungPrices: [
-    {
-      leistungId: leistungIds.own,
-      number: 'L-7',
-      name: 'Monteurstunde',
-      unit: 'hour',
-      archived: false,
-      salePriceCents: 6800,
-    },
-  ],
 };
 
 const ownRows = (table: string, organizationId: unknown, ids: unknown) =>
@@ -145,9 +136,14 @@ world.rpc = ({ name, args }) => {
     }));
     return { data: rows, error: null };
   }
-  if (name === 'list_client_price_conditions') {
-    const own = args.p_organization_id === ORGANIZATION_A && args.p_client_id === clientIds.conditioned;
-    return { data: own ? [CONDITION] : [], error: null };
+  if (name === 'offer_price_condition_on_day') {
+    const offer = tableRows(world, 'offers').find(
+      (row) => row.organization_id === args.p_organization_id && row.id === args.p_offer_id,
+    );
+    if (!offer) return { data: null, error: null };
+    const ownPriceCents = args.p_leistung_id === leistungIds.own ? 6800 : null;
+    const condition = offer.client_id === clientIds.conditioned ? { ...CONDITION, ownPriceCents } : null;
+    return { data: { condition }, error: null };
   }
   if (name === 'save_offer_content') return { data: SAVED, error: null };
   return { data: null, error: { message: `unexpected ${name}` } };
@@ -158,6 +154,24 @@ const { readInvoiceLineSource, readOfferArticleLine, readOfferLeistungLine } = a
 );
 const { saveOfferContent } = await import('@/lib/offers/actions');
 const { recordCustomerCondition } = await import('@/lib/price-catalog/actions');
+const { signPriceSource } = await import('@/lib/price-catalog/price-source-proof');
+
+/** The proof the server signs for a source of a Position of the organization's offer. */
+const proofOf = (
+  forOffer: string,
+  entry: { kind: 'article' | 'leistung'; id: string },
+  kind: 'listenpreis' | 'kundenkondition',
+  unitPriceCents: number,
+) =>
+  signPriceSource({
+    organizationId: ORGANIZATION_A,
+    offerId: forOffer,
+    entry,
+    kind,
+    conditionId: kind === 'kundenkondition' ? conditionId : null,
+    unitPriceCents,
+    priceQuantity: 1,
+  });
 
 const position = (
   source: { kind: 'article' | 'leistung'; id: string } | null,
@@ -247,14 +261,15 @@ for (const [label, call, priceRead] of foreignReads) {
     // The two reads run side by side, in either order.
     world.rpcCalls.map((rpc) => [rpc.name, rpc.args.p_organization_id]).sort(),
     [
-      ['list_client_price_conditions', ORGANIZATION_A],
+      ['offer_price_condition_on_day', ORGANIZATION_A],
       [priceRead, ORGANIZATION_A],
     ].sort(),
     `${label}: called more than the reads of its own organization`,
   );
 }
 
-// Another organization's offer is not found: no customer's conditions of it are read.
+// Another organization's offer is not found: the conditions read names Büro's own organization,
+// so it answers no customer's conditions of it.
 for (const call of [
   () => readOfferArticleLine({ offerId: foreignOfferId, articleId: articleIds.own }),
   () => readOfferLeistungLine({ offerId: foreignOfferId, leistungId: leistungIds.own }),
@@ -262,8 +277,8 @@ for (const call of [
   world.rpcCalls.length = 0;
   assert.deepEqual(await call(), { success: false, error: 'offer_not_found' });
   assert.ok(
-    world.rpcCalls.every((rpc) => rpc.name !== 'list_client_price_conditions'),
-    "another organization's offer read its customer's conditions",
+    world.rpcCalls.every((rpc) => rpc.args.p_organization_id === ORGANIZATION_A),
+    'a read named another organization',
   );
 }
 
@@ -288,7 +303,10 @@ assert.deepEqual(await readOfferArticleLine({ offerId: plainOfferId, articleId: 
       archived: false,
     },
     cost: COST,
-    priceSource: { kind: 'listenpreis' },
+    priceSource: {
+      kind: 'listenpreis',
+      proof: proofOf(plainOfferId, { kind: 'article', id: articleIds.own }, 'listenpreis', 1234),
+    },
   },
 });
 const leistungLine = {
@@ -305,20 +323,25 @@ assert.deepEqual(await readOfferLeistungLine({ offerId: plainOfferId, leistungId
   line: {
     ...leistungLine,
     cost: { amountCents: 4180, priceQuantity: 1 },
-    priceSource: { kind: 'listenpreis' },
+    priceSource: {
+      kind: 'listenpreis',
+      proof: proofOf(plainOfferId, { kind: 'leistung', id: leistungIds.own }, 'listenpreis', 7250),
+    },
   },
 });
 
 // The customer's conditions of today price the same entries: the Leistung's own price, the
-// article's list price less 10 % on material (1234 × 0,9 = 1110,6 → 1111), both naming the version.
-const fromCondition = {
+// article's list price less 10 % on material (1234 × 0,9 = 1110,6 → 1111), both naming the version
+// with the server's proof for this offer.
+const fromCondition = (entry: { kind: 'article' | 'leistung'; id: string }, unitPriceCents: number) => ({
   kind: 'kundenkondition',
   condition: { id: conditionId, version: 2, validFrom: '2026-01-01' },
-} as const;
+  proof: proofOf(offerId, entry, 'kundenkondition', unitPriceCents),
+});
 const ownLeistung = await readOfferLeistungLine({ offerId, leistungId: leistungIds.own });
 assert.deepEqual(ownLeistung.success && [ownLeistung.line.unitPriceCents, ownLeistung.line.priceSource], [
   6800,
-  fromCondition,
+  fromCondition({ kind: 'leistung', id: leistungIds.own }, 6800),
 ]);
 const ownArticle = await readOfferArticleLine({ offerId, articleId: articleIds.own });
 assert.deepEqual(
@@ -327,7 +350,7 @@ assert.deepEqual(
     ownArticle.line.priceQuantity,
     ownArticle.line.priceSource,
   ],
-  [1111, 1, fromCondition],
+  [1111, 1, fromCondition({ kind: 'article', id: articleIds.own }, 1111)],
 );
 const legacy = await readOfferArticleLine({ offerId: plainOfferId, articleId: articleIds.legacyUnit });
 assert.equal(legacy.success && legacy.line.unit, null, 'an article with a unit outside the list kept a unit');
@@ -340,21 +363,27 @@ assert.deepEqual(await readInvoiceLineSource({ kind: 'leistung', id: leistungIds
 
 // The save hands each Position's own cost to the database as its cost store names it, and its
 // price source, with the caller's organization and actor; it reads no price again. A source
-// whose answered price the Position no longer has is stored as „manuell“.
+// stays only with the server's proof for this offer, entry and price: a changed price, another
+// offer's proof, a forged proof and a claim without a catalog entry are stored as „manuell“.
+const pipe = { kind: 'article', id: articleIds.own } as const;
+const hour = { kind: 'leistung', id: leistungIds.own } as const;
+const claimOf = (entry: typeof pipe | typeof hour, unitPriceCents: number): PriceSourceClaim => ({
+  kind: 'kundenkondition',
+  conditionId,
+  proof: proofOf(offerId, entry, 'kundenkondition', unitPriceCents),
+});
 world.rpcCalls.length = 0;
 assert.deepEqual(
   await saveOfferContent(
     contentWith([
-      {
-        ...position({ kind: 'article', id: articleIds.own }, COST),
-        priceSource: { kind: 'listenpreis', unitPriceCents: 1234 },
-      },
-      {
-        ...position({ kind: 'leistung', id: leistungIds.own }, { amountCents: 4180, priceQuantity: 1 }),
-        priceSource: { kind: 'kundenkondition', conditionId, unitPriceCents: 6800 },
-      },
-      position(null, { amountCents: 0, priceQuantity: 1 }),
-      { ...position(null), priceSource: { kind: 'listenpreis', unitPriceCents: 1234 } },
+      { ...position(pipe, COST, claimOf(pipe, 1111)), unitPriceCents: 1111 },
+      position(hour, { amountCents: 4180, priceQuantity: 1 }, claimOf(hour, 6800)),
+      { ...position(hour, null, claimOf(hour, 6800)), unitPriceCents: 6800 },
+      position(pipe, null, {
+        kind: 'listenpreis',
+        proof: proofOf(plainOfferId, pipe, 'listenpreis', 1234),
+      }),
+      position(null, { amountCents: 0, priceQuantity: 1 }, { kind: 'listenpreis', proof: 'A'.repeat(43) }),
     ]),
   ),
   { success: true, offerId, ...SAVED },
@@ -370,17 +399,14 @@ assert.ok(Array.isArray(positions));
 assert.deepEqual(
   positions.map((entry) => [entry.source, entry.purchaseCost, 'cost' in entry, entry.priceSource]),
   [
-    [{ kind: 'article', id: articleIds.own }, COST, false, { kind: 'listenpreis', conditionId: null }],
-    [
-      { kind: 'leistung', id: leistungIds.own },
-      { amountCents: 4180, priceQuantity: 1 },
-      false,
-      // The Position's price is 12,34 €, not the condition's 68,00 €: the office changed it.
-      { kind: 'manuell', conditionId: null },
-    ],
+    [pipe, COST, false, { kind: 'kundenkondition', conditionId }],
+    // The Position's price is 12,34 €, not the condition's 68,00 €: the office changed it.
+    [hour, { amountCents: 4180, priceQuantity: 1 }, false, { kind: 'manuell', conditionId: null }],
+    [hour, null, false, { kind: 'kundenkondition', conditionId }],
+    // Another offer's proof.
+    [pipe, null, false, { kind: 'manuell', conditionId: null }],
+    // A forged proof, and no catalog entry.
     [null, { amountCents: 0, priceQuantity: 1 }, false, { kind: 'manuell', conditionId: null }],
-    // No catalog entry: a list price claim cannot stand.
-    [null, null, false, { kind: 'manuell', conditionId: null }],
   ],
 );
 

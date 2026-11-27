@@ -104,20 +104,22 @@ test('a content save whose priced Position names no price source is refused', ()
   };
   const content = (positions: unknown[]) => ({ ...save('', 0), sections: [{ title: 'Montage', positions }] });
   const conditionId = '98000000-0000-4000-8000-000000000002';
+  // A base64url HMAC-SHA256 of the server (lib/price-catalog/price-source-proof.ts).
+  const proof = 'p'.repeat(43);
   expect(saveOfferContentSchema.safeParse(content([position])).success).toBe(false);
   for (const priceSource of [
     { kind: 'manuell' },
-    { kind: 'listenpreis', unitPriceCents: 7250 },
-    { kind: 'kundenkondition', conditionId, unitPriceCents: 6800 },
+    { kind: 'listenpreis', proof },
+    { kind: 'kundenkondition', conditionId, proof },
   ]) {
     expect(saveOfferContentSchema.safeParse(content([{ ...position, priceSource }])).success).toBe(true);
   }
   for (const priceSource of [
-    { kind: 'kundenkondition', unitPriceCents: 6800 },
-    { kind: 'kundenkondition', conditionId: 'K-2', unitPriceCents: 6800 },
+    { kind: 'kundenkondition', proof },
+    { kind: 'kundenkondition', conditionId: 'K-2', proof },
     { kind: 'listenpreis' },
-    { kind: 'listenpreis', unitPriceCents: -1 },
-    { kind: 'rabatt', unitPriceCents: 6800 },
+    { kind: 'listenpreis', proof: 'kurz' },
+    { kind: 'rabatt', proof },
   ]) {
     expect(saveOfferContentSchema.safeParse(content([{ ...position, priceSource }])).success).toBe(false);
   }

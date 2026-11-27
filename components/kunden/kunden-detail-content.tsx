@@ -31,7 +31,7 @@ import { ClientRemovalDialog, type ClientRemoval } from '@/components/kunden/cli
 import { useClientRemoval } from '@/components/kunden/use-client-deletion';
 import { useCommunicationContactGuard } from '@/components/kunden/use-communication-contact-guard';
 import type { OfferPage } from '@/lib/offers/list-page';
-import type { CustomerCondition } from '@/lib/price-catalog/customer-conditions';
+import type { CustomerConditions } from '@/lib/price-catalog/customer-conditions';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 
 import type { ClientContact, ClientSite } from '@/lib/clients/types';
@@ -73,7 +73,7 @@ interface KundenDetailContentProps {
   /** The customer's newest offers; null for a failed read. */
   offers: OfferPage | null;
   /** The customer's Kundenkonditionen, newest version first; null for a failed read. */
-  conditions: CustomerCondition[] | null;
+  conditions: CustomerConditions | null;
 }
 
 export function KundenDetailContent({
@@ -298,7 +298,6 @@ function useKundenDetailRealtime(
       'document_links',
       'installed_equipment',
       'offers',
-      'client_price_conditions',
     ],
     eventFilter: (event) => !isLeavingRef.current && isCustomerDetailEvent(event, clientId, related),
   });

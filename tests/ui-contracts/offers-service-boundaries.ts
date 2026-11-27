@@ -100,7 +100,7 @@ export async function readOfferArticleLine(): Promise<{ success: true; line: Off
         archived: false,
       },
       cost: { amountCents: 310, priceQuantity: 1 },
-      priceSource: { kind: 'listenpreis' },
+      priceSource: { kind: 'listenpreis', proof: 'contract-proof' },
     },
   };
 }
@@ -128,6 +128,7 @@ export async function readOfferLeistungLine(): Promise<{ success: true; line: Of
       priceSource: {
         kind: 'kundenkondition',
         condition: { id: 'contract-condition', version: 2, validFrom: '2026-01-01' },
+        proof: 'contract-proof',
       },
     },
   };
