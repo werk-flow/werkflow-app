@@ -32,7 +32,20 @@ export type ToolCalls = {
   seen: Map<string, string>;
   /** The provider's ids of the current attempt's calls a tool ran for. */
   ran: Set<string>;
+  /** Calls a tool started whose ledger row is not written yet: tool name by ledger key. */
+  pending: Map<string, string>;
 };
+
+/** A turn's tool calls before the first one. */
+export function newToolCalls(): ToolCalls {
+  return { tainted: false, unrecorded: false, count: 0, seen: new Map(), ran: new Set(), pending: new Map() };
+}
+
+/** The ledger key of the turn's next call: one per call, so a late repeat of its row lands once. */
+function nextKey(context: ToolCallRun): string {
+  context.toolCalls.count += 1;
+  return `${context.runKey}:tool:${context.toolCalls.count}`;
+}
 
 /** What a turn's tool calls write with: its run, ledger key and caller. */
 type ToolCallRun = {
@@ -77,6 +90,8 @@ export async function runTool(
 ): Promise<ToolResultPart['output']> {
   context.toolCalls.ran.add(toolCallId);
   if (context.toolCalls.unrecorded) return { type: 'json', value: { status: 'failed' } };
+  const key = nextKey(context);
+  context.toolCalls.pending.set(key, tool.name);
   const caller = await currentCaller(context.command).catch((error: unknown) => {
     logError('aiTurn: caller read failed', error);
     return 'failed' as const;
@@ -90,9 +105,9 @@ export async function runTool(
         : { status: 'refused' };
   if (result.status === 'ok' && carriesUntrustedText(result.value)) context.toolCalls.tainted = true;
   const limitMs = AI_TURN_LIMITS[context.command.entryPoint].costWriteTimeoutMs;
-  if (!(await recordToolCall(context, tool.name, result.status, limitMs))) {
-    return { type: 'json', value: { status: 'failed' } };
-  }
+  const recorded = await recordToolCall(context, key, tool.name, result.status, limitMs);
+  context.toolCalls.pending.delete(key);
+  if (!recorded) return { type: 'json', value: { status: 'failed' } };
   return result.status === 'ok'
     ? untrustedToolOutput(result.value)
     : { type: 'json', value: { status: result.status } };
@@ -118,10 +133,28 @@ export async function recordUnrunCalls(context: ToolCallRun): Promise<void> {
       context.toolCalls.unrecorded = true;
       break;
     }
-    if (!(await recordToolCall(context, name, 'not_run', left))) break;
+    if (!(await recordToolCall(context, nextKey(context), name, 'not_run', left))) break;
   }
   seen.clear();
   ran.clear();
+}
+
+/**
+ * Records the calls whose tool was still running when the turn ended, as
+ * failed, before the run settles: no call leaves the turn without its row.
+ * Their result never reaches the model; a row the tool writes later under
+ * the same key lands once. The batch shares one write's time limit.
+ */
+export async function recordPendingCalls(context: ToolCallRun): Promise<void> {
+  const deadline = Date.now() + AI_TURN_LIMITS[context.command.entryPoint].costWriteTimeoutMs;
+  for (const [key, name] of context.toolCalls.pending) {
+    const left = deadline - Date.now();
+    if (left <= 0 || !(await recordToolCall(context, key, name, 'failed', left))) {
+      context.toolCalls.unrecorded = true;
+      return;
+    }
+    context.toolCalls.pending.delete(key);
+  }
 }
 
 /**
@@ -132,12 +165,11 @@ export async function recordUnrunCalls(context: ToolCallRun): Promise<void> {
  */
 async function recordToolCall(
   context: ToolCallRun,
+  key: string,
   name: string,
   status: AiToolResult['status'] | 'not_run',
   limitMs: number,
 ): Promise<boolean> {
-  context.toolCalls.count += 1;
-  const key = `${context.runKey}:tool:${context.toolCalls.count}`;
   const recorded = await boundedWrite('aiTurn: tool call record failed', limitMs, 2, (signal) =>
     context.admin
       .rpc('record_ai_run_attempt', {

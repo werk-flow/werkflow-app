@@ -99,7 +99,8 @@ const hang = (name: string, when: (args: Record<string, unknown>) => boolean = (
 // Each tool row moves the clock past the limit, as a slow write that succeeds would.
 {
   resetAiTables(world);
-  let now = Date.now();
+  let now = Date.parse('2026-11-27T08:00:00.000Z');
+  setSystemTime(new Date(now));
   world.rpc = (call) => {
     if (call.name === 'record_ai_run_attempt' && String(call.args.p_outcome).startsWith('tool_call_')) {
       now += WRITE_LIMIT_MS * 1.2;
@@ -120,4 +121,37 @@ const hang = (name: string, when: (args: Record<string, unknown>) => boolean = (
   );
   assert.deepEqual(runStatus(), ['failed'], 'the run must still settle');
   assert.equal(answerItem()?.status, 'failed');
+}
+
+const toolRows = () =>
+  rows('ai_run_attempts').flatMap((row) =>
+    String(row.p_outcome).startsWith('tool_call_') ? [row.p_outcome] : [],
+  );
+
+// A provider cost row past its limit still leaves each emitted tool call its ledger row; the run
+// keeps its provisional charge (B15, B19).
+{
+  resetAiTables(world);
+  hang('record_ai_run_attempt', (args) => !String(args.p_outcome).startsWith('tool_call_'));
+  const events = await readTurn(world, await postTurn('[replay:schleife] Schick alles raus.'));
+  world.rpc = answerOf;
+  assert.equal(events.at(-1)?.failure, 'interrupted');
+  assert.deepEqual(toolRows(), ['tool_call_unknown_not_run'], 'a failed cost row must not drop the call row');
+  assert.deepEqual(runStatus(), ['reserved']);
+}
+
+// A tool still reading when the turn's time is up gets its ledger row before the run settles (B19).
+{
+  resetAiTables(world);
+  hang('list_job_entries_page');
+  const request = JSON.stringify({ name: 'auftraege_finden', input: { suche: 'Heizung' } });
+  const events = await readTurn(world, await postTurn(`[replay:werkzeug] ${request}`));
+  world.rpc = answerOf;
+  assert.equal(events.at(-1)?.failure, 'timeout');
+  assert.deepEqual(
+    toolRows(),
+    ['tool_call_auftraege_finden_failed'],
+    'a stalled call must be ledgered as failed',
+  );
+  assert.deepEqual(runStatus(), ['cancelled'], 'the run settles after the stalled call is recorded');
 }
