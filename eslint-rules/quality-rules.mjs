@@ -1,6 +1,7 @@
 // Code-quality lint rules (docs/technical/code-quality.md). Each rule names
 // the defect that motivated it so the why travels with the no (decision 0005).
 
+import { noImportMetaFileReadRule } from './runtime-file-reads.mjs';
 import { measureFunctions } from './function-size.mjs';
 
 const BEST_EFFORT_ANNOTATION = /^\s*best-effort: \S/;
@@ -122,6 +123,7 @@ const functionSizeRule = {
 export const qualityRules = {
   rules: {
     'function-size': functionSizeRule,
+    'no-import-meta-file-read': noImportMetaFileReadRule,
     'no-silent-catch': noSilentCatchRule,
   },
 };
