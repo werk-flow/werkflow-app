@@ -24,41 +24,8 @@ import {
 // ── Time model constants ──────────────────────────────────────────────
 const TOTAL_RING_MINUTES = 510; // 8.5h = one full rotation of main ring
 const BREAK_THRESHOLD_MINUTES = 360; // 6h total clocked → break applies
-const BREAK_DURATION_MINUTES = 30;
 const BREAK_START_MINUTES = 330; // 5.5h mark on ring where yellow starts
-const OVERTIME_THRESHOLD_MINUTES = 510; // legacy threshold for fixed-break fallback
 const OVERTIME_RING_MAX_MINUTES = 240; // 4h = full outer overtime ring
-
-export interface TimeBreakdown {
-  workMinutes: number;
-  breakMinutes: number;
-  overtimeMinutes: number;
-}
-
-/**
- * Split total presence into work/break/overtime. Since P1-04 the overtime
- * boundary is the resolved daily target for that date (schedule → derived →
- * labeled default); callers that do not resolve targets keep the legacy
- * 8h boundary, which equals the `default` target source.
- */
-export function computeTimeBreakdown(
-  totalMinutes: number,
-  actualBreakMinutes?: number,
-  targetMinutes: number = DEFAULT_DAILY_TARGET_MINUTES,
-): TimeBreakdown {
-  if (actualBreakMinutes !== undefined) {
-    const clampedBreakMinutes = Math.max(0, Math.min(actualBreakMinutes, totalMinutes));
-    const netWorkMinutes = Math.max(0, totalMinutes - clampedBreakMinutes);
-    const overtimeMinutes = Math.max(0, netWorkMinutes - Math.max(0, targetMinutes));
-    const workMinutes = Math.max(0, netWorkMinutes - overtimeMinutes);
-    return { workMinutes, breakMinutes: clampedBreakMinutes, overtimeMinutes };
-  }
-
-  const breakMinutes = totalMinutes >= BREAK_THRESHOLD_MINUTES ? BREAK_DURATION_MINUTES : 0;
-  const overtimeMinutes = Math.max(0, totalMinutes - OVERTIME_THRESHOLD_MINUTES);
-  const workMinutes = totalMinutes - breakMinutes - overtimeMinutes;
-  return { workMinutes, breakMinutes, overtimeMinutes };
-}
 
 /**
  * Compute elapsed milliseconds for a live session.

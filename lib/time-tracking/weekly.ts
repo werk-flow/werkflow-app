@@ -1,12 +1,7 @@
 import type { TimeEntry, WeeklyTimeDataPoint, WeeklyTimeLabel } from './types';
 import type { DailyTarget } from '@/lib/personnel/targets';
-import {
-  calculateBreakMinutes,
-  calculateTotalMinutes,
-  computeTimeBreakdown,
-  groupEntriesByDate,
-} from './helpers';
-import { computeBreakdownForSettings, resolveBreakPolicyAtTimestamp, type BreakPolicy } from './settings';
+import { calculateBreakMinutes, calculateTotalMinutes, groupEntriesByDate } from './helpers';
+import { computeDayBreakdown, resolveBreakPolicyAtTimestamp, type BreakPolicy } from './settings';
 import { calculateBreakSessions, calculateWorkSessions } from './work-sessions';
 import {
   addLocalDays,
@@ -87,30 +82,18 @@ export function buildWeeklyTimeData(
     const dayEntries = grouped[key] || [];
     const workSessions = calculateWorkSessions(dayEntries);
     const breakSessions = calculateBreakSessions(dayEntries);
-    const productiveMinutes = calculateTotalMinutes(
-      workSessions.filter((session) => session.clockIn?.activityKind !== 'standby'),
-    );
     const standbyMinutes = calculateTotalMinutes(
       workSessions.filter((session) => session.clockIn?.activityKind === 'standby'),
     );
     const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
-    // The break steps count the day's presence without standby.
-    const policyMinutes = productiveMinutes + trackedBreakMinutes;
-    const totalMinutes = policyMinutes + standbyMinutes;
+    const totalMinutes = calculateTotalMinutes(workSessions) + trackedBreakMinutes;
     const referenceTimestamp = dayEntries[dayEntries.length - 1]?.timestamp ?? null;
     const effectiveSettings = resolveBreakPolicyAtTimestamp(settings, referenceTimestamp);
     const target = weekTargets?.[i];
-    const { breakMinutes } = computeBreakdownForSettings(
-      policyMinutes,
-      trackedBreakMinutes,
+    const breakdown = computeDayBreakdown(
+      { presenceMinutes: totalMinutes, standbyMinutes, trackedBreakMinutes },
       effectiveSettings,
-    );
-    // Standby is working time, as in the day: it counts toward the target and
-    // overtime. An unknown target owes no overtime, never an assumed 8 hours.
-    const breakdown = computeTimeBreakdown(
-      totalMinutes,
-      breakMinutes,
-      target?.targetMinutes ?? Number.POSITIVE_INFINITY,
+      target?.targetMinutes,
     );
 
     days.push({

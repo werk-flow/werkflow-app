@@ -11,7 +11,7 @@ import { SicknessSection } from './sickness-section';
 import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
 import { useZeiterfassungLiveTime } from './use-zeiterfassung-dashboard-live-time';
 import { ZeiterfassungDashboardHero } from './zeiterfassung-dashboard-hero';
-import { computeZeiterfassungLiveTotals } from './zeiterfassung-dashboard-live-totals';
+import { computeZeiterfassungLiveTotals } from '@/lib/time-tracking/live-totals';
 import { ZeiterfassungDashboardStatusCard } from './zeiterfassung-dashboard-status-card';
 
 interface ZeiterfassungDashboardProps {
@@ -94,7 +94,7 @@ export function ZeiterfassungDashboard({
             todayIndex={todayIndex}
             weekLabel={weekLabel}
             liveTotalMinutes={liveTotalMinutes}
-            liveBreakMinutes={totals.liveBreakMinutes}
+            liveBreakdown={totals.breakdown}
           />
         </StaleRegion>
       </div>
