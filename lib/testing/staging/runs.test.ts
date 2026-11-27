@@ -3,14 +3,15 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
-  RUN_PATTERNS,
   StagingFailure,
   actorRunId,
   factLine,
   failureText,
   newRunId,
+  originsFact,
   redact,
   runActorEmail,
+  runActorsQuery,
   runMemberEmail,
   runOrganizationName,
   selectRuns,
@@ -39,15 +40,6 @@ test('a run id names its UTC minute and six hex digits, and refuses less randomn
   expect(runOrganizationName(RUN)).toBe('Agenten-Test 20261125-1500-a1b2c3');
   expect(runActorEmail(RUN)).toBe('agent+20261125-1500-a1b2c3@werkflow-agents.test');
 });
-
-/** A SQL `like` pattern as a regular expression: `%` any text, `_` one character, the rest literal. */
-const likes = (pattern: string, value: string) =>
-  new RegExp(
-    `^${pattern
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      .replace(/%/g, '.*')
-      .replace(/_/g, '.')}$`,
-  ).test(value);
 
 describe('actor addresses', () => {
   test('an actor that receives no mail keeps the reserved .test domain', () => {
@@ -78,17 +70,19 @@ describe('actor addresses', () => {
       expect(actorRunId(email), email).toBeNull();
   });
 
-  test("the cleanup's patterns find every run address and only the run domains", () => {
-    const found = (email: string) =>
-      likes(RUN_PATTERNS.actorEmail, email) || likes(RUN_PATTERNS.memberEmail, email);
-    for (const email of [runActorEmail(RUN), runMemberEmail(RUN, 'buero'), runMemberEmail(RUN, 'employee')])
-      expect(found(email), email).toBe(true);
-    for (const email of [
-      'delivered@resend.dev',
-      `delivered+gg-${RUN}@resend.dev`,
-      `agent+${RUN}@partner.example`,
-    ])
-      expect(found(email), email).toBe(false);
+  test("the cleanup's DEV read returns a user only when its address is a run address of its own marker", () => {
+    const { query, parameters } = runActorsQuery();
+    // Each parameter is one run address with `{run}`, which the query fills with the user's own marker.
+    expect(parameters.map((address) => address.replace('{run}', RUN))).toEqual([
+      runActorEmail(RUN),
+      runMemberEmail(RUN, 'buero'),
+      runMemberEmail(RUN, 'employee'),
+    ]);
+    for (const [index] of parameters.entries())
+      expect(query).toContain(`replace($${index + 1}, '{run}', run.marker)`);
+    expect(query).toContain("run.marker ~ '^20[0-9]{6}-[0-9]{4}-[0-9a-f]{6}$' and email in (");
+    // No pattern match: an unmarked look-alike address never leaves the database.
+    expect(query).not.toContain(' like ');
   });
 });
 
@@ -145,6 +139,19 @@ describe('cleanup selection', () => {
 });
 
 describe('printing', () => {
+  test('refused origins print as one bounded fact, however long or key-shaped a host is', () => {
+    const long = `https://${'a'.repeat(63)}.${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(57)}`;
+    const keyShaped = 'https://sbp-cdn.example';
+    for (const origins of [[long], [keyShaped], ['https://pay.google.com', long, keyShaped]]) {
+      const fact = originsFact(origins, []);
+      expect(fact.length).toBeLessThanOrEqual(240);
+      expect(() => factLine('blocked', { origins: fact })).not.toThrow();
+    }
+    expect(originsFact(['https://pay.google.com', 'https://maps.googleapis.com'], [])).toBe(
+      'https://pay.google.com,https://maps.googleapis.com',
+    );
+  });
+
   test('a failure line loses every secret, key-shaped word and address', () => {
     const password = 'MadeUpPassword-Aa1';
     const line = redact(

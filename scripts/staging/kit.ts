@@ -24,14 +24,16 @@ import {
   type StripeFacts,
 } from '../../lib/testing/staging/readers';
 import {
-  RUN_PATTERNS,
+  RUN_ORGANIZATION_PATTERN,
   StagingFailure,
   actorRunId,
   failureText,
   factLine,
+  originsFact,
   isRunId,
   runActorEmail,
   runMemberEmail,
+  runActorsQuery,
   runOrganizationName,
   selectRuns,
   type ActorRow,
@@ -183,16 +185,13 @@ const actorRows = z.array(
 );
 const organizationRows = z.array(z.object({ id: uuidSchema, name: z.string(), admin_id: uuidSchema }));
 
-/** Every run's actor and organization on DEV: the database filters, so no other row reaches the kit. */
+/** Every run's actor and organization on DEV: the database filters by the run's marks, so no other user reaches the kit. */
 async function readRunRows(kit: Kit): Promise<{ actors: ActorRow[]; organizations: OrganizationRow[] }> {
+  const actorsRead = runActorsQuery();
   const [actors, organizations] = await Promise.all([
-    readOnlySql(
-      kit,
-      "select id, email, created_at, raw_app_meta_data->>'werkflow_agent_run' as run_marker from auth.users where email like $1 or email like $2",
-      [RUN_PATTERNS.actorEmail, RUN_PATTERNS.memberEmail],
-    ),
+    readOnlySql(kit, actorsRead.query, actorsRead.parameters),
     readOnlySql(kit, 'select id, name, admin_id from public.organizations where name like $1', [
-      RUN_PATTERNS.organizationName,
+      RUN_ORGANIZATION_PATTERN,
     ]),
   ]);
   return {
@@ -407,7 +406,7 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
     } catch (error) {
       outcome = { error };
     }
-    if (blocked.size) kit.log('blocked', { origins: [...blocked].join(',') });
+    if (blocked.size) kit.log('blocked', { origins: originsFact(blocked, kit.secrets) });
   } finally {
     await browser.close();
   }
