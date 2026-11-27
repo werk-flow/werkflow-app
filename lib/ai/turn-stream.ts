@@ -3,9 +3,10 @@ import type { AiTurnEnd, AiTurnSink } from '@/lib/ai/turn';
 /** Text deltas reach the client at most this often (brief non-negotiable 4). */
 const DELTA_BATCH_MS = 50;
 
-type Schedule = (run: () => void, delayMs: number) => () => void;
+/** Runs a task after a delay and returns its cancel; tests pass a manual one. */
+export type Schedule = (run: () => void, delayMs: number) => () => void;
 
-const timerSchedule: Schedule = (run, delayMs) => {
+export const timerSchedule: Schedule = (run, delayMs) => {
   const timer = setTimeout(run, delayMs);
   return () => clearTimeout(timer);
 };

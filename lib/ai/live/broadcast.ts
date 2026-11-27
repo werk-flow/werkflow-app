@@ -9,6 +9,7 @@ import {
   kiLiveTopic,
 } from '@/lib/ai/live/events';
 import type { AiTurnEnd, AiTurnSink } from '@/lib/ai/turn';
+import { type Schedule, timerSchedule } from '@/lib/ai/turn-stream';
 import { getSupabaseUrl } from '@/lib/env/public';
 import { getSupabaseSecretKey } from '@/lib/env/server';
 import { logError } from '@/lib/logging';
@@ -16,12 +17,6 @@ import { logError } from '@/lib/logging';
 /** The live channel's deltas leave at most this often: a fast model sends one message per interval. */
 const KI_LIVE_INTERVAL_MS = 250;
 
-type Schedule = (run: () => void, delayMs: number) => () => void;
-
-const timerSchedule: Schedule = (run, delayMs) => {
-  const timer = setTimeout(run, delayMs);
-  return () => clearTimeout(timer);
-};
 
 /** Sends events in order through one REST call; resolves whether Realtime accepted them. */
 export type KiLiveSend = (topic: string, events: KiLiveEvent[], signal: AbortSignal) => Promise<boolean>;

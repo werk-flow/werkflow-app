@@ -78,10 +78,14 @@ function applyKiLiveEvent(
   const unchanged = { window, applied: true };
   if (event.type === 'started') {
     const keys = new Set(window.messages.map((message) => message.key));
-    // A turn that starts past messages the page never saw waits, so the cursor does not skip them.
+    // A turn that starts past messages the page never saw waits, so the cursor does not skip them. A
+    // retried command keeps its saved message, so its answer can land past a missing sequence too.
     const last = Math.max(0, ...window.messages.map((message) => message.sequence));
-    if (!keys.has(userKey(event.command)) && event.user.sequence > last + 1)
-      return { window, applied: false };
+    const userHeld = keys.has(userKey(event.command));
+    const userGap = !userHeld && event.user.sequence > last + 1;
+    const answerGap =
+      !keys.has(answerKey(event.command)) && event.answer.sequence > (userHeld ? last : event.user.sequence) + 1;
+    if (userGap || answerGap) return { window, applied: false };
     const added: AiChatMessage[] = [];
     if (!keys.has(userKey(event.command)))
       added.push({

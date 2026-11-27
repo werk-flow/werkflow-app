@@ -122,6 +122,17 @@ test('a turn that starts past messages the page never saw waits for a read, so t
   expect(kiLiveCursor(earlier), 'the catch-up starts at the first message the page lacks').toBe(3);
 });
 
+test('a retried command whose answer lands past a missing sequence waits for a read', () => {
+  const held: AiThreadWindow = { hasOlder: false, messages: [message('c1:user', 1, { role: 'user' })] };
+  const retried: KiLiveEvent = {
+    ...started,
+    user: { sequence: 1, text: 'Wie entlüfte ich?' },
+    answer: { sequence: 3 },
+  };
+  expect(applyKiLiveEvent(held, retried).applied).toBe(false);
+  expect(applyKiLiveEvent(held, { ...retried, answer: { sequence: 2 } }).applied).toBe(true);
+});
+
 test('text for an answer the page never saw waits for a read', () => {
   expect(applyKiLiveEvent(earlier, text(0, 'Erst')).applied).toBe(false);
 });

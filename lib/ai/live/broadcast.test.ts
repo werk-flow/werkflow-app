@@ -1,10 +1,8 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 
 import type { KiLiveEvent } from '@/lib/ai/live/events';
 
 mock.module('server-only', () => ({}));
-const logged: unknown[] = [];
-mock.module('@/lib/logging', () => ({ logError: (...args: unknown[]) => logged.push(args) }));
 const { createKiLiveBroadcast } = await import('./broadcast');
 
 function manualSchedule() {
@@ -159,7 +157,8 @@ test('a save that says the author lost access stops every further send, the end 
 });
 
 test('a failed send is logged once per turn and the end still goes out', async () => {
-  logged.length = 0;
+  // logError writes through console.error (lib/logging.ts); the spy keeps this test's lines to itself.
+  const logged = spyOn(console, 'error').mockImplementation(() => undefined);
   const clock = manualSchedule();
   const sent: KiLiveEvent[][] = [];
   const live = createKiLiveBroadcast(
@@ -185,5 +184,7 @@ test('a failed send is logged once per turn and the end still goes out', async (
     failure: 'Die Antwort wurde unterbrochen.',
     length: 1,
   });
-  expect(logged).toHaveLength(1);
+  const lines = logged.mock.calls.filter(([label]) => label === 'kiLive: broadcast failed');
+  logged.mockRestore();
+  expect(lines).toHaveLength(1);
 });
