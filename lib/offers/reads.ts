@@ -186,24 +186,8 @@ function priceSourceOf(
     : { kind: 'kundenkondition', condition: stored.condition, proof };
 }
 
-/**
- * One offer of the organization as the office's page reads it: its header
- * with the names it shows, its content, and each priced Position's cost and
- * price source, read in one statement with the content. The caller has established Admin
- * or Büro; `null` when there is no such offer.
- */
-export async function readOfferWithCosts(
-  organizationId: string,
-  offerId: string,
-): Promise<OfferWithCosts | null> {
-  const admin = createSupabaseAdminClient();
-  const selected = await admin.rpc('get_offer_with_costs', {
-    p_organization_id: organizationId,
-    p_offer_id: offerId,
-  });
-  if (selected.error) throw new Error('offer_read_failed');
-  if (selected.data === null) return null;
-  const parsed = offerWithCostsSchema.safeParse(selected.data);
+function offerWithCostsOf(data: unknown, scope: { organizationId: string; offerId: string }): OfferWithCosts {
+  const parsed = offerWithCostsSchema.safeParse(data);
   if (!parsed.success) throw new Error('offer_read_failed');
   const offer = offerDetailOf(parsed.data.offer);
   const { costs, priceSources } = parsed.data;
@@ -220,7 +204,7 @@ export async function readOfferWithCosts(
         return {
           ...position,
           cost,
-          priceSource: priceSourceOf(priceSource, position, { organizationId, offerId }),
+          priceSource: priceSourceOf(priceSource, position, scope),
         };
       }),
     })),
@@ -246,6 +230,18 @@ const revisionsSchema = z.array(
   }),
 );
 
+/** The sent revisions as list_offer_revisions answers them, with who recorded each. */
+function revisionsOf(data: unknown): OfferRevision[] {
+  const parsed = revisionsSchema.safeParse(data);
+  if (!parsed.success) throw new Error('offer_revisions_read_failed');
+  return parsed.data.map(({ sentBy, ...revision }) => ({
+    ...revision,
+    sentBy: sentBy
+      ? formatProfileName({ first_name: sentBy.firstName, last_name: sentBy.lastName, email: sentBy.email })
+      : null,
+  }));
+}
+
 /** The sent revisions of one offer of the organization, newest first; none for an offer never sent. */
 export async function readOfferRevisions(organizationId: string, offerId: string): Promise<OfferRevision[]> {
   const admin = createSupabaseAdminClient();
@@ -253,12 +249,33 @@ export async function readOfferRevisions(organizationId: string, offerId: string
     p_organization_id: organizationId,
     p_offer_id: offerId,
   });
-  const parsed = revisionsSchema.safeParse(selected.data);
-  if (selected.error || !parsed.success) throw new Error('offer_revisions_read_failed');
-  return parsed.data.map(({ sentBy, ...revision }) => ({
-    ...revision,
-    sentBy: sentBy
-      ? formatProfileName({ first_name: sentBy.firstName, last_name: sentBy.lastName, email: sentBy.email })
-      : null,
-  }));
+  if (selected.error) throw new Error('offer_revisions_read_failed');
+  return revisionsOf(selected.data);
+}
+
+const offerWithRevisionsSchema = z.object({ offer: z.unknown(), revisions: z.unknown() });
+
+/**
+ * One offer of the organization as the office's page reads it: its header
+ * with the names it shows, its content with each priced Position's cost and price source, and
+ * its sent revisions, all from one database snapshot, so a draft never shows
+ * beside a revision sent after it. The caller has established Admin or Büro;
+ * `null` when there is no such offer. A failed or malformed read throws.
+ */
+export async function readOfferWithRevisions(
+  organizationId: string,
+  offerId: string,
+): Promise<{ offer: OfferWithCosts; revisions: OfferRevision[] } | null> {
+  const admin = createSupabaseAdminClient();
+  const selected = await admin.rpc('get_offer_with_revisions', {
+    p_organization_id: organizationId,
+    p_offer_id: offerId,
+  });
+  const parsed = offerWithRevisionsSchema.safeParse(selected.data);
+  if (selected.error || !parsed.success) throw new Error('offer_read_failed');
+  if (parsed.data.offer === null) return null;
+  return {
+    offer: offerWithCostsOf(parsed.data.offer, { organizationId, offerId }),
+    revisions: revisionsOf(parsed.data.revisions),
+  };
 }

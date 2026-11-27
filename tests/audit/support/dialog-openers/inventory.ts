@@ -36,6 +36,7 @@ import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
 import { invoiceDeliverySeed, parseDeliverySeed } from '../invoice-delivery-fixtures';
 import { offerDeliverySeed, parseOfferDeliverySeed } from '../offer-delivery-fixtures';
 import { invoiceChainSeed, parseInvoiceChain } from '../invoice-chain-fixtures';
+import { seedRevisedOffer } from '../../../golden/support/db/offer-revisions';
 import type { TestWorld } from '../../../golden/support/world';
 
 type ItemDialogPicker = Parameters<typeof itemDialogPicker>[1];
@@ -367,6 +368,17 @@ export const COMMERCIAL_OPENERS = {
     trigger: async ({ page }) =>
       page.getByRole('main').getByRole('button', { name: 'Vorschau', exact: true }),
     layer: (page) => page.getByRole('dialog', { name: /^Vorschau ANG-/ }),
+  },
+  'commercial.offer-revision': {
+    // The audit world's offer is a draft: „Bearbeiten“ of a sent one starts its next revision.
+    trigger: async ({ page, world }) => {
+      const offerId = await surfaceFixture(world, 'commercial.offer-revision', () =>
+        seedRevisedOffer(world, 'Layout Angebot gesendet', 'sent'),
+      );
+      await page.goto(`/angebote/${offerId}`);
+      return page.getByRole('main').getByRole('button', { name: 'Bearbeiten', exact: true });
+    },
+    layer: (page) => page.getByRole('alertdialog', { name: /^Revision \d+ bearbeiten\?$/ }),
   },
   'commercial.invoice': {
     trigger: async ({ page }) =>

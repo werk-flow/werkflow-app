@@ -142,3 +142,14 @@ export const sendOfferSchema = z.object({
 });
 
 export type SendOfferInput = z.input<typeof sendOfferSchema>;
+
+/** „Bearbeiten“ of a sent offer: starts its next revision as a draft. */
+export const startOfferRevisionSchema = z.object({
+  offerId: uuidSchema,
+  /** The version the page showed as sent: a change since refuses the start. */
+  expectedVersion: z.number().int().positive(),
+  /** One key per confirmation: a press repeated after a lost answer gets the first start. */
+  attemptKey: uuidSchema,
+});
+
+export type StartOfferRevisionInput = z.input<typeof startOfferRevisionSchema>;

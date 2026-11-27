@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { useClientRead } from '@/hooks/use-client-read';
@@ -15,14 +15,21 @@ import type { ActionFailure } from '@/lib/action-result';
 /** The PDF's blob: URL and the SHA-256 of its bytes, as lowercase hex. */
 type PdfRead = { success: true; url: string; contentHash: string } | ActionFailure<'load_failed'>;
 
-async function readPdf(path: string, signal: AbortSignal): Promise<PdfRead> {
+/** Reads the PDF at `path`; `allocate` turns its bytes into the URL the answer names. */
+async function readPdf(
+  path: string,
+  signal: AbortSignal,
+  allocate: (blob: Blob) => string,
+): Promise<PdfRead> {
   try {
     const response = await fetch(path, { signal, cache: 'no-store' });
     if (!response.ok) return { success: false, error: 'load_failed' };
     const blob = await response.blob();
     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()));
+    // The digest takes no signal: a preview closed meanwhile allocates no URL.
+    if (signal.aborted) return { success: false, error: 'load_failed' };
     const contentHash = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
-    return { success: true, url: URL.createObjectURL(blob), contentHash };
+    return { success: true, url: allocate(blob), contentHash };
   } catch {
     // A lost connection is the same failure as a refused render: the retry asks again.
     return { success: false, error: 'load_failed' };
@@ -31,7 +38,10 @@ async function readPdf(path: string, signal: AbortSignal): Promise<PdfRead> {
 
 /**
  * The PDF at `path` as a blob: URL while `enabled`; a change of `deps`
- * renders it anew. The URL is revoked once it is replaced or unmounted.
+ * renders it anew. Every URL a read made is recorded as it is made: the one on
+ * screen stays, the others are revoked once no read runs, among them one whose
+ * read the hook dropped because it was aborted after the URL was made, and all
+ * are revoked on unmount.
  */
 export function usePdfRead({
   path,
@@ -44,14 +54,37 @@ export function usePdfRead({
   enabled?: boolean;
   failureMessage: string;
 }) {
+  const made = useRef(new Set<string>());
   const read = useClientRead({
-    read: (signal) => readPdf(path, signal),
+    read: (signal) =>
+      readPdf(path, signal, (blob) => {
+        const url = URL.createObjectURL(blob);
+        made.current.add(url);
+        return url;
+      }),
     deps: [path, ...deps],
     enabled,
     failureMessage,
   });
   const url = read.data?.url;
-  useEffect(() => (url ? () => URL.revokeObjectURL(url) : undefined), [url]);
+  const settled = !read.loading;
+  // Once no read of the current deps runs, every URL but the shown one is off screen for good:
+  // replaced, or made by a read the hook dropped, also when the read after it failed.
+  useEffect(() => {
+    if (!settled) return;
+    for (const other of made.current) {
+      if (other === url) continue;
+      URL.revokeObjectURL(other);
+      made.current.delete(other);
+    }
+  }, [url, settled]);
+  useEffect(() => {
+    const urls = made.current;
+    return () => {
+      for (const other of urls) URL.revokeObjectURL(other);
+      urls.clear();
+    };
+  }, []);
   return read;
 }
 

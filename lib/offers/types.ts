@@ -117,7 +117,7 @@ export type OfferDetail = {
   sections: OfferStoredSection[];
 };
 
-/** An offer as the office's editor reads it (readOfferWithCosts): the same, each priced Position with its cost and price source. */
+/** An offer as the office's editor reads it (readOfferWithRevisions): each priced Position with its cost and price source. */
 export type OfferWithCosts = Omit<OfferDetail, 'sections'> & { sections: OfferCostedSection[] };
 
 /** How the office says it sent a revision; WerkFlow itself sends nothing. */
