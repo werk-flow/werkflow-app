@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { rpcArgs } from '../../../lib/supabase/rpc-args';
-import { createAdminClient } from '../../golden/support/db/shared';
-import type { TestWorld } from '../../golden/support/world';
+import { rpcArgs } from '../../../../lib/supabase/rpc-args';
+import { createAdminClient } from './shared';
+import type { TestWorld } from '../world';
 
 // A made-up sent offer for the audit world, written through the real
 // functions: create_offer, save_offer_content, send_offer and
@@ -33,9 +33,9 @@ const FIRST = [
   },
 ];
 const FIRST_TOTALS = { netCents: 10_875, taxCents: 2066, grossCents: 12_941 };
-const SECOND = [
+const SECOND: typeof FIRST = [
   {
-    ...FIRST[0],
+    title: 'Wartung',
     netCents: 12_675,
     positions: [
       ...(FIRST[0]?.positions ?? []),

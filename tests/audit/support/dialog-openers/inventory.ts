@@ -35,7 +35,7 @@ import type { DialogOpener } from '../dialog-opener';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
 import { invoiceDeliverySeed, parseDeliverySeed } from '../invoice-delivery-fixtures';
 import { invoiceChainSeed, parseInvoiceChain } from '../invoice-chain-fixtures';
-import { seedRevisedOffer } from '../offer-revision-fixtures';
+import { seedRevisedOffer } from '../../../golden/support/db/offer-revisions';
 import type { TestWorld } from '../../../golden/support/world';
 
 type ItemDialogPicker = Parameters<typeof itemDialogPicker>[1];

@@ -1,6 +1,6 @@
 import type { TestWorld } from '../../../golden/support/world';
 import { acceptanceSet, type OpenSet } from '../acceptance-sets';
-import { seedRevisedOffer, type OfferRevisionStage } from '../offer-revision-fixtures';
+import { seedRevisedOffer, type OfferRevisionStage } from '../../../golden/support/db/offer-revisions';
 import type { SurfaceDestination } from '../surface-routes';
 import { surfaceFixture } from '../surface-fixtures';
 
