@@ -1,4 +1,6 @@
 name: release
+# The CI alert timer finds its own dispatches by this name (werk-flow/werkflow-planning ops/ci-alert.py).
+run-name: ${{ inputs.scheduled && 'Scheduled release' || 'release' }}
 
 # The owner's release (docs/technical/environments.md, "Release and rollback").
 # It decides each weekday at 03:30 Berlin, so PROD is live by 05:00, or by hand: gh workflow run release. It releases
@@ -9,24 +11,20 @@ name: release
 # stopped at a red full run, opens or updates the issue "CI alert: release"; the next
 # release that ships closes it.
 on:
-  # GitHub starts this repository's scheduled runs up to 10 hours late, so this line fires at
-  # 17:00 the evening before a weekday: even 10 hours late, and behind a nightly full run on the
-  # same commit (ci.yml queues them), its own full run ends before 05:00. The Hold job waits for
-  # 03:30. It stays a schedule event, so it decides as a scheduled run (lib/testing/ci-schedule.test.ts
-  # keeps these times).
-  schedule:
-    - cron: '0 17 * * 0-4'
-      timezone: Europe/Berlin
+  # No cron: GitHub starts scheduled runs up to 10 hours late, and a run that held on a runner
+  # until 03:30 cost hours of job-minutes (werk-flow/werkflow-planning#503). The ci-alert timer
+  # dispatches it with scheduled=true at 03:30 Berlin, Monday to Friday
+  # (lib/testing/ci-schedule.test.ts keeps the times).
   workflow_dispatch:
     inputs:
       dry_run:
         description: Decide like a scheduled run, then stop before the full run and any change to PROD
         type: boolean
         default: false
-      # A runner's scheduler dispatches the release at 03:30 instead of a held run
-      # (bun scripts/ci/schedule.ts due). It decides like a scheduled run, never as a manual one.
+      # The weekday release: the ci-alert timer's dispatch at 03:30. It decides as a scheduled run,
+      # never as a manual one.
       scheduled:
-        description: Decide and ship like a scheduled run, without the hold (the CI scheduler's dispatch at 03:30)
+        description: Decide and ship like a scheduled run (the ci-alert timer's dispatch at 03:30)
         type: boolean
         default: false
       alert_proof:
@@ -48,31 +46,8 @@ env:
   VERCEL_PROJECT_ID: prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R
 
 jobs:
-  hold:
-    name: Hold until 03:30
-    # Only a scheduled run waits. A job lasts 6 hours at most, so two legs in turn cover the
-    # evening: the second ends at once when the first reached 03:30. A failed leg stops the
-    # release, and the alert reports it.
-    strategy:
-      max-parallel: 1
-      matrix:
-        leg: [1, 2]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 350
-    steps:
-      # Only the script is read; no step needs the job token in .git/config.
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        if: github.event_name == 'schedule'
-        with:
-          persist-credentials: false
-          sparse-checkout: .github/scripts
-      - name: Wait for 03:30 Berlin
-        if: github.event_name == 'schedule'
-        run: bash .github/scripts/hold-until.sh 03:30
-
   candidate:
     name: Find a full run
-    needs: hold
     # Without a successful candidate no later job runs, so a proof run cannot ship.
     if: ${{ !inputs.alert_proof }}
     runs-on: ubuntu-24.04
@@ -97,7 +72,7 @@ jobs:
         id: candidate
         env:
           GH_TOKEN: ${{ github.token }}
-          MODE: ${{ inputs.dry_run && 'dry-run' || (github.event_name == 'schedule' || inputs.scheduled) && 'scheduled' || 'manual' }}
+          MODE: ${{ inputs.dry_run && 'dry-run' || inputs.scheduled && 'scheduled' || 'manual' }}
         run: bash .github/scripts/release-candidate.sh "$MODE"
 
   full:
@@ -238,7 +213,7 @@ jobs:
 
   alert:
     name: Alert
-    needs: [hold, candidate, full, dev, release, smoke, proof]
+    needs: [candidate, full, dev, release, smoke, proof]
     # Only a real release on main speaks, and a run a person cancelled says nothing. Nothing
     # needs this job, so it runs after the release decision and changes none.
     if: ${{ !cancelled() && !inputs.dry_run && (github.ref == 'refs/heads/main' || inputs.alert_proof) }}

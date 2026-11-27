@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 
 import type { DocumentPosition } from '@/lib/document-rendering/model';
 import { offerDocument, type PrintedOffer } from './document';
-import type { OfferCostedSection } from './types';
+import type { OfferCostedSection, OfferPriceSource } from './types';
 
 const values = {
   name: 'Wartung Gastherme',
@@ -13,6 +13,8 @@ const values = {
   priceQuantity: 1,
   taxRateBasisPoints: 1900,
 } satisfies Partial<OfferCostedSection['positions'][number]>;
+// The price source is the editor's; the document never carries it.
+const priceSource: OfferPriceSource = { kind: 'manuell' };
 const cost = { amountCents: 8000, priceQuantity: 1 } satisfies { amountCents: number; priceQuantity: 1 };
 
 // The editor's content of one Titel: the same values typed by hand, taken
@@ -21,7 +23,7 @@ const costed: OfferCostedSection[] = [
   {
     title: 'Wartung',
     positions: [
-      { kind: 'free', ...values, source: null, cost },
+      { kind: 'free', ...values, source: null, cost, priceSource },
       {
         kind: 'free',
         ...values,
@@ -33,6 +35,7 @@ const costed: OfferCostedSection[] = [
           archived: false,
         },
         cost,
+        priceSource,
       },
       { kind: 'text', name: 'Hinweis', description: 'Nach Absprache.' },
       {
@@ -40,6 +43,7 @@ const costed: OfferCostedSection[] = [
         ...values,
         source: { kind: 'article', id: crypto.randomUUID(), number: 'A-7', name: 'Wartung', archived: true },
         cost,
+        priceSource,
       },
     ],
   },

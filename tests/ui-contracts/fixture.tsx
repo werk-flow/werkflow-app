@@ -83,6 +83,10 @@ import {
   InventoryMovementsContractFixture,
 } from './inventory-movements-boundaries';
 import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
+import {
+  CustomerConditionsContractFixture,
+  CustomerConditionsSectionContractFixture,
+} from './customer-conditions-boundaries';
 import { OffersContractFixture } from './offers-boundaries';
 import {
   InvoiceDeliveriesContractFixture,
@@ -93,6 +97,7 @@ import {
 } from './invoice-editor-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { ServiceReportDeliveryContractFixture } from './service-report-delivery-boundaries';
+import { OfferDeliveryContractFixture } from './offer-delivery-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
@@ -655,6 +660,12 @@ createRoot(root).render(
     <InventoryMovementsContractFixture />
   ) : window.uiContractFixture === 'leistungen' ? (
     <LeistungenContractFixture />
+  ) : window.uiContractFixture === 'customer-conditions' ? (
+    <CustomerConditionsContractFixture />
+  ) : window.uiContractFixture === 'customer-conditions-section' ? (
+    <BannerProvider>
+      <CustomerConditionsSectionContractFixture />
+    </BannerProvider>
   ) : window.uiContractFixture === 'presentation' ? (
     <PresentationFixture />
   ) : window.uiContractFixture === 'customer' ? (
@@ -687,6 +698,8 @@ createRoot(root).render(
     <InvoiceDeliveryRetryContractFixture stale />
   ) : window.uiContractFixture === 'service-report-delivery' ? (
     <ServiceReportDeliveryContractFixture />
+  ) : window.uiContractFixture === 'offer-delivery' ? (
+    <OfferDeliveryContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>

@@ -94,7 +94,6 @@ export function useMitarbeiterDetailLiveTime({
   const nowMs = useWallClockTick(60_000);
   const { presenceMinutes: liveTotalMinutes, breakdown: memberBreakdown } = memberLiveDay(
     status,
-    breakPolicy,
     todayTarget?.targetMinutes,
     nowMs,
   );

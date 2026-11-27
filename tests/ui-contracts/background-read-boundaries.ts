@@ -24,6 +24,7 @@ import { readOnCallOverviewContract } from './worker-start-service-boundaries';
 import { readKiThreadWindowContract } from './ki-chat-boundaries';
 import { readKiFileUrlContract } from './ki-files-boundaries';
 import { readServiceReportDeliveryContract } from './service-report-delivery-boundaries';
+import { readOfferRevisionDeliveryContract } from './offer-delivery-boundaries';
 import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
 
 export async function readInBackground(kind: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
@@ -62,6 +63,7 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
   if (kind === 'ki-file-url') return readKiFileUrlContract(input);
   if (kind === 'on-call-overview') return readOnCallOverviewContract();
   if (kind === 'service-report-delivery') return readServiceReportDeliveryContract();
+  if (kind === 'offer-revision-delivery') return readOfferRevisionDeliveryContract(input);
   if (kind === 'personnel-lifecycle' && input && typeof input === 'object' && 'employeeRecordId' in input)
     return getPersonnelLifecycle(String(input.employeeRecordId));
   // The job edit dialog's assignment reads stay in flight: its focus contract

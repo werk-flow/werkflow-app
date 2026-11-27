@@ -279,6 +279,9 @@ mock.module('@/lib/service-reports/page-actions', () => ({
   getCompletedVisitPage: seam('completed-maintenance-visits'),
   getServiceReportDelivery: seam('service-report-delivery'),
 }));
+mock.module('@/lib/offers/delivery-read', () => ({
+  getOfferRevisionDelivery: seam('offer-revision-delivery'),
+}));
 mock.module('@/lib/work-templates/actions', () => ({
   getWorkTemplates: seam('work-templates'),
   getWorkTemplate: seam('work-template-detail'),
@@ -496,6 +499,7 @@ const inputs: Record<string, unknown> = {
   'on-call-overview': { organizationId },
   'completed-maintenance-visits': { organizationId, page: 2 },
   'service-report-delivery': { reportId: jobId },
+  'offer-revision-delivery': { offerId: jobId, revision: 2 },
   'published-work-templates': { targetType: 'project' },
   'work-template-preview': { versionId: jobId, targetType: 'job', jobId },
   'approved-artifact-actions': { targetType: 'job', targetId: jobId },

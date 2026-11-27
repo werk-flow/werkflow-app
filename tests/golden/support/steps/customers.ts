@@ -344,6 +344,16 @@ export function siteRolesDialog(page: Page): Locator {
   return page.getByRole('dialog', { name: CUSTOMER_COPY.siteRolesTitle, exact: true });
 }
 
+/** „Konditionen festlegen“ of a customer without Kundenkonditionen. */
+export function setConditionsButton(page: Page): Locator {
+  return page.getByRole('button', { name: 'Konditionen festlegen', exact: true });
+}
+
+/** The dialog that records the customer's first Kundenkonditionen. */
+export function conditionsDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: 'Konditionen festlegen', exact: true });
+}
+
 /** The dialog that adds a work site to the customer. */
 export function customerSiteDialog(page: Page): Locator {
   return page.getByRole('dialog', { name: CUSTOMER_COPY.addSite, exact: true });

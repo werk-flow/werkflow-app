@@ -360,4 +360,235 @@ begin
 end;
 $$;
 
+-- Editing a sent offer starts revision n+1 (migration
+-- 20270701090000_start_the_next_revision_of_a_sent_offer.sql): revision 1 and
+-- the Positionen with their costs before the start.
+create temporary table before_revision as
+select (select to_jsonb(sent) from public.offer_revisions sent
+    where sent.organization_id = '38070000-0000-4000-8000-000000000010'
+      and sent.offer_id = pg_temp.id('first') and sent.revision = 1) as first_revision,
+  (select jsonb_agg(to_jsonb(line) - 'updated_at' order by line.section_id, line.position)
+    from public.offer_positions line
+    where line.organization_id = '38070000-0000-4000-8000-000000000010'
+      and line.offer_id = pg_temp.id('first')) as positions;
+grant select on before_revision to service_role;
+
+create function pg_temp.start(
+  p_offer uuid, p_version integer, p_key uuid,
+  p_actor uuid default '38070000-0000-4000-8000-000000000002',
+  p_organization uuid default '38070000-0000-4000-8000-000000000010'
+) returns jsonb language sql as $$
+  select public.start_offer_revision(p_actor, p_organization, p_offer, p_version, p_key);
+$$;
+grant execute on function pg_temp.start(uuid, integer, uuid, uuid, uuid) to service_role;
+
+create function pg_temp.revision(p_revision integer) returns public.offer_revisions language sql as $$
+  select * from public.offer_revisions revision
+  where revision.organization_id = '38070000-0000-4000-8000-000000000010'
+    and revision.offer_id = pg_temp.id('first') and revision.revision = p_revision;
+$$;
+grant execute on function pg_temp.revision(integer) to service_role;
+
+set local role service_role;
+
+-- „Bearbeiten“ on the sent offer: „Entwurf“ again at a new version and content
+-- version, the Positionen as sent with their costs, revision 1 untouched, and
+-- the history entry naming revision 1, in one call.
+do $$
+declare
+  v_answer jsonb := pg_temp.start(pg_temp.id('first'), 2, '38070000-0000-4000-8000-000000000111');
+  v_event public.offer_events;
+begin
+  if v_answer - 'updatedAt' is distinct from '{"revision": 2, "version": 3, "replay": false}'::jsonb
+    or (v_answer ->> 'updatedAt')::timestamptz is distinct from (select updated_at from public.offers
+      where organization_id = '38070000-0000-4000-8000-000000000010' and id = pg_temp.id('first')) then
+    raise exception 'the start of revision 2 answered %', v_answer;
+  end if;
+  if (select status || ':' || version || ':' || content_version from public.offers
+      where organization_id = '38070000-0000-4000-8000-000000000010' and id = pg_temp.id('first'))
+    is distinct from 'entwurf:3:3' then
+    raise exception 'the started revision is not a draft at version 3 and content version 3';
+  end if;
+  if (select jsonb_agg(to_jsonb(line) - 'updated_at' order by line.section_id, line.position)
+      from public.offer_positions line
+      where line.organization_id = '38070000-0000-4000-8000-000000000010'
+        and line.offer_id = pg_temp.id('first'))
+    is distinct from (select positions from before_revision) then
+    raise exception 'the start of revision 2 changed the Positionen or their costs';
+  end if;
+  if to_jsonb(pg_temp.revision(1)) is distinct from (select first_revision from before_revision) then
+    raise exception 'the start of revision 2 changed revision 1';
+  end if;
+  select * into v_event from public.offer_events
+  where organization_id = '38070000-0000-4000-8000-000000000010'
+    and attempt_key = '38070000-0000-4000-8000-000000000111';
+  if v_event.event_type is distinct from 'revision_started' or v_event.status is distinct from 'entwurf'
+    or v_event.version is distinct from 3
+    or v_event.payload is distinct from '{"revision": 2, "replaces": 1, "fromVersion": 2,
+      "contentVersion": 3}'::jsonb
+    or v_event.actor_id is distinct from '38070000-0000-4000-8000-000000000002'::uuid then
+    raise exception 'the history row of the start is %', to_jsonb(v_event);
+  end if;
+end;
+$$;
+
+-- A press repeated after a lost answer, and the same sent version started from
+-- another tab, answer the first start and write nothing.
+do $$
+begin
+  if pg_temp.start(pg_temp.id('first'), 2, '38070000-0000-4000-8000-000000000111') - 'updatedAt'
+      is distinct from '{"revision": 2, "version": 3, "replay": true}'::jsonb
+    or pg_temp.start(pg_temp.id('first'), 2, '38070000-0000-4000-8000-000000000112') - 'updatedAt'
+      is distinct from '{"revision": 2, "version": 3, "replay": true}'::jsonb then
+    raise exception 'a repeated start did not answer the first one';
+  end if;
+  if (select count(*) from public.offer_events where organization_id = '38070000-0000-4000-8000-000000000010'
+      and offer_id = pg_temp.id('first') and event_type = 'revision_started') is distinct from 1::bigint
+    or (select version from public.offers where organization_id = '38070000-0000-4000-8000-000000000010'
+      and id = pg_temp.id('first')) is distinct from 3 then
+    raise exception 'a repeated start wrote again';
+  end if;
+end;
+$$;
+
+-- No revision starts while a draft revision is open, from a draft never sent,
+-- for a field worker, an outsider or another organization; refusals write nothing.
+select pg_temp.expect_refusal(label, format('select pg_temp.start(%L, %s, gen_random_uuid(), %L, %L)',
+  offer, version, actor, org), refusal)
+from (values
+  ('a second start while revision 2 is a draft', pg_temp.id('first'), 3,
+   '38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010', 'offer_not_sent'),
+  ('a draft never sent', pg_temp.id('empty'), 1, '38070000-0000-4000-8000-000000000002',
+   '38070000-0000-4000-8000-000000000010', 'offer_not_sent'),
+  ('an employee', pg_temp.id('first'), 3, '38070000-0000-4000-8000-000000000003',
+   '38070000-0000-4000-8000-000000000010', 'not_authorized'),
+  ('an outsider', pg_temp.id('first'), 3, '38070000-0000-4000-8000-000000000004',
+   '38070000-0000-4000-8000-000000000010', 'not_authorized'),
+  ('Büro in another organization', pg_temp.id('first'), 3, '38070000-0000-4000-8000-000000000002',
+   '38070000-0000-4000-8000-000000000011', 'not_authorized'),
+  ('an offer outside the organization', '38070000-0000-4000-8000-000000000060'::uuid, 3,
+   '38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010', 'offer_not_found')
+) as cases(label, offer, version, actor, org, refusal);
+
+-- Sending the unchanged draft freezes revision 2 with exactly revision 1's
+-- content and no cost, numbered after the newest sent one; revision 1 stays
+-- as it was and reads as replaced, derived from revision 2.
+do $$
+declare
+  v_answer jsonb := pg_temp.send(pg_temp.id('first'), 3, 3, '38070000-0000-4000-8000-000000000121',
+    '38070000-0000-4000-8000-000000000304');
+begin
+  if v_answer is distinct from '{"revision": 2, "documentId": "38070000-0000-4000-8000-000000000304",
+      "replay": false}'::jsonb then
+    raise exception 'the send of revision 2 answered %', v_answer;
+  end if;
+  if (pg_temp.revision(2)).content is distinct from (pg_temp.revision(1)).content
+    or to_jsonb(pg_temp.revision(2))::text ~* 'cost|margin' then
+    raise exception 'revision 2 is not revision 1''s content without cost: %', to_jsonb(pg_temp.revision(2));
+  end if;
+  if to_jsonb(pg_temp.revision(1)) is distinct from (select first_revision from before_revision) then
+    raise exception 'sending revision 2 changed revision 1';
+  end if;
+  if (select jsonb_agg(entry -> 'revision')
+      from jsonb_array_elements(public.list_offer_revisions('38070000-0000-4000-8000-000000000010',
+        pg_temp.id('first'))) entry) is distinct from '[2, 1]'::jsonb then
+    raise exception 'the revision list is not revision 2, then revision 1';
+  end if;
+end;
+$$;
+
+-- A second send of revision 2, under its key or from another tab, returns it
+-- and registers nothing.
+do $$
+begin
+  if pg_temp.send(pg_temp.id('first'), 3, 3, '38070000-0000-4000-8000-000000000121',
+      '38070000-0000-4000-8000-000000000305') is distinct from '{"revision": 2,
+      "documentId": "38070000-0000-4000-8000-000000000304", "replay": true}'::jsonb
+    or pg_temp.send(pg_temp.id('first'), 3, 3, '38070000-0000-4000-8000-000000000122',
+      '38070000-0000-4000-8000-000000000306') is distinct from '{"revision": 2,
+      "documentId": "38070000-0000-4000-8000-000000000304", "replay": true}'::jsonb then
+    raise exception 'a second send of revision 2 did not return it';
+  end if;
+  if (select count(*) from public.offer_revisions where organization_id = '38070000-0000-4000-8000-000000000010'
+      and offer_id = pg_temp.id('first')) is distinct from 2::bigint then
+    raise exception 'a second send of revision 2 froze another revision';
+  end if;
+end;
+$$;
+
+-- A start from a version before revision 2 was sent is refused, and so is the
+-- key of revision 2's start sent again from the version revision 2 left: it
+-- names another start, never a replay that leaves no draft.
+select pg_temp.expect_refusal('a start from an older version', format(
+  'select pg_temp.start(%L, 3, gen_random_uuid())', pg_temp.id('first')), 'offer_changed');
+select pg_temp.expect_refusal('an earlier start''s key from a later version', format(
+  'select pg_temp.start(%L, 4, %L)', pg_temp.id('first'), '38070000-0000-4000-8000-000000000111'),
+  'invalid_input');
+
+-- Revision 3 with a changed price: revisions 1 and 2 keep theirs. A further
+-- revision that is never sent stays a draft, and revision 3 stays the newest sent one.
+do $$
+declare
+  v_second public.offer_revisions := pg_temp.revision(2);
+  v_started jsonb;
+begin
+  perform pg_temp.start(pg_temp.id('first'), 4, gen_random_uuid());
+  perform public.save_offer_content('38070000-0000-4000-8000-000000000002',
+    '38070000-0000-4000-8000-000000000010', pg_temp.id('first'), 4, gen_random_uuid(),
+    jsonb_set(jsonb_set(jsonb_set(pg_temp.content(), '{0,positions,0,unitPriceCents}', '11000'),
+      '{0,positions,0,amountCents}', '22000'), '{0,netCents}', '34900'),
+    '{"netCents": 34900, "taxCents": 6631, "grossCents": 41531}');
+  if pg_temp.send(pg_temp.id('first'), 5, 5, gen_random_uuid(), '38070000-0000-4000-8000-000000000307')
+      ->> 'revision' is distinct from '3' then
+    raise exception 'the changed draft was not sent as revision 3';
+  end if;
+  if (pg_temp.revision(3)).gross_cents is distinct from 41531::bigint
+    or (pg_temp.revision(3)).content #>> '{0,positions,0,unitPriceCents}' is distinct from '11000'
+    or to_jsonb(pg_temp.revision(2)) is distinct from to_jsonb(v_second)
+    or to_jsonb(pg_temp.revision(1)) is distinct from (select first_revision from before_revision) then
+    raise exception 'sending revision 3 changed an earlier revision';
+  end if;
+  -- Its own statement: a condition beside it would read the offer as it was before the call.
+  v_started := pg_temp.start(pg_temp.id('first'), 6, gen_random_uuid());
+  if v_started ->> 'revision' is distinct from '4'
+    or public.list_offer_revisions('38070000-0000-4000-8000-000000000010', pg_temp.id('first')) -> 0 ->> 'revision'
+      is distinct from '3'
+    or (select status from public.offers where organization_id = '38070000-0000-4000-8000-000000000010'
+      and id = pg_temp.id('first')) is distinct from 'entwurf' then
+    raise exception 'an unsent revision 4 is not a draft beside revision 3 as the newest sent one';
+  end if;
+end;
+$$;
+
+-- The office page's read answers the offer with its costs and its revisions together, and
+-- another organization's offer as none.
+do $$
+begin
+  if public.get_offer_with_revisions('38070000-0000-4000-8000-000000000010', pg_temp.id('first'))
+      is distinct from jsonb_build_object(
+        'offer', public.get_offer_with_costs('38070000-0000-4000-8000-000000000010', pg_temp.id('first')),
+        'revisions', public.list_offer_revisions('38070000-0000-4000-8000-000000000010', pg_temp.id('first')))
+    or public.get_offer_with_revisions('38070000-0000-4000-8000-000000000010', pg_temp.id('first'))
+      #>> '{revisions,0,revision}' is distinct from '3'
+    or public.get_offer_with_revisions('38070000-0000-4000-8000-000000000011', pg_temp.id('first'))
+      is distinct from '{"offer": null, "revisions": []}'::jsonb then
+    raise exception 'the offer page read is not the offer with its revisions';
+  end if;
+end;
+$$;
+
+reset role;
+do $$
+declare
+  v_role text;
+begin
+  foreach v_role in array array['anon', 'authenticated'] loop
+    if has_function_privilege(v_role, 'public.start_offer_revision(uuid,uuid,uuid,integer,uuid)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.get_offer_with_revisions(uuid,uuid)', 'EXECUTE') then
+      raise exception '% may start a revision or read an offer with its costs', v_role;
+    end if;
+  end loop;
+end;
+$$;
+
 rollback;

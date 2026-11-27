@@ -21,7 +21,7 @@
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
-        "backendRequests": { "reference": 64, "tolerance": 1 }
+        "backendRequests": { "reference": 66, "tolerance": 1 }
       },
       "payloads": {
         "api:/api/attention-counts": {
@@ -458,6 +458,14 @@
           },
           "runKeys": ["2026-11-26T223155072Z-87e9ea"],
           "reason": "main's start-up stylesheet grew from the utilities of merged features since #335 (cff553792), each PR inside the tolerance: Tailwind's minified output of app/globals.css rose from 114,458 to 115,612 B (+1,154), equal to this run's decoded growth (117,895 to 119,049); requests stay 2. Per first-parent PR, compiled at each commit: #485 Rechnung editor +422 (sm:grid-cols-[repeat(4,minmax(0,1fr))_auto], sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)], sm:col-span-1, sm:min-w-28, sm:pb-2, pt-8, items-stretch); #415 stock movement history +257 (lg:flex, lg:flex-wrap, lg:w-40/44/48/64, max-w-40); #410 Leistungen prices +214 (sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)], sm:w-48, w-[56px], w-[80px], w-[180px]); #389 support queue +110 (list-decimal, sm:w-60, whitespace-pre); #333 leaver handover +107 (sm:grid-cols-[minmax(0,1fr)_minmax(0,14rem)], border-warning); #538 invoice catalog line +107 (sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]); #359 banner action stacks +95 (-my-1.5, sm:my-0); #379 offline photos +94 (object-cover, sm:grid-cols-5); #391 site access proposal +93 (-my-3.5, min-w-11); #395 frozen billing parties +90 (mb-1.5, whitespace-pre-line); #329 problem reports +84 (max-h-[60dvh], md:inline, w-[72px]); #499 header search +66 (max-sm:h-dvh, max-sm:max-h-dvh); #325 customer archive +60 (basis-full, sm:basis-auto); #474 wholesaler import +59 (sm:grid-cols-[auto_1fr]); #370 Einsatzort parties +47 (pl-5.5); #348 activities +45 (basis-64); #316 install hint +41 (pointer-events-auto); #467 overdue maintenance +41 (@3xl/maintenance:block); #406 company profile +30 (sm:ml-auto); #464 offers +25 (w-[240px]); #476 Anlage on phone +23 (sm:w-auto); #407 CSV import +16 (border-warning). Removals: #319 -463 (marquee, motion-reduce utilities, -space-x-1.5, border-background, sm:max-w-80), #364 -292 (glow animations, ease-out), #376 -122 (row highlight), #398 -95 (@md:grid-cols-2). Every added utility is a className in a rendered component; no dead class, duplicate rule or safelist."
+        },
+        {
+          "kind": "raise",
+          "target": "backendRequests",
+          "from": { "reference": 64, "tolerance": 1 },
+          "to": { "reference": 66, "tolerance": 1 },
+          "runKeys": ["2026-11-27T080322134Z-244985"],
+          "reason": "The clock state reads the day's approved time corrections (read_time_correction_applications), so today's totals count the same records as the week (werk-flow/werkflow-planning#594): one database request per clock-state read."
         }
       ]
     },
@@ -994,7 +1002,7 @@
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
-        "backendRequests": { "reference": 22, "tolerance": 1 },
+        "backendRequests": { "reference": 24, "tolerance": 1 },
         "componentRenders": { "reference": 656, "tolerance": 13 }
       },
       "payloads": {
@@ -1211,6 +1219,14 @@
           },
           "runKeys": ["2026-11-21T090946906Z-ec017e"],
           "reason": "#553's worker start leaves the organization card out of the employee's /dashboard render, on top of #485 (werk-flow/werkflow-planning#23)"
+        },
+        {
+          "kind": "raise",
+          "target": "backendRequests",
+          "from": { "reference": 22, "tolerance": 1 },
+          "to": { "reference": 24, "tolerance": 1 },
+          "runKeys": ["2026-11-27T080322134Z-244985"],
+          "reason": "The clock state reads the day's approved time corrections (read_time_correction_applications), so today's totals count the same records as the week (werk-flow/werkflow-planning#594): one database request per clock-state read."
         }
       ]
     },
@@ -1595,7 +1611,7 @@
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
-        "backendRequests": { "reference": 90, "tolerance": 1 },
+        "backendRequests": { "reference": 92, "tolerance": 1 },
         "componentRenders": { "reference": 7596, "tolerance": 201 }
       },
       "payloads": {
@@ -1982,6 +1998,14 @@
           },
           "runKeys": ["2026-11-26T223155072Z-9b0c39"],
           "reason": "main's start-up stylesheet grew from the utilities of merged features since #335 (cff553792), each PR inside the tolerance: Tailwind's minified output of app/globals.css rose from 114,458 to 115,612 B (+1,154), equal to this run's decoded growth (117,895 to 119,049); requests stay 2. Per first-parent PR, compiled at each commit: #485 Rechnung editor +422 (sm:grid-cols-[repeat(4,minmax(0,1fr))_auto], sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)], sm:col-span-1, sm:min-w-28, sm:pb-2, pt-8, items-stretch); #415 stock movement history +257 (lg:flex, lg:flex-wrap, lg:w-40/44/48/64, max-w-40); #410 Leistungen prices +214 (sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)], sm:w-48, w-[56px], w-[80px], w-[180px]); #389 support queue +110 (list-decimal, sm:w-60, whitespace-pre); #333 leaver handover +107 (sm:grid-cols-[minmax(0,1fr)_minmax(0,14rem)], border-warning); #538 invoice catalog line +107 (sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]); #359 banner action stacks +95 (-my-1.5, sm:my-0); #379 offline photos +94 (object-cover, sm:grid-cols-5); #391 site access proposal +93 (-my-3.5, min-w-11); #395 frozen billing parties +90 (mb-1.5, whitespace-pre-line); #329 problem reports +84 (max-h-[60dvh], md:inline, w-[72px]); #499 header search +66 (max-sm:h-dvh, max-sm:max-h-dvh); #325 customer archive +60 (basis-full, sm:basis-auto); #474 wholesaler import +59 (sm:grid-cols-[auto_1fr]); #370 Einsatzort parties +47 (pl-5.5); #348 activities +45 (basis-64); #316 install hint +41 (pointer-events-auto); #467 overdue maintenance +41 (@3xl/maintenance:block); #406 company profile +30 (sm:ml-auto); #464 offers +25 (w-[240px]); #476 Anlage on phone +23 (sm:w-auto); #407 CSV import +16 (border-warning). Removals: #319 -463 (marquee, motion-reduce utilities, -space-x-1.5, border-background, sm:max-w-80), #364 -292 (glow animations, ease-out), #376 -122 (row highlight), #398 -95 (@md:grid-cols-2). Every added utility is a className in a rendered component; no dead class, duplicate rule or safelist."
+        },
+        {
+          "kind": "raise",
+          "target": "backendRequests",
+          "from": { "reference": 90, "tolerance": 1 },
+          "to": { "reference": 92, "tolerance": 1 },
+          "runKeys": ["2026-11-27T081200854Z-05f1fa"],
+          "reason": "The clock state reads the day's approved time corrections (read_time_correction_applications), so today's totals count the same records as the week (werk-flow/werkflow-planning#594): one database request per clock-state read."
         }
       ]
     },

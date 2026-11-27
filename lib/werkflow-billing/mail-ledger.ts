@@ -49,6 +49,11 @@ function contentHash(
   return hash.digest('hex').slice(0, 32);
 }
 
+/** Resend's answer while another request under the same idempotency key is still sending. */
+const IN_FLIGHT = 'email_concurrent_idempotent_requests';
+/** About 15 s in all; a send still in flight after them settles failed for Stripe's next delivery. */
+const IN_FLIGHT_WAITS_MS = [1_000, 2_000, 4_000, 8_000];
+
 type Admin = ReturnType<typeof createSupabaseAdminClient>;
 type MailRow = { kind: MailKind; organizationId: string | null; recipient: string; stripeObjectId: string };
 
@@ -127,18 +132,25 @@ export async function deliverBillingMail(
   const mailId = await claim(admin, input);
   if (!mailId) return { status: 'already_sent' };
 
-  const result = await sendEmail(
-    {
-      to: recipient,
-      subject: mail.subject,
-      html: mail.html,
-      text: mail.text,
-      idempotencyKey: `werkflow-billing-mail/${mailId}/${contentHash(recipient, mail, input.replyTo, input.attachments)}`,
-      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
-      ...(input.attachments ? { attachments: input.attachments } : {}),
-    },
-    environment,
-  );
+  const message = {
+    to: recipient,
+    subject: mail.subject,
+    html: mail.html,
+    text: mail.text,
+    idempotencyKey: `werkflow-billing-mail/${mailId}/${contentHash(recipient, mail, input.replyTo, input.attachments)}`,
+    ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+    ...(input.attachments ? { attachments: input.attachments } : {}),
+  };
+  let result = await sendEmail(message, environment);
+  // Another claim of this row is sending the same message: once it ends, the
+  // same key answers its id. Two signals of one invoice, such as the replay
+  // after an organization's creation and Stripe's live payment signal, can
+  // send its invoice mail at the same moment.
+  for (const wait of IN_FLIGHT_WAITS_MS) {
+    if (result.status !== 'retryable' || result.code !== IN_FLIGHT) break;
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    result = await sendEmail(message, environment);
+  }
   const settled =
     result.status === 'accepted'
       ? { p_outcome: 'sent', p_provider_message_id: result.messageId, p_failure_code: null }

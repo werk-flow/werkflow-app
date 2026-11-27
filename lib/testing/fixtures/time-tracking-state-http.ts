@@ -69,6 +69,7 @@ const state: LiveClockState = {
     autoBreakDurationMinutes: 30,
     secondStep: null,
   },
+  dayBreakPolicy: null,
   status: 'working',
   isClockedIn: true,
   isOnBreak: false,
@@ -78,6 +79,7 @@ const state: LiveClockState = {
   todayMinutes: 60,
   workMinutes: 55,
   breakMinutes: 5,
+  trackedBreakMinutes: 5,
   timelineSegments: [
     { type: 'work', minutes: 55 },
     { type: 'break', minutes: 5 },

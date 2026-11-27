@@ -9,8 +9,8 @@
 #
 # `decide` finds the newest full run on main's last commits, and any older one still running, and
 # asks the repository's rule, scripts/ci/full-run.ts (lib/testing/ci/full-run.ts), which writes
-# run=true|false and reason to $GITHUB_OUTPUT: at once after a tooling change, otherwise in a
-# daytime slot every 3 hours, and never while a full run runs, for a commit that has one, or when
+# run=true|false and reason to $GITHUB_OUTPUT: landed changes share a daytime slot every 6 hours,
+# and never start one while a full run runs, for a commit that has one, or when
 # only documentation landed. It needs a checkout of GITHUB_SHA with its history and the installed
 # dependencies.
 # `context` prints the alert's detail: the groups that this run's

@@ -6,6 +6,7 @@ import {
   liveDayEntriesOf,
   liveDayPolicyArbitrary,
   liveDayTargetArbitrary,
+  liveDayWithRuleChangeArbitrary,
   standbyAfterArbitrary,
   weekDayOf,
   withStandbyAfter,
@@ -16,7 +17,7 @@ import type { BreakPolicy } from './settings';
 // Property tests (docs/technical/testing.md, "Property tests"). The rules come from
 // docs/features/time-tracking.md, "Break rule" and "Targets": the automatic steps count the day's
 // presence without standby; standby is working time; overtime is the work beyond the target, and
-// an unknown target owes none. A member's day on the Mitarbeiter list and detail, read from that
+// an unknown target owes none; a day counts by the rule in force at its last entry. A member's day on the Mitarbeiter list and detail, read from that
 // member's entries, splits the day as the week splits it once the day has ended.
 
 afterEach(() => setSystemTime());
@@ -25,7 +26,7 @@ afterEach(() => setSystemTime());
 function memberDay(day: LiveDay, policy: BreakPolicy, target: number | undefined) {
   setSystemTime(new Date(day.nowMs));
   const status = memberStatusOf(liveDayEntriesOf(day.segments), policy);
-  return { status, ...memberLiveDay(status, policy, target, day.nowMs) };
+  return { status, ...memberLiveDay(status, target, day.nowMs) };
 }
 
 describe('A member’s live day', () => {
@@ -40,6 +41,16 @@ describe('A member’s live day', () => {
         expect(presenceMinutes).toBe(day.presenceMinutes);
         expect(weekDayOf(day, policy, target)).toMatchObject({ workMinutes, breakMinutes, overtimeMinutes });
         expect(workMinutes + overtimeMinutes + breakMinutes).toBe(day.presenceMinutes);
+      }),
+    );
+  });
+
+  test('splits the day by the rule at its last entry, also when the rule changed after clock-out', () => {
+    fc.assert(
+      fc.property(liveDayWithRuleChangeArbitrary, liveDayTargetArbitrary, ({ day, policy }, target) => {
+        const { workMinutes, breakMinutes, overtimeMinutes } = memberDay(day, policy, target).breakdown;
+
+        expect(weekDayOf(day, policy, target)).toMatchObject({ workMinutes, breakMinutes, overtimeMinutes });
       }),
     );
   });

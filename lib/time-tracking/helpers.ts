@@ -9,13 +9,9 @@ import type {
 } from './types';
 import { DEFAULT_DAILY_TARGET_MINUTES } from '@/lib/personnel/targets';
 import { MANAGED_ROLES } from './types';
-import {
-  formatBerlinLocalDate,
-  getLocalDayEnd,
-  getLocalDayStart,
-  isSameLocalDay,
-} from '@/lib/date-time/berlin';
+import { getLocalDayEnd, getLocalDayStart, isSameLocalDay } from '@/lib/date-time/berlin';
 import { getEffectiveTimeEntries } from './effective-entries';
+import { entryBusinessDate } from './closed-period-dates';
 import {
   canHolderApproveTarget,
   type EffectiveResponsibilityHolder,
@@ -485,6 +481,23 @@ export function calculateTotalMinutes(sessions: WorkSession[]): number {
   }, 0);
 }
 
+/**
+ * The minutes of the closed work sessions per activity, by the activity each
+ * session starts with. They are parts of the working time, never added to it.
+ */
+export function sessionActivityMinutes(
+  sessions: WorkSession[],
+): Record<'travelMinutes' | 'standbyMinutes' | 'calloutMinutes' | 'internalMinutes', number> {
+  const minutesOf = (kind: TimeEntry['activityKind']) =>
+    calculateTotalMinutes(sessions.filter((session) => session.clockIn?.activityKind === kind));
+  return {
+    travelMinutes: minutesOf('travel'),
+    standbyMinutes: minutesOf('standby'),
+    calloutMinutes: minutesOf('callout'),
+    internalMinutes: minutesOf('internal_activity'),
+  };
+}
+
 export function calculateBreakMinutes(sessions: BreakSession[]): number {
   return sessions.reduce((total, session) => {
     return total + (session.durationMinutes || 0);
@@ -518,13 +531,14 @@ export function formatSignedDuration(minutes: number): string {
 }
 
 /**
- * Group entries by date (YYYY-MM-DD)
+ * Group entries by the Berlin date they count on (YYYY-MM-DD): a clock-out at
+ * exactly midnight closes the day before, as does a break end (`entryBusinessDate`).
  */
 export function groupEntriesByDate(entries: TimeEntry[]): Record<string, TimeEntry[]> {
   const grouped: Record<string, TimeEntry[]> = {};
 
   for (const entry of entries) {
-    const date = formatBerlinLocalDate(entry.timestamp);
+    const date = entryBusinessDate(entry);
     if (!grouped[date]) {
       grouped[date] = [];
     }

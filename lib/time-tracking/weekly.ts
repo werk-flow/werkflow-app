@@ -1,7 +1,19 @@
 import type { TimeEntry, WeeklyTimeDataPoint, WeeklyTimeLabel } from './types';
 import type { DailyTarget } from '@/lib/personnel/targets';
-import { calculateBreakMinutes, calculateTotalMinutes, groupEntriesByDate } from './helpers';
-import { computeDayBreakdown, resolveBreakPolicyAtTimestamp, type BreakPolicy } from './settings';
+import {
+  calculateBreakMinutes,
+  calculateTotalMinutes,
+  groupEntriesByDate,
+  sessionActivityMinutes,
+} from './helpers';
+import { getEffectiveTimeEntries } from './effective-entries';
+import {
+  computeDayBreakdown,
+  currentBreakPolicy,
+  resolveBreakPolicyAtTimestamp,
+  type BreakPolicy,
+  type BreakPolicyValues,
+} from './settings';
 import { calculateBreakSessions, calculateWorkSessions } from './work-sessions';
 import {
   addLocalDays,
@@ -64,6 +76,24 @@ export function targetsOfWeek(targets: DailyTarget[] | undefined, monday: Date):
   return targets?.[0]?.date === formatBerlinLocalDate(monday) ? targets : undefined;
 }
 
+/**
+ * The break rule a day counts by (docs/features/time-tracking.md, „Break
+ * rule“): the version in force at the day's last counted entry, so a rule
+ * saved after clock-out never moves the day. While the clock runs, today's
+ * last entry is now, and the current rule holds. The week and every live
+ * view of today resolve the day here.
+ */
+export function dayBreakPolicy(
+  settings: BreakPolicy,
+  dayEntries: TimeEntry[],
+  running: boolean,
+): BreakPolicyValues {
+  if (running) return currentBreakPolicy(settings);
+  // The entries the totals count: none rejected, waiting for deletion or still ahead.
+  const lastEntry = getEffectiveTimeEntries(dayEntries).at(-1);
+  return resolveBreakPolicyAtTimestamp(settings, lastEntry?.timestamp ?? null);
+}
+
 export function buildWeeklyTimeData(
   entries: TimeEntry[],
   monday: Date,
@@ -82,17 +112,15 @@ export function buildWeeklyTimeData(
     const dayEntries = grouped[key] || [];
     const workSessions = calculateWorkSessions(dayEntries);
     const breakSessions = calculateBreakSessions(dayEntries);
-    const standbyMinutes = calculateTotalMinutes(
-      workSessions.filter((session) => session.clockIn?.activityKind === 'standby'),
-    );
+    const activityMinutes = sessionActivityMinutes(workSessions);
     const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
     const totalMinutes = calculateTotalMinutes(workSessions) + trackedBreakMinutes;
-    const referenceTimestamp = dayEntries[dayEntries.length - 1]?.timestamp ?? null;
-    const effectiveSettings = resolveBreakPolicyAtTimestamp(settings, referenceTimestamp);
     const target = weekTargets?.[i];
     const breakdown = computeDayBreakdown(
-      { presenceMinutes: totalMinutes, standbyMinutes, trackedBreakMinutes },
-      effectiveSettings,
+      { presenceMinutes: totalMinutes, standbyMinutes: activityMinutes.standbyMinutes, trackedBreakMinutes },
+      // The snapshot counts every day by its last entry, today too; the live
+      // views lay today's running split over it (`computeZeiterfassungLiveTotals`, `memberLiveDay`).
+      dayBreakPolicy(settings, dayEntries, false),
       target?.targetMinutes,
     );
 
@@ -105,16 +133,7 @@ export function buildWeeklyTimeData(
       overtimeMinutes: breakdown.overtimeMinutes,
       // Category minutes explain totalMinutes; they do not add to it. Travel,
       // standby, call-out and internal activity are parts of the working time.
-      travelMinutes: calculateTotalMinutes(
-        workSessions.filter((session) => session.clockIn?.activityKind === 'travel'),
-      ),
-      standbyMinutes,
-      calloutMinutes: calculateTotalMinutes(
-        workSessions.filter((session) => session.clockIn?.activityKind === 'callout'),
-      ),
-      internalMinutes: calculateTotalMinutes(
-        workSessions.filter((session) => session.clockIn?.activityKind === 'internal_activity'),
-      ),
+      ...activityMinutes,
       target,
     });
   }

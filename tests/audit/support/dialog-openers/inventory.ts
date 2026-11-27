@@ -34,7 +34,9 @@ import { worldName } from '../../../../lib/testing/seed-world-plan';
 import type { DialogOpener } from '../dialog-opener';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
 import { invoiceDeliverySeed, parseDeliverySeed } from '../invoice-delivery-fixtures';
+import { offerDeliverySeed, parseOfferDeliverySeed } from '../offer-delivery-fixtures';
 import { invoiceChainSeed, parseInvoiceChain } from '../invoice-chain-fixtures';
+import { seedRevisedOffer } from '../../../golden/support/db/offer-revisions';
 import type { TestWorld } from '../../../golden/support/world';
 
 type ItemDialogPicker = Parameters<typeof itemDialogPicker>[1];
@@ -48,6 +50,23 @@ async function invoiceDeliveryButton(
   const { id } = parseDeliverySeed(await surfaceFixture(world, seed.name, seed.create));
   if (!page.url().endsWith(`/rechnungen/${id}`)) await page.goto(`/rechnungen/${id}`);
   return page.getByRole('main').getByRole('button', { name, exact: true });
+}
+
+/**
+ * The newest revision's „Versenden“ on the open offer, as on a sent offer an
+ * acceptance set opened; else on the world's offer sent twice.
+ */
+async function offerDeliveryButton({ page, world }: SurfaceContext): Promise<Locator> {
+  const button = page.getByRole('main').getByRole('button', { name: 'Versenden', exact: true });
+  if (/\/angebote\/[0-9a-f-]{36}$/.test(page.url()) && (await button.count()) === 1) return button;
+  const seed = offerDeliverySeed(world, 'fresh');
+  const { id } = parseOfferDeliverySeed(await surfaceFixture(world, seed.name, seed.create));
+  await page.goto(`/angebote/${id}`);
+  return button;
+}
+
+function offerDeliveryLayer(page: Page): Locator {
+  return page.getByRole('dialog', { name: 'Angebot versenden', exact: true });
 }
 
 /** The world's issued invoice, opened unless it is the page already, and its header action. */
@@ -350,6 +369,17 @@ export const COMMERCIAL_OPENERS = {
       page.getByRole('main').getByRole('button', { name: 'Vorschau', exact: true }),
     layer: (page) => page.getByRole('dialog', { name: /^Vorschau ANG-/ }),
   },
+  'commercial.offer-revision': {
+    // The audit world's offer is a draft: „Bearbeiten“ of a sent one starts its next revision.
+    trigger: async ({ page, world }) => {
+      const offerId = await surfaceFixture(world, 'commercial.offer-revision', () =>
+        seedRevisedOffer(world, 'Layout Angebot gesendet', 'sent'),
+      );
+      await page.goto(`/angebote/${offerId}`);
+      return page.getByRole('main').getByRole('button', { name: 'Bearbeiten', exact: true });
+    },
+    layer: (page) => page.getByRole('alertdialog', { name: /^Revision \d+ bearbeiten\?$/ }),
+  },
   'commercial.invoice': {
     trigger: async ({ page }) =>
       page.getByRole('main').getByRole('button', { name: 'Rechnung erstellen', exact: true }),
@@ -363,6 +393,17 @@ export const COMMERCIAL_OPENERS = {
   'commercial.invoice-send': {
     trigger: async (context) => invoiceDeliveryButton(context, 'Per E-Mail senden'),
     layer: (page) => page.getByRole('dialog', { name: 'Rechnung per E-Mail senden', exact: true }),
+  },
+  // The newest revision's sends; the audit waits for their read to settle.
+  'commercial.offer-delivery': { trigger: offerDeliveryButton, layer: offerDeliveryLayer },
+  // The email step: recipient, subject and text before „Senden“.
+  'commercial.offer-delivery-email': {
+    trigger: offerDeliveryButton,
+    layer: offerDeliveryLayer,
+    prepareLayer: async (layer) => {
+      await layer.getByRole('button', { name: 'Per E-Mail senden', exact: true }).click();
+      await expect(layer.getByRole('textbox', { name: 'Empfänger' })).toBeVisible();
+    },
   },
   'commercial.invoice-sent-manually': {
     trigger: async (context) => invoiceDeliveryButton(context, 'Als manuell versendet markieren'),

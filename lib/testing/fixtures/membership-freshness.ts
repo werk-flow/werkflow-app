@@ -119,7 +119,7 @@ mock.module('@/lib/supabase/admin', () => ({
 }));
 
 const { withReadRequest } = await import('@/lib/data/read-request-cache');
-const { getCachedMemberships } = await import('@/lib/data/cached');
+const { getCachedMemberships, getOwnEmployeeRecordId } = await import('@/lib/data/cached');
 const { resolveActiveOrgId } = await import('@/lib/org/cookies');
 const freshRead = <Result>(read: () => Promise<Result>): Promise<Result> =>
   withReadRequest(new Request('https://fixture.invalid/read'), read);
@@ -127,6 +127,9 @@ await freshRead(async () => {
   const results = await Promise.all(Array.from({ length: 4 }, () => getCachedMemberships('caller')));
   assert.equal(queryCount, 1, 'Parallel consumers share one joined membership/lifecycle read within a GET');
   assert.ok(results.every((result) => result === results[0]));
+  assert.equal(await getOwnEmployeeRecordId('caller', 'old'), 'employee-old', 'The caller’s own record');
+  assert.equal(await getOwnEmployeeRecordId('caller', 'foreign'), null, 'No record outside a membership');
+  assert.equal(queryCount, 1, 'The own record comes from the same membership read');
 });
 organizations = ['old', 'new'];
 // The real resolver reads the real request cookie store.
@@ -144,11 +147,21 @@ assert.equal(
   'old',
   'A revoked membership must not remain selectable',
 );
+assert.equal(
+  await freshRead(() => getOwnEmployeeRecordId('caller', 'new')),
+  null,
+  'A removed member holds no record, so no retained data of it reaches them',
+);
 state = 'suspended';
 assert.deepEqual(
   await freshRead(() => getCachedMemberships('caller')),
   [],
   'A later request must enforce changed lifecycle access',
+);
+assert.equal(
+  await freshRead(() => getOwnEmployeeRecordId('caller', 'old')),
+  null,
+  'A record whose access ended names nothing',
 );
 state = 'active';
 failed = true;

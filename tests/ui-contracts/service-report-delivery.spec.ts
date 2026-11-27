@@ -6,7 +6,8 @@ import { answerHeldWrite, openContractFixture } from './open-fixture';
 // answer was lost is pressed again under the same attempt key, also after
 // „Zurück“ and reopening the step, so the database replays it instead of
 // sending or recording twice. A changed email or note is a new send, and a
-// confirmed one starts the next from a new key.
+// confirmed one closes the dialog with its Banner; reopened, the next starts
+// from a new key.
 
 /** Waits until the dialog issued its `count`th write and the gate holds it open; returns that write's attempt key. */
 async function heldAttemptKey(page: Page, count: number): Promise<string> {
@@ -54,7 +55,9 @@ test('an email whose answer was lost is sent again under its key, also after „
   await expect(
     visibleText(page, 'Der Servicebericht ist an hausmeister@lindenhof.example versendet.'),
   ).toBeVisible();
+  await expect(dialog, 'a confirmed send left its dialog open').toBeHidden();
 
+  await page.getByRole('button', { name: 'Versand' }).click();
   await dialog.getByRole('button', { name: 'Per E-Mail senden' }).click();
   await expect(subject).toHaveValue(
     'Servicebericht zur Wartung vom 12.11.2037 – Haustechnik Sonnenberg GmbH',
@@ -97,7 +100,9 @@ test('a manual record keeps its note and key across „Zurück“ until it is co
   expect(changed, 'a different note replayed the earlier record').not.toBe(first);
   await answerHeldWrite(page, null);
   await expect(visibleText(page, 'Der Servicebericht ist als manuell versendet vermerkt.')).toBeVisible();
+  await expect(dialog, 'a confirmed record left its dialog open').toBeHidden();
 
+  await page.getByRole('button', { name: 'Versand' }).click();
   await dialog.getByRole('button', { name: 'Als manuell versendet markieren' }).click();
   await expect(note).toHaveValue('');
   await record.click();

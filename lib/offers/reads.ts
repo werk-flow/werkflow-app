@@ -7,6 +7,7 @@ import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
+import { signPriceSource } from '@/lib/price-catalog/price-source-proof';
 import { positionCostSchema, storedSectionSchema } from './action-schemas';
 import type { OfferListQuery, OfferPage } from './list-page';
 import {
@@ -14,6 +15,8 @@ import {
   OFFER_STATUSES,
   offerWorkKindSchema,
   type OfferDetail,
+  type OfferFreePosition,
+  type OfferPriceSource,
   type OfferRevision,
   type OfferWithCosts,
   type OfferWorkKind,
@@ -131,6 +134,14 @@ function offerDetailOf(data: unknown): OfferDetail {
   };
 }
 
+const priceSourceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('listenpreis'), condition: z.null() }),
+  z.object({
+    kind: z.literal('kundenkondition'),
+    condition: z.object({ id: uuidSchema, version: z.number().int().positive(), validFrom: z.iso.date() }),
+  }),
+  z.object({ kind: z.literal('manuell'), condition: z.null() }),
+]);
 /**
  * One offer of the organization with the names its header shows and no cost:
  * the read for its document (preview and send), which must never carry a
@@ -147,29 +158,39 @@ export async function readOffer(organizationId: string, offerId: string): Promis
 const offerWithCostsSchema = z.object({
   offer: z.unknown(),
   costs: z.array(z.array(positionCostSchema.nullable())),
+  priceSources: z.array(z.array(priceSourceSchema.nullable())),
 });
 
 /**
- * One offer of the organization as the office's page reads it: its header
- * with the names it shows, its content, and each priced Position's cost,
- * read in one statement with the content. The caller has established Admin
- * or Büro; `null` when there is no such offer.
+ * A stored price source as the editor holds it, signed again for this
+ * Position's entry and price, so the next save keeps it while the Position
+ * does. A Position saved before sources were kept reads as „manuell“.
  */
-export async function readOfferWithCosts(
-  organizationId: string,
-  offerId: string,
-): Promise<OfferWithCosts | null> {
-  const admin = createSupabaseAdminClient();
-  const selected = await admin.rpc('get_offer_with_costs', {
-    p_organization_id: organizationId,
-    p_offer_id: offerId,
+function priceSourceOf(
+  stored: z.infer<typeof priceSourceSchema> | null,
+  position: Pick<OfferFreePosition, 'source' | 'unit' | 'unitPriceCents' | 'priceQuantity'>,
+  scope: { organizationId: string; offerId: string },
+): OfferPriceSource {
+  if (!stored || stored.kind === 'manuell' || !position.source) return { kind: 'manuell' };
+  const proof = signPriceSource({
+    ...scope,
+    entry: { kind: position.source.kind, id: position.source.id },
+    kind: stored.kind,
+    conditionId: stored.condition?.id ?? null,
+    unit: position.unit,
+    unitPriceCents: position.unitPriceCents,
+    priceQuantity: position.priceQuantity,
   });
-  if (selected.error) throw new Error('offer_read_failed');
-  if (selected.data === null) return null;
-  const parsed = offerWithCostsSchema.safeParse(selected.data);
+  return stored.kind === 'listenpreis'
+    ? { kind: 'listenpreis', proof }
+    : { kind: 'kundenkondition', condition: stored.condition, proof };
+}
+
+function offerWithCostsOf(data: unknown, scope: { organizationId: string; offerId: string }): OfferWithCosts {
+  const parsed = offerWithCostsSchema.safeParse(data);
   if (!parsed.success) throw new Error('offer_read_failed');
   const offer = offerDetailOf(parsed.data.offer);
-  const { costs } = parsed.data;
+  const { costs, priceSources } = parsed.data;
   return {
     ...offer,
     sections: offer.sections.map((section, sectionIndex) => ({
@@ -177,9 +198,14 @@ export async function readOfferWithCosts(
       positions: section.positions.map((position, positionIndex) => {
         if (position.kind === 'text') return position;
         const cost = costs[sectionIndex]?.[positionIndex];
-        // Both answers come from one statement: a missing entry is a broken read, never a cost of zero.
-        if (cost === undefined) throw new Error('offer_read_failed');
-        return { ...position, cost };
+        const priceSource = priceSources[sectionIndex]?.[positionIndex];
+        // The answers come from one statement: a missing entry is a broken read, never a cost of zero.
+        if (cost === undefined || priceSource === undefined) throw new Error('offer_read_failed');
+        return {
+          ...position,
+          cost,
+          priceSource: priceSourceOf(priceSource, position, scope),
+        };
       }),
     })),
   };
@@ -204,6 +230,18 @@ const revisionsSchema = z.array(
   }),
 );
 
+/** The sent revisions as list_offer_revisions answers them, with who recorded each. */
+function revisionsOf(data: unknown): OfferRevision[] {
+  const parsed = revisionsSchema.safeParse(data);
+  if (!parsed.success) throw new Error('offer_revisions_read_failed');
+  return parsed.data.map(({ sentBy, ...revision }) => ({
+    ...revision,
+    sentBy: sentBy
+      ? formatProfileName({ first_name: sentBy.firstName, last_name: sentBy.lastName, email: sentBy.email })
+      : null,
+  }));
+}
+
 /** The sent revisions of one offer of the organization, newest first; none for an offer never sent. */
 export async function readOfferRevisions(organizationId: string, offerId: string): Promise<OfferRevision[]> {
   const admin = createSupabaseAdminClient();
@@ -211,12 +249,33 @@ export async function readOfferRevisions(organizationId: string, offerId: string
     p_organization_id: organizationId,
     p_offer_id: offerId,
   });
-  const parsed = revisionsSchema.safeParse(selected.data);
-  if (selected.error || !parsed.success) throw new Error('offer_revisions_read_failed');
-  return parsed.data.map(({ sentBy, ...revision }) => ({
-    ...revision,
-    sentBy: sentBy
-      ? formatProfileName({ first_name: sentBy.firstName, last_name: sentBy.lastName, email: sentBy.email })
-      : null,
-  }));
+  if (selected.error) throw new Error('offer_revisions_read_failed');
+  return revisionsOf(selected.data);
+}
+
+const offerWithRevisionsSchema = z.object({ offer: z.unknown(), revisions: z.unknown() });
+
+/**
+ * One offer of the organization as the office's page reads it: its header
+ * with the names it shows, its content with each priced Position's cost and price source, and
+ * its sent revisions, all from one database snapshot, so a draft never shows
+ * beside a revision sent after it. The caller has established Admin or Büro;
+ * `null` when there is no such offer. A failed or malformed read throws.
+ */
+export async function readOfferWithRevisions(
+  organizationId: string,
+  offerId: string,
+): Promise<{ offer: OfferWithCosts; revisions: OfferRevision[] } | null> {
+  const admin = createSupabaseAdminClient();
+  const selected = await admin.rpc('get_offer_with_revisions', {
+    p_organization_id: organizationId,
+    p_offer_id: offerId,
+  });
+  const parsed = offerWithRevisionsSchema.safeParse(selected.data);
+  if (selected.error || !parsed.success) throw new Error('offer_read_failed');
+  if (parsed.data.offer === null) return null;
+  return {
+    offer: offerWithCostsOf(parsed.data.offer, { organizationId, offerId }),
+    revisions: revisionsOf(parsed.data.revisions),
+  };
 }
