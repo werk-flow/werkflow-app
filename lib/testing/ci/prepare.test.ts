@@ -360,6 +360,55 @@ test("the replay of run 45741947708: an unapproved PR that edits a list's file o
   expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
 });
 
+// A list the registry names in `lib/attention/count-volume.test.ts`, as one commit writes it.
+const VOLUME = 'lib/attention/count-volume.test.ts';
+function volumeCommit(subject: string, reads: string): string {
+  mkdirSync(join(repository, 'lib/attention'), { recursive: true });
+  writeFileSync(
+    join(repository, VOLUME),
+    `const HISTORY_READS: Readonly<Record<string, number>> = { ${reads} };\n`,
+  );
+  git('add', VOLUME);
+  git('commit', '--quiet', '--no-verify', '--message', subject);
+  return git('rev-parse', 'HEAD');
+}
+
+// Merge-queue run 45967427617: #685, unapproved, added a new list with its entries, and the step
+// counted every entry as growth, dropping #684's approval for the commit below it.
+test('the replay of run 45967427617: an unapproved PR that adds a list main lacks keeps the approval', () => {
+  const queue = onMain();
+  const approved = ratchetCommit('#684 grows the list (#684)', { 'lib/b.ts': 1 });
+  // The step reads the run's final registry, which names the new list.
+  const added = volumeCommit('#685 adds a list (#685)', 'read: 1, write: 2');
+  mergeQueue([
+    { commit: approved, pr: 684, approved: true },
+    { commit: added, pr: 685, approved: false },
+  ]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
+  // The gate starts the new list's baseline at the tip: only #684's growth needs the approval.
+  expect(
+    shrinkOnlyProblems(
+      (file) => committedFileText(repository, 'origin/main', file),
+      (file) => committedFileText(repository, 'HEAD', file),
+    ),
+  ).toEqual([`type assertion ratchet (${RATCHET}) gained "lib/b.ts"`]);
+});
+
+test('an unapproved PR that restores a list main holds keeps the gate strict, though its parent lacks the list', () => {
+  const queue = onMain();
+  volumeCommit('Main', 'read: 1');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  git('rm', '--quiet', VOLUME);
+  git('commit', '--quiet', '--no-verify', '--message', 'Removes the list (#11)');
+  const removed = git('rev-parse', 'HEAD');
+  const restored = volumeCommit('Restores the list (#12)', 'read: 1');
+  mergeQueue([
+    { commit: removed, pr: 11, approved: true },
+    { commit: restored, pr: 12, approved: false },
+  ]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+});
+
 test("a merge commit in the queue's range fails the step: it brings in commits no queue entry names", () => {
   const queue = onMain();
   git('switch', '--quiet', '--create', 'side');
@@ -440,6 +489,8 @@ test('a pull request that grows the agent context budget and a list needs both l
 
 test("a queue entry that grows the agent context budget takes its PR's `approved: context growth`, not the list label", () => {
   const queue = onMain();
+  budgetCommit('Main budget', 1900);
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
   const grown = budgetCommit('A longer prompt (#11)', 1901);
   const entries = (labels: readonly { name: string }[]) =>
     JSON.stringify({
