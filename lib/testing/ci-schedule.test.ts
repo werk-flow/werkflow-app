@@ -44,7 +44,7 @@ function minutesOf(clock: string) {
   return (hours ?? 0) * 60 + (minutes ?? 0);
 }
 
-test('PROD is live by 05:00 when the ci-alert timer dispatches the release at 03:30', () => {
+test('a release the ci-alert timer dispatches on time at 03:30 is live by 05:00, even with its own slowest full run', () => {
   expect(CLOCK_WORK.release.time).toBe(RELEASE_DECIDES);
   // The timer's pass, then the release's own full run when it finds none, then the ship.
   const liveAt = (ownRun: number) => minutesOf(RELEASE_DECIDES) + TIMER_PASS_MINUTES + ownRun + SHIP_MINUTES;
@@ -61,9 +61,10 @@ test('no cron and no hold job: the release waits for a dispatch, and the timer f
   expect(readWorkflow('release.yml').text('jobs', 'candidate', 'steps', 1, 'env', 'MODE')).toBe(
     "${{ inputs.dry_run && 'dry-run' || inputs.scheduled && 'scheduled' || 'manual' }}",
   );
-  // ops/ci-alert.py counts a run of this name as the night's release, and no other dispatch.
-  expect(readWorkflow('release.yml').at('run-name')).toBe(
-    "${{ inputs.scheduled && 'Scheduled release' || 'release' }}",
+  // ops/ci-alert.py counts a run of this name as the night's release, and no other dispatch. It
+  // dispatches only while it finds this exact line in the raw file, so a folded block would stop it.
+  expect(releaseWorkflow).toContain(
+    "\nrun-name: ${{ inputs.scheduled && 'Scheduled release' || 'release' }}\n",
   );
 });
 
