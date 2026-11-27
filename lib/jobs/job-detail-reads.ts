@@ -3,7 +3,7 @@ import 'server-only';
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { toClientContact, toClientSite } from '@/lib/clients/relation-rows';
 import type { ClientContact, ClientSite } from '@/lib/clients/types';
-import { logReadErrors, logReadFailure } from '@/lib/data/read-request-cache';
+import { logReadFailure } from '@/lib/data/read-request-cache';
 import { formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { formatEmployeeRecordName } from '@/lib/personnel/types';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
@@ -15,9 +15,8 @@ import {
 import type { WorkBillingParties } from '@/lib/billing-parties/types';
 import type { ActionContext } from '@/lib/org/action-context';
 import { JOB_WORK_LEADS_EMBED, type WorkLeadHoldingRow } from '@/lib/projects/work-lead-types';
-import { readInBatches } from '@/lib/supabase/query-batches';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { projectFieldJobDetails } from './field-work-pack';
-import { readJobAssignmentOfUser } from './job-access-reads';
 import {
   toClient,
   toJob,
@@ -251,18 +250,18 @@ export async function readJobDetails(input: {
   const { admin, jobData } = input;
   const { userId, orgId, isManagerOrAbove } = input.context;
 
-  if (!isManagerOrAbove) {
-    const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
-      orgId,
-      jobData.id,
-      userId,
-    );
-    if (assignmentError) return { success: false, error: 'load_failed' };
-    if (!assignment) return { success: false, error: 'not_authorized' };
-  }
-
   const [assignmentRowsResult, projectResult] = await Promise.all([
-    admin.from('job_assignments').select('*').eq('organization_id', orgId).eq('job_id', jobData.id),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('job_assignments')
+          .select('*')
+          .eq('organization_id', orgId)
+          .eq('job_id', jobData.id)
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
     jobData.project_id
       ? admin
           .from('projects')
@@ -272,14 +271,19 @@ export async function readJobDetails(input: {
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
   ]);
-  if (projectResult.error) {
-    logReadFailure(`${input.operation}: project failed`, projectResult.error);
-    return { success: false, error: 'fetch_failed' };
-  }
   // A missing assignee list or missing names would show the job as unassigned or
   // every assignee as "Mitarbeiter", so either read failure fails the detail read.
   if (assignmentRowsResult.error) {
     logReadFailure(`${input.operation}: job_assignments failed`, { code: assignmentRowsResult.error.code });
+    return { success: false, error: 'fetch_failed' };
+  }
+  // The team read alone decides an employee's access, so an assignment removed
+  // between two reads can never let the job through.
+  if (!isManagerOrAbove && !assignmentRowsResult.data.some((row) => row.user_id === userId)) {
+    return { success: false, error: 'not_authorized' };
+  }
+  if (projectResult.error) {
+    logReadFailure(`${input.operation}: project failed`, projectResult.error);
     return { success: false, error: 'fetch_failed' };
   }
   const assignments = await readJobAssigneeProfiles(admin, assignmentRowsResult.data, input.operation);
@@ -374,12 +378,14 @@ export async function readJobByNumber(
     .order('version', { referencedTable: 'work_billing_parties', ascending: false })
     .order('started_at', { referencedTable: 'work_leads', ascending: false })
     .order('id', { referencedTable: 'work_leads' })
-    .single();
+    .maybeSingle();
 
-  if (jobError || !jobRow) {
-    logReadErrors(`${operation}: read failed`, jobError);
-    return { success: false, error: 'job_not_found' };
+  // A failed read is a failure the page shows with a retry, never an absent job.
+  if (jobError) {
+    logReadFailure(`${operation}: read failed`, { code: jobError.code });
+    return { success: false, error: 'fetch_failed' };
   }
+  if (!jobRow) return { success: false, error: 'job_not_found' };
   const { work_billing_parties: billingParties, work_leads: workLeads, ...jobData } = jobRow;
 
   const details = await readJobDetails({ admin, context, jobData, billingParties, operation });

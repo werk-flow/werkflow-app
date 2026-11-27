@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import type { AI_TOOLS as RegisteredTools } from '@/lib/ai/tools/registry';
 import { missingBoundaryCases } from '@/lib/testing/ai-tool-walk';
 import { CALLER_ID, ORGANIZATION_A, signInAs, tableRows } from './action-boundary-world';
-import { toolCallOutcomes } from './ai-turn-world';
+import { postTurn, readTurn, resetAiTables, toolCallOutcomes } from './ai-turn-world';
 import {
   IDS,
   OFFICE_ONLY,
@@ -15,6 +15,7 @@ import {
   callTool,
   installAiToolWorld,
   offeredTools,
+  toolResults,
 } from './ai-tool-world';
 
 type Input = Record<string, unknown>;
@@ -197,4 +198,21 @@ for (const cases of Object.values(CASES)) {
   await cases.foreignOrganization();
   await cases.lowerRole();
   await cases.suspendedMember();
+}
+
+// A job read that fails reaches the model as a failure, never as an absent job: „gibt es nicht“
+// would be a wrong answer the person acts on.
+{
+  resetAiTables(world);
+  signInAs(world, 'buero');
+  world.failingTables.add('jobs');
+  const request = JSON.stringify({ name: 'auftrag_lesen', input: { nummer: 'A-1' } });
+  await readTurn(world, await postTurn(`[replay:werkzeug] ${request}`));
+  world.failingTables.clear();
+  assert.deepEqual(
+    toolResults(world.streamRequests[1]).map((result) => result.output),
+    [{ type: 'json', value: { status: 'failed' } }],
+    'a failed job read must reach the model as failed',
+  );
+  assert.deepEqual(toolCallOutcomes(world), ['tool_call_auftrag_lesen_failed']);
 }
