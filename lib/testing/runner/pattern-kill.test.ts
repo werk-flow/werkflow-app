@@ -22,6 +22,21 @@ const refused = [
   'pid=$(pgrep verify); kill "$pid"',
   'run & pid=$!; pid=$(pgrep verify); kill "$pid"',
   'echo pid=$!; kill "$pid"',
+  'kill -TERM 0',
+  'kill 00',
+  'kill 000',
+  'pid=$! some_command; kill "$pid"',
+  'run & pid=$!; export pid=0; kill "$pid"',
+  'run & pid=$!; read pid; kill "$pid"',
+  '(pid=$!); kill "$pid"',
+  'pid=$! & kill "$pid"',
+  'command kill "$pid"',
+  'builtin kill "$pid"',
+  'command pkill bun',
+  'pgrep verify | xargs -n 1 command kill',
+  'pgrep verify | xargs --replace kill {}',
+  'pgrep verify | xargs -I {} kill {}',
+  "cat <<$'EOF'\nbody\nEOF\npkill bun",
   'kill bun',
   'kill -TERM -1 123',
   'kill -- -1',
@@ -29,6 +44,15 @@ const refused = [
 ];
 const allowed = [
   'kill 123',
+  'kill 00123',
+  'kill -s TERM -- 123',
+  'kill %%',
+  'kill -l',
+  'command -v pkill',
+  'command kill 123',
+  'builtin kill "$!"',
+  "xargs printf '%s\\n' 'kill'",
+  'xargs -n 1 echo "pkill"',
   'kill -TERM 123',
   'kill -0 123',
   'kill %1',
@@ -65,9 +89,13 @@ test('the Bash hook enforces refusals with exit 2 and accepts other input', () =
     });
   for (const command of [...refused, ...allowed]) {
     const result = call(JSON.stringify({ tool_name: 'Bash', tool_input: { command } }));
-    expect(result.exitCode, command).toBe(refused.includes(command) ? 2 : 0);
+    expect(result.exitCode, `${command}: ${result.stderr.toString()}`).toBe(
+      refused.includes(command) ? 2 : 0,
+    );
     if (result.exitCode === 2) expect(result.stderr.toString()).toContain("tool's own stop");
   }
-  for (const input of ['not json', '{}', JSON.stringify({ tool_name: 'Edit', tool_input: {} })])
-    expect(call(input).exitCode).toBe(0);
+  for (const input of ['not json', '{}', JSON.stringify({ tool_name: 'Edit', tool_input: {} })]) {
+    const result = call(input);
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+  }
 });
