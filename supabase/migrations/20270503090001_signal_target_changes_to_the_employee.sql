@@ -51,10 +51,16 @@ alter table public.employment_target_signals
 alter publication supabase_realtime add table public.employment_target_signals;
 
 -- 3. Touches the signal of each personnel record a target input of changed.
--- A record without a login has nobody to tell; one that lost its login drops
--- its signal. A record deleted in the same statement is gone from the read
--- and gets no signal. Definer rights, because a record write of any caller
--- must be able to touch the signal, which no client role writes.
+-- A record without a login has nobody to tell. When the record's login
+-- changes or goes, the old signal row goes and the new login gets a new row:
+-- Realtime checks a queued event against the current row with the event's
+-- primary key, so a kept key would hand the new login an event of the old.
+-- The record is read under a share lock, in id order: a relink holds the
+-- record's row lock until it commits, so a concurrent condition write waits
+-- for it and signals the login it committed, never the one before. A record
+-- deleted in the same statement is gone from the read and gets no signal.
+-- Definer rights, because a record write of any caller must be able to touch
+-- the signal, which no client role writes.
 create function app_private.signal_employment_target_change()
 returns trigger
 language plpgsql
@@ -63,6 +69,7 @@ set search_path to ''
 as $$
 declare
   v_record_ids uuid[];
+  v_record record;
 begin
   if tg_table_name = 'employee_records' then
     v_record_ids := array[new.id];
@@ -74,19 +81,22 @@ begin
     v_record_ids := array[old.employee_record_id];
   end if;
 
-  delete from public.employment_target_signals signal
-  using public.employee_records record
-  where record.id = any (v_record_ids)
-    and signal.employee_record_id = record.id
-    and record.user_id is null;
-
-  insert into public.employment_target_signals (organization_id, employee_record_id, user_id)
-  select record.organization_id, record.id, record.user_id
-  from public.employee_records record
-  where record.id = any (v_record_ids)
-    and record.user_id is not null
-  on conflict (employee_record_id) do update
-    set user_id = excluded.user_id, organization_id = excluded.organization_id, updated_at = now();
+  for v_record in
+    select employee.id, employee.organization_id, employee.user_id
+    from public.employee_records employee
+    where employee.id = any (v_record_ids)
+    order by employee.id
+    for share
+  loop
+    delete from public.employment_target_signals signal
+    where signal.employee_record_id = v_record.id
+      and signal.user_id is distinct from v_record.user_id;
+    if v_record.user_id is not null then
+      insert into public.employment_target_signals (organization_id, employee_record_id, user_id)
+      values (v_record.organization_id, v_record.id, v_record.user_id)
+      on conflict (employee_record_id) do update set updated_at = now();
+    end if;
+  end loop;
   return null;
 end;
 $$;
@@ -107,12 +117,23 @@ create trigger signal_employment_target_on_update
     or old.user_id is distinct from new.user_id)
   execute function app_private.signal_employment_target_change();
 
--- Weekly hours derive the target and the vacation days set the entitlement.
--- An organization's deletion skips the call, as for the deletion notices
+-- The start date and the weekly hours derive the target, and the vacation
+-- days set the entitlement. The note, the employment type and the author
+-- change neither, so their edits read nothing again. An organization's
+-- deletion skips the call, as for the deletion notices
 -- (20270111100001_index_every_foreign_key_and_skip_teardown_triggers.sql).
-create trigger signal_employment_target
-  after insert or update on public.employment_conditions
+create trigger signal_employment_target_on_insert
+  after insert on public.employment_conditions
   for each row
+  execute function app_private.signal_employment_target_change();
+create trigger signal_employment_target_on_update
+  after update of employee_record_id, valid_from, weekly_hours, vacation_days_per_year
+  on public.employment_conditions
+  for each row
+  when (old.employee_record_id is distinct from new.employee_record_id
+    or old.valid_from is distinct from new.valid_from
+    or old.weekly_hours is distinct from new.weekly_hours
+    or old.vacation_days_per_year is distinct from new.vacation_days_per_year)
   execute function app_private.signal_employment_target_change();
 create trigger signal_employment_target_on_delete
   after delete on public.employment_conditions

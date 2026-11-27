@@ -2,7 +2,9 @@
 -- (20270503090001_signal_target_changes_to_the_employee.sql,
 -- werk-flow/werkflow-planning#589). A change of a person's entry or exit
 -- date, login or employment conditions moves their own signal row and no
--- other; a change of anything else on the record moves nothing. The row
+-- other; a change of anything else on the record or the conditions, and the
+-- author's account leaving, move nothing. A new login gets a new row, so no
+-- event of the old row's key reaches it. The row
 -- holds ids and a timestamp, never a column of the personnel tables. Only
 -- its own person selects it, while a member of its organization; Realtime
 -- delivers by that policy, so no other session hears of the change. No
@@ -25,7 +27,13 @@ insert into auth.users (
  '{"first_name":"Cem","last_name":"Signal"}', now(), now()),
 ('58900000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000',
  'authenticated', 'authenticated', 'signal-outsider@example.test', '', now(), '{}',
- '{"first_name":"Dana","last_name":"Signal"}', now(), now());
+ '{"first_name":"Dana","last_name":"Signal"}', now(), now()),
+('58900000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'signal-author@example.test', '', now(), '{}',
+ '{"first_name":"Emil","last_name":"Signal"}', now(), now()),
+('58900000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'signal-new-login@example.test', '', now(), '{}',
+ '{"first_name":"Frida","last_name":"Signal"}', now(), now());
 
 insert into public.organizations (id, name, admin_id, unique_code) values
 ('58900000-0000-0000-0000-000000000010', 'Signal GmbH', '58900000-0000-0000-0000-000000000001', 'SIGNAL10'),
@@ -42,14 +50,17 @@ create function pg_temp.record_of(p_user_id uuid) returns uuid language sql as $
   select record.id from public.employee_records record
   where record.organization_id = '58900000-0000-0000-0000-000000000010' and record.user_id = p_user_id;
 $$;
--- Ages every signal, so a step's move reads as a timestamp of this transaction.
+-- Ages the fixture's signals, so a step's move reads as a timestamp of this transaction.
 create function pg_temp.age_signals() returns void language sql as $$
-  update public.employment_target_signals set updated_at = now() - interval '1 hour';
+  update public.employment_target_signals set updated_at = now() - interval '1 hour'
+  where organization_id in ('58900000-0000-0000-0000-000000000010', '58900000-0000-0000-0000-000000000011');
 $$;
--- The people whose signal moved since the last aging, in id order.
+-- The fixture's people whose signal moved since the last aging, in id order.
 create function pg_temp.moved() returns uuid[] language sql as $$
   select coalesce(array_agg(user_id order by user_id), array[]::uuid[])
-  from public.employment_target_signals where updated_at = now();
+  from public.employment_target_signals
+  where organization_id in ('58900000-0000-0000-0000-000000000010', '58900000-0000-0000-0000-000000000011')
+    and updated_at = now();
 $$;
 
 -- The table's shape and grants: ids and a timestamp, read by the person only.
@@ -140,6 +151,27 @@ begin
   end if;
 
   perform pg_temp.age_signals();
+  update public.employment_conditions set vacation_days_per_year = 28 where id = v_condition;
+  if pg_temp.moved() is distinct from array[v_employee] then
+    raise exception 'changed vacation days did not signal exactly their person: %', pg_temp.moved();
+  end if;
+
+  -- The note, the employment type, an unchanged save and the author's
+  -- account leaving set no target and no entitlement: nothing moves.
+  update public.employment_conditions set created_by = '58900000-0000-0000-0000-000000000005' where id = v_condition;
+  perform pg_temp.age_signals();
+  update public.employment_conditions
+  set note = 'Nur fürs Büro', employment_type = 'vollzeit', weekly_hours = 20
+  where id = v_condition;
+  delete from auth.users where id = '58900000-0000-0000-0000-000000000005';
+  if (select created_by from public.employment_conditions where id = v_condition) is not null then
+    raise exception 'the author''s account left the conditions';
+  end if;
+  if pg_temp.moved() is distinct from array[]::uuid[] then
+    raise exception 'a note, type, unchanged or author change signalled: %', pg_temp.moved();
+  end if;
+
+  perform pg_temp.age_signals();
   delete from public.employment_conditions where id = v_condition;
   if pg_temp.moved() is distinct from array[v_employee] then
     raise exception 'deleted conditions did not signal their person: %', pg_temp.moved();
@@ -225,6 +257,7 @@ reset role;
 do $$
 declare
   v_employee_record constant uuid := pg_temp.record_of('58900000-0000-0000-0000-000000000002');
+  v_old_signal uuid;
 begin
   delete from public.organization_members
   where organization_id = '58900000-0000-0000-0000-000000000010'
@@ -238,6 +271,25 @@ begin
   if not exists (select 1 from public.employment_target_signals
       where employee_record_id = v_employee_record and user_id = '58900000-0000-0000-0000-000000000002') then
     raise exception 'a record that got its login back did not signal its person';
+  end if;
+
+  -- A direct relink to another login retires the old row and its key.
+  select id into v_old_signal from public.employment_target_signals where employee_record_id = v_employee_record;
+  update public.employee_records set user_id = '58900000-0000-0000-0000-000000000006' where id = v_employee_record;
+  if (select array_agg(user_id) from public.employment_target_signals where employee_record_id = v_employee_record)
+    is distinct from array['58900000-0000-0000-0000-000000000006'::uuid] then
+    raise exception 'a relinked record did not signal exactly its new login';
+  end if;
+  if exists (select 1 from public.employment_target_signals where id = v_old_signal) then
+    raise exception 'a relinked record kept the old login''s signal key';
+  end if;
+
+  -- Deleting a record takes its conditions and its signal, and signals nobody.
+  perform pg_temp.age_signals();
+  delete from public.employee_records where id = v_employee_record;
+  if exists (select 1 from public.employment_target_signals where employee_record_id = v_employee_record)
+    or pg_temp.moved() is distinct from array[]::uuid[] then
+    raise exception 'a deleted record left or moved a signal';
   end if;
 end;
 $$;

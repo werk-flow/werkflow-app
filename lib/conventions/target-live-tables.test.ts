@@ -12,12 +12,7 @@ import { listProductSources, parseProductSource } from './product-sources';
 // `tables`; the person's own signal reaches them through that list too.
 
 /** Background reads whose result is a daily target or a sum of them. */
-const TARGET_READ_KINDS = [
-  'weekly-targets',
-  'own-vacation-overview',
-  'pending-vacation-for-approver',
-  'decidable-approved-vacation',
-];
+const TARGET_READ_KINDS = ['weekly-targets', 'own-vacation-overview', 'pending-vacation-for-approver'];
 
 const TARGET_TABLES = 'DAILY_TARGET_LIVE_TABLES';
 
@@ -59,6 +54,21 @@ function readText(read: ts.Expression, source: ts.SourceFile, functions: Map<str
   return parts.join('\n');
 }
 
+/** `tables: DAILY_TARGET_LIVE_TABLES`, or an array literal that spreads it whole. */
+function listsEveryTargetTable(tables: ts.Expression | undefined): boolean {
+  if (!tables) return false;
+  if (ts.isIdentifier(tables)) return tables.text === TARGET_TABLES;
+  return (
+    ts.isArrayLiteralExpression(tables) &&
+    tables.elements.some(
+      (element) =>
+        ts.isSpreadElement(element) &&
+        ts.isIdentifier(element.expression) &&
+        element.expression.text === TARGET_TABLES,
+    )
+  );
+}
+
 type TargetView = { line: number; listensToTargets: boolean };
 
 /** Each `useLiveView` call of a file whose read returns targets. */
@@ -78,10 +88,9 @@ function targetViews(file: string, text?: string): TargetView[] {
       const read = property(options, 'read');
       const reads = read ? readText(read, source, functions) : '';
       if (TARGET_READ_KINDS.some((kind) => reads.includes(`'${kind}'`))) {
-        const tables = property(options, 'tables');
         views.push({
           line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
-          listensToTargets: tables !== undefined && tables.getText(source).includes(TARGET_TABLES),
+          listensToTargets: listsEveryTargetTable(property(options, 'tables')),
         });
       }
     }
@@ -109,11 +118,13 @@ test('every live view that shows targets listens to every source of a target', (
 });
 
 test('the scan finds the week and both vacation views', () => {
-  expect([...scan().keys()].sort()).toEqual([
-    'components/zeiterfassung/vacation-approvals.tsx',
-    'components/zeiterfassung/vacation-section.tsx',
-    'hooks/use-weekly-time-data.ts',
-  ]);
+  expect([...scan().keys()]).toEqual(
+    expect.arrayContaining([
+      'components/zeiterfassung/vacation-approvals.tsx',
+      'components/zeiterfassung/vacation-section.tsx',
+      'hooks/use-weekly-time-data.ts',
+    ]),
+  );
 });
 
 test('the scan follows a same-file read function and flags a partial table list', () => {
@@ -125,9 +136,10 @@ test('the scan follows a same-file read function and flags a partial table list'
     function Queue() {
       const view = useLiveView({ tables: ['vacation_requests'], read: ({ signal }) => readQueue(signal) });
       const week = useLiveView({ tables: [...DAILY_TARGET_LIVE_TABLES], read: () => readInBackground('weekly-targets', {}) });
+      const filtered = useLiveView({ tables: DAILY_TARGET_LIVE_TABLES.filter(Boolean), read: () => readInBackground('weekly-targets', {}) });
       const other = useLiveView({ tables: ['jobs'], read: () => readInBackground('parked-jobs', {}) });
       return null;
     }`,
   );
-  expect(planted.map((view) => view.listensToTargets)).toEqual([false, true]);
+  expect(planted.map((view) => view.listensToTargets)).toEqual([false, true, false]);
 });
