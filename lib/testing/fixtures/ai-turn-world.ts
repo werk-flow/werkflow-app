@@ -191,10 +191,11 @@ function cancelTurn(world: AiTurnWorld, args: Row): Outcome {
     (row) =>
       row.thread_id === args.p_thread_id && row.idempotency_key === `${String(args.p_command_id)}:assistant`,
   );
-  if (!item) return ok('not_found');
-  if (item.status !== 'streaming') return ok('finished');
+  if (!item) return ok([{ verdict: 'not_found', text_length: null }]);
+  if (item.status !== 'streaming') return ok([{ verdict: 'finished', text_length: null }]);
   stopAnswer(item);
-  return ok('stopped');
+  const { text } = z.object({ text: z.string() }).parse(item.body);
+  return ok([{ verdict: 'stopped', text_length: text.length }]);
 }
 
 /** What a stop leaves: the last saved text, finished as stopped. */

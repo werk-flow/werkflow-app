@@ -17426,7 +17426,10 @@ export type Database = {
           p_thread_id: string;
           p_user_id: string;
         };
-        Returns: string;
+        Returns: {
+          text_length: number;
+          verdict: string;
+        }[];
       };
       cancel_approved_vacation_request: {
         Args: {

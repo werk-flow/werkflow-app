@@ -469,14 +469,15 @@ function markStarted(
 }
 
 /**
- * Puts a saved turn into its thread and the list. Without its end event, the
- * saved answer says how it went on; a stopped answer keeps the text of the
- * server's last save, which a read shows too.
+ * Puts a saved turn into its thread and the list. Only a whole answer is
+ * final as streamed: an answer that ended early, a stopped one above all,
+ * keeps the text the server saved, and without its end event the saved
+ * answer says how it went on, so a read shows both.
  */
 function settleSaved(current: LiveTurn, outcome: TurnOutcome, host: TurnHost): void {
   showAddress(host, current.threadId);
   host.touch(current.threadId, current.user.text);
-  if (current.end && current.stoppedAt === null)
+  if (current.end?.status === 'complete')
     return host.settle(current.threadId, [current.user, answerMessage(current)], true);
   // Without its end event the answer stays open: the server goes on writing it, the thread's live
   // channel brings the rest, and a read now shows what is saved.
@@ -583,8 +584,10 @@ function useStop(refs: {
         threadId: turn.threadId,
         commandId: turn.commandId,
       }).then((taken) => {
-        if (taken || leftRef.current || liveRef.current?.commandId !== turn.commandId) return;
-        update((current) => ({ ...current, stoppedAt: null }));
+        if (taken || leftRef.current) return;
+        // The answer runs on: the screen shows it again, or the channel does once the turn has settled.
+        if (liveRef.current?.commandId === turn.commandId)
+          update((current) => ({ ...current, stoppedAt: null }));
         setError({ draft: draftKey(host.userId, host.organizationId, turn.threadId), message: STOP_FAILED });
       });
     },

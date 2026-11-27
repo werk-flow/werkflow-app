@@ -1,3 +1,4 @@
+import { sendKiLiveStop } from '@/lib/ai/live/broadcast';
 import { stopAiTurn } from '@/lib/ai/stop';
 import { logError } from '@/lib/logging';
 import { resolveActionContextFor } from '@/lib/org/action-context';
@@ -15,7 +16,7 @@ function refuse(error: string, status: number): Response {
 
 /**
  * „Antwort anhalten“: stops the answer to one command in the caller's own
- * thread. The running turn ends at its next save and tells every tab.
+ * thread and tells every tab. The running turn ends at its next save.
  */
 export async function POST(
   request: Request,
@@ -30,15 +31,23 @@ export async function POST(
   try {
     const auth = await resolveActionContextFor(parsed.data.organizationId);
     if (!auth.success) return refuse(auth.error, auth.error === 'not_authenticated' ? 401 : 403);
-    const verdict = await stopAiTurn({
+    const stop = await stopAiTurn({
       organizationId: auth.context.orgId,
       userId: auth.context.userId,
       threadId: threadId.data,
       commandId: parsed.data.commandId,
     });
-    if (verdict === 'thread_not_found') return refuse(verdict, 404);
-    if (verdict === 'unavailable') return refuse(verdict, 503);
-    return Response.json({ verdict }, { headers: privateHeaders });
+    if (stop.verdict === 'thread_not_found') return refuse(stop.verdict, 404);
+    if (stop.verdict === 'unavailable') return refuse(stop.verdict, 503);
+    // Every tab learns the stop from the stop itself, also when the turn's invocation is gone.
+    if (stop.verdict === 'stopped')
+      await sendKiLiveStop({
+        threadId: threadId.data,
+        commandId: parsed.data.commandId,
+        entryPoint: 'chat',
+        length: stop.length,
+      });
+    return Response.json({ verdict: stop.verdict }, { headers: privateHeaders });
   } catch (error) {
     logError('aiStopRoute: stop failed', error);
     return refuse('unavailable', 503);

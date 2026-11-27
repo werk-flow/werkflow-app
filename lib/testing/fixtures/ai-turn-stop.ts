@@ -83,8 +83,11 @@ const outputCap = costMicroUsd(
   const ends = liveEvents().filter((event) => event.type === 'end');
   assert.deepEqual(
     ends.map((event) => event.type === 'end' && [event.status, event.length]),
-    [['cancelled', kept.length]],
-    'every tab learns the stop and cuts the answer back to its saved text',
+    [
+      ['cancelled', kept.length],
+      ['cancelled', kept.length],
+    ],
+    'every tab learns the stop from the stop itself and from the turn, at the saved text',
   );
   assert.deepEqual(
     await (await postStop(command)).json(),
@@ -92,6 +95,40 @@ const outputCap = costMicroUsd(
     'a repeated stop changes nothing',
   );
   assert.equal(answerItem()?.status, 'cancelled');
+}
+
+// A partial save that landed although its answer was lost: the turn believes less text is saved
+// than the database holds. The stop itself tells every tab the saved length, so no tab keeps less.
+{
+  resetAiTables(world);
+  const command = crypto.randomUUID();
+  const answer = world.rpc;
+  let partialSaves = 0;
+  world.rpc = (call) => {
+    const outcome = answer(call);
+    if (call.name !== 'update_ai_thread_item' || call.args.p_status !== 'streaming') return outcome;
+    partialSaves += 1;
+    return partialSaves === 2 ? { data: null, error: { message: 'AbortError: aborted' } } : outcome;
+  };
+  const before = world.liveSends.length;
+  world.onLiveSend = async () => {
+    if (partialSaves < 2) return;
+    world.onLiveSend = null;
+    await postStop(command);
+  };
+  await readTurn(world, await postTurn('[replay:langsam] Und der Vorlauf?', { commandId: command }));
+  world.rpc = answer;
+  world.onLiveSend = null;
+  const kept = textOf(answerItem()?.body);
+  const ends = liveEvents(world.liveSends.slice(before)).flatMap((event) =>
+    event.type === 'end' ? [event.length] : [],
+  );
+  assert.equal(answerItem()?.status, 'cancelled');
+  assert.equal(ends[0], kept.length, 'the stop must tell every tab the length the database kept');
+  assert.ok(
+    ends.every((length) => length <= kept.length),
+    'no end may promise more text than the stop kept',
+  );
 }
 
 // A stop while the model still thinks: a save of the unchanged text sees it, so thinking stops too.

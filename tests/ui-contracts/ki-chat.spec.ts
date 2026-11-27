@@ -777,7 +777,7 @@ test('a stop pressed before the message is saved goes once the turn has its answ
 
 test('a stop the server did not take lets the answer run on and says so', async ({ page }) => {
   await openChat(page);
-  await sendInThreadA(page, 'Wie entlüfte ich?');
+  const command = await sendInThreadA(page, 'Wie entlüfte ich?');
   await emit(page, {
     type: 'started',
     userItem: { id: 'u', sequence: 1 },
@@ -797,6 +797,41 @@ test('a stop the server did not take lets the answer run on and says so', async 
   await emit(page, { type: 'text', delta: 'das Ventil.' });
   await expect(timeline(page).getByText('Erst das Ventil.', { exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toHaveText('schreibt …');
+
+  // The stop had landed after all, only its answer was lost: the turn's stopped end shows the saved text.
+  await page.evaluate(
+    ([id, key]) => {
+      window.uiContractKiWindows[id] = {
+        hasOlder: false,
+        messages: [
+          {
+            key: `${key}:user`,
+            sequence: 1,
+            role: 'user',
+            status: 'complete',
+            text: 'Wie entlüfte ich?',
+            failure: null,
+          },
+          {
+            key: `${key}:assistant`,
+            sequence: 2,
+            role: 'assistant',
+            status: 'cancelled',
+            text: 'Erst',
+            failure: 'Du hast die Antwort angehalten.',
+          },
+        ],
+      };
+    },
+    [THREAD_A, command] as const,
+  );
+  await emit(page, { type: 'end', status: 'cancelled', message: 'Du hast die Antwort angehalten.' });
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'answered' }));
+  await expect(
+    timeline(page).getByText('Erst', { exact: true }),
+    'a stopped end shows what the server kept',
+  ).toBeVisible();
+  await expect(timeline(page).getByText('Erst das Ventil.', { exact: true })).toHaveCount(0);
 });
 
 test('an answer stopped on another tab ends where the server saved it', async ({ page }) => {
@@ -812,6 +847,30 @@ test('an answer stopped on another tab ends where the server saved it', async ({
     answer: { sequence: 2 },
   });
   await liveEmit(page, { v, type: 'text', command: 's', at: 0, delta: 'Erst das Ventil öffnen', saved: 15 });
+  // The stop kept less than this tab holds, so the tab reads the saved answer instead of guessing.
+  await page.evaluate((id) => {
+    window.uiContractKiWindows[id] = {
+      hasOlder: false,
+      messages: [
+        {
+          key: 's:user',
+          sequence: 1,
+          role: 'user',
+          status: 'complete',
+          text: 'Wie entlüfte ich?',
+          failure: null,
+        },
+        {
+          key: 's:assistant',
+          sequence: 2,
+          role: 'assistant',
+          status: 'cancelled',
+          text: 'Erst das Ventil',
+          failure: 'Du hast die Antwort angehalten.',
+        },
+      ],
+    };
+  }, THREAD_A);
   await liveEmit(page, {
     v,
     type: 'end',

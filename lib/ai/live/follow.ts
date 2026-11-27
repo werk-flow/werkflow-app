@@ -120,15 +120,10 @@ function applyKiLiveEvent(
     if (!fresh) return unchanged;
     next = { ...answer, text: answer.text + fresh };
   } else {
-    // The answer's end with text this page never received: the saved answer holds it.
-    if (answer.text.length < event.length) return { window, applied: false };
-    // A stopped answer ends where its last save ended; text this page holds past it was never kept.
-    next = {
-      ...answer,
-      text: answer.text.slice(0, event.length),
-      status: event.status,
-      failure: event.failure,
-    };
+    // An end whose length differs from what the page holds reads the saved answer: text the page
+    // missed, or text past what a stopped answer kept.
+    if (answer.text.length !== event.length) return { window, applied: false };
+    next = { ...answer, status: event.status, failure: event.failure };
   }
   return {
     window: { ...window, messages: window.messages.map((message) => (message === answer ? next : message)) },
