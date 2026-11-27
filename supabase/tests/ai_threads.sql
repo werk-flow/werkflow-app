@@ -287,20 +287,21 @@ reset role;
 
 -- The ledger's denials are proved in security_boundaries.sql.
 
--- Boundaries of the budget, each at its exact edge: a hold lapses when its
--- run is 15 minutes old while its recorded cost still counts, an attempt at
--- the first instant of the Berlin month counts, and one a microsecond
--- earlier counts no more.
+-- Boundaries of the budget, each at its exact edge: a settled run counts at
+-- its recorded cost, an attempt at the first instant of the Berlin month
+-- counts, and one a microsecond earlier counts no more. An open run's
+-- provisional charge is in ai_turn_charges.sql.
 set local role service_role;
 select public.set_ai_organization_enabled('ae000000-0000-4000-8000-000000000011',
   'ae000000-0000-4000-8000-000000000003', true);
 select public.create_ai_thread('ae000000-0000-4000-8000-000000000011', 'ae000000-0000-4000-8000-000000000003',
   'ae000000-0000-4000-8000-000000000021', 'Grenzen');
 reset role;
-insert into public.ai_runs (id, organization_id, thread_id, user_id, idempotency_key, reserved_micro_usd, created_at)
+insert into public.ai_runs (id, organization_id, thread_id, user_id, idempotency_key, status, reserved_micro_usd,
+  created_at, settled_at)
 values ('ae000000-0000-4000-8000-000000000041', 'ae000000-0000-4000-8000-000000000011',
-  'ae000000-0000-4000-8000-000000000021', 'ae000000-0000-4000-8000-000000000003', 'lapsed-run', 50000000,
-  now() - interval '15 minutes');
+  'ae000000-0000-4000-8000-000000000021', 'ae000000-0000-4000-8000-000000000003', 'settled-run', 'succeeded',
+  50000000, now() - interval '15 minutes', now() - interval '14 minutes');
 insert into public.ai_runs (id, organization_id, thread_id, user_id, idempotency_key, status, reserved_micro_usd,
   created_at, settled_at)
 values ('ae000000-0000-4000-8000-000000000042', 'ae000000-0000-4000-8000-000000000011',
@@ -308,7 +309,7 @@ values ('ae000000-0000-4000-8000-000000000042', 'ae000000-0000-4000-8000-0000000
   50000000, now() - interval '40 days', now() - interval '40 days');
 insert into public.ai_run_attempts (organization_id, run_id, idempotency_key, model_id, prompt_version,
   input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, outcome, created_at) values
-('ae000000-0000-4000-8000-000000000011', 'ae000000-0000-4000-8000-000000000041', 'lapsed-run:1', 'claude-haiku',
+('ae000000-0000-4000-8000-000000000011', 'ae000000-0000-4000-8000-000000000041', 'settled-run:1', 'claude-haiku',
  'prompt-v1', 10, 10, 0, 0, 10000000, 'succeeded', now()),
 ('ae000000-0000-4000-8000-000000000011', 'ae000000-0000-4000-8000-000000000042', 'last-month:1', 'claude-haiku',
  'prompt-v1', 10, 10, 0, 0, 50000000, 'succeeded',
@@ -318,17 +319,17 @@ insert into public.ai_run_attempts (organization_id, run_id, idempotency_key, mo
  date_trunc('month', now() at time zone 'Europe/Berlin') at time zone 'Europe/Berlin');
 do $$
 begin
-  -- EUR 11 spent this month (the lapsed run's 10 and the month-start 1), the
-  -- lapsed hold free, last month's EUR 50 gone: EUR 39 fits, a micro-euro more does not.
+  -- EUR 11 spent this month (the settled run's 10 and the month-start 1), the
+  -- settled run's hold free, last month's EUR 50 gone: EUR 39 fits, a micro-euro more does not.
   if (select verdict from public.reserve_ai_run('ae000000-0000-4000-8000-000000000011',
       'ae000000-0000-4000-8000-000000000003', 'ae000000-0000-4000-8000-000000000021', 'over', 39000001))
       is distinct from 'budget_exhausted' then
-    raise exception 'The recorded cost of a lapsed run or the attempt at the month start did not count';
+    raise exception 'The recorded cost of a settled run or the attempt at the month start did not count';
   end if;
   if (select verdict from public.reserve_ai_run('ae000000-0000-4000-8000-000000000011',
       'ae000000-0000-4000-8000-000000000003', 'ae000000-0000-4000-8000-000000000021', 'fits', 39000000))
       is distinct from 'reserved' then
-    raise exception 'A hold 15 minutes old or last month''s spend still blocked the budget';
+    raise exception 'A settled run''s hold or last month''s spend still blocked the budget';
   end if;
 end;
 $$;
