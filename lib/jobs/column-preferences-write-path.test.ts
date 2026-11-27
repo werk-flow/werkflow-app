@@ -89,7 +89,6 @@ ${stderr}`,
 
 if (ISOLATED) {
   const loggedErrors: string[] = [];
-  mock.module('server-only', () => ({}));
   mock.module('next/cache', () => ({ updateTag: () => undefined }));
   mock.module('@/lib/logging', () => ({ logError: (message: string) => loggedErrors.push(message) }));
   mock.module('@/lib/jobs/auth', () => ({

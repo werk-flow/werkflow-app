@@ -85,7 +85,6 @@ const admin = {
   },
 };
 
-mock.module('server-only', () => ({}));
 mock.module('next/cache', () => ({
   updateTag: () => undefined,
   revalidatePath: () => undefined,

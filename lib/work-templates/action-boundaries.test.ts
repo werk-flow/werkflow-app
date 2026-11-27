@@ -54,7 +54,6 @@ test.skipIf(ISOLATED)('the work-template boundary cases pass in an isolated proc
 });
 
 if (ISOLATED) {
-  mock.module('server-only', () => ({}));
   mock.module('next/cache', () => ({ revalidatePath: () => undefined, updateTag: () => undefined }));
   mock.module('@/lib/data/cached', () => ({
     CACHE_TAGS: { workTemplates: (organizationId: string) => `work-templates-${organizationId}` },

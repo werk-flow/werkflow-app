@@ -88,7 +88,6 @@ ${stderr}`,
 });
 
 async function loadMemberJobs(): Promise<(typeof import('./actions'))['getJobsForMember']> {
-  mock.module('server-only', () => ({}));
   mock.module('next/cache', () => ({
     updateTag: () => undefined,
     revalidatePath: () => undefined,
