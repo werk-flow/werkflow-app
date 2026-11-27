@@ -34,12 +34,15 @@ import {
   CONDITION_LINE_KINDS,
   CONDITION_LINE_KIND_LABELS,
   MAX_CONDITION_LEISTUNG_PRICES,
+  type ConditionChanged,
   type CustomerCondition,
 } from '@/lib/price-catalog/customer-conditions';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 
 const SAVE_FAILED = 'Die Konditionen konnten nicht gespeichert werden. Versuche es erneut.';
+const CONDITION_CHANGED =
+  'Inzwischen wurde ein neuerer Stand gespeichert, zum Beispiel in einem anderen Fenster. Deine Eingaben sind noch da: Speicherst du erneut, werden sie als nächster Stand gespeichert.';
 const FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   client_archived: 'Der Kunde ist archiviert. Stelle ihn wieder her, um Konditionen festzulegen.',
   client_not_found: 'Diesen Kunden gibt es nicht mehr.',
@@ -254,8 +257,11 @@ function usePayloadAttemptKey(): (payload: ConditionInput) => string {
  * Records a new version of a customer's conditions, filled from the newest
  * one: its first day, a discount per kind of line and own Leistung prices.
  * The version it was filled from goes with the save, so another session's
- * version meanwhile refuses this one; one key per payload makes a retried
- * press of the same values answer with the first version.
+ * version meanwhile refuses this one. The dialog then keeps every value and
+ * expects the version the refusal names: a save never overwrites, so a
+ * second press records the office's values as the next version. One key per
+ * payload makes a retried press of the same values answer with the first
+ * version.
  */
 export function ClientConditionDialog({
   newest,
@@ -265,11 +271,16 @@ export function ClientConditionDialog({
 }: {
   newest: CustomerCondition | null;
   today: string;
-  onRecord: (input: ConditionInput, expectedVersion: number, attemptKey: string) => Promise<ActionResult>;
+  onRecord: (
+    input: ConditionInput,
+    expectedVersion: number,
+    attemptKey: string,
+  ) => Promise<ActionResult | ConditionChanged>;
   onClose: () => void;
 }) {
   const [form, setForm] = useState<ConditionForm>(() => conditionFormOf(newest, today));
-  const [expectedVersion] = useState(() => newest?.version ?? 0);
+  // The page's newer version waits while the dialog is open: a refusal names it instead.
+  const [expectedVersion, setExpectedVersion] = useState(() => newest?.version ?? 0);
   const attemptKeyFor = usePayloadAttemptKey();
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -288,12 +299,16 @@ export function ClientConditionDialog({
       setError(null);
       const key = attemptKeyFor(parsed.input);
       const result = await onRecord(parsed.input, expectedVersion, key).catch(() => null);
-      // Another session's newer version refuses this form for good: the page names it and shows it.
-      if (!result?.success && result?.error !== 'condition_changed') {
-        setError(result ? describeFailure(result.error, FAILURE_MESSAGES, SAVE_FAILED) : SAVE_FAILED);
+      if (result?.success) {
+        onClose();
         return;
       }
-      onClose();
+      if (result && 'currentVersion' in result) {
+        setExpectedVersion(result.currentVersion);
+        setError(CONDITION_CHANGED);
+        return;
+      }
+      setError(result ? describeFailure(result.error, FAILURE_MESSAGES, SAVE_FAILED) : SAVE_FAILED);
     });
   };
   return (

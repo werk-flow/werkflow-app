@@ -1,3 +1,4 @@
+import type { ActionFailure } from '@/lib/action-result';
 import { lineAmountCents, type PriceQuantity } from '@/lib/inventory/line-amount';
 import type { InventoryUnitCode } from '@/lib/inventory/units';
 import type { LeistungKind } from './types';
@@ -60,6 +61,13 @@ export type CustomerConditions = {
   /** The version that applies today; null before the first one starts. */
   applyingId: string | null;
 };
+
+/**
+ * Another session recorded a newer version since the form was filled. The
+ * server read that version's number, which the office's next save of its
+ * values expects: a save never overwrites, it records the next version.
+ */
+export type ConditionChanged = ActionFailure<'condition_changed'> & { currentVersion: number };
 
 /** The kind of line of a catalog entry; a Leistung of another kind takes no discount. */
 export function conditionLineKind(

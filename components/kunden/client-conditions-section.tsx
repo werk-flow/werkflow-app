@@ -22,6 +22,7 @@ import {
   CONDITION_LINE_KINDS,
   CONDITION_LINE_KIND_LABELS,
   discountText,
+  type ConditionChanged,
   type CustomerCondition,
   type CustomerConditions,
 } from '@/lib/price-catalog/customer-conditions';
@@ -157,17 +158,10 @@ export function ClientConditionsSection({
     input: ConditionInput,
     expectedVersion: number,
     attemptKey: string,
-  ): Promise<ActionResult> => {
+  ): Promise<ActionResult | ConditionChanged> => {
     since.current = settle.markChange();
+    // A refusal, a newer version of another session included, stays in the open dialog with its values.
     const result = await save.run({ clientId, expectedVersion, attemptKey, ...input });
-    if (!result.success && result.error === 'condition_changed') {
-      // The dialog closes: the page shows the other session's version, which a new dialog starts from.
-      showBanner({
-        variant: 'error',
-        message:
-          'Jemand hat die Konditionen gerade geändert. Prüfe den neuen Stand und öffne „Konditionen ändern“ erneut.',
-      });
-    }
     if (result.success) {
       showBanner({
         variant: 'success',

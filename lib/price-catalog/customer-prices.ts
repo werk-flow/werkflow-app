@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { isInventoryUnitCode } from '@/lib/inventory/units';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { uuidSchema } from '@/lib/validation/uuid';
@@ -55,16 +56,21 @@ function discounts(row: {
   };
 }
 
-/** The customer's newest versions, how many it has and the one that applies on `today`. */
+/**
+ * The customer's newest versions (at most `limit`, the function's 20 without
+ * one), how many it has and the one that applies on `today`.
+ */
 export async function readCustomerConditions(
   organizationId: string,
   clientId: string,
   today: string,
+  limit?: number,
 ): Promise<CustomerConditions> {
   const { data, error } = await createSupabaseAdminClient().rpc('list_client_price_conditions', {
     p_organization_id: organizationId,
     p_client_id: clientId,
     p_on_date: today,
+    ...(limit === undefined ? {} : { p_limit: limit }),
   });
   const parsed = conditionsSchema.safeParse(data);
   if (error || !parsed.success) throw new Error('client_price_conditions_read_failed');
@@ -82,6 +88,13 @@ export async function readCustomerConditions(
       })),
     })),
   };
+}
+
+/** The number of the customer's newest version, 0 for none. */
+export async function readNewestConditionVersion(organizationId: string, clientId: string): Promise<number> {
+  // The newest comes first; the day only names the version that applies, which this read leaves aside.
+  const conditions = await readCustomerConditions(organizationId, clientId, getBusinessTodayIso(), 1);
+  return conditions.versions[0]?.version ?? 0;
 }
 
 const dayConditionSchema = z

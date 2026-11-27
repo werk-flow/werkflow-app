@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import type { ActionResult } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
 import { resolveActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -22,6 +22,8 @@ import {
   type SetLeistungArchivedInput,
   type UpdateLeistungInput,
 } from './action-schemas';
+import type { ConditionChanged } from './customer-conditions';
+import { readNewestConditionVersion } from './customer-prices';
 
 // Admin and Büro keep the Leistungen. Every action resolves the caller's
 // organization and manager role on the server and writes only inside it;
@@ -44,6 +46,24 @@ const conditionAnswerSchema = z.object({
   clientId: uuidSchema,
   updatedAt: z.string(),
 });
+
+/** The refusal of a save against an older version, with the newest one's number of the caller's organization. */
+async function conditionChanged(
+  orgId: string,
+  clientId: string,
+): Promise<ConditionChanged | ActionFailure<'load_failed'>> {
+  try {
+    return {
+      success: false,
+      error: 'condition_changed',
+      currentVersion: await readNewestConditionVersion(orgId, clientId),
+    };
+  } catch (error) {
+    // Without the number the next save would send the old one again: the office retries instead.
+    logError('recordCustomerCondition: newest version read failed', error);
+    return { success: false, error: 'load_failed' };
+  }
+}
 
 /** The caller in the active organization, refused unless Admin or Büro. */
 async function resolveManager() {
@@ -215,11 +235,13 @@ export async function setLeistungArchived(rawInput: SetLeistungArchivedInput): P
 /**
  * Records a new version of a customer's conditions, with its own Leistung
  * prices, in one database call. Earlier versions and every Position they
- * priced stay as they are.
+ * priced stay as they are. A newer version of another session refuses the
+ * call with its number, read here, so the office's next save of the same
+ * values records them after it.
  */
 export async function recordCustomerCondition(
   rawInput: RecordCustomerConditionInput,
-): Promise<ActionResult<{ version: number; clientId: string; updatedAt: string }>> {
+): Promise<ActionResult<{ version: number; clientId: string; updatedAt: string }> | ConditionChanged> {
   const parsed = recordCustomerConditionSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
@@ -244,11 +266,12 @@ export async function recordCustomerCondition(
     );
     const recorded = conditionAnswerSchema.safeParse(data);
     if (error || !recorded.success) {
-      return conditionRefusal(
+      const refusal = conditionRefusal(
         error,
         'save_failed',
         'recordCustomerCondition: record_client_price_condition failed',
       );
+      return refusal.error === 'condition_changed' ? conditionChanged(orgId, input.clientId) : refusal;
     }
     // The customer page renders the new version into this answer; another session hears it through Realtime.
     revalidatePath(`/kunden/${input.clientId}`);

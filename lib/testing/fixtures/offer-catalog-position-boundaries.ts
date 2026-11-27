@@ -6,7 +6,8 @@
 // the same entry carries neither, and Büro's save hands each Position's own
 // cost and price source to the database for its own organization and actor.
 // The customer's conditions are recorded only by Admin and Büro, for their
-// own organization and as themselves.
+// own organization and as themselves; a newer version of another session
+// refuses a save with its number, which the server reads.
 // supabase/tests/offers.sql and client_price_conditions.sql prove the stored
 // source, the hidden cost, the conditions and the refusals.
 import assert from 'node:assert/strict';
@@ -520,3 +521,41 @@ assert.deepEqual(
   ],
 );
 assert.deepEqual(world.rpcCalls[1]?.args.p_leistung_prices, conditionInput.leistungPrices);
+
+// A newer version of another session refuses the save with that version's number, which the server
+// reads for Büro's own organization and the named customer; it never trusts a number the client
+// sent. A read that cannot complete fails the save instead of naming no version.
+const newerVersion = {
+  id: '98000000-0000-4000-8000-000000000003',
+  version: 3,
+  validFrom: '2027-01-01',
+  materialDiscountTenths: 0,
+  arbeitDiscountTenths: 0,
+  anfahrtDiscountTenths: 0,
+  leistungPrices: [],
+};
+let newestReadFails = false;
+world.rpc = ({ name }) => {
+  if (name === 'record_client_price_condition') {
+    return { data: null, error: { message: 'condition_changed', code: 'P0001' } };
+  }
+  if (name === 'list_client_price_conditions' && !newestReadFails) {
+    return { data: { total: 3, applyingId: conditionId, versions: [newerVersion] }, error: null };
+  }
+  return { data: null, error: { message: 'read failed' } };
+};
+world.rpcCalls.length = 0;
+assert.deepEqual(await recordCustomerCondition(conditionInput), {
+  success: false,
+  error: 'condition_changed',
+  currentVersion: 3,
+});
+assert.deepEqual(
+  world.rpcCalls.map((call) => [call.name, call.args.p_organization_id, call.args.p_client_id]),
+  [
+    ['record_client_price_condition', ORGANIZATION_A, clientIds.conditioned],
+    ['list_client_price_conditions', ORGANIZATION_A, clientIds.conditioned],
+  ],
+);
+newestReadFails = true;
+assert.deepEqual(await recordCustomerCondition(conditionInput), { success: false, error: 'load_failed' });

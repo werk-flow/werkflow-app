@@ -83,7 +83,10 @@ import {
   InventoryMovementsContractFixture,
 } from './inventory-movements-boundaries';
 import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
-import { CustomerConditionsContractFixture } from './customer-conditions-boundaries';
+import {
+  CustomerConditionsContractFixture,
+  CustomerConditionsSectionContractFixture,
+} from './customer-conditions-boundaries';
 import { OffersContractFixture } from './offers-boundaries';
 import {
   InvoiceDeliveriesContractFixture,
@@ -653,6 +656,10 @@ createRoot(root).render(
     <LeistungenContractFixture />
   ) : window.uiContractFixture === 'customer-conditions' ? (
     <CustomerConditionsContractFixture />
+  ) : window.uiContractFixture === 'customer-conditions-section' ? (
+    <BannerProvider>
+      <CustomerConditionsSectionContractFixture />
+    </BannerProvider>
   ) : window.uiContractFixture === 'presentation' ? (
     <PresentationFixture />
   ) : window.uiContractFixture === 'customer' ? (
