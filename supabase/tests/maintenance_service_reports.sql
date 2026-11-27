@@ -10,7 +10,7 @@
 --   and a visit that is not completed are refused; a storage key outside the
 --   organization is invalid.
 -- * A report records its PDF's content hash when the caller passes one
---   (20270420090000_send_service_reports_through_document_delivery.sql); a
+--   (20270504090000_send_service_reports_through_document_delivery.sql); a
 --   call without it, as before, still files the report.
 -- * E2c's delivery sends the visit's latest report under the subject
 --   service_report, with its own filed PDF: a superseded report, another
@@ -255,7 +255,7 @@ do $$ begin
   end if;
 end $$;
 
--- E2c's delivery of a report (20270420090000): report 81 was superseded by
+-- E2c's delivery of a report (20270504090000): report 81 was superseded by
 -- 83, whose PDF carries its hash; 84 was filed without one.
 create function pg_temp.request_report(p_actor text, p_org text, p_report text, p_document text,
   p_kind text default 'service_report', p_attempt text default null)
