@@ -2,6 +2,7 @@
 // Each rule names the rule of that doc it enforces (decision 0005).
 
 import { relative, resolve } from 'node:path';
+import { variableOf } from './bindings.mjs';
 
 const REPOSITORY_ROOT = resolve(import.meta.dirname, '..');
 
@@ -50,15 +51,6 @@ function* executedUnder(node, visitorKeys, root = node) {
       yield* executedUnder(each, visitorKeys, root);
     }
   }
-}
-
-/** The variable `identifier` names in its scope, or undefined for a global. */
-function variableOf(identifier, sourceCode) {
-  for (let scope = sourceCode.getScope(identifier); scope; scope = scope.upper) {
-    const variable = scope.set.get(identifier.name);
-    if (variable) return variable;
-  }
-  return undefined;
 }
 
 /**
