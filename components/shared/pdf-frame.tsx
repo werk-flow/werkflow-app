@@ -55,7 +55,12 @@ export function usePdfRead({
   return read;
 }
 
-/** The PDF inline in the browser's viewer; until its URL is there, a skeleton of its size holds its place. */
+/**
+ * The PDF inline in the browser's viewer; until its URL is there, a skeleton of its size holds its place.
+ * The frame is out of the tab order: Tab into it would move focus into the viewer's own
+ * document, out of the dialog's focus trap. Keyboard users open the same bytes through the
+ * caller's open link, in the browser's full viewer; screen readers still name the frame by `title`.
+ */
 export function PdfFrame({
   url,
   title,
@@ -77,6 +82,7 @@ export function PdfFrame({
     <iframe
       src={`${url}#toolbar=0&navpanes=0&view=FitH`}
       title={title}
+      tabIndex={-1}
       className="h-[70dvh] w-full rounded-md border bg-muted"
     />
   );
