@@ -18,11 +18,15 @@ type HeldTurn = {
   calls: { threadId: string; commandId: string; text: string; fileIds: readonly string[] }[];
   emit: ((event: TurnEvent) => void) | null;
   resolve: ((outcome: TurnOutcome) => void) | null;
+  /** Each „Antwort anhalten“ the page sent, and whether the server takes the next one. */
+  stops: { threadId: string; commandId: string }[];
+  stopTaken: boolean;
 };
 
 declare global {
   interface Window {
     uiContractKiTurn: HeldTurn;
+    uiContractKiHeldStops: { release: (taken: boolean) => void }[] | null;
     /** Set by the spec: every thread read fails with this code, as a lost connection or a refusal does. */
     uiContractKiReadsFail: 'background_read_failed' | 'not_found' | false;
     /** Set by the spec to a list: each thread read waits there, with its answer, until the spec releases it. */
@@ -41,7 +45,8 @@ declare global {
   }
 }
 
-window.uiContractKiTurn = { calls: [], emit: null, resolve: null };
+window.uiContractKiTurn = { calls: [], emit: null, resolve: null, stops: [], stopTaken: true };
+window.uiContractKiHeldStops = null;
 window.uiContractKiReadsFail = false;
 window.uiContractKiHeldReads = null;
 window.uiContractKiWindows = {};
@@ -112,6 +117,13 @@ export function sendTurn(input: {
     };
     input.signal.addEventListener('abort', () => held.resolve?.({ kind: 'stopped' }));
   });
+}
+
+export function stopTurn(input: { threadId: string; commandId: string }): Promise<boolean> {
+  const held = window.uiContractKiTurn;
+  held.stops.push({ threadId: input.threadId, commandId: input.commandId });
+  const stops = window.uiContractKiHeldStops;
+  return stops ? new Promise((resolve) => stops.push({ release: resolve })) : Promise.resolve(held.stopTaken);
 }
 
 export const KI_CONTRACT_THREADS = [

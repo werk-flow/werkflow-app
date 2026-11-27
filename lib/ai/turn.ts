@@ -41,8 +41,10 @@ import { z } from '@/lib/zod';
 
 /** How many earlier messages of the thread the model sees, newest first, within the input cap. */
 const HISTORY_MESSAGES = 20;
-/** A save refused for these says the author lost the thread: the live channel sends nothing more (KI-6). */
+/** A save refused for these says the author lost the thread: the turn ends, and the live channel sends nothing more. */
 const LOST_ACCESS = new Set(['ai_actor_without_access', 'ai_thread_not_found', 'ai_thread_item_not_found']);
+/** A save refused with this says the person stopped the answer (`cancel_ai_turn`): the turn ends. */
+const STOPPED = 'ai_thread_item_stopped';
 /** Saves of a streaming answer: at most one per interval (brief non-negotiable 4). */
 const PARTIAL_SAVE_INTERVAL_MS = 750;
 
@@ -86,7 +88,9 @@ export type AiTurnFailure =
   | 'provider_refused'
   | 'provider_unavailable'
   | 'model_refused'
-  | 'interrupted';
+  | 'interrupted'
+  | 'stopped'
+  | 'revoked';
 
 export type AiTurnEnd =
   | { status: 'complete' }
@@ -315,6 +319,9 @@ type RunContext = TurnContext & {
   toolCalls: ToolCalls;
 };
 
+/** Why the turn ends at once: the person stopped the answer, or a save said they lost the thread. */
+type Halt = 'stopped' | 'revoked';
+
 /** The run's answer so far, with what is left of its one retry allowance. */
 type Answer = {
   text: string;
@@ -324,6 +331,9 @@ type Answer = {
   saving: Promise<void> | null;
   ledgerFailed: boolean;
   retriesLeft: number;
+  halted: Halt | null;
+  /** Aborts the provider request when the turn halts. */
+  halt: AbortController;
 };
 
 type StepOutcome =
@@ -340,6 +350,8 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
     saving: null,
     ledgerFailed: false,
     retriesLeft: limits.maxRetries,
+    halted: null,
+    halt: new AbortController(),
   };
   // The turn's time counts from the request's arrival, so setup cannot eat the time to settle.
   const turnSignal = AbortSignal.timeout(
@@ -368,7 +380,11 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
   const body =
     end.status === 'complete' ? { text: answer.text } : { text: answer.text, failure: end.failure };
   await answer.saving;
-  if (!(await saveAnswer(context, end.status, body))) end = failedEnd('failed', 'interrupted');
+  // An author who lost the thread gets no final write: it would only be refused again.
+  const saved = answer.halted !== 'revoked' && (await saveAnswer(context, answer, end.status, body));
+  // A stop that landed after the last partial save is first seen by the final save, which it refused.
+  if (answer.halted) end = failedEnd('cancelled', answer.halted);
+  else if (!saved) end = failedEnd('failed', 'interrupted');
   // An attempt the ledger could not take leaves the run open: its reservation stays as the provisional charge.
   // Every other run settles at its recorded cost, a failed final save included, so the person's next turn may start.
   if (!answer.ledgerFailed) await settleRun(context, end.status === 'complete' ? 'succeeded' : end.status);
@@ -377,12 +393,15 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
 
 /**
  * Writes an answer's end, trying again within its time limit. An answer
- * already finished counts as saved: while the run is open, only the run
- * finishes its answer, so an earlier try landed. Left streaming, the answer
- * keeps its last partial save, and the database job finishes it.
+ * already finished counts as saved: while the run is open, only the run and
+ * the person's stop finish its answer, and a stopped one refuses as stopped,
+ * so a plain refusal says an earlier try landed. A stop or a lost thread ends
+ * the tries and halts the turn. Left streaming, the answer keeps its last
+ * partial save, and the database job finishes it.
  */
 async function saveAnswer(
   context: TurnContext,
+  answer: Answer,
   status: 'complete' | 'failed' | 'cancelled',
   body: { text: string; failure?: AiTurnFailure },
 ): Promise<boolean> {
@@ -401,10 +420,24 @@ async function saveAnswer(
         })
         .abortSignal(signal),
     (message) => {
-      if (LOST_ACCESS.has(message)) context.sink.revoked?.();
-      return message === 'ai_thread_item_finished';
+      haltOnRefusal(context, answer, message);
+      // A stop or a lost thread is final: no try changes it.
+      return message === 'ai_thread_item_finished' || message === STOPPED || LOST_ACCESS.has(message);
     },
   );
+}
+
+/**
+ * Ends the turn at once when a save says the person stopped the answer or
+ * lost the thread: the provider request aborts, and a lost thread's live
+ * channel sends nothing more.
+ */
+function haltOnRefusal(context: TurnContext, answer: Answer, message: string): void {
+  const halt: Halt | null = message === STOPPED ? 'stopped' : LOST_ACCESS.has(message) ? 'revoked' : null;
+  if (!halt) return;
+  if (halt === 'revoked') context.sink.revoked?.();
+  answer.halted ??= halt;
+  answer.halt.abort();
 }
 
 function failedEnd(status: 'failed' | 'cancelled', failure: AiTurnFailure): AiTurnEnd {
@@ -412,23 +445,55 @@ function failedEnd(status: 'failed' | 'cancelled', failure: AiTurnFailure): AiTu
 }
 
 /**
- * Whether the organization may take another model step. A read that cannot
- * decide refuses (B14); one still running when the turn's time is up ends the
- * turn, so the invocation keeps its time to save and settle.
+ * Whether the answer is still being written: only the person's stop finishes
+ * it while its run is open. The database rechecks the author's effective access.
+ */
+async function readAnswerOpen(context: RunContext): Promise<'open' | Halt | 'load_failed'> {
+  const { data, error } = await context.admin.rpc('read_ai_answer_status', {
+    p_organization_id: context.command.organizationId,
+    p_user_id: context.command.userId,
+    p_item_id: context.assistantItem.id,
+  });
+  if (error) {
+    if (LOST_ACCESS.has(error.message)) return 'revoked';
+    logError('aiTurn: answer read failed', error);
+    return 'load_failed';
+  }
+  if (!data) return 'load_failed';
+  return data === 'streaming' ? 'open' : 'stopped';
+}
+
+/**
+ * Whether the turn may take another model step: the organization's switch
+ * and the person's stop are read again. A read that cannot decide refuses
+ * (B14); one still running when the turn's time is up ends the turn, so the
+ * invocation keeps its time to save and settle.
  */
 async function readStepGate(
-  organizationId: string,
+  context: RunContext,
+  answer: Answer,
   turnSignal: AbortSignal,
-): Promise<'open' | 'disabled' | 'undecidable' | 'timeout'> {
+): Promise<'open' | 'disabled' | 'undecidable' | 'timeout' | Halt> {
+  if (answer.halted) return answer.halted;
   const timeUp = new Promise<'timeout'>((resolve) => {
     if (turnSignal.aborted) resolve('timeout');
     else turnSignal.addEventListener('abort', () => resolve('timeout'), { once: true });
   });
   try {
-    const gate = await Promise.race([readAiOrganizationSwitch(organizationId), timeUp]);
+    const reads = Promise.all([
+      readAiOrganizationSwitch(context.command.organizationId),
+      readAnswerOpen(context),
+    ]);
+    const gate = await Promise.race([reads, timeUp]);
     if (gate === 'timeout') return 'timeout';
-    if (gate === 'load_failed') return 'undecidable';
-    return gate.released && gate.enabled ? 'open' : 'disabled';
+    const [organization, open] = gate;
+    if (organization === 'load_failed' || open === 'load_failed') return 'undecidable';
+    if (!organization.released || !organization.enabled) return 'disabled';
+    if (open !== 'open') {
+      answer.halted ??= open;
+      if (open === 'revoked') context.sink.revoked?.();
+    }
+    return answer.halted ?? 'open';
   } catch (error) {
     logError('aiTurn: switch read failed', error);
     return 'undecidable';
@@ -440,7 +505,7 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
   let messages = context.modelContext.messages;
   for (let step = 1; ; step += 1) {
     if (step > limits.maxSteps) return failedEnd('cancelled', 'step_limit');
-    const gate = await readStepGate(context.command.organizationId, context.turnSignal);
+    const gate = await readStepGate(context, answer, context.turnSignal);
     if (gate !== 'open') return failedEnd('cancelled', gate);
     if (!isAllowedModel(context.model)) return failedEnd('failed', 'provider_refused');
     const prompt = serializedInput(context.modelContext, messages);
@@ -453,7 +518,7 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
       turnSignal: context.turnSignal,
     });
     if (outcome.kind === 'failed') {
-      const stopped = outcome.failure === 'timeout' || outcome.failure === 'answer_too_long';
+      const stopped = ['timeout', 'answer_too_long', 'stopped', 'revoked'].includes(outcome.failure);
       return failedEnd(stopped ? 'cancelled' : 'failed', outcome.failure);
     }
     if (outcome.finishReason === 'length') return failedEnd('cancelled', 'answer_too_long');
@@ -479,11 +544,14 @@ async function runStep(
     const result = await runAttempt(context, answer, step);
     const written = answer.text.length > textBefore;
     const classified = result.ok ? null : classifyAttemptFailure(result.error);
-    const outcome = result.ok
-      ? result.finishReason === 'tool-calls'
-        ? 'tool_calls'
-        : 'completed'
-      : (classified?.outcome ?? 'provider_error');
+    // A halted attempt is ledgered as what ended it, at its caps unless the provider reported its usage.
+    const outcome =
+      answer.halted ??
+      (result.ok
+        ? result.finishReason === 'tool-calls'
+          ? 'tool_calls'
+          : 'completed'
+        : (classified?.outcome ?? 'provider_error'));
     const provider = result.ok ? null : providerFailure(result.error);
     const billed = !result.ok && (result.started || acceptedByProvider(result.error));
     // Every attempt is ledgered at its cost before anything else, so a retry never goes uncounted (B15).
@@ -495,6 +563,8 @@ async function runStep(
     await recordUnrunCalls(context);
     if (!costRecorded) answer.ledgerFailed = true;
     if (!costRecorded || context.toolCalls.unrecorded) return { kind: 'failed', failure: 'interrupted' };
+    // A call whose tool still runs when the turn halts is recorded before the run settles (runTurn).
+    if (answer.halted) return { kind: 'failed', failure: answer.halted };
     if (result.ok) {
       return {
         kind: 'finished',
@@ -511,7 +581,7 @@ async function runStep(
       return { kind: 'failed', failure };
     }
     answer.retriesLeft -= 1;
-    const gate = await readStepGate(context.command.organizationId, step.turnSignal);
+    const gate = await readStepGate(context, answer, step.turnSignal);
     if (gate !== 'open') return { kind: 'failed', failure: gate };
   }
 }
@@ -539,7 +609,7 @@ async function runAttempt(
     maxOutputTokens: limits.maxOutputTokens,
     // The harness retries, so it can ledger each attempt and never retry a spend limit.
     maxRetries: 0,
-    abortSignal: AbortSignal.any([step.turnSignal, attemptAbort.signal]),
+    abortSignal: AbortSignal.any([step.turnSignal, attemptAbort.signal, answer.halt.signal]),
     timeout: { stepMs: limits.stepTimeoutMs, chunkMs: limits.chunkTimeoutMs },
     providerOptions: { anthropic: { thinking: { type: 'adaptive' }, effort: limits.effort } },
     telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
@@ -563,7 +633,6 @@ async function runAttempt(
           return fail(new TurnStop('answer_too_long'));
         answer.text += part.text;
         context.sink.text(part.text);
-        savePartial(context, answer);
       } else if (part.type === 'tool-call') {
         context.toolCalls.seen.set(part.toolCallId, part.toolName);
       } else if (part.type === 'start-step') {
@@ -577,6 +646,8 @@ async function runAttempt(
       } else if (part.type === 'abort') {
         return fail(new DOMException('aborted', 'AbortError'));
       }
+      // Every part may save, thinking included, so a stop or a lost thread shows within one save interval.
+      savePartial(context, answer);
     }
     // The provider's stream ended without its final event: what it wrote may be cut, its usage unknown.
     if (finishReason === 'interrupted') return fail(new TurnStop('interrupted'));
@@ -592,11 +663,13 @@ async function runAttempt(
   }
 }
 
-/** Saves the partial answer at most every PARTIAL_SAVE_INTERVAL_MS, so a reload or a second device shows it. */
+/**
+ * Saves the partial answer at most every PARTIAL_SAVE_INTERVAL_MS, so a reload or a second device shows it.
+ * A save of unchanged text while the model thinks is how the turn learns of a stop in time.
+ */
 function savePartial(context: RunContext, answer: Answer): void {
   const now = Date.now();
-  if (answer.saving || now - answer.savedAt < PARTIAL_SAVE_INTERVAL_MS || answer.text === answer.savedText)
-    return;
+  if (answer.saving || answer.halted || now - answer.savedAt < PARTIAL_SAVE_INTERVAL_MS) return;
   answer.savedAt = now;
   answer.savedText = answer.text;
   // The model's stream never waits for the database; the final save waits for this one.
@@ -612,10 +685,8 @@ function savePartial(context: RunContext, answer: Answer): void {
       .abortSignal(AbortSignal.timeout(AI_TURN_LIMITS[context.command.entryPoint].answerSaveTimeoutMs));
     // A missed partial save costs only freshness; the final save follows.
     if (!error) context.sink.saved?.(answer.savedText.length);
-    else {
-      logError('aiTurn: partial save failed', error);
-      if (LOST_ACCESS.has(error.message)) context.sink.revoked?.();
-    }
+    else if (error.message !== STOPPED) logError('aiTurn: partial save failed', error);
+    if (error) haltOnRefusal(context, answer, error.message);
     answer.saving = null;
   })();
 }

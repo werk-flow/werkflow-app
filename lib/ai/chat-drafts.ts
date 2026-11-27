@@ -11,6 +11,8 @@ import { tabStorage } from '@/lib/time-tracking/manual-entry-bridge-storage';
 // the chat page loads this module.
 /** Marks the copy of a message on its way, kept beside the draft it came from. */
 const SENDING_SUFFIX = ':sending';
+/** Marks the command of a message that went back into its draft, kept beside that draft. */
+const RETRY_SUFFIX = ':retry';
 
 const memoryDrafts = new Map<string, string>();
 const draftListeners = new Set<() => void>();
@@ -65,15 +67,16 @@ export function draftKey(userId: string, organizationId: string, threadId: strin
   return `${draftScope(userId, organizationId)}${threadId ?? 'neu'}`;
 }
 
-/** A message on its way to the turn route, from the draft under `draft`. */
-type SendingMessage = { draft: string; threadId: string; commandId: string; text: string };
+/** A message's thread and command: sent again unchanged, it is the same command. */
+export type RetryCommand = { threadId: string; commandId: string; text: string };
 
-function isSendingMessage(value: unknown): value is SendingMessage {
+/** A message on its way to the turn route, from the draft under `draft`. */
+type SendingMessage = RetryCommand & { draft: string };
+
+function isRetryCommand(value: unknown): value is RetryCommand {
   return (
     typeof value === 'object' &&
     value !== null &&
-    'draft' in value &&
-    typeof value.draft === 'string' &&
     'threadId' in value &&
     typeof value.threadId === 'string' &&
     'commandId' in value &&
@@ -81,6 +84,38 @@ function isSendingMessage(value: unknown): value is SendingMessage {
     'text' in value &&
     typeof value.text === 'string'
   );
+}
+
+function isSendingMessage(value: unknown): value is SendingMessage {
+  return isRetryCommand(value) && 'draft' in value && typeof value.draft === 'string';
+}
+
+/** A stored copy as written by this module, or null. */
+function parseStored(raw: string): unknown {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // best-effort: a copy that does not parse was not written by this module and holds no message.
+    return null;
+  }
+}
+
+/**
+ * Keeps the command of a message that went back into its draft, beside that
+ * draft, so an unchanged resend after any number of reloads is the same
+ * command (brief non-negotiable 9). It goes when the draft is sent.
+ */
+export function holdRetry(draft: string, retry: RetryCommand): void {
+  writeDraft(`${draft}${RETRY_SUFFIX}`, JSON.stringify(retry));
+}
+
+/** Takes the command kept beside the draft, as the draft is sent. */
+export function takeRetry(draft: string): RetryCommand | undefined {
+  const key = `${draft}${RETRY_SUFFIX}`;
+  const value = parseStored(readDraft(key));
+  writeDraft(key, '');
+  return isRetryCommand(value) ? value : undefined;
 }
 
 /**
@@ -103,15 +138,8 @@ export function takeSending(userId: string, organizationId: string): SendingMess
   const taken: SendingMessage[] = [];
   for (const key of keys) {
     if (!key.startsWith(scope) || !key.endsWith(SENDING_SUFFIX)) continue;
-    const raw = readDraft(key);
+    const value = parseStored(readDraft(key));
     writeDraft(key, '');
-    if (!raw) continue;
-    let value: unknown = null;
-    try {
-      value = JSON.parse(raw);
-    } catch {
-      // best-effort: a copy that does not parse was not written by this module and holds no message.
-    }
     if (isSendingMessage(value)) taken.push(value);
   }
   return taken;

@@ -117,30 +117,6 @@ test('the message shows at once, unconfirmed until saved, and only the block bei
   await expect(page.getByRole('button', { name: 'Senden', exact: true })).toBeVisible();
 });
 
-test('the stop button ends the answer on screen and keeps what was written', async ({ page }) => {
-  await openChat(page);
-  await composer(page).fill('Erklär mir die Wartung.');
-  await composer(page).press('Enter');
-  await emit(page, {
-    type: 'started',
-    userItem: { id: 'u', sequence: 1 },
-    assistantItem: { id: 'a', sequence: 2 },
-  });
-  await emit(page, { type: 'text', delta: 'Zuerst prüfst du den Druck.' });
-  // Enter while the answer runs starts a new line of the next message; it never stops the answer.
-  await composer(page).fill('Und danach?');
-  await composer(page).press('Enter');
-  await expect(composer(page)).toHaveValue('Und danach?\n');
-  await expect(timeline(page).getByText('schreibt …', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Antwort anhalten', exact: true }).click();
-  await expect(timeline(page).getByText('Du hast die Antwort angehalten.', { exact: true })).toBeVisible();
-  await expect(timeline(page).getByText('Zuerst prüfst du den Druck.', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Senden', exact: true })).toBeVisible();
-  // The click that stopped the answer never sends the draft typed meanwhile.
-  await expect(composer(page)).toHaveValue('Und danach?\n');
-  expect(await page.evaluate(() => window.uiContractKiTurn.calls.length)).toBe(1);
-});
-
 test('a message refused before its thread exists goes back into the composer with the reason', async ({
   page,
 }) => {
@@ -336,7 +312,7 @@ for (const order of ['before', 'after'] as const) {
 
 // The composer clears at Send, so until the message is saved its text lives only in the turn. A page
 // that goes before then, by a reload or by leaving the chat, gets it back in its draft.
-test('a message whose page went before it was saved comes back into its draft as the same command', async ({
+test('a message whose page went before it was saved comes back into its draft as the same command, after two reloads too', async ({
   page,
 }) => {
   await openChat(page);
@@ -345,6 +321,9 @@ test('a message whose page went before it was saved comes back into its draft as
   await expect(composer(page)).toHaveValue('');
   const [sent] = await page.evaluate(() => window.uiContractKiTurn.calls);
 
+  await openChat(page);
+  await expect(composer(page)).toHaveValue('Wie viele Aufträge sind offen?');
+  // A second reload before the resend keeps the command with the draft (werk-flow/werkflow-planning#609).
   await openChat(page);
   await expect(composer(page)).toHaveValue('Wie viele Aufträge sind offen?');
   // Sent again unchanged, it is the same command: the route answers it once, even if it had saved it.
@@ -700,5 +679,260 @@ test('an answer the channel brought to its end stays finished when the sending t
     }),
   );
   await expect(timeline(page).getByText('Erst das Ventil.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveCount(0);
+});
+
+// The real stop (werk-flow/werkflow-planning#609): „Antwort anhalten“ asks the server to end the turn.
+// The answer holds still at once; the server's end says it stopped, and the page shows the text the
+// server kept.
+async function sendInThreadA(page: Page, text: string): Promise<string> {
+  await showThreadA(page, { messages: [], hasOlder: false });
+  await expect.poll(() => liveThread(page)).toBe(THREAD_A);
+  await composer(page).fill(text);
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  const [turn] = await page.evaluate(() => window.uiContractKiTurn.calls);
+  return turn?.commandId ?? '';
+}
+
+const stopButton = (page: Page) => page.getByRole('button', { name: 'Antwort anhalten', exact: true });
+
+test('the stop asks the server to end the answer, holds it still at once and shows what the server kept', async ({
+  page,
+}) => {
+  await openChat(page);
+  const command = await sendInThreadA(page, 'Erklär mir die Wartung.');
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await emit(page, { type: 'text', delta: 'Zuerst prüfst du den Druck.' });
+  // Enter while the answer runs starts a new line of the next message; it never stops the answer.
+  await composer(page).fill('Und danach?');
+  await composer(page).press('Enter');
+  await expect(composer(page)).toHaveValue('Und danach?\n');
+  await stopButton(page).click();
+  await expect(stopButton(page), 'the stop shows in its first frame').toHaveAttribute('aria-busy', 'true');
+  expect(await page.evaluate(() => window.uiContractKiTurn.stops)).toEqual([
+    { threadId: THREAD_A, commandId: command },
+  ]);
+  // Text the server sent before it saw the stop does not move the answer on.
+  await emit(page, { type: 'text', delta: ' Dann das Ventil.' });
+  await expect(timeline(page).getByText('Zuerst prüfst du den Druck.', { exact: true })).toBeVisible();
+
+  await page.evaluate(
+    ([id, key]) => {
+      window.uiContractKiWindows[id] = {
+        hasOlder: false,
+        messages: [
+          {
+            key: `${key}:user`,
+            sequence: 1,
+            role: 'user',
+            status: 'complete',
+            text: 'Erklär mir die Wartung.',
+            failure: null,
+          },
+          {
+            key: `${key}:assistant`,
+            sequence: 2,
+            role: 'assistant',
+            status: 'cancelled',
+            text: 'Zuerst prüfst du',
+            failure: 'Du hast die Antwort angehalten.',
+          },
+        ],
+      };
+    },
+    [THREAD_A, command] as const,
+  );
+  await emit(page, { type: 'end', status: 'cancelled', message: 'Du hast die Antwort angehalten.' });
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'answered' }));
+  await expect(timeline(page).getByText('Du hast die Antwort angehalten.', { exact: true })).toBeVisible();
+  await expect(
+    timeline(page).getByText('Zuerst prüfst du', { exact: true }),
+    'the answer ends where the server saved it',
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Senden', exact: true })).toBeVisible();
+  // The click that stopped the answer never sends the draft typed meanwhile.
+  await expect(composer(page)).toHaveValue('Und danach?\n');
+  expect(await page.evaluate(() => window.uiContractKiTurn.calls.length)).toBe(1);
+});
+
+test('a stop pressed before the message is saved goes once the turn has its answer', async ({ page }) => {
+  await openChat(page);
+  const command = await sendInThreadA(page, 'Wie entlüfte ich?');
+  await stopButton(page).click();
+  await expect(stopButton(page)).toHaveAttribute('aria-busy', 'true');
+  expect(await page.evaluate(() => window.uiContractKiTurn.stops)).toEqual([]);
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await expect
+    .poll(() => page.evaluate(() => window.uiContractKiTurn.stops))
+    .toEqual([{ threadId: THREAD_A, commandId: command }]);
+});
+
+test('an answer that completed before the stop landed shows whole, with no stop', async ({ page }) => {
+  await openChat(page);
+  await sendInThreadA(page, 'Wie entlüfte ich?');
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await emit(page, { type: 'text', delta: 'Erst ' });
+  await stopButton(page).click();
+  await emit(page, { type: 'text', delta: 'das Ventil.' });
+  await expect(timeline(page).getByText('Erst', { exact: true })).toBeVisible();
+  await emit(page, { type: 'end', status: 'complete' });
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'answered' }));
+  await expect(timeline(page).getByText('Erst das Ventil.', { exact: true })).toBeVisible();
+  await expect(timeline(page).getByText('Du hast die Antwort angehalten.', { exact: true })).toHaveCount(0);
+});
+
+test("an earlier turn's failed stop never shows on the next turn's draft", async ({ page }) => {
+  await openChat(page);
+  await sendInThreadA(page, 'Wie entlüfte ich?');
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await page.evaluate(() => {
+    window.uiContractKiHeldStops = [];
+  });
+  await stopButton(page).click();
+  await expect.poll(() => page.evaluate(() => window.uiContractKiHeldStops?.length)).toBe(1);
+  await emit(page, { type: 'text', delta: 'Erst das Ventil.' });
+  await emit(page, { type: 'end', status: 'complete' });
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'answered' }));
+  await expect(page.getByRole('button', { name: 'Senden', exact: true })).toBeVisible();
+  await composer(page).fill('Und danach?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u2', sequence: 3 },
+    assistantItem: { id: 'a2', sequence: 4 },
+  });
+  await page.evaluate(() => window.uiContractKiHeldStops?.shift()?.release(false));
+  await emit(page, { type: 'text', delta: 'Dann den Druck prüfen.' });
+  await expect(timeline(page).getByText('Dann den Druck prüfen.', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('alert').filter({
+      hasText: 'Die Antwort konnte nicht angehalten werden. Versuch es noch einmal.',
+    }),
+  ).toHaveCount(0);
+  await expect(stopButton(page)).not.toHaveAttribute('aria-busy');
+});
+
+test('a stop the server did not take lets the answer run on and says so', async ({ page }) => {
+  await openChat(page);
+  const command = await sendInThreadA(page, 'Wie entlüfte ich?');
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await emit(page, { type: 'text', delta: 'Erst ' });
+  await page.evaluate(() => {
+    window.uiContractKiTurn.stopTaken = false;
+  });
+  await stopButton(page).click();
+  await expect(
+    page
+      .getByRole('alert')
+      .filter({ hasText: 'Die Antwort konnte nicht angehalten werden. Versuch es noch einmal.' }),
+  ).toBeVisible();
+  await expect(stopButton(page)).not.toHaveAttribute('aria-busy');
+  await emit(page, { type: 'text', delta: 'das Ventil.' });
+  await expect(timeline(page).getByText('Erst das Ventil.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveText('schreibt …');
+
+  // The stop had landed after all, only its answer was lost: the turn's stopped end shows the saved text.
+  await page.evaluate(
+    ([id, key]) => {
+      window.uiContractKiWindows[id] = {
+        hasOlder: false,
+        messages: [
+          {
+            key: `${key}:user`,
+            sequence: 1,
+            role: 'user',
+            status: 'complete',
+            text: 'Wie entlüfte ich?',
+            failure: null,
+          },
+          {
+            key: `${key}:assistant`,
+            sequence: 2,
+            role: 'assistant',
+            status: 'cancelled',
+            text: 'Erst',
+            failure: 'Du hast die Antwort angehalten.',
+          },
+        ],
+      };
+    },
+    [THREAD_A, command] as const,
+  );
+  await emit(page, { type: 'end', status: 'cancelled', message: 'Du hast die Antwort angehalten.' });
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'answered' }));
+  await expect(
+    timeline(page).getByText('Erst', { exact: true }),
+    'a stopped end shows what the server kept',
+  ).toBeVisible();
+  await expect(timeline(page).getByText('Erst das Ventil.', { exact: true })).toHaveCount(0);
+});
+
+test('an answer stopped on another tab ends where the server saved it', async ({ page }) => {
+  await openChat(page);
+  await showThreadA(page, { messages: [], hasOlder: false });
+  await expect.poll(() => liveThread(page)).toBe(THREAD_A);
+  const v = KI_LIVE_PROTOCOL;
+  await liveEmit(page, {
+    v,
+    type: 'started',
+    command: 's',
+    user: { sequence: 1, text: 'Wie entlüfte ich?' },
+    answer: { sequence: 2 },
+  });
+  await liveEmit(page, { v, type: 'text', command: 's', at: 0, delta: 'Erst das Ventil öffnen', saved: 15 });
+  // The stop kept less than this tab holds, so the tab reads the saved answer instead of guessing.
+  await page.evaluate((id) => {
+    window.uiContractKiWindows[id] = {
+      hasOlder: false,
+      messages: [
+        {
+          key: 's:user',
+          sequence: 1,
+          role: 'user',
+          status: 'complete',
+          text: 'Wie entlüfte ich?',
+          failure: null,
+        },
+        {
+          key: 's:assistant',
+          sequence: 2,
+          role: 'assistant',
+          status: 'cancelled',
+          text: 'Erst das Ventil',
+          failure: 'Du hast die Antwort angehalten.',
+        },
+      ],
+    };
+  }, THREAD_A);
+  await liveEmit(page, {
+    v,
+    type: 'end',
+    command: 's',
+    status: 'cancelled',
+    failure: 'Du hast die Antwort angehalten.',
+    length: 15,
+  });
+  await expect(timeline(page).getByText('Du hast die Antwort angehalten.', { exact: true })).toBeVisible();
+  await expect(timeline(page).getByText('Erst das Ventil', { exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toHaveCount(0);
 });

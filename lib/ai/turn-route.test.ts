@@ -29,6 +29,10 @@ test('no chat text of a turn, its answer or a provider failure reaches a log', a
   await runFixture('ai-turn-log-sentinel');
 });
 
+test('a stop or a lost thread ends the turn at once, aborts the provider request and settles at what was spent', async () => {
+  await runFixture('ai-turn-stop');
+});
+
 test('hidden characters and a role-play reach the model neither as instructions nor as tools', async () => {
   await runFixture('ai-turn-context');
 });

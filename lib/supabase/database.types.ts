@@ -17635,6 +17635,18 @@ export type Database = {
         };
         Returns: Json;
       };
+      cancel_ai_turn: {
+        Args: {
+          p_command_id: string;
+          p_organization_id: string;
+          p_thread_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          text_length: number;
+          verdict: string;
+        }[];
+      };
       cancel_approved_vacation_request: {
         Args: {
           p_actor_id: string;
@@ -21197,6 +21209,14 @@ export type Database = {
       queue_storage_purge: {
         Args: { p_organization_id: string; p_paths: string[] };
         Returns: undefined;
+      };
+      read_ai_answer_status: {
+        Args: {
+          p_item_id: string;
+          p_organization_id: string;
+          p_user_id: string;
+        };
+        Returns: Database["public"]["Enums"]["ai_thread_item_status"];
       };
       read_inventory_item_prices_on_day: {
         Args: {

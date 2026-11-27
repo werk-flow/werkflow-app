@@ -2,7 +2,8 @@
 -- werk-flow/werkflow-planning#559): a turn starts in one call that writes
 -- once per command; an open run counts at its reserved amount until it
 -- settles; the job settles a stale run at its reserved amount and finishes
--- the answer it left streaming. Runs in one transaction and rolls back.
+-- the answer it left streaming; only the author stops an answer (migration
+-- 20270504100000). Runs in one transaction and rolls back.
 begin;
 
 do $$
@@ -333,6 +334,177 @@ begin
   if verdict is distinct from 'budget_exhausted' then
     raise exception 'A run open across the month start held less than its reservation: %', verdict;
   end if;
+end;
+$$;
+
+-- The stop (werk-flow/werkflow-planning#609): only the author stops their
+-- answer, under the turn's command id. It keeps the last saved text, says it
+-- was stopped, refuses the running turn's next save as stopped, and a repeat
+-- changes nothing. Client roles cannot stop anything.
+do $$
+declare
+  api_role text;
+begin
+  foreach api_role in array array['anon', 'authenticated'] loop
+    if has_function_privilege(api_role, 'public.cancel_ai_turn(uuid, uuid, uuid, text)', 'execute') then
+      raise exception 'A client role may stop a WerkFlow KI answer: %', api_role;
+    end if;
+  end loop;
+  if not has_function_privilege('service_role', 'public.cancel_ai_turn(uuid, uuid, uuid, text)', 'execute') then
+    raise exception 'service_role lost execute on cancel_ai_turn';
+  end if;
+end;
+$$;
+select public.create_ai_thread('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000001',
+  'af000000-0000-4000-8000-000000000025', 'Anhalten');
+select public.append_ai_thread_item('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000001',
+  'af000000-0000-4000-8000-000000000025', 'user_message', 'complete', '{"text":"Wie entlüfte ich?"}', 'stop-cmd:user');
+select public.append_ai_thread_item('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000001',
+  'af000000-0000-4000-8000-000000000025', 'assistant_message', 'streaming', '{"text":"Erst das Ventil 🔧"}',
+  'stop-cmd:assistant');
+do $$
+declare
+  stopped record;
+  answer_id uuid := (select id from public.ai_thread_items where idempotency_key = 'stop-cmd:assistant'
+    and thread_id = 'af000000-0000-4000-8000-000000000025');
+begin
+  -- Another member of the organization, a person outside it and the author in another organization stop nothing.
+  begin
+    perform public.cancel_ai_turn('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000002',
+      'af000000-0000-4000-8000-000000000025', 'stop-cmd');
+    raise exception 'Another member stopped the author''s WerkFlow KI answer';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_thread_not_found' then raise; end if;
+  end;
+  begin
+    perform public.cancel_ai_turn('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000003',
+      'af000000-0000-4000-8000-000000000025', 'stop-cmd');
+    raise exception 'A person outside the organization stopped a WerkFlow KI answer';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_actor_without_access' then raise; end if;
+  end;
+  begin
+    perform public.cancel_ai_turn('af000000-0000-4000-8000-000000000011', 'af000000-0000-4000-8000-000000000003',
+      'af000000-0000-4000-8000-000000000025', 'stop-cmd');
+    raise exception 'A foreign organization stopped a WerkFlow KI answer';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_thread_not_found' then raise; end if;
+  end;
+  if (select status::text from public.ai_thread_items where id = answer_id) is distinct from 'streaming' then
+    raise exception 'A refused stop changed the answer';
+  end if;
+
+  select * into stopped from public.cancel_ai_turn('af000000-0000-4000-8000-000000000010',
+    'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000025', 'stop-cmd');
+  if stopped.verdict is distinct from 'stopped' or stopped.text_length is distinct from 18
+    or (select status::text || body::text from public.ai_thread_items where id = answer_id)
+      is distinct from 'cancelled{"text": "Erst das Ventil 🔧", "failure": "stopped"}' then
+    raise exception 'The author''s stop did not keep the saved text, count it as the live channel does and say it was stopped: % %',
+      stopped.verdict, stopped.text_length;
+  end if;
+  begin
+    perform public.update_ai_thread_item('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000001', answer_id, 'streaming', '{"text":"Erst das Ventil öffnen"}');
+    raise exception 'The running turn saved into a stopped answer';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_thread_item_stopped' then raise; end if;
+  end;
+  -- A repeat, such as a retry after a lost reply, changes nothing and answers the kept length again.
+  if (select verdict || ':' || text_length from public.cancel_ai_turn('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000025', 'stop-cmd'))
+      is distinct from 'stopped:18'
+    or (select status::text || body::text from public.ai_thread_items where id = answer_id)
+      is distinct from 'cancelled{"text": "Erst das Ventil 🔧", "failure": "stopped"}'
+    or (select verdict from public.cancel_ai_turn('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000025', 'kein-befehl'))
+      is distinct from 'not_found' then
+    raise exception 'A repeated stop changed the answer or did not answer the kept length, or an unknown command did not answer not_found';
+  end if;
+end;
+$$;
+
+-- An answer the run finished itself still refuses a later save as finished, not as stopped.
+do $$
+declare
+  done_id uuid;
+begin
+  select item_id into done_id from public.append_ai_thread_item('af000000-0000-4000-8000-000000000010',
+    'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000025', 'assistant_message',
+    'cancelled', '{"text":"Bis hier","failure":"timeout"}', 'done-cmd:assistant');
+  begin
+    perform public.update_ai_thread_item('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000001', done_id, 'cancelled', '{"text":"Bis hier","failure":"timeout"}');
+    raise exception 'A finished answer took a second save';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_thread_item_finished' then raise; end if;
+  end;
+  if (select verdict from public.cancel_ai_turn('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000025', 'done-cmd'))
+      is distinct from 'finished' then
+    raise exception 'A stop of an answer the run finished itself did not answer finished';
+  end if;
+end;
+$$;
+
+-- A step reads the same effective access as a save, including a scheduled suspension
+-- whose deadline passed without any write to the answer or current access state.
+select public.append_ai_thread_item('af000000-0000-4000-8000-000000000010',
+  'af000000-0000-4000-8000-000000000002', 'af000000-0000-4000-8000-000000000020',
+  'assistant_message', 'streaming', '{"text":"Bis hier"}', 'access-gate:assistant');
+do $$
+declare
+  answer_id uuid := (select id from public.ai_thread_items
+    where organization_id = 'af000000-0000-4000-8000-000000000010'
+      and thread_id = 'af000000-0000-4000-8000-000000000020' and idempotency_key = 'access-gate:assistant');
+  employee_id uuid := (select id from public.employee_records
+    where organization_id = 'af000000-0000-4000-8000-000000000010'
+      and user_id = 'af000000-0000-4000-8000-000000000002');
+  api_role text;
+begin
+  foreach api_role in array array['anon', 'authenticated'] loop
+    if has_function_privilege(api_role, 'public.read_ai_answer_status(uuid, uuid, uuid)', 'execute') then
+      raise exception 'A client role may read the privileged WerkFlow KI step gate: %', api_role;
+    end if;
+  end loop;
+  if not has_function_privilege('service_role', 'public.read_ai_answer_status(uuid, uuid, uuid)', 'execute') then
+    raise exception 'service_role lost execute on read_ai_answer_status';
+  end if;
+  if public.read_ai_answer_status('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000002', answer_id) is distinct from 'streaming' then
+    raise exception 'An active author lost the open step gate';
+  end if;
+  begin
+    perform public.read_ai_answer_status('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000001', answer_id);
+    raise exception 'Another member read the author''s step gate';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_thread_not_found' then raise; end if;
+  end;
+  insert into public.personnel_access_lifecycles (organization_id, employee_record_id, state, state_effective_at)
+  values ('af000000-0000-4000-8000-000000000010', employee_id, 'suspended', now());
+  begin
+    perform public.read_ai_answer_status('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000002', answer_id);
+    raise exception 'A suspended author passed the step gate';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_actor_without_access' then raise; end if;
+  end;
+  update public.personnel_access_lifecycles
+  set state = 'active', scheduled_state = 'suspended', scheduled_for = now() + interval '1 day'
+  where employee_record_id = employee_id and organization_id = 'af000000-0000-4000-8000-000000000010';
+  if public.read_ai_answer_status('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000002', answer_id) is distinct from 'streaming' then
+    raise exception 'A future suspension closed the step gate early';
+  end if;
+  update public.personnel_access_lifecycles set scheduled_for = now() - interval '1 minute'
+  where employee_record_id = employee_id and organization_id = 'af000000-0000-4000-8000-000000000010';
+  begin
+    perform public.read_ai_answer_status('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000002', answer_id);
+    raise exception 'A scheduled suspension past its deadline passed the step gate';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_actor_without_access' then raise; end if;
+  end;
 end;
 $$;
 

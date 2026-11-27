@@ -201,6 +201,27 @@ test('the files of a message whose page went before it was saved come back, and 
   expect(await page.evaluate(() => JSON.stringify(sessionStorage))).not.toContain('Rechnung.pdf');
 });
 
+test('a refused message keeps its command and its files with its draft through a reload, so an unchanged resend is the same command', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'ki-chat');
+  await choose(page, [pdf('Lieferschein 4711.pdf')]);
+  await finishUpload(page, FILE_ID, 2);
+  await composer(page).fill('Lies bitte den Lieferschein.');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  const [sent] = await page.evaluate(() => window.uiContractKiTurn.calls);
+  expect(sent?.fileIds).toEqual([FILE_ID]);
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'refused', message: 'Gerade nicht.' }));
+  await expect(attached(page).getByText('Lieferschein 4711.pdf')).toBeVisible();
+
+  // After a reload the draft holds both: start_ai_turn_with_files refuses a command whose files changed.
+  await openContractFixture(page, 'ki-chat');
+  await expect(composer(page)).toHaveValue('Lies bitte den Lieferschein.');
+  await expect(attached(page).getByText('Lieferschein 4711.pdf')).toBeVisible();
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  expect(await page.evaluate(() => window.uiContractKiTurn.calls)).toEqual([sent]);
+});
+
 test('a new chat takes its files along once saved, and a refusal after sign-out writes nothing back', async ({
   page,
 }) => {

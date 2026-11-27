@@ -130,8 +130,8 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
   );
 }
 
-// A member lowered or suspended during a turn: the next tool call runs as the current membership, so
-// it is refused and no reader runs again (B5).
+// A lowered role is refused by the next tool call (B5). A suspension ends the turn
+// at the step gate before another provider request or tool call may start.
 for (const membership of [
   { orgId: ORGANIZATION_A, role: 'employee' },
   { orgId: ORGANIZATION_A, role: 'buero', accessState: 'suspended' },
@@ -143,11 +143,18 @@ for (const membership of [
     current.memberships = [membership];
   };
   const request = JSON.stringify({ name: 'kunden_finden', input: { suche: 'Müller' } });
-  await readTurn(world, await postTurn(`[replay:zweimal] ${request}`));
-  assert.deepEqual(toolCallOutcomes(world), [
-    'tool_call_kunden_finden_ok',
-    'tool_call_kunden_finden_refused',
-  ]);
+  const events = await readTurn(world, await postTurn(`[replay:zweimal] ${request}`));
+  const suspended = 'accessState' in membership && membership.accessState === 'suspended';
+  assert.deepEqual(
+    toolCallOutcomes(world),
+    suspended
+      ? ['tool_call_kunden_finden_ok']
+      : ['tool_call_kunden_finden_ok', 'tool_call_kunden_finden_refused'],
+  );
+  if (suspended) {
+    assert.equal(world.streamRequests.length, 1, 'a suspended author starts no further step');
+    assert.equal(events.at(-1)?.failure, 'revoked');
+  }
   assert.equal(
     world.rpcCalls.filter((call) => call.name === 'list_customer_page').length,
     1,
