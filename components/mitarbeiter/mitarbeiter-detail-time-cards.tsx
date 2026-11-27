@@ -9,7 +9,6 @@ import { StatusBadge } from './status-badge';
 import { WeeklyHoursChart } from '@/components/zeiterfassung/weekly-hours-chart';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { getNoTargetReason } from '@/lib/personnel/targets';
-import type { BreakPolicyValues } from '@/lib/time-tracking/settings';
 import { cn, formatBerlinTime } from '@/lib/utils';
 import type { MitarbeiterDetailLiveTime } from './use-mitarbeiter-detail-live-time';
 import { SectionTitle } from '@/components/shared/section-title';
@@ -23,11 +22,10 @@ function NoWeekData() {
 
 type MitarbeiterDetailTimeCardsProps = {
   liveTime: MitarbeiterDetailLiveTime;
-  breakPolicy: BreakPolicyValues;
 };
 
 /** The live status card and the weekly hours card of the left column. */
-export function MitarbeiterDetailTimeCards({ liveTime, breakPolicy }: MitarbeiterDetailTimeCardsProps) {
+export function MitarbeiterDetailTimeCards({ liveTime }: MitarbeiterDetailTimeCardsProps) {
   const { status, statusError, statusStale, refetchStatus, memberBreakdown, todayTarget } = liveTime;
 
   return (
@@ -92,16 +90,15 @@ export function MitarbeiterDetailTimeCards({ liveTime, breakPolicy }: Mitarbeite
         )}
       </div>
 
-      <MitarbeiterDetailWeekCard liveTime={liveTime} breakPolicy={breakPolicy} />
+      <MitarbeiterDetailWeekCard liveTime={liveTime} />
     </>
   );
 }
 
 /** The week's attendance and hours, or the failure of its read with a retry. */
-function MitarbeiterDetailWeekCard({ liveTime, breakPolicy }: MitarbeiterDetailTimeCardsProps) {
+function MitarbeiterDetailWeekCard({ liveTime }: MitarbeiterDetailTimeCardsProps) {
   const { weekData, weekStale, weekError, refetchWeek, weekTargets, todayIndex, weekLabel } = liveTime;
   const { liveTotalMinutes, memberBreakdown } = liveTime;
-  const liveBreakMinutes = memberBreakdown.breakMinutes;
 
   return (
     <div className="rounded-lg border bg-card p-3 sm:p-4">
@@ -118,9 +115,7 @@ function MitarbeiterDetailWeekCard({ liveTime, breakPolicy }: MitarbeiterDetailT
           <WeeklyHoursChart
             weekData={weekData}
             todayIndex={todayIndex}
-            liveTodayMinutes={liveTotalMinutes}
-            liveTodayBreakMinutes={liveBreakMinutes}
-            liveTodayBreakPolicy={breakPolicy}
+            liveToday={{ presenceMinutes: liveTotalMinutes, breakdown: memberBreakdown }}
             weekLabel={weekLabel}
             weekTargets={weekTargets}
           />

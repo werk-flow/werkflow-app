@@ -1,4 +1,4 @@
-import { computeZeiterfassungLiveTotals } from '@/components/zeiterfassung/zeiterfassung-dashboard-live-totals';
+import { computeZeiterfassungLiveTotals } from '@/lib/time-tracking/live-totals';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { describeClockActivity } from '@/lib/time-tracking/clock-day-summary';
 import { liveMinutes, todayRunningSince } from '@/lib/time-tracking/helpers';

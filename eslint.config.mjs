@@ -830,6 +830,17 @@ const aiSdkPattern = {
   message:
     'The AI SDK is imported only in lib/ai/, which owns the one model route, its caps, switches and cost ledger. Call a lib/ai/ function instead.',
 };
+// Model text renders through one renderer that cannot load or navigate
+// anywhere outside the app (werk-flow/werkflow-planning#530, B11). The import
+// ban covers static imports; lib/ui/ai-markdown-lint.test.mjs keeps every
+// listed package out of package.json, and knip refuses an import of a package
+// that is not listed, so a dynamic import or require cannot reach one either.
+export const markdownRendererPattern = {
+  regex:
+    '^(react-markdown|markdown-to-jsx|marked|markdown-it|micromark|mdast-.*|remark|remark-.*|rehype|rehype-.*|unified|showdown|snarkdown|streamdown|@mdx-js/.*|dompurify|sanitize-html)(/.*)?$',
+  message:
+    'Model and Markdown text render only through AiMarkdown (components/shared/ai-markdown.tsx): no HTML, no images, links only to same-origin paths. Another renderer can load or open an outside address.',
+};
 const radixPrimitivesPattern = {
   group: ['@radix-ui/*', 'radix-ui', 'radix-ui/*'],
   message:
@@ -881,6 +892,7 @@ function importRestrictions({
         ...(libLayer ? [libToComponentsPattern] : []),
         ...(radixPrimitives ? [radixPrimitivesPattern] : []),
         ...(aiSdk ? [aiSdkPattern] : []),
+        markdownRendererPattern,
         editJobDialogPattern,
       ],
     },

@@ -1,10 +1,9 @@
-import { liveMinutes, todayRunningSince } from '@/lib/time-tracking/helpers';
-import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
-import type { ClockTimelineSegment, LiveClockState } from '@/lib/time-tracking/types';
+import { liveMinutes, todayRunningSince } from './helpers';
+import { computeDayBreakdown, type TimeBreakdown } from './settings';
+import type { ClockTimelineSegment, LiveClockState } from './types';
 
 export type ZeiterfassungLiveTotals = {
-  breakdown: ReturnType<typeof computeBreakdownForSettings>;
-  liveBreakMinutes: number;
+  breakdown: TimeBreakdown;
   workPercentage: number | null;
   ringTimelineSegments: ClockTimelineSegment[] | undefined;
   liveTravelMinutes: number;
@@ -52,14 +51,20 @@ export function computeZeiterfassungLiveTotals(
         )
       : effectiveState.breakMinutes;
 
-  const breakdown = computeBreakdownForSettings(
-    liveTotalMinutes,
-    trackedLiveBreakMinutes,
+  const liveStandbyMinutes =
+    effectiveState.standbyMinutes +
+    (effectiveState.currentActivity?.kind === 'standby' ? currentActivityMinutes : 0);
+
+  const breakdown = computeDayBreakdown(
+    {
+      presenceMinutes: liveTotalMinutes,
+      standbyMinutes: liveStandbyMinutes,
+      trackedBreakMinutes: trackedLiveBreakMinutes,
+    },
     effectiveState.breakPolicy,
     todayTargetMinutes,
   );
   const liveWorkMinutes = breakdown.workMinutes;
-  const liveBreakMinutes = breakdown.breakMinutes;
   const workPercentage =
     todayTargetMinutes !== undefined && todayTargetMinutes > 0
       ? Math.min(Math.round((liveWorkMinutes / todayTargetMinutes) * 100), 100)
@@ -69,9 +74,6 @@ export function computeZeiterfassungLiveTotals(
   const liveTravelMinutes =
     effectiveState.travelMinutes +
     (effectiveState.currentActivity?.kind === 'travel' ? currentActivityMinutes : 0);
-  const liveStandbyMinutes =
-    effectiveState.standbyMinutes +
-    (effectiveState.currentActivity?.kind === 'standby' ? currentActivityMinutes : 0);
   const liveCalloutMinutes =
     effectiveState.calloutMinutes +
     (effectiveState.currentActivity?.kind === 'callout' ? currentActivityMinutes : 0);
@@ -81,7 +83,6 @@ export function computeZeiterfassungLiveTotals(
 
   return {
     breakdown,
-    liveBreakMinutes,
     workPercentage,
     ringTimelineSegments,
     liveTravelMinutes,

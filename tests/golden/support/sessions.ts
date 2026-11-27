@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { workspaceAppOrigin } from '../../../lib/testing/runner/app-port';
 import { requireEnv } from './env';
 import { testSupabaseClientOptions } from './client-options';
-import type { TestRole, TestWorld } from './world';
+import type { TestRole, TestUser, TestWorld } from './world';
 
 export type SessionRole = TestRole | 'outsider';
 
@@ -14,9 +14,15 @@ export async function createRolePage(input: {
   baseUrl?: string | undefined;
   world: TestWorld;
   role: SessionRole;
+  /** A person of an organization a spec seeded itself, instead of the world's role. */
+  account?: { user: TestUser; organizationId: string } | undefined;
 }): Promise<{ context: BrowserContext; page: Page }> {
-  const user = input.role === 'outsider' ? input.world.outsider.admin : input.world.users[input.role];
-  const organizationId = input.role === 'outsider' ? input.world.outsider.orgId : input.world.orgId;
+  const user =
+    input.account?.user ??
+    (input.role === 'outsider' ? input.world.outsider.admin : input.world.users[input.role]);
+  const organizationId =
+    input.account?.organizationId ??
+    (input.role === 'outsider' ? input.world.outsider.orgId : input.world.orgId);
   const baseUrl = input.baseUrl ?? workspaceAppOrigin(resolve(__dirname, '../../..'));
   const origin = new URL(baseUrl);
   const context = await input.browser.newContext({

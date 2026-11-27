@@ -10,7 +10,7 @@ import {
 } from '@/lib/time-tracking/clock-day-summary';
 import { describeNoTargetToday, type DailyTarget } from '@/lib/personnel/targets';
 import type { LiveClockState } from '@/lib/time-tracking/types';
-import type { ZeiterfassungLiveTotals } from './zeiterfassung-dashboard-live-totals';
+import type { ZeiterfassungLiveTotals } from '@/lib/time-tracking/live-totals';
 
 type ZeiterfassungTodayTargetNoteProps = {
   todayTarget: DailyTarget | undefined;
@@ -124,14 +124,14 @@ export function ZeiterfassungDashboardHero({
   todayTargetHint,
   totals,
 }: ZeiterfassungDashboardHeroProps) {
-  const { liveBreakMinutes, ringTimelineSegments, workPercentage } = totals;
+  const { breakdown, ringTimelineSegments, workPercentage } = totals;
   const activity = describeClockActivity(effectiveState);
 
   return (
     <div className="flex flex-col items-center py-8">
       <TimeProgressRing
         totalMinutes={liveTotalMinutes}
-        breakMinutes={liveBreakMinutes}
+        breakMinutes={breakdown.breakMinutes}
         timelineSegments={ringTimelineSegments}
         // An unknown target draws no overtime ring, never one past 8 h.
         targetMinutes={todayTargetMinutes ?? Number.POSITIVE_INFINITY}

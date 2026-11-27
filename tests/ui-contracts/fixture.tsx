@@ -131,6 +131,7 @@ import { initializePersonnelBoundary } from './personnel-boundaries';
 import { TaskSectionsAnchorContractFixture, TaskSectionsContractFixture } from './task-section-boundaries';
 import { OfficeStartContractFixture } from './office-start-boundaries';
 import { OwnerStartContractFixture } from './owner-start-boundaries';
+import { KiChatContractFixture } from './ki-chat-boundaries';
 
 initializeServiceBoundaries();
 initializeLifecycleBoundary();
@@ -784,6 +785,8 @@ createRoot(root).render(
       <h1>Komponentenverträge</h1>
       <OfficeStartContractFixture />
     </main>
+  ) : window.uiContractFixture === 'ki-chat' ? (
+    <KiChatContractFixture />
   ) : window.uiContractFixture === 'owner-start' ? (
     <main>
       <h1>Komponentenverträge</h1>

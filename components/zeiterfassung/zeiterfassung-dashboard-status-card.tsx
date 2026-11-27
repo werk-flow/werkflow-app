@@ -6,6 +6,7 @@ import { cn, formatBerlinTime } from '@/lib/utils';
 import type { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { WeeklyHoursChart } from './weekly-hours-chart';
 import { describeClockActivity, type ClockActivityTone } from '@/lib/time-tracking/clock-day-summary';
+import type { TimeBreakdown } from '@/lib/time-tracking/settings';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 
 type ZeiterfassungDashboardStatusCardProps = Pick<
@@ -14,7 +15,8 @@ type ZeiterfassungDashboardStatusCardProps = Pick<
 > & {
   effectiveState: LiveClockState;
   liveTotalMinutes: number;
-  liveBreakMinutes: number;
+  /** Today's split from the dashboard's live totals, which the hero shows too. */
+  liveBreakdown: TimeBreakdown;
 };
 
 const ACTIVITY_TONE_CLASSES = {
@@ -39,7 +41,7 @@ export function ZeiterfassungDashboardStatusCard({
   todayIndex,
   weekLabel,
   liveTotalMinutes,
-  liveBreakMinutes,
+  liveBreakdown,
 }: ZeiterfassungDashboardStatusCardProps) {
   const activity = describeClockActivity(effectiveState);
   return (
@@ -80,9 +82,7 @@ export function ZeiterfassungDashboardStatusCard({
             <WeeklyHoursChart
               weekData={weekData}
               todayIndex={todayIndex}
-              liveTodayMinutes={liveTotalMinutes}
-              liveTodayBreakMinutes={liveBreakMinutes}
-              liveTodayBreakPolicy={effectiveState.breakPolicy}
+              liveToday={{ presenceMinutes: liveTotalMinutes, breakdown: liveBreakdown }}
               narrowBars
               weekLabel={weekLabel}
               weekTargets={weekTargets}
