@@ -277,6 +277,7 @@ export const COLUMN_LABELS_N_TO_Z = {
   series_lineage_id: 'Serienabstammung-ID',
   service_case_id: 'Servicefall-ID',
   service_end: 'Leistung bis',
+  service_report_id: 'Servicebericht (ID)',
   service_start: 'Leistung ab',
   session_id: 'Sitzung-ID',
   set_by: 'Festgelegt von (ID)',

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { ActionResult } from '@/lib/action-result';
 import { readOfferLetterhead } from '@/lib/company-profile/reads';
@@ -18,7 +18,8 @@ import type { ServiceReport } from './model';
 // The server-generated file of a Servicebericht: rendered here, stored under
 // the organization's key, then registered, linked and filed in one database
 // call (register_maintenance_service_report, which files through E9's
-// file_document). The bytes never cross a Server Action boundary.
+// file_document) with the PDF's content hash, which a delivery checks before
+// it attaches the file. The bytes never cross a Server Action boundary.
 
 const REGISTER_FAILURES = [
   'not_authorized',
@@ -84,6 +85,7 @@ export async function storeAndFileServiceReport(
       p_storage_path: storagePath,
       p_file_name: `Servicebericht ${report.jobNumber ?? report.visitedOn}.pdf`,
       p_size_bytes: bytes.byteLength,
+      p_content_hash: createHash('sha256').update(bytes).digest('hex'),
     }),
   );
   const registered = z

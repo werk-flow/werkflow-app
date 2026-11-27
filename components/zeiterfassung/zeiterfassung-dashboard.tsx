@@ -1,6 +1,5 @@
 'use client';
 
-import { StaleRegion } from '@/components/shared/stale-region';
 import { ErrorText } from '@/components/ui/error-text';
 import { ClockActionList } from '@/components/clock-action-list';
 import { getTargetSourceHint } from '@/lib/personnel/targets';
@@ -29,14 +28,7 @@ export function ZeiterfassungDashboard({
   const effectiveState =
     state && state.organizationId === organizationId ? state : initialOverview.clockState;
 
-  const {
-    weekData,
-    weekTargets,
-    todayIndex,
-    weekLabel,
-    isStale: weekStale,
-    refetch: refetchWeek,
-  } = useWeeklyTimeData({
+  const week = useWeeklyTimeData({
     organizationId,
     userId,
     // The server's rule with its versions: past days resolve against them, and
@@ -51,7 +43,7 @@ export function ZeiterfassungDashboard({
   const { liveTime, liveTotalMinutes, nowMs } = useZeiterfassungLiveTime(effectiveState);
 
   // Today's resolved target (P1-04): schedule → derived → labeled default.
-  const todayTarget = weekTargets?.[todayIndex];
+  const todayTarget = week.weekTargets?.[week.todayIndex];
   const todayTargetMinutes = todayTarget?.targetMinutes;
   const todayTargetHint = todayTarget ? getTargetSourceHint(todayTarget) : null;
 
@@ -67,6 +59,8 @@ export function ZeiterfassungDashboard({
         todayTarget={todayTarget}
         todayTargetMinutes={todayTargetMinutes}
         todayTargetHint={todayTargetHint}
+        targetsStale={week.targetsStale}
+        onRetryTargets={week.refetch}
         totals={totals}
       />
 
@@ -86,17 +80,18 @@ export function ZeiterfassungDashboard({
       <div className="space-y-3">
         <h2 className="text-sm font-medium text-muted-foreground px-1">Status</h2>
 
-        <StaleRegion stale={weekStale} onRetry={refetchWeek}>
-          <ZeiterfassungDashboardStatusCard
-            effectiveState={effectiveState}
-            weekData={weekData}
-            weekTargets={weekTargets}
-            todayIndex={todayIndex}
-            weekLabel={weekLabel}
-            liveTotalMinutes={liveTotalMinutes}
-            liveBreakdown={totals.breakdown}
-          />
-        </StaleRegion>
+        <ZeiterfassungDashboardStatusCard
+          effectiveState={effectiveState}
+          weekData={week.weekData}
+          weekTargets={week.weekTargets}
+          targetsStale={week.targetsStale}
+          todayIndex={week.todayIndex}
+          weekLabel={week.weekLabel}
+          isStale={week.isStale}
+          refetch={week.refetch}
+          liveTotalMinutes={liveTotalMinutes}
+          liveBreakdown={totals.breakdown}
+        />
       </div>
 
       <ErrorText className="text-center text-xs">{statusError}</ErrorText>

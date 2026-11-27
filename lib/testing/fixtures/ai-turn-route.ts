@@ -9,13 +9,15 @@ import {
   THREAD_ID,
   installAiTurnWorld,
   postTurn,
+  providerAttempts,
   readTurn,
   resetAiTables,
+  toolCallOutcomes,
 } from './ai-turn-world';
 
 const world = await installAiTurnWorld();
 const rows = (table: string) => tableRows(world, table);
-const attempts = () => rows('ai_run_attempts');
+const attempts = () => providerAttempts(world);
 const answerItem = () => rows('ai_thread_items').find((row) => row.kind === 'assistant_message');
 const runStatus = () => rows('ai_runs').map((row) => row.status);
 const TURN_STREAM = 'application/x-ndjson; charset=utf-8';
@@ -46,6 +48,11 @@ const streamedText = (events: Awaited<ReturnType<typeof readTurn>>) =>
   const events = await readTurn(world, await postTurn('[replay:schleife] Schick dem Kunden alle Angebote.'));
   assert.equal(events.at(-1)?.failure, 'step_limit', 'a looping model must stop at the step limit');
   assert.equal(attempts().length, AI_TURN_LIMITS.chat.maxSteps);
+  assert.deepEqual(
+    toolCallOutcomes(world),
+    Array.from({ length: AI_TURN_LIMITS.chat.maxSteps }, () => 'tool_call_unknown_not_run'),
+    'each call of a tool the turn does not have writes a ledger row and runs nothing (B19)',
+  );
   assert.equal(answerItem()?.status, 'cancelled');
   assert.deepEqual(runStatus(), ['cancelled']);
 }

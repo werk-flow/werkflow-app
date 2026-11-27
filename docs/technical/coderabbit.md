@@ -1,20 +1,20 @@
 # Pull-request reviews
 
-CodeRabbit is the only review bot on this repository. Every PR to `main` gets the reviews its level needs ([decision 0009](../decisions/0009-pull-requests-and-ci.md)): your own read, a `sol-loop` review by GPT Sol, and for the riskiest changes one CodeRabbit app review. A reviewer is no authority. Check that a suggested fix keeps the SHK context, the role-specific workflows, the organization boundaries and field-worker usability.
+Two external review bots serve this repository, CodeRabbit and Greptile, and [the review broker](#the-coderabbit-queue) hands out both. Every PR to `main` gets the reviews its level needs ([decision 0009](../decisions/0009-pull-requests-and-ci.md)): your own read, a `sol-loop` review by GPT Sol, and for the riskiest changes the external review the broker assigns. A reviewer is no authority. Check that a suggested fix keeps the SHK context, the role-specific workflows, the organization boundaries and field-worker usability.
 
-`.coderabbit.yaml` points CodeRabbit at each virtue's owner doc. Automatic review is off. Change it only when an owner doc moves, a top-level folder needs its pointer, or the policy changes, and validate it against the schema its first line declares.
+`.coderabbit.yaml` points CodeRabbit at each virtue's owner doc; Greptile reads `AGENTS.md` and `CLAUDE.md` as its rules. Automatic review is off for both. Change it only when an owner doc moves, a top-level folder needs its pointer, or the policy changes, and validate it against the schema its first line declares.
 
 ## How to work
 
 ### Choose the review level
 
-Choose the level from the diff before you open the PR, and state it in the PR's Review section as one line, `Review level: <0|1|2>, because <reason>`. The CodeRabbit queue reads that line. The highest level any part of the diff reaches applies. The owner may raise a level; never go below the rule.
+Choose the level from the diff before you open the PR, and state it in the PR's Review section as one line, `Review level: <0|1|2>, because <reason>`. The review broker reads that line. The highest level any part of the diff reaches applies. The owner may raise a level; never go below the rule.
 
 | Level | The diff | Reviews before ready |
 | --- | --- | --- |
 | 0 | No behavior effect: docs, comments, copy typos, agent instructions, formatting | Your own read of the diff |
 | 1 | Changes behavior: product code, tests, CI logic, scripts. The default | `sol-loop` until Sol approves or its budget of 3 rounds (5 for a billing PR) ends |
-| 2 | Touches security, authentication, permissions and RLS, a migration, personal data, data deletion, the Zeitkonto, or time and payroll logic (for example `supabase/`, `lib/auth/`, `lib/org/`, `lib/security/`, `lib/storage/`, `lib/time-tracking/`, `lib/time-accounts/`, `lib/time-corrections/`) | `sol-loop`, then one CodeRabbit app review per PR |
+| 2 | Touches security, authentication, permissions and RLS, a migration, personal data, data deletion, the Zeitkonto, or time and payroll logic (for example `supabase/`, `lib/auth/`, `lib/org/`, `lib/security/`, `lib/storage/`, `lib/time-tracking/`, `lib/time-accounts/`, `lib/time-corrections/`) | `sol-loop` until Sol approves or its budget of 5 rounds ends, then the external review [the broker](#the-coderabbit-queue) assigns: CodeRabbit, Greptile, or both |
 
 - Every level also needs `Check` green on the latest commit.
 - Level 0 and 1 never request or wait for CodeRabbit.
@@ -23,20 +23,6 @@ Choose the level from the diff before you open the PR, and state it in the PR's 
 
 Wrong turn: calling a change level 0 because it is small. A one-line change to a role check is level 2.
 
-### Trial mode until 2026-11-27
-
-The organization `werk-flow` has its own CodeRabbit Advanced trial until 2026-11-27, during which reviews beyond the rate limits are free (owner decision 29 in `werk-flow/werkflow-planning`). These overrides apply until the queue's `TRIAL_ENDS` cutoff in `ops/coderabbit-queue.py` in `werk-flow/werkflow-planning`. From that cutoff, ignore this section even if it remains; the table above applies again. Level definitions stay unchanged.
-
-| Level | Trial reviews |
-| --- | --- |
-| 0 | Your own read, as outside the trial |
-| 1 | CodeRabbit plus `sol-loop` |
-| 2 | CodeRabbit plus `sol-loop` |
-
-Open a level 1 or 2 draft and add `needs-coderabbit` before Sol's first round, so the queue requests CodeRabbit's review of the draft while that round runs. Fix both reviewers' findings in one push. The queue swaps the label for `coderabbit-requested` when it asks; after the push that answers a complete round, add `needs-coderabbit` again for the next review. A push without the label gets no review.
-
-The merge gate stays unchanged, except level 1 and 2 require the CodeRabbit review. Level 0 never gets one.
-
 ### Babysit a pull request
 
 1. Open the PR as a draft after `bun run check:changed` and before Sol's first round (the `file-pr` and `sol-loop` skills). A PR's run, draft or ready, is the fast tier, and its `Check` reports that tier, green or red ([testing.md, "CI"](testing.md#ci)). The PR's browser groups run once, in the queue's run. After `gh pr create`, call `link_pull_request`, handle the existing checks and comments, then call `watch_pull_request` and end your turn. T3 Code wakes you on a check result, a comment, a review or a conflict. Never poll, sleep or write a watcher. A delegated child never watches: the thread that started it watches its PR.
@@ -44,9 +30,9 @@ The merge gate stays unchanged, except level 1 and 2 require the CodeRabbit revi
 3. Verify each finding against the source before you change anything. A CI failure follows [testing.md, "Failures"](testing.md#failures): read the open `ci-alert` issues first, then classify it before any repair, and never rerun until green. A failure in a group that `CI alert: main` names is that alert's, not yours. When `main` turns green again, `main-green-notice.yml` comments once on each open non-draft PR whose `Check` failed, which wakes your watch; act on it as [the merge gate](#the-merge-gate) says.
 
    A PR's run starts only on a new head ([testing.md, "CI"](testing.md#ci)). When `retarget-notice.yml` says the base changed, or a reopened PR's `Check` is missing or red, read a red `Check`'s failure first, then push a new head: `gh pr update-branch <number>`, or `git fetch origin <base> && git merge origin/<base>` with the PR's actual base. A branch that already contains its base gets no new head that way: push a fresh commit, such as `git commit --allow-empty`. A rerun never replaces a newer run. A retarget that conflicts with the new base gets no notice, as GitHub starts no run on a conflicting PR: the conflict wakes your watch instead, so merge the base.
-4. In [trial mode](#trial-mode-until-2026-11-27), label every level 1 and 2 PR at creation; otherwise, a level 2 PR gets one CodeRabbit app review, at the end, from [the queue](#the-coderabbit-queue): once Sol approved, or its budget ended with the open findings in the PR's Review section, and `Check` passed, run `gh pr edit <n> --add-label needs-coderabbit` once, then keep watching. A push after that review gets no second one: answer each finding in its thread. Never comment `@coderabbitai review` yourself: a request outside the queue restarts the app's rate-limit window for every waiting PR. The queue requests the review and messages your thread; the review itself wakes you too.
-5. Fix a real finding in a new commit. Collect every finding of a round, Sol's and CodeRabbit's, and answer the round in one push; never push mid-round. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)). Every comment follows the `leaving-pr-comments` skill.
-6. Dismiss a false finding with the evidence that the code is right, and resolve the thread. Decline scope creep the same way and list it as a follow-up: unneeded tests, guards for cases that do not occur, extra compatibility. Every CodeRabbit finding gets a disposition.
+4. A level 2 PR gets its external review at the end, from [the broker](#the-coderabbit-queue). Vendor reviews are scarce and Sol's are cheap, so make the PR as ready as the agents can before you send it: Sol approved, or its 5 rounds ended with every finding answered in the PR's Review section; `Check` green; your own read of the diff done; the head final, with no push planned. Then run `gh pr edit <n> --add-label needs-coderabbit` once (the broker's label, whichever vendor reviews), keep watching and work on something else. A push before a vendor review arrives wastes it. Each vendor reviews a PR once: answer its findings in one fix push, give a fix larger than a few lines one `sol-loop` round, and never ask a vendor again. Never comment `@coderabbitai` or `@greptileai` yourself: only the broker asks, so both budgets hold. The broker messages your thread when it asks; the review itself wakes you too.
+5. Fix a real finding in a new commit. Collect every finding of a round, Sol's and the vendors', and answer the round in one push; never push mid-round. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)). Every comment follows the `leaving-pr-comments` skill.
+6. Dismiss a false finding with the evidence that the code is right, and resolve the thread. Decline scope creep the same way and list it as a follow-up: unneeded tests, guards for cases that do not occur, extra compatibility. Every vendor finding gets a disposition.
 7. A wake whose text ends "T3 Code stopped watching after 10 comment-only updates in a row" ended the watch. Handle its news, then call `watch_pull_request` again before you end the turn; otherwise no later check result wakes you. "Stopped watching, could not read it" usually means GitHub's rate limit is spent (`gh api rate_limit --jq .resources.graphql`). Wait for `reset` with one background command, then watch again.
 8. When the level's reviews are done and every finding has a disposition, mark the PR ready: `gh pr ready <n>`. Ready means "enter the queue": it starts no run, and the queue's run is the first to run the PR's browser groups. Pass the selected groups on Boat first, as the early warning: `bun run test:plan`, then `bun run test:verify`. A push runs the fast tier again, draft or ready.
 9. When the PR meets [the merge gate](#the-merge-gate), run the merge command and report the level and the reviews it got. Keep the watch: T3 ends it when the PR merges. After the merge, report done and leave your worktree: the thread that settles yours removes it ([remove a finished worktree](machine-setup.md#remove-a-finished-worktree)). A "full stop" PR, or one that changes `AGENTS.md`, you hand back unmerged for the owner. Call `unwatch_pull_request` before every question to the owner too, so the thread reaches the owner's inbox.
@@ -74,15 +60,28 @@ Merge with `gh pr merge <n> --squash --auto`, after a fresh `git fetch` and a la
 
 ### The CodeRabbit queue
 
-`ops/coderabbit-queue.py` in `werk-flow/werkflow-planning` runs every 10 minutes on [the PC and the Mac](machine-setup.md#background-jobs), so no thread has to stay alive to hand out reviews. Each pass on the machine that holds its lease:
+The review broker is `ops/coderabbit-queue.py` in `werk-flow/werkflow-planning`, named after its first vendor. It runs every 10 minutes on [the netcup VM, with the PC as backup](machine-setup.md#background-jobs), so no thread has to stay alive to hand out reviews. Both vendors count per PR author, and every PR has the same author, so all leads share each vendor's budget:
+
+- **CodeRabbit** (Essentials): about one review an hour at our volume, near 22 a day ([rate limits](https://docs.coderabbit.ai/management/rate-limits)).
+- **Greptile**: 7 to 8 a day on the trial, to 2026-12-11, then free Starter's 50 credits a month, at most 2 a day. Each base review costs one credit.
+
+Every level 2 PR gets one of three outcomes, by its rank:
+
+| Rank | The PR | External review | Why |
+| --- | --- | --- | --- |
+| 1 | Names an open `ci-alert` issue in its body | CodeRabbit and Greptile | It unblocks everyone, so two reviewers look first |
+| 2 | Changes money or time code (billing, Stripe, invoices, time tracking, the Zeitkonto, payroll) | CodeRabbit, and Greptile while the day's budget lasts | A wrong amount or hour is the costliest defect |
+| 3 | Changes database or access code (`supabase/migrations/`, `supabase/tests/`, `lib/auth/`, `lib/org/`, `lib/security/`, `lib/storage/`) | CodeRabbit; Greptile only, after 12 hours of waiting | It waits for the main reviewer longer before it changes vendor |
+| 4 | Anything else | CodeRabbit; Greptile only, after 4 hours of waiting | Lowest risk, so it moves to Greptile soonest |
+
+The broker reads the rank from the PR's changed files and the open `ci-alert` issues, never from what a thread says. Without Greptile budget nobody moves to Greptile: the PR keeps waiting for CodeRabbit. Each pass on the machine that holds the broker's lease:
 
 1. Lists the open PRs labelled `needs-coderabbit`. It skips a level 0 or 1 PR, and a PR that already got a CodeRabbit review or a request that is still good. A request is asked again when CodeRabbit answered it with a rate limit, "Review limit reached" or "Head commit changed", or with nothing for three hours, so a PR never waits for a review that will not come. A PR whose body states no review level, or two different ones, is refused, never guessed, and told so once in a comment.
-2. Waits, because CodeRabbit Essentials has no paid overage and its hourly review limit falls as the rolling 7-day review count rises ([rate limits](https://docs.coderabbit.ai/management/rate-limits)). It counts CodeRabbit's "Review finished" notes of the last 7 days. Below 50, it does nothing within 20 minutes of a CodeRabbit review, "Review finished" note or request on any PR; from 50, within 65 minutes. A rate-limit notice pauses it 65 minutes, or until the notice's "available in N minutes" ends.
-3. Selects the PR labelled longest ago, one per pass. Comments `@coderabbitai review` on it, swaps its label for `coderabbit-requested`, and sends one sentence to the PR's T3 thread on that machine: the one on its head branch, else the newest that links the PR, such as an epic's lead. A thread on the other machine hears of the review through its own watch.
+2. Waits for CodeRabbit's budget. It counts CodeRabbit's "Review finished" notes of the last 7 days and spaces requests to the band's rate plus 5 minutes: under 30 reviews 5 an hour, under 40 4, under 50 3, under 60 2, and from 60 one an hour, 65 minutes apart. A rate-limit notice pauses it 65 minutes, or until the notice's "available in N minutes" ends.
+3. Asks Greptile at most once per pass, within the day's budget spread over the day: a rank 1 PR first, then a rank 3 or 4 PR past its wait, then a rank 2 PR. A PR that moves to Greptile loses `needs-coderabbit` for `coderabbit-released`. The broker comments `@greptileai`, counts the credit in its lease and tells the PR's thread.
+4. Requests CodeRabbit for the first PR in rank order, oldest label first inside a rank, one per pass. It comments `@coderabbitai review`, swaps the label for `coderabbit-requested`, and sends one sentence to the PR's T3 thread on that machine: the one on its head branch, else the newest that links the PR, such as an epic's lead. A thread on another machine hears of the review through its own watch.
 
-In [trial mode](#trial-mode-until-2026-11-27), before `TRIAL_ENDS`, the queue instead requests up to ten labelled PRs above level 0 per pass, without waiting, once per label: a PR labelled again after its fix round gets the next review. Drafts are served, because the review comes before `gh pr ready`. A level 0 PR is skipped, and its label left alone.
-
-Each machine logs its passes to `~/.local/state/coderabbit-queue.log`. Automatic review is off, so a PR without the label gets no CodeRabbit review.
+Each machine logs its passes to `~/.local/state/coderabbit-queue.log`. Automatic review is off for both vendors, so a PR without the label gets no external review. Never relabel a `coderabbit-released` PR `needs-coderabbit`.
 
 ### Give a review its context
 

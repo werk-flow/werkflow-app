@@ -157,7 +157,8 @@ export function useWeeklyTimeData({
   return {
     weekData: view.data?.weekData ?? [],
     weekTargets: view.data?.weekTargets,
-    targetsStale: view.data?.targetsStale ?? false,
+    // A failed week read refreshed no target either.
+    targetsStale: (view.data?.targetsStale ?? false) || view.isStale,
     todayIndex: view.data?.todayIndex ?? getTodayIndex(),
     weekLabel: view.data?.weekLabel ?? computeWeekLabel(getWeekBounds().monday),
     isLoading: view.isLoading,

@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 
-import type { ActionResult } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { readCompanyProfile } from '@/lib/company-profile/reads';
 import { getCachedMemberships } from '@/lib/data/cached';
 import { loggedRead } from '@/lib/data/read-request-cache';
@@ -38,9 +38,18 @@ import { DELIVERY_STATES, type DeliveryState, type DeliverySubject } from './del
  */
 const SEND_DEADLINE_MS = (23 * 60 + 30) * 60_000;
 
-type DeliveryCaller = Pick<ActionContext, 'userId' | 'orgId' | 'isManagerOrAbove'>;
+export type DeliveryCaller = Pick<ActionContext, 'userId' | 'orgId' | 'isManagerOrAbove'>;
 
 export type DeliveryOutcome = ActionResult<{ state: DeliveryState; failureCode: string | null }>;
+/**
+ * A retry's outcome, and whether the delivery's record holds an attempt without
+ * the provider's answer: the office's row may predate one from another session.
+ */
+export type RetryOutcome = ActionResult<{
+  state: DeliveryState;
+  failureCode: string | null;
+  outcomeUnknown: boolean;
+}>;
 
 const RATE_LIMITED = { success: false, error: 'rate_limited' } as const;
 const SEND_UNAVAILABLE = { success: false, error: 'send_unavailable' } as const;
@@ -50,6 +59,8 @@ const refusal = writeRefusalFor(
     'not_authorized',
     'invoice_not_found',
     'invoice_not_issued',
+    'service_report_not_found',
+    'service_report_stale',
     'document_not_found',
     'delivery_not_found',
     'delivery_not_retryable',
@@ -97,7 +108,7 @@ export async function readDeliverySender(
 async function passRateLimit(
   caller: DeliveryCaller,
   recipient: string | null,
-): Promise<DeliveryOutcome | null> {
+): Promise<ActionFailure | null> {
   const verdict = await consumeRateLimit(
     { action: 'document_send_per_organization', subject: caller.orgId },
     ...(recipient === null
@@ -207,7 +218,7 @@ async function recordedOutcome(
     createSupabaseAdminClient()
       .from('document_deliveries')
       .select(
-        'state, failure_code, channel, subject_kind, invoice_id, document_id, recipient_email, email_subject, message_text',
+        'state, failure_code, channel, subject_kind, invoice_id, service_report_id, document_id, recipient_email, email_subject, message_text',
       )
       .eq('organization_id', caller.orgId)
       .eq('attempt_key', request.attemptKey)
@@ -218,7 +229,7 @@ async function recordedOutcome(
   const sameMail =
     data?.channel === 'email' &&
     data.subject_kind === request.subject.kind &&
-    data.invoice_id === request.subject.id &&
+    (data.invoice_id ?? data.service_report_id) === request.subject.id &&
     data.document_id === request.documentId &&
     data.recipient_email === request.recipient &&
     data.email_subject === request.emailSubject &&
@@ -269,22 +280,25 @@ export async function sendDocument(
 }
 
 /**
- * Sends a failed email delivery again with its stored content, once per
- * attempt the office saw; a sent one is never sent twice. It counts against
- * its stored recipient's limit too.
+ * Sends a failed email delivery of the caller's subject kind again with its
+ * stored content, once per attempt the office saw; a sent one is never sent
+ * twice. A delivery of another kind reads as none. It counts against its
+ * stored recipient's limit too.
  */
 export async function retryDocumentDelivery(
   caller: DeliveryCaller,
-  delivery: { id: string; expectedAttempt: number },
-): Promise<DeliveryOutcome> {
+  delivery: { id: string; expectedAttempt: number; subjectKind: DeliverySubject['kind'] },
+): Promise<RetryOutcome> {
   const stored = await createSupabaseAdminClient()
     .from('document_deliveries')
-    .select('recipient_email')
+    .select('recipient_email, subject_kind, state, outcome_unknown_at')
     .eq('organization_id', caller.orgId)
     .eq('id', delivery.id)
     .maybeSingle();
   if (stored.error)
     return refusal(stored.error, 'send_failed', 'retryDocumentDelivery: delivery read failed');
+  if (stored.data && stored.data.subject_kind !== delivery.subjectKind)
+    return { success: false, error: 'delivery_not_found' };
   const limited = await passRateLimit(caller, stored.data?.recipient_email ?? null);
   if (limited) return limited;
   const answer = await createSupabaseAdminClient().rpc('retry_document_delivery', {
@@ -293,7 +307,11 @@ export async function retryDocumentDelivery(
     p_delivery_id: delivery.id,
     p_expected_attempt: delivery.expectedAttempt,
   });
-  return sendClaimed(caller, answer, 'retryDocumentDelivery: retry_document_delivery failed');
+  const outcome = await sendClaimed(caller, answer, 'retryDocumentDelivery: retry_document_delivery failed');
+  if (!outcome.success) return outcome;
+  // Taking over a sending attempt marks the outcome unknown (retry_document_delivery).
+  const outcomeUnknown = stored.data?.outcome_unknown_at != null || stored.data?.state === 'sending';
+  return { ...outcome, outcomeUnknown };
 }
 
 /** Records that the office sent the subject's document itself, by post or by hand, once per attempt key. */

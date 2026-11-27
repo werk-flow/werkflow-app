@@ -1587,6 +1587,7 @@ export type Database = {
           recipient_email: string | null;
           reply_to: string | null;
           sender_name: string | null;
+          service_report_id: string | null;
           state: string;
           subject_kind: string;
           updated_at: string;
@@ -1613,6 +1614,7 @@ export type Database = {
           recipient_email?: string | null;
           reply_to?: string | null;
           sender_name?: string | null;
+          service_report_id?: string | null;
           state: string;
           subject_kind: string;
           updated_at?: string;
@@ -1639,6 +1641,7 @@ export type Database = {
           recipient_email?: string | null;
           reply_to?: string | null;
           sender_name?: string | null;
+          service_report_id?: string | null;
           state?: string;
           subject_kind?: string;
           updated_at?: string;
@@ -1671,6 +1674,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_deliveries_service_report_fk";
+            columns: ["service_report_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_service_reports";
+            referencedColumns: ["id", "organization_id"];
           },
         ];
       };
@@ -2483,6 +2493,45 @@ export type Database = {
           },
           {
             foreignKeyName: "employment_conditions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      employment_target_signals: {
+        Row: {
+          employee_record_id: string;
+          id: string;
+          organization_id: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          employee_record_id: string;
+          id?: string;
+          organization_id: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          employee_record_id?: string;
+          id?: string;
+          organization_id?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "employment_target_signals_employee_record_id_fkey";
+            columns: ["employee_record_id"];
+            isOneToOne: true;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "employment_target_signals_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
@@ -21322,6 +21371,7 @@ export type Database = {
       register_maintenance_service_report: {
         Args: {
           p_actor_id: string;
+          p_content_hash?: string;
           p_document_id: string;
           p_file_name: string;
           p_maintenance_due_work_id: string;

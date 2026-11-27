@@ -6,6 +6,7 @@ import {
   retryDocumentDelivery,
   sendDocument,
   type DeliveryOutcome,
+  type RetryOutcome,
 } from '@/lib/delivery/document-delivery';
 import { recordManualDeliverySchema, sendDocumentEmailSchema } from '@/lib/delivery/delivery-types';
 import { logError } from '@/lib/logging';
@@ -68,7 +69,7 @@ export async function sendInvoiceEmail(
 /** „Erneut senden“: a failed delivery once more, with what it carried. */
 export async function retryInvoiceDelivery(
   rawInput: z.input<typeof retryInvoiceDeliverySchema>,
-): Promise<DeliveryOutcome> {
+): Promise<RetryOutcome> {
   const parsed = retryInvoiceDeliverySchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   try {
@@ -77,6 +78,7 @@ export async function retryInvoiceDelivery(
     return await retryDocumentDelivery(caller.context, {
       id: parsed.data.deliveryId,
       expectedAttempt: parsed.data.expectedAttempt,
+      subjectKind: 'invoice',
     });
   } catch (error) {
     logError('retryInvoiceDelivery: unexpected error', error);
