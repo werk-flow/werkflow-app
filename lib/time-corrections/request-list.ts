@@ -14,6 +14,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { PENDING_CORRECTION_STATUSES } from './pending-projection';
+import { isEffectiveFact, readRecordByUser } from './person-corrections';
 import { TIME_ACTIVITY_LABELS } from '@/lib/time-tracking/types';
 import { formatBerlinTime } from '@/lib/utils';
 import { snapshotSegments } from './snapshot-segments';
@@ -46,11 +47,13 @@ type CallerView = {
   holder: EffectiveResponsibilityHolder | null;
 };
 
-/** What the hydration reads beside the requests: roles, names and revisions. */
+/** What the hydration reads beside the requests: roles, names, revisions and the subjects' records. */
 type RequestDetails = {
   roleByUser: Map<string, OrgRole>;
   nameByUser: Map<string, string | null>;
   revisionByKey: Map<string, RevisionRow>;
+  /** The employee record each subject holds in the organization now. */
+  recordByUser: ReadonlyMap<string, string>;
 };
 
 export async function readCorrectionRequestList(input: {
@@ -94,7 +97,7 @@ export async function readCorrectionRequestList(input: {
   return hydrateCorrectionRequests({ admin, organizationId, callerUserId, callerRole, holder, roots });
 }
 
-/** The roles, names and revisions of the requests; null when a read fails. */
+/** The roles, names, revisions and subjects' records of the requests; null when a read fails. */
 async function readRequestDetails(
   admin: AdminClient,
   organizationId: string,
@@ -102,7 +105,8 @@ async function readRequestDetails(
 ): Promise<RequestDetails | null> {
   const requestIds = roots.map((request) => request.id);
   const userIds = [...new Set(roots.flatMap((request) => [request.requested_by, request.subject_user_id]))];
-  const [memberships, profiles, revisions] = await Promise.all([
+  const subjectIds = [...new Set(roots.map((request) => request.subject_user_id))];
+  const [memberships, profiles, revisions, records] = await Promise.all([
     readInBatches(userIds, (batch) =>
       admin
         .from('organization_members')
@@ -130,10 +134,14 @@ async function readRequestDetails(
         LIST_ROW_CAP,
       ),
     ),
+    readRecordByUser(admin, organizationId, subjectIds).then(
+      (recordByUser) => ({ recordByUser, error: null }),
+      (error: unknown) => ({ recordByUser: null, error }),
+    ),
   ]);
-  const detailError = memberships.error ?? profiles.error ?? revisions.error;
-  if (detailError) {
-    // Without roles or revisions the filter below would drop requests silently.
+  const detailError = memberships.error ?? profiles.error ?? revisions.error ?? records.error;
+  if (detailError || !records.recordByUser) {
+    // Without roles, revisions or records the filter below would drop requests silently.
     logReadFailure('getTimeCorrectionRequests: request details failed', detailError);
     return null;
   }
@@ -148,7 +156,22 @@ async function readRequestDetails(
     revisionByKey: new Map(
       revisions.data.map((revision) => [`${revision.request_id}:${revision.revision}`, revision]),
     ),
+    recordByUser: records.recordByUser,
   };
+}
+
+/**
+ * Whether the request's subject still holds the employee record it was filed
+ * on (`isEffectiveFact`). A request of a record its person no longer holds is
+ * retained data of a removed employee (docs/technical/security.md, "Calendar
+ * correction input boundary"); `list_time_correction_history_page` applies
+ * the same rule to the history in the database.
+ */
+function hasEffectiveSubject(request: RequestRow, details: RequestDetails): boolean {
+  return isEffectiveFact(
+    { userId: request.subject_user_id, employeeRecordId: request.subject_employee_record_id },
+    details.recordByUser,
+  );
 }
 
 /** Whether the caller's time-approval responsibility covers the request's subject. */
@@ -214,7 +237,8 @@ function toCorrectionRequest(
 /**
  * The selected requests with names, the current revision and the caller's
  * review and withdraw rights, in the selection order, limited to the ones
- * the caller may see. A missing or unreadable revision fails the read.
+ * the caller may see and whose subject holds their record now
+ * (`hasEffectiveSubject`). A missing or unreadable revision fails the read.
  */
 export async function hydrateCorrectionRequests(
   input: CallerView & { admin: AdminClient; organizationId: string; roots: RequestRow[] },
@@ -225,10 +249,11 @@ export async function hydrateCorrectionRequests(
   if (!details) return { success: false, error: 'fetch_failed' };
   const visible = roots.filter(
     (request) =>
-      input.callerRole !== 'employee' ||
-      request.requested_by === input.callerUserId ||
-      request.subject_user_id === input.callerUserId ||
-      holderCovers(input, request, details),
+      hasEffectiveSubject(request, details) &&
+      (input.callerRole !== 'employee' ||
+        request.requested_by === input.callerUserId ||
+        request.subject_user_id === input.callerUserId ||
+        holderCovers(input, request, details)),
   );
   const requests: TimeCorrectionRequest[] = [];
   for (const request of visible) {
