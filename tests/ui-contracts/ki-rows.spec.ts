@@ -63,9 +63,19 @@ const todo = (command: string, revision: number, firstDone: boolean): AiTodoRow 
   ],
 });
 
-/** Sends a message and saves it; returns its command, which every key of the turn starts with. */
-async function sendMessage(page: Page, text: string): Promise<string> {
+/**
+ * Sends a message and saves it, in a new chat or in the listed thread A; returns its command, which
+ * every key of the turn starts with.
+ */
+async function sendMessage(page: Page, text: string, inThreadA = false): Promise<string> {
   await openContractFixture(page, 'ki-chat');
+  if (inThreadA) {
+    await page
+      .getByRole('complementary', { name: 'Chats' })
+      .getByRole('link', { name: 'Material für die Heizung' })
+      .click();
+    await expect.poll(() => page.evaluate(() => window.uiContractKiLive.threadId)).toBe(THREAD_A);
+  }
   await composer(page).fill(text);
   await composer(page).press('Enter');
   await emit(page, {
@@ -132,7 +142,8 @@ test('a tool row shows while it runs, stays collapsed, and reads its result only
 test('a refused tool call shows why, and a row whose turn ended unfinished shows it broke off', async ({
   page,
 }) => {
-  const command = await sendMessage(page, 'Zeig mir die Kunden.');
+  // Thread A is the person's: the read after the early end finds it.
+  const command = await sendMessage(page, 'Zeig mir die Kunden.', true);
   await emit(page, {
     type: 'row',
     row: toolRow(command, 2, { outcome: 'refused', status: 'failed', hasDetail: false }),
@@ -146,6 +157,37 @@ test('a refused tool call shows why, and a row whose turn ended unfinished shows
   await expect(refused.getByRole('button')).toHaveCount(0);
   const stalled = timeline(page).getByRole('listitem').filter({ hasText: 'Aufträge finden' });
   await expect(stalled).toContainText('läuft …');
+  // An answer that ended early is read again (lib/ai/live/follow.ts): the saved thread still holds
+  // the row its dead harness left running.
+  const saved: AiThreadWindow = {
+    hasOlder: false,
+    messages: [
+      {
+        key: `${command}:user`,
+        sequence: 1,
+        role: 'user',
+        status: 'complete',
+        text: 'Zeig mir die Kunden.',
+        failure: null,
+      },
+      {
+        key: `${command}:assistant`,
+        sequence: 2,
+        role: 'assistant',
+        status: 'failed',
+        text: '',
+        failure: 'Die Antwort wurde unterbrochen. Versuch es noch einmal.',
+      },
+      toolRow(command, 2, { outcome: 'refused', status: 'failed', hasDetail: false }),
+      toolRow(command, 1, { key: `${command}:tool:2`, sequence: 4, label: 'Aufträge finden' }),
+    ],
+  };
+  await page.evaluate(
+    ([id, window_]) => {
+      window.uiContractKiWindows[id] = window_;
+    },
+    [THREAD_A, saved] as const,
+  );
   await emit(page, {
     type: 'end',
     status: 'failed',
