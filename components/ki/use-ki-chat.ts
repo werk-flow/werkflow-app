@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useClientRead } from '@/hooks/use-client-read';
+import type { KiLiveEvent } from '@/lib/ai/live/events';
+import {
+  applyKiLiveEvents,
+  fresherMessage,
+  kiLiveCursor,
+  kiLiveGapFillable,
+  mergeNewer,
+} from '@/lib/ai/live/follow';
 import type { AiThreadSummary, AiThreadWindow } from '@/lib/ai/thread-types';
 import { readInBackground } from '@/lib/data/background-read-client';
 import {
@@ -16,12 +24,15 @@ import {
 import { kiThreadHref } from './ki-thread-list';
 import type { TimelineMessage } from './ki-timeline';
 import { describeTurnRefusal, sendTurn, type TurnEvent, type TurnOutcome } from './turn-client';
+import { useKiLive } from './use-ki-live';
 
 // The chat page's state (werk-flow/werkflow-planning#530): the thread list,
 // the threads read so far, the thread on screen and the one running turn.
 // A switch changes the address through the history API, shows the last known
 // messages at once and reads the thread again (brief non-negotiables 1 and 8).
-// The live channel (KI-6) and prefetch (KI-11) build on `readWindow`.
+// The thread on screen follows its live channel (use-ki-live.ts): a turn of
+// another tab or device streams in, and a gap is filled from the cursor.
+// Prefetch (KI-11) builds on `readWindow`.
 
 export type ThreadView = { window: AiThreadWindow | null; confirmed: boolean; failed: boolean };
 export type ThreadList = { threads: AiThreadSummary[]; hasMore: boolean };
@@ -84,19 +95,10 @@ export function answerMessage(live: LiveTurn): TimelineMessage {
   };
 }
 
-function sameMessage(left: TimelineMessage, right: TimelineMessage): boolean {
-  return (
-    left.sequence === right.sequence &&
-    left.status === right.status &&
-    left.text === right.text &&
-    left.failure === right.failure
-  );
-}
-
 /**
  * A read window joined with what the page holds, each message once by its key
- * and in sequence order. A read never takes back a finished answer for an
- * older snapshot of it still being written, and keeps the messages it did not
+ * and in sequence order. A read never takes back an answer for an older
+ * snapshot of it (lib/ai/live/follow.ts), and keeps the messages it did not
  * cover: turns settled after the read began, and older pages already shown
  * when they reach the window without a gap. An
  * unchanged message keeps its object, so it does not render again.
@@ -107,9 +109,7 @@ function mergeWindow(previous: AiThreadWindow | null, next: AiThreadWindow): AiT
   const first = Math.min(...next.messages.map((message) => message.sequence));
   const fresh = next.messages.map((message) => {
     const old = held.get(message.key);
-    if (!old) return message;
-    const outdated = message.status === 'streaming' && old.status !== 'streaming';
-    return outdated || sameMessage(old, message) ? old : message;
+    return old ? fresherMessage(old, message) : message;
   });
   const unread = (previous?.messages ?? []).filter((message) => !read.has(message.key));
   // Older pages stay only when they reach the read window; otherwise paging starts at the window again.
@@ -185,17 +185,19 @@ function countOn(counts: Map<string, number>, id: string): number {
   return next;
 }
 
-function useThreadViews(
+type ViewChange = (all: Record<string, ThreadView>) => Record<string, ThreadView>;
+
+/**
+ * The thread reads of the page: the latest window, the page before `before`,
+ * or the messages from the live cursor on (`after`). A denied read takes the
+ * thread off the page; `afterRead` runs after each read that landed.
+ */
+function useWindowRead(
   organizationId: string,
-  initialThreadId: string | null,
-  initialWindow: AiThreadWindow | null,
   missing: React.RefObject<(threadId: string) => void>,
+  update: (change: ViewChange) => void,
+  afterRead: React.RefObject<(id: string) => void>,
 ) {
-  const [views, setViews] = useState<Record<string, ThreadView>>(() =>
-    initialThreadId && initialWindow
-      ? { [initialThreadId]: { window: initialWindow, confirmed: true, failed: false } }
-      : {},
-  );
   // A read that answers after the page is gone touches neither its state nor the address.
   const reads = useRef(new AbortController());
   useEffect(() => {
@@ -208,63 +210,168 @@ function useThreadViews(
   const stamp = useCallback((id: string): number => countOn(stamps.current, id), []);
   // And with every read of its latest messages: only the newest of those may show what it read.
   const latestReads = useRef(new Map<string, number>());
-  const readWindow = useCallback(
-    async (id: string, beforeSequence?: number): Promise<WindowRead> => {
+  const read = useCallback(
+    async (id: string, bound: { before?: number; after?: number }): Promise<WindowRead> => {
       const signal = reads.current.signal;
       const mine = stamp(id);
-      const latest = beforeSequence === undefined ? countOn(latestReads.current, id) : null;
+      const latest =
+        bound.before === undefined && bound.after === undefined ? countOn(latestReads.current, id) : null;
       const result = await readInBackground(
         'ki-thread-window',
-        { organizationId, threadId: id, ...(beforeSequence ? { beforeSequence } : {}) },
+        {
+          organizationId,
+          threadId: id,
+          ...(bound.before ? { beforeSequence: bound.before } : {}),
+          ...(bound.after ? { afterSequence: bound.after } : {}),
+        },
         signal,
       );
       if (signal.aborted) return 'failed';
       if (!result.success && DENIED_READS.has(result.error)) {
         // A newer read or turn of the thread has the last word: a retry may have saved it since.
         if (stamps.current.get(id) !== mine) return 'failed';
-        setViews((all) => Object.fromEntries(Object.entries(all).filter(([key]) => key !== id)));
+        update((all) => Object.fromEntries(Object.entries(all).filter(([key]) => key !== id)));
         missing.current(id);
         return 'missing';
       }
       // An earlier read of the latest messages that answers after a newer one would show older text.
       if (latest !== null && latestReads.current.get(id) !== latest)
         return result.success ? 'found' : 'failed';
-      setViews((all) => {
+      update((all) => {
         const current = all[id]?.window ?? null;
         // A passing failure keeps what was shown, still marked unconfirmed.
         if (!result.success) return { ...all, [id]: { window: current, confirmed: false, failed: true } };
-        return {
-          ...all,
-          [id]: { window: mergeWindow(current, result.window), confirmed: true, failed: false },
-        };
+        // A catch-up that fitted holds only newer messages; one that did not is the latest window.
+        const merged =
+          bound.after && !result.window.hasOlder
+            ? mergeNewer(current, result.window)
+            : mergeWindow(current, result.window);
+        return { ...all, [id]: { window: merged, confirmed: true, failed: false } };
       });
+      if (result.success) afterRead.current(id);
       return result.success ? 'found' : 'failed';
     },
-    [organizationId, missing, stamp],
+    [organizationId, missing, stamp, update, afterRead],
+  );
+  return { read, stamp };
+}
+
+function useThreadViews(
+  organizationId: string,
+  initialThreadId: string | null,
+  initialWindow: AiThreadWindow | null,
+  missing: React.RefObject<(threadId: string) => void>,
+) {
+  const [views, setViews] = useState<Record<string, ThreadView>>(() =>
+    initialThreadId && initialWindow
+      ? { [initialThreadId]: { window: initialWindow, confirmed: true, failed: false } }
+      : {},
+  );
+  // The views as of the last change, so a live event decides against what it lands on.
+  const viewsRef = useRef(views);
+  const update = useCallback((change: ViewChange) => {
+    viewsRef.current = change(viewsRef.current);
+    setViews(viewsRef.current);
+  }, []);
+  // Live events that waited for this thread's read apply once it landed.
+  const afterRead = useRef<(id: string) => void>(() => undefined);
+  const { read, stamp } = useWindowRead(organizationId, missing, update, afterRead);
+  const readWindow = useCallback(
+    (id: string, beforeSequence?: number) => read(id, beforeSequence ? { before: beforeSequence } : {}),
+    [read],
   );
   /** Shows the last known messages, marked unconfirmed, and reads the thread again. */
   const reopen = useCallback(
     (id: string) => {
-      setViews((all) => {
+      update((all) => {
         const current = all[id];
         return current ? { ...all, [id]: { ...current, confirmed: false, failed: false } } : all;
       });
       void readWindow(id);
     },
-    [readWindow],
+    [readWindow, update],
   );
   /** Puts a turn's messages into its thread, in place of earlier copies under the same keys. */
-  const settle = useCallback((id: string, turn: readonly TimelineMessage[], confirmed: boolean) => {
-    setViews((all) => {
-      // A thread that just took its first message exists from now on; a known one keeps its state.
-      if (turn.length === 0 && all[id]) return all;
-      const window = all[id]?.window ?? EMPTY_WINDOW;
-      const keys = new Set(turn.map((message) => message.key));
-      const messages = [...window.messages.filter((message) => !keys.has(message.key)), ...turn];
-      return { ...all, [id]: { window: { ...window, messages }, confirmed, failed: false } };
-    });
-  }, []);
-  return { views, readWindow, reopen, settle, supersedeReads: stamp };
+  const settle = useCallback(
+    (id: string, turn: readonly TimelineMessage[], confirmed: boolean) => {
+      update((all) => {
+        // A thread that just took its first message exists from now on; a known one keeps its state.
+        if (turn.length === 0 && all[id]) return all;
+        const window = all[id]?.window ?? EMPTY_WINDOW;
+        const keys = new Set(turn.map((message) => message.key));
+        const messages = [...window.messages.filter((message) => !keys.has(message.key)), ...turn];
+        return { ...all, [id]: { window: { ...window, messages }, confirmed, failed: false } };
+      });
+    },
+    [update],
+  );
+  const { receive, catchUp, drain } = useLiveFollow(viewsRef, update, read);
+  useEffect(() => {
+    afterRead.current = drain;
+  });
+  return { views, readWindow, reopen, settle, supersedeReads: stamp, receive, catchUp };
+}
+
+/**
+ * The thread on screen as its live channel moves it on (brief non-negotiable
+ * 9): each event extends the saved window; an event the window cannot take
+ * yet waits until a read from the cursor fills the gap. A join reads from the
+ * cursor too, so nothing sent while the tab was away stays missing.
+ */
+function useLiveFollow(
+  viewsRef: React.RefObject<Record<string, ThreadView>>,
+  update: (change: ViewChange) => void,
+  read: (id: string, bound: { after: number }) => Promise<WindowRead>,
+) {
+  const held = useRef(new Map<string, KiLiveEvent[]>());
+  const filling = useRef(new Set<string>());
+  /** Applies the thread's held events and the new one; returns whether a read could fill what is left. */
+  const apply = useCallback(
+    (id: string, events: readonly KiLiveEvent[]): boolean => {
+      const queue = [...(held.current.get(id) ?? []), ...events];
+      const window = viewsRef.current[id]?.window;
+      // A thread not read yet takes the events once its first read landed.
+      if (!window) {
+        held.current.set(id, queue);
+        return false;
+      }
+      const result = applyKiLiveEvents(window, queue);
+      held.current.set(id, result.held);
+      if (result.window !== window)
+        update((all) => {
+          const view = all[id];
+          return view ? { ...all, [id]: { ...view, window: result.window } } : all;
+        });
+      return kiLiveGapFillable(result.held);
+    },
+    [viewsRef, update],
+  );
+  /** Reads the thread from the cursor on, once at a time, and applies the held events again. */
+  const catchUp = useCallback(
+    async (id: string): Promise<void> => {
+      const window = viewsRef.current[id]?.window;
+      if (!window || filling.current.has(id)) return;
+      filling.current.add(id);
+      await read(id, { after: kiLiveCursor(window) });
+      filling.current.delete(id);
+      apply(id, []);
+    },
+    [viewsRef, read, apply],
+  );
+  const receive = useCallback(
+    (id: string, event: KiLiveEvent) => {
+      if (apply(id, [event])) void catchUp(id);
+    },
+    [apply, catchUp],
+  );
+  /** Applies what waited for a read that just landed. */
+  const drain = useCallback(
+    (id: string) => {
+      if (apply(id, [])) void catchUp(id);
+    },
+    [apply, catchUp],
+  );
+  return { receive, catchUp, drain };
 }
 
 function useShownThread(initialThreadId: string | null, reopen: (id: string) => void) {
@@ -534,7 +641,7 @@ export function useKiChat(input: {
   const list = useThreadList(organizationId, input.initialThreads);
   // A thread the person cannot open here (gone, or another organization's after Back) leaves the screen.
   const missing = useRef<(threadId: string) => void>(() => undefined);
-  const { views, readWindow, reopen, settle, supersedeReads } = useThreadViews(
+  const { views, readWindow, reopen, settle, supersedeReads, receive, catchUp } = useThreadViews(
     organizationId,
     input.initialThreadId,
     input.initialWindow,
@@ -567,6 +674,9 @@ export function useKiChat(input: {
     readWindow,
     supersedeReads,
   });
+  // A new chat's thread exists only once its message is saved; until then there is no channel to join.
+  const unsaved = turn.live?.provisional === true && !turn.live.started && turn.live.threadId === threadId;
+  useKiLive({ threadId: unsaved ? null : threadId, onEvent: receive, onJoin: catchUp });
   const error = turn.error?.draft === turn.draft ? turn.error.message : null;
   return { list, views, readWindow, threadId, show, openThread: open, turn, draft: turn.draft, error };
 }

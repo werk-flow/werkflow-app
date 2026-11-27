@@ -26,9 +26,13 @@ export const aiThreadPageInput = z.object({
   before: z.object({ updatedAt: z.string().datetime({ offset: true }), id: uuidSchema }).optional(),
 });
 
-export const aiThreadWindowInput = z.object({
-  organizationId: uuidSchema,
-  threadId: uuidSchema,
-  /** The sequence of the oldest message already shown. */
-  beforeSequence: z.number().int().positive().optional(),
-});
+export const aiThreadWindowInput = z
+  .object({
+    organizationId: uuidSchema,
+    threadId: uuidSchema,
+    /** The sequence of the oldest message already shown. */
+    beforeSequence: z.number().int().positive().optional(),
+    /** A catch-up from the live channel's cursor: the messages from this sequence on (lib/ai/live/follow.ts). */
+    afterSequence: z.number().int().positive().optional(),
+  })
+  .refine((input) => input.beforeSequence === undefined || input.afterSequence === undefined);

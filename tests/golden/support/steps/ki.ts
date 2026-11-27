@@ -19,6 +19,10 @@ export const KI_REPLAY = {
   outsideHost: 'evil.example',
   exfiltration: '[replay:ausleiten] Fass den Lieferschein zusammen.',
   appLink: '/aufgaben',
+  /** An answer of 120 steps, one every 100 ms: long enough to follow it and to reload in its middle. */
+  slow: '[replay:sehr-langsam] Wie prüfe ich den Anlagendruck?',
+  slowStep: (step: number) => `Schritt ${step}: Druck am Manometer prüfen`,
+  slowSteps: 120,
 } as const;
 
 /** The sidebar's entry of the chat page. */
@@ -47,6 +51,17 @@ export function kiThreadLink(page: Page, title: string): Locator {
   return page
     .getByRole('complementary', { name: KI_COPY.threads, exact: true })
     .getByRole('link', { name: title, exact: true });
+}
+
+/** The open thread's last message: the answer of the latest turn once it started. */
+export function kiLastMessage(page: Page): Locator {
+  return kiMessages(page).last();
+}
+
+/** Sends a message without waiting for its answer. */
+export async function sendKi(page: Page, text: string): Promise<void> {
+  await kiComposer(page).fill(text);
+  await page.getByRole('button', { name: KI_COPY.send, exact: true }).click();
 }
 
 /** Sends a message and waits until its answer is written. */

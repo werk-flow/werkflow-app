@@ -36,6 +36,8 @@ export const AI_TURN_LIMITS = {
     answerSaveTimeoutMs: 8_000,
     /** The run's settlement. Past it the reservation stays as the run's provisional charge. */
     settleTimeoutMs: 5_000,
+    /** One send on the thread's live channel; a missed one costs only freshness. */
+    liveSendTimeoutMs: 1_500,
   },
 } as const;
 

@@ -70,8 +70,8 @@ export type AiTurnEnd =
   | { status: 'complete' }
   | { status: 'failed' | 'cancelled'; failure: AiTurnFailure; message: string };
 
-/** Receives the answer while it is written. */
-export type AiTurnSink = { text: (delta: string) => void };
+/** Receives the answer while it is written, and how much of it each partial save holds (the live channel). */
+export type AiTurnSink = { text: (delta: string) => void; saved?: (length: number) => void };
 
 type ItemRef = { id: string; sequence: number };
 
@@ -576,6 +576,7 @@ function savePartial(context: RunContext, answer: Answer): void {
       .abortSignal(AbortSignal.timeout(AI_TURN_LIMITS[context.command.entryPoint].answerSaveTimeoutMs));
     // A missed partial save costs only freshness; the final save follows.
     if (error) logError('aiTurn: partial save failed', error);
+    else context.sink.saved?.(answer.savedText.length);
     answer.saving = null;
   })();
 }
