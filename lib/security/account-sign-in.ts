@@ -12,9 +12,10 @@ import {
 
 // Agents never start a sign-in or use an account-wide CLI (docs/technical/security.md, "Never"):
 // a device sign-in an agent starts asks the owner to approve it, and the owner cannot tell who
-// asked. Approved, it leaves an account token on the machine that reaches production. The
-// PreToolUse hook .claude/hooks/refuse-account-sign-in.ts refuses such a shell call, for Claude
-// Code and Codex alike.
+// asked. Approved, it leaves an account token on the machine that reaches production. Nor do they
+// touch a hosted project's function secrets: from a checkout, `supabase secrets set` also uploads
+// config.toml's local-only [edge_runtime.secrets]. The PreToolUse hook
+// .claude/hooks/refuse-account-sign-in.ts refuses such a shell call, for Claude Code and Codex alike.
 //
 // Threat model: the guard stops accidental and habitual calls. Agents run as the owner's OS user,
 // so deliberate evasion is a rule violation it does not claim to catch.
@@ -22,7 +23,7 @@ import {
 /** A CLI the guard refuses, entirely or for the subcommands that sign in or hand out a token. */
 type AccountCli = {
   /** Its program names: the last part of a path, or a package a runner such as `npx` fetches. */
-  names: readonly string[];
+  names: readonly [string, ...string[]];
   /** Each level of the subcommand that signs in, as the words it may be; none refuses every call. */
   verbs: readonly (readonly string[])[];
 };
@@ -31,7 +32,8 @@ const CLIS: readonly AccountCli[] = [
   // Every call: the Vercel CLI acts for the owner's whole account. Agents use the Vercel MCP connector.
   { names: ['vercel', 'vc'], verbs: [] },
   { names: ['gh'], verbs: [['auth'], ['login', 'refresh', 'switch', 'token', 'setup-git']] },
-  { names: ['supabase'], verbs: [['login']] },
+  // Hosted function secrets are set in the project's dashboard (docs/technical/environments.md#credentials).
+  { names: ['supabase'], verbs: [['login', 'secrets']] },
   { names: ['stripe'], verbs: [['login']] },
   { names: ['wrangler'], verbs: [['login']] },
   { names: ['railway', '@railway/cli'], verbs: [['login']] },
@@ -53,7 +55,7 @@ const CLIS: readonly AccountCli[] = [
 ];
 
 const INSTEAD = [
-  'A sign-in is an owner step: put it under "Owner queue" on your epic or issue with exact steps,',
+  'A sign-in or a hosted secret is an owner step: put it under "Owner queue" on your epic or issue with exact steps,',
   'ask the owner through the question tool, and keep working (docs/technical/security.md, "Never").',
   'For Vercel metadata and counts use the Vercel MCP connector.',
 ].join(' ');
@@ -223,12 +225,8 @@ function scan(command: string, depth = 0): Scan | undefined {
     for (const [index, word] of runnable.entries()) {
       const cli = cliOf(word.text);
       if (cli && opensWithSignIn(runnable.slice(index + 1), cli.verbs)) {
-        refused.push(
-          runnable
-            .slice(index)
-            .map((each) => each.text)
-            .join(' '),
-        );
+        // The CLI's listed name only: the word or an argument may hold a token or a NAME=VALUE secret.
+        refused.push(cli.names[0]);
         break;
       }
     }
@@ -237,8 +235,8 @@ function scan(command: string, depth = 0): Scan | undefined {
 }
 
 /**
- * Why a shell command may not run because it starts a sign-in, hands out an account token or uses
- * the Vercel CLI, or undefined. Every such call refuses, and every mention of one in the raw
+ * Why a shell command may not run because it starts a sign-in, hands out an account token, uses
+ * the Vercel CLI or touches a hosted project's function secrets, or undefined. Every such call refuses, and every mention of one in the raw
  * command must be data the scan accounts for: a mention it cannot place (a comment, an
  * interpreter's script, a heredoc an unknown program reads) refuses too.
  */
@@ -252,20 +250,19 @@ export function accountSignInRefusal(command: string): string | undefined {
     return named > 0
       ? `Refused: the sign-in guard cannot tell where a heredoc delimiter in this command ends, and the command names an account CLI. Write the delimiter plainly: <<EOF or <<'EOF'. ${INSTEAD}`
       : undefined;
+  // A refusal names programs and line numbers, never an argument: it may hold a token or secret.
   const [first] = result.refused;
   if (first) {
-    const call = first.length > 80 ? `${first.slice(0, 77)}...` : first;
-    return `Refused: \`${call}\` starts a sign-in, hands out an account token, or runs the Vercel CLI. ${INSTEAD}`;
+    return `Refused: this \`${first}\` call starts a sign-in, hands out an account token, runs the Vercel CLI, or touches a hosted project's function secrets. ${INSTEAD}`;
   }
   if (named <= result.accounted) return undefined;
   const lines = command
     .split('\n')
-    .filter((line) => mentions(line) > 0)
-    .slice(0, 3)
-    .map((line) => `\`${line.trim().slice(0, 80)}\``);
+    .flatMap((line, index) => (mentions(line) > 0 ? [index + 1] : []))
+    .slice(0, 3);
   return [
     `Refused: the command names an account CLI ${named} times, and the guard could verify only ${result.accounted} of them as data.`,
-    `It could not place ${lines.join(', ')}: an interpreter, a comment or a program that may run its input can hide a call.`,
+    `It could not place line ${lines.join(', ')}: an interpreter, a comment or a program that may run its input can hide a call.`,
     INSTEAD,
   ].join(' ');
 }

@@ -38,8 +38,9 @@ No migration carries auth settings, mail templates, SMTP or rate limits. Both pr
 
 This table is the one home of every deployment and workflow credential. No check copies a secret.
 
-- `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call. A failure fails the credential's step and opens or updates the issue "Weekly health check failed". Only a failed `prod` check assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
+- `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call. A failure opens or updates the issue "Weekly health check failed". Only a failed `prod` check assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
 - The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only `x-health-check-token` and name each check `ok` or `failed`, never a value.
+- Set function secrets in the dashboard: a checkout's `supabase secrets set` also uploads `config.toml`'s mail capture, stopping hosted mail (`local_mail_capture`, `refuse-account-sign-in.ts`).
 
 | Credential | Lives in | Used by | Expires | Rotate |
 | --- | --- | --- | --- | --- |
@@ -55,7 +56,7 @@ This table is the one home of every deployment and workflow credential. No check
 | `DEV_DATABASE_URL` | GitHub repository secret | Staging: `supabase db push` | With its password | DEV Database settings: reset the password; `gh secret set` the new connection string. |
 | `PROD_DATABASE_URL` | GitHub environment `production` | Release: `supabase db push` | With its password | As for DEV, with `gh secret set --env production`. |
 | `PRODUCTION_DEPLOY_KEY` | GitHub environment `production`; its public half is a write deploy key of this repository | Release: advances `production` | Never | `ssh-keygen -t ed25519`, add the public key as a deploy key with write access, `gh secret set PRODUCTION_DEPLOY_KEY --env production`, delete the old deploy key. |
-| `HEALTH_CHECK_TOKEN` | GitHub repository secret, Vercel (both rows), Supabase secrets of DEV and PROD | The health endpoints and the weekly run | Never | One new value (`openssl rand -hex 32`) in one sitting: `gh secret set`, both Vercel rows, `supabase secrets set` on DEV, PROD's dashboard, then redeploy both. |
+| `HEALTH_CHECK_TOKEN` | GitHub repository secret, Vercel (both rows), Supabase secrets of DEV and PROD | The health endpoints and the weekly run | Never | One new value (`openssl rand -hex 32`) in one sitting: `gh secret set`, both Vercel rows, both Supabase dashboards, then redeploy both. |
 | `VERCEL_AUTOMATION_BYPASS_SECRET` | GitHub repository secret; Vercel project, Deployment Protection | The weekly run past staging's protection | Never | Vercel project settings, Deployment Protection, Protection Bypass for Automation: regenerate, then `gh secret set`. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Vercel | Supabase clients | Never | Supabase API keys: create one, set it in Vercel, redeploy, delete the old one. |
 | `SUPABASE_SECRET_KEY` | Vercel | Admin client, edge-function calls | Never | As above. The functions accept every secret key of their project. |
@@ -67,7 +68,7 @@ This table is the one home of every deployment and workflow credential. No check
 | `SUPPORT_USER_IDS` | Vercel, Production and Preview (PROD ids, DEV ids) | [Support allowlist](../features/problem-reports.md#current-product-baseline) | Never | Set, redeploy. |
 | `POSTHOG_PROJECT_API_KEY`, `POSTHOG_ORGANIZATION_IDS` | Vercel | [Usage statistics](security.md#mail-and-providers) | Never | Rotate in PostHog, redeploy. |
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
-| `RESEND_API_KEY`, `FROM_EMAIL` | Supabase secrets, one key per project; Vercel | Mail functions; `lib/delivery/send-email.ts` | Never | Resend, API keys: a sending key per project, `supabase secrets set RESEND_API_KEY` on DEV, PROD's dashboard, or Vercel, delete the old one. |
+| `RESEND_API_KEY`, `FROM_EMAIL` | Supabase secrets, one key per project; Vercel | Mail functions; `lib/delivery/send-email.ts` | Never | Resend: new sending key per project, set in Supabase secrets and Vercel, redeploy, delete the old. |
 | `WERKFLOW_ALARM_EMAIL`, `WERKFLOW_BILLING_REPLY_TO`, `RESEND_WEBHOOK_SECRET` | Vercel | Alarm, reply-to, webhook | Never | Set, redeploy. |
 | `WERKFLOW_KI_ANTHROPIC_KEY` | Vercel, Sensitive | [KI model calls](../features/ai-automations.md#current-product-baseline) | Never | Anthropic Console: new key, redeploy, revoke old. |
 
@@ -79,7 +80,7 @@ The test groups run against the Supabase CLI's Docker composition: Docker Engine
 
 - A workstation's stack holds only `main`'s merged migrations. `check:changed` fails while it holds another.
 - The keys are the CLI's shared defaults, not secrets.
-- Auth mail lands in Mailpit. Cloud functions reject the local capture setup.
+- Auth mail lands in Mailpit.
 - Analytics is off: Logflare filled the disk. The lab recorder reads Kong's access log through `docker logs`.
 - PostgREST truncates at its row limit without an error, locally and hosted. Read in pages ([add a list](realtime-and-caching.md#add-a-list)). Never raise the limit to hide the bound.
 - The stack answers on `http://127.0.0.1:54321`. `bun run env:local` writes that origin and this checkout's test-server origin into `.env.local`. Rebuild after a switch: `NEXT_PUBLIC_*` values are baked into the build.
