@@ -16,7 +16,12 @@
 create table public.time_correction_application_spans (
   id bigint generated always as identity primary key,
   application_id uuid not null references public.time_correction_applications (id) on delete cascade,
-  organization_id uuid not null references public.organizations (id) on delete cascade,
+  -- The application's organization, copied by the trigger. No key to
+  -- organizations: its check would lock the organization's row while the
+  -- approval holds the timeline revision, and an organization's deletion locks
+  -- that row first and then waits for the approval's rows. The application's
+  -- key removes the spans with it.
+  organization_id uuid not null,
   snapshot text not null check (snapshot in ('before', 'after')),
   user_id uuid,
   span tstzrange not null,
@@ -26,8 +31,6 @@ create table public.time_correction_application_spans (
 -- Range overlap with an equality on organization and person (btree_gist).
 create index time_correction_application_spans_person_span_idx
   on public.time_correction_application_spans using gist (organization_id, user_id, span);
-create index time_correction_application_spans_organization_id_fk_idx
-  on public.time_correction_application_spans (organization_id);
 
 -- RLS without a policy: only the server reads it, through the function below;
 -- only the trigger writes it.

@@ -12624,13 +12624,6 @@ export type Database = {
             referencedRelation: "time_correction_applications";
             referencedColumns: ["id"];
           },
-          {
-            foreignKeyName: "time_correction_application_spans_organization_id_fkey";
-            columns: ["organization_id"];
-            isOneToOne: false;
-            referencedRelation: "organizations";
-            referencedColumns: ["id"];
-          },
         ];
       };
       time_correction_applications: {

@@ -5,8 +5,13 @@
 -- record before it writes time, which takes that revision. Waiting for the
 -- record there would deadlock the two.
 --
--- The first session holds the recipient's record as a clock transition does;
--- the second approves the reassignment under a lock timeout and must finish.
+-- 1. The first session holds the recipient's record as a clock transition
+--    does; the second approves the reassignment under a lock timeout and must
+--    finish.
+-- 2. The first session holds the organization as its deletion does before the
+--    cascade, which then waits for the approval's rows; the second approves a
+--    pending correction under a lock timeout and must finish without locking
+--    the organization (the spans keep no key to it).
 -- The sessions need committed rows, so this file writes one synthetic
 -- organization through dblink connections and deletes it at the start (a run
 -- that broke off) and at the end. The main session only orchestrates and rolls back.
@@ -124,6 +129,52 @@ begin
       raise exception 'the approval moved the signal of % from % to %', v_after.user_id, v_before.signalled, v_after.signalled;
     end if;
   end loop;
+end $$;
+
+-- 2. The subject's own correction waits for a decision while the organization is held.
+create temporary table signal_order_pending on commit drop as
+select (result ->> 'requestId')::uuid as request_id from dblink('signal_order_setup', format($submit$
+  select public.create_time_correction_request(
+    %1$L, %2$L, '61000000-0000-4000-8000-000000000002', gen_random_uuid(), 'add', 'Arbeitszeit nachtragen',
+    repeat('6', 64), repeat('5', 64), '{"schemaVersion":1,"facts":[]}',
+    jsonb_build_object('schemaVersion', 1, 'facts', jsonb_build_array(
+      jsonb_build_object('factId', 'added-in', 'employeeRecordId', %2$L::uuid,
+        'userId', '61000000-0000-4000-8000-000000000002', 'entryType', 'clock_in',
+        'timestamp', '2026-08-13T06:00:00Z', 'jobId', null, 'activityKind', 'work', 'isManual', true),
+      jsonb_build_object('factId', 'added-out', 'employeeRecordId', %2$L::uuid,
+        'userId', '61000000-0000-4000-8000-000000000002', 'entryType', 'clock_out',
+        'timestamp', '2026-08-13T07:00:00Z', 'jobId', null, 'activityKind', 'work', 'isManual', true))),
+    '[]',
+    jsonb_build_object('timelineRevision', coalesce((select revision from public.time_timeline_revisions
+      where organization_id = %1$L), 0)))
+$submit$,
+  '61000000-0000-4000-8000-000000000010',
+  (select record_id from signal_order_people where user_id = '61000000-0000-4000-8000-000000000002')))
+  as submitted(result jsonb);
+
+select dblink_exec('signal_order_clock', 'begin');
+select locked from dblink('signal_order_clock',
+  'select 1 from public.organizations where id = ''61000000-0000-4000-8000-000000000010'' for update')
+  as deletion(locked integer);
+do $$
+begin
+  perform * from dblink('signal_order_approval', format($decide$
+    select public.decide_time_correction(%1$L, '61000000-0000-4000-8000-000000000001', gen_random_uuid(), 1,
+      'approve', null, jsonb_build_object('timelineRevision', coalesce((select revision
+        from public.time_timeline_revisions where organization_id = %2$L), 0)))
+  $decide$, (select request_id from signal_order_pending), '61000000-0000-4000-8000-000000000010'))
+    as approval(result jsonb);
+exception when others then
+  raise exception 'the approval waited for the organization: %', sqlerrm;
+end $$;
+select dblink_exec('signal_order_clock', 'rollback');
+
+do $$
+begin
+  if not exists (select 1 from dblink('signal_order_setup', format(
+      'select 1 from public.time_correction_application_spans span join public.time_correction_applications application on application.id = span.application_id where application.request_id = %L',
+      (select request_id from signal_order_pending))) as span(found integer))
+  then raise exception 'the decided correction wrote no span'; end if;
 end $$;
 
 select dblink_exec('signal_order_setup', statement) from signal_order_cleanup order by position;

@@ -1,8 +1,8 @@
-// The week (Zeiterfassung) and the member status (Mitarbeiter detail) count
-// only the correction facts of the person's effective employee record. A
-// person whose record was removed and who holds a new one sees none of the
-// facts the old record retains, in their own week and in the office's view of
-// them (docs/technical/security.md, "Calendar correction input boundary";
+// The week (Zeiterfassung) and the member status (Mitarbeiter list and detail)
+// count only the approved and pending correction facts of the person's
+// effective employee record. A person whose record was removed and who holds a
+// new one sees none of the facts the old record retains, in their own week and
+// in the office's view of them (docs/technical/security.md, "Calendar correction input boundary";
 // werk-flow/werkflow-planning#610). The file spawns itself: module mocks stay
 // in the child.
 import assert from 'node:assert/strict';
@@ -85,8 +85,28 @@ async function runFixture(): Promise<void> {
         application.snapshot.facts.some((fact) => !input.userIds || input.userIds.includes(fact.userId)),
       ),
   }));
-  mock.module('@/lib/time-corrections/actions', () => ({
-    getProvisionalTimeCorrectionProjection: async () => ({ entries: [], sources: [] }),
+  // Two pending proposals of a Wednesday shift, one on each record; the real
+  // provisional projection reads them.
+  const proposal = (id: string, employeeRecordId: string) => ({
+    id,
+    kind: 'add' as const,
+    currentRevision: 1,
+    updatedAt: berlin('2026-11-25T10:00'),
+    subjectUserId: employee,
+    proposedSnapshot: {
+      schemaVersion: 1 as const,
+      facts: addedShift(id, employeeRecordId).snapshot.facts.map((fact) => ({
+        ...fact,
+        timestamp: new Date(Date.parse(fact.timestamp) + 24 * 3600_000).toISOString(),
+      })),
+    },
+  });
+  mock.module('@/lib/time-corrections/pending-projection', () => ({
+    createPendingProjectionPort: () => ({}),
+    loadPendingCorrectionProjection: async () => ({
+      requests: [proposal('pending-removed', removedRecord), proposal('pending-current', currentRecord)],
+      sources: [],
+    }),
   }));
   const { getTimeEntries } = await import('./entry-read-actions');
 
@@ -99,9 +119,14 @@ async function runFixture(): Promise<void> {
       ...(whole ? {} : { userId: employee }),
     });
     assert.ok(result.success, 'the week reads');
-    return result.entries.map((entry) => entry.id).sort();
+    return [...result.entries, ...(result.provisionalEntries ?? [])].map((entry) => entry.id).sort();
   };
-  const currentFacts = ['correction:current:current-clock_in', 'correction:current:current-clock_out'];
+  const currentFacts = [
+    'correction:current:current-clock_in',
+    'correction:current:current-clock_out',
+    'proposal:pending-current:1:pending-current-clock_in',
+    'proposal:pending-current:1:pending-current-clock_out',
+  ];
 
   // Zeiterfassung: the employee's own week.
   assert.deepEqual(await correctionIds(), currentFacts, 'the own week counts no fact of the removed record');
