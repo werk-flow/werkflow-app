@@ -138,8 +138,9 @@ export type ExecutorTask = {
   timeoutMs: number;
   /**
    * Called once the job's steps passed and its body's process exists, never before, and before the
-   * body runs: a crash before the launch never leaves a launch behind. A throw ends the body before
-   * it starts, and the job fails.
+   * body runs: a crash before the launch never leaves a launch behind. The process exists as a gate
+   * that then starts the body; a body that cannot start there fails the job. A throw ends the body
+   * before it starts, and the job fails.
    */
   onLaunch?: (() => void) | undefined;
 };
