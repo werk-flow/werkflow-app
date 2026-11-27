@@ -51,7 +51,7 @@ function contentHash(
 
 /** Resend's answer while another request under the same idempotency key is still sending. */
 const IN_FLIGHT = 'email_concurrent_idempotent_requests';
-/** Longer in total than a send may take (lib/delivery/send-email.ts). */
+/** About 15 s in all; a send still in flight after them settles failed for Stripe's next delivery. */
 const IN_FLIGHT_WAITS_MS = [1_000, 2_000, 4_000, 8_000];
 
 type Admin = ReturnType<typeof createSupabaseAdminClient>;
