@@ -15,13 +15,18 @@ test('focus stays in the customer edit dialog the row menu opened, and Escape re
     .getByRole('region', { name: 'Kundenzeile' })
     .getByRole('button', { name: 'Aktionen öffnen' });
   await trigger.click();
+  // Radix runs the menu's focus return in a later task, as an event on the closed menu element.
+  await page.getByRole('menu').evaluate((menu) => {
+    window.uiContractMenuFocusReturn = new Promise<void>((resolve) => {
+      menu.addEventListener('focusScope.autoFocusOnUnmount', () => queueMicrotask(resolve), { once: true });
+    });
+  });
   await page.getByRole('menuitem', { name: 'Bearbeiten' }).click();
   const dialog = page.getByRole('dialog', { name: 'Kunde bearbeiten' });
   await expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveValue('Heizungsbau Weber');
   await expect(dialog.getByRole('textbox', { name: 'Name' })).toBeFocused();
-  // The menu's close animation ends after the dialog opened; its focus return runs in a later task.
-  await expect(page.getByRole('menu', { includeHidden: true })).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => window.uiContractFocusReturns)).toBe(1);
+  // The menu's close animation ends after the dialog opened; its focus return lands then.
+  await page.evaluate(() => window.uiContractMenuFocusReturn);
   expect(
     await page.evaluate(() => window.uiContractDialogFocusLeaks),
     'focus never left the dialog the menu item opened',

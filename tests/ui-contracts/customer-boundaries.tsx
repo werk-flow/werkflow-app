@@ -115,37 +115,25 @@ declare global {
   interface Window {
     /** Each move of focus out of a dialog, named by the control it went to. */
     uiContractDialogFocusLeaks: string[] | undefined;
-    /** How many focus scopes (a menu, a dialog) ran their focus return on closing. */
-    uiContractFocusReturns: number;
+    /** Settles once the open menu ran its focus return on closing; a spec sets it on the menu it opened. */
+    uiContractMenuFocusReturn: Promise<void> | undefined;
   }
 }
-
-const FOCUS_SCOPE_UNMOUNT = 'focusScope.autoFocusOnUnmount';
 
 /**
  * Records each move of focus out of a dialog. A modal dialog's trap takes
  * focus back while it leaves, so the control outside never holds it: only the
- * focusout from the dialog shows the move. Radix runs a closing layer's focus
- * return in a later task; the count of finished returns is the fact a spec
- * waits on before it reads the moves.
+ * focusout from the dialog shows the move.
  */
 function recordDialogFocusLeaks(): void {
   if (window.uiContractDialogFocusLeaks) return;
   const leaks: string[] = [];
   window.uiContractDialogFocusLeaks = leaks;
-  window.uiContractFocusReturns = 0;
   document.addEventListener('focusout', (event) => {
     const from = event.target instanceof Element ? event.target.closest('[role="dialog"]') : null;
     const to = event.relatedTarget instanceof Element ? event.relatedTarget : null;
     if (from && to && !from.contains(to)) leaks.push(to.textContent ?? '');
   });
-  const dispatch = EventTarget.prototype.dispatchEvent;
-  EventTarget.prototype.dispatchEvent = function (this: EventTarget, event: Event): boolean {
-    const result = dispatch.call(this, event);
-    // The default focus return runs right after the dispatch, in the same task.
-    if (event.type === FOCUS_SCOPE_UNMOUNT) queueMicrotask(() => (window.uiContractFocusReturns += 1));
-    return result;
-  };
 }
 
 const ROW_ACTIONS: ClientRowActions = {
