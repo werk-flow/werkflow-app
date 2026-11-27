@@ -98,7 +98,7 @@ Check the path without an outage:
 
 The runner's agent reaches GitHub over TLS. On a clock past that certificate's expiry it loses GitHub, which shuts the runner down 13 to 20 minutes later: after a suite job ends, but before a browser job does. So the plan, from the agent's hosts in the runner's journal, gives browser jobs only to dates whose midday is a day or more before the earliest certificate expiry. Its log names each held date. GitHub renews the certificate, so a held date gets its browser jobs back. A runner shut down mid-job ("The runner has received a shutdown signal") went past that horizon.
 
-Failed suite dates stay until passing or arrival. A date keeps its browser jobs while the issue names it, so a green run cannot close the issue on a date it skipped, except a date past the horizon, whose browser jobs could not have run. Started by hand, `gh workflow run date-lookahead.yml -f date=<YYYY-MM-DD>` reruns one date and reports nothing.
+Failed midday suite dates stay until passing or arrival. A date keeps its browser jobs while the issue names it, so a green run cannot close the issue on a date it skipped, except a date past the horizon, whose browser jobs could not have run. Started by hand, `gh workflow run date-lookahead.yml -f date=<YYYY-MM-DD>` reruns one date and reports nothing.
 
 The look-ahead does not cover:
 
