@@ -1,5 +1,5 @@
 -- An approval that moves time to a person signals them without waiting for
--- their personnel record (20270603090000_index_correction_reads_by_person_and_window.sql,
+-- their personnel record (20270701090001_index_correction_reads_by_person_and_window.sql,
 -- werk-flow/werkflow-planning#610). The approval holds the organization's
 -- timeline revision when it signals; a clock transition locks the person's
 -- record before it writes time, which takes that revision. Waiting for the
