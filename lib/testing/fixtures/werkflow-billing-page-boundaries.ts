@@ -137,6 +137,7 @@ gateway = {
   readInvoiceDebit: noRead,
   listFinalizedInvoices: noRead,
   listEventIds: noRead,
+  readEvent: noRead,
   subscriptions: {
     ...calls,
     readSubscription: (id) => {

@@ -1,10 +1,15 @@
 // The chat page over a held turn: `sendTurn` stands in for the turn route's
 // client (components/ki/turn-client.ts), so the spec decides when the message
-// is saved, each batch of the answer, and how the turn ends. The thread reads
-// go to `/api/background-read`, which the spec routes.
+// is saved, each batch of the answer, and how the turn ends. `useKiLive`
+// stands in for the thread's live channel (components/ki/use-ki-live.ts): the
+// spec sees which thread the page joined and sends its events. The thread
+// reads go to `/api/background-read`, which the spec routes.
+import { useEffect } from 'react';
+
 import { KiChat } from '@/components/ki/ki-chat';
 import { describeTurnRefusal, type TurnEvent, type TurnOutcome } from '@/components/ki/turn-client';
 import { BannerProvider } from '@/components/ui/banner';
+import type { KiLiveEvent } from '@/lib/ai/live/events';
 import type { AiThreadWindow } from '@/lib/ai/thread-types';
 
 export { describeTurnRefusal };
@@ -26,6 +31,13 @@ declare global {
     uiContractKiWindows: Record<string, AiThreadWindow>;
     /** Every thread read's input, in the order the page sent them. */
     uiContractKiReadInputs: unknown[];
+    /** The live channel the page joined: its thread, null for none, and what the spec sends on it. */
+    uiContractKiLive: {
+      threadId: string | null;
+      joins: string[];
+      emit: ((event: KiLiveEvent) => void) | null;
+      join: (() => void) | null;
+    };
   }
 }
 
@@ -34,6 +46,29 @@ window.uiContractKiReadsFail = false;
 window.uiContractKiHeldReads = null;
 window.uiContractKiWindows = {};
 window.uiContractKiReadInputs = [];
+window.uiContractKiLive = { threadId: null, joins: [], emit: null, join: null };
+
+/** The live channel's stand-in: it joins at once and hands the spec the thread's event handler. */
+export function useKiLive(input: {
+  threadId: string | null;
+  onEvent: (threadId: string, event: KiLiveEvent) => void;
+  onJoin: (threadId: string) => void;
+}): void {
+  const { threadId, onEvent, onJoin } = input;
+  useEffect(() => {
+    const live = window.uiContractKiLive;
+    live.threadId = threadId;
+    if (threadId === null) return;
+    live.joins.push(threadId);
+    live.emit = (event) => onEvent(threadId, event);
+    live.join = () => onJoin(threadId);
+    return () => {
+      live.threadId = null;
+      live.emit = null;
+      live.join = null;
+    };
+  }, [threadId, onEvent, onJoin]);
+}
 
 /** A listed thread opens with the window the spec set, or empty: the spec drives each turn. Any other thread is not the person’s. */
 function answerKiThreadWindow(threadId: unknown) {

@@ -74,6 +74,8 @@ export type StripeGateway = {
   listFinalizedInvoices(since: number): Promise<Array<{ id: string; finalizedAt: number }>>;
   /** The ids of the events of `types` Stripe created between `since` and `until` (seconds); same cap. */
   listEventIds(since: number, until: number, types: readonly Stripe.Event.Type[]): Promise<string[]>;
+  /** An event Stripe holds, read by id: as trusted as a verified signal. Stripe keeps events 30 days. */
+  readEvent(eventId: string): Promise<Stripe.Event>;
 };
 
 /** How Stripe collects an invoice or a renewal. */
@@ -344,10 +346,13 @@ async function capped<T>(items: Promise<T[]>): Promise<T[]> {
   return all;
 }
 
-/** The reads of the debit notice, the invoice and receipt mails, and the daily comparison. */
+/** The reads of the debit notice, the invoice and receipt mails, the daily comparison and the waiting signals. */
 function debitReads(
   client: Stripe,
-): Pick<StripeGateway, 'readUpcomingDebit' | 'readInvoiceDebit' | 'listFinalizedInvoices' | 'listEventIds'> {
+): Pick<
+  StripeGateway,
+  'readUpcomingDebit' | 'readInvoiceDebit' | 'listFinalizedInvoices' | 'listEventIds' | 'readEvent'
+> {
   return {
     readUpcomingDebit: (subscriptionId) =>
       read(async () => {
@@ -417,6 +422,7 @@ function debitReads(
       );
       return events.map((event) => event.id);
     },
+    readEvent: (eventId) => read(() => client.events.retrieve(eventId)),
   };
 }
 

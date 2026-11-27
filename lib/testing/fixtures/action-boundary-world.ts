@@ -46,6 +46,8 @@ export type ActionWorld = {
   deletedUserIds: string[];
   /** How often an action asked for the service-role client. */
   adminClientRequests: number;
+  /** Table rows every read returned, summed: what a measured flow cost the database. */
+  rowsRead: number;
   /** Tables whose every read answers with a connection error instead of rows. */
   failingTables: Set<string>;
   /**
@@ -254,6 +256,11 @@ function mockCachedReads(world: ActionWorld): void {
   }));
 }
 
+function countRows<Result extends { data: unknown }>(world: ActionWorld, result: Result): Result {
+  world.rowsRead += Array.isArray(result.data) ? result.data.length : result.data ? 1 : 0;
+  return result;
+}
+
 export function installActionWorld(
   tables: InMemoryTables,
   columnDefaults: Record<string, () => FixtureRow> = {},
@@ -272,6 +279,7 @@ export function installActionWorld(
     deleteUser: () => ({ error: null }),
     deletedUserIds: [],
     adminClientRequests: 0,
+    rowsRead: 0,
     failingTables: new Set(),
     beforeNextWrite: null,
   };
@@ -289,7 +297,7 @@ export function installActionWorld(
         read((result) =>
           world.failingTables.has(table)
             ? { ...result, data: null, error: { code: '08006', message: 'connection failure' } }
-            : { ...result, data: structuredClone(result.data) },
+            : countRows(world, { ...result, data: structuredClone(result.data) }),
         ).then(onFulfilled, onRejected);
       return query;
     },
