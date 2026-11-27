@@ -84,7 +84,8 @@ function applyKiLiveEvent(
     const userHeld = keys.has(userKey(event.command));
     const userGap = !userHeld && event.user.sequence > last + 1;
     const answerGap =
-      !keys.has(answerKey(event.command)) && event.answer.sequence > (userHeld ? last : event.user.sequence) + 1;
+      !keys.has(answerKey(event.command)) &&
+      event.answer.sequence > (userHeld ? last : event.user.sequence) + 1;
     if (userGap || answerGap) return { window, applied: false };
     const added: AiChatMessage[] = [];
     if (!keys.has(userKey(event.command)))

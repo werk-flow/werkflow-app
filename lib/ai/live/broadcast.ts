@@ -17,7 +17,6 @@ import { logError } from '@/lib/logging';
 /** The live channel's deltas leave at most this often: a fast model sends one message per interval. */
 const KI_LIVE_INTERVAL_MS = 250;
 
-
 /** Sends events in order through one REST call; resolves whether Realtime accepted them. */
 export type KiLiveSend = (topic: string, events: KiLiveEvent[], signal: AbortSignal) => Promise<boolean>;
 
