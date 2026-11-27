@@ -42,22 +42,6 @@ export const AI_TURN_LIMITS = {
 export type AiEntryPoint = keyof typeof AI_TURN_LIMITS;
 
 /**
- * The longest a turn runs from its request to its settlement: its total
- * timeout, then the last attempt's cost write, the partial save in flight,
- * the final save and the settlement, each at its limit. The turn route's
- * `maxDuration` holds it, so the invocation is never cut off before it settles.
- */
-export function maxTurnRunMs(entryPoint: AiEntryPoint): number {
-  const limits = AI_TURN_LIMITS[entryPoint];
-  return (
-    limits.totalTimeoutMs +
-    limits.costWriteTimeoutMs +
-    2 * limits.answerSaveTimeoutMs +
-    limits.settleTimeoutMs
-  );
-}
-
-/**
  * The most a turn can cost: every step and every retry at its input cap,
  * all of it written to the prompt cache (the dearest input), plus its output
  * cap. The run reserves this before its first step, so the hold covers each
