@@ -303,8 +303,8 @@ const runOf = (name: string): DryRun => {
 
 test('the dry runs keep the fleet design: a PR runs the fast tier, the queue the browser groups once, the landing nothing', () => {
   expect(runOf('docs-only PR').plan.jobs).toEqual(['plan', 'fast', 'check']);
-  expect(runOf('code PR').plan.jobs).toEqual(['plan', 'fast', 'sql', 'components', 'check']);
-  expect(runOf('tooling PR').plan.jobs).toEqual(['plan', 'fast', 'sql', 'components', 'invoices', 'check']);
+  expect(runOf('code PR').plan.jobs).toEqual(['plan', 'fast', 'sql', 'check']);
+  expect(runOf('tooling PR').plan.jobs).toEqual(['plan', 'fast', 'sql', 'invoices', 'check']);
   for (const name of ['docs-only PR', 'code PR', 'tooling PR']) expect(runOf(name).plan.shards).toEqual([]);
   expect(runOf('queue batch of 4').plan.shards.length).toBeGreaterThan(0);
   expect(runOf('push that lands the batch').plan.jobs).toEqual(['plan', 'check']);

@@ -251,11 +251,17 @@ export function planRun(input: {
   const midnightUntil = shards.length ? (outputs.midnight_until ?? '') : '';
   if (!runsBrowser) skips.midnight = PR_BROWSER_SKIP;
   else if (!midnightUntil) skips.midnight = 'No browser shard waits for the midnight start window.';
-  const componentsToRun = shardsToRun(
-    'components',
-    componentShards,
-    'The plan selects no component area: no change reaches a contract, its bundle or a stylesheet (lib/testing/selection/fast-tier.ts).',
-  );
+  const runsComponents = CI_DAG.components.events.includes(input.event);
+  const componentsToRun = runsComponents
+    ? shardsToRun(
+        'components',
+        componentShards,
+        'The plan selects no component area: no change reaches a contract, its bundle or a stylesheet (lib/testing/selection/fast-tier.ts).',
+      )
+    : [];
+  if (!runsComponents)
+    skips.components =
+      'Component contracts run in the integration run, before merge (owner decision 2026-11-27, werk-flow/werkflow-planning#503).';
   for (const job of WORK_JOBS) {
     if (skips[job] || job === 'browser' || job === 'components') continue;
     const receipt = reusedBy(job);

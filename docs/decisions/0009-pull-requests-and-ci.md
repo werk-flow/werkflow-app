@@ -280,3 +280,7 @@ Under the amendment of 2026-11-23, an unapproved PR that only edited a list's fi
 ## Amendment 2026-11-27: a new list needs no approval
 
 Under the amendment of 2026-11-26, a commit that added a new shrink-only list counted each of its entries as growth, since its parent lacks the list. An unapproved PR that added a list therefore cancelled the approval of every PR in its group, and Unit failed on their approved growth. The gate starts a list that the merge base with `origin/main` lacks at the run's tip, so no commit grows it. This narrows that amendment's rule: a list counts as empty below a commit only where that merge base holds it, and a list the merge base lacks needs no approval. A list the merge base holds that a commit moves aside or restores is still growth.
+
+## Amendment 2026-11-27: component contracts run in the queue
+
+The owner decided that PR runs, draft or ready, skip Component contracts to keep Actions under about 9,000 job-minutes a day (werk-flow/werkflow-planning#503). The integration run keeps the same component selection and runs it before merge, alongside the browser groups. A contract failure therefore surfaces in the queue run. Main and full runs, including the nightly run and release gate, keep their existing component selection. No test is removed. [testing.md](../technical/testing.md#ci) owns the run tiers.
