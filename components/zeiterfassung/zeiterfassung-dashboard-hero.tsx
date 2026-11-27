@@ -134,8 +134,15 @@ export function ZeiterfassungDashboardHero({
   const { breakdown, ringTimelineSegments, workPercentage } = totals;
   const activity = describeClockActivity(effectiveState);
 
+  // The ring, the target line and today's overtime all measure against the
+  // target: a failed target read marks them together. The recorded time stays readable.
   return (
-    <div className="flex flex-col items-center py-8">
+    <StaleRegion
+      stale={targetsStale && todayTarget !== undefined}
+      onRetry={onRetryTargets}
+      notice="Das Tagesziel konnte nicht aktualisiert werden und ist eventuell nicht mehr aktuell."
+      className="flex flex-col items-center py-8"
+    >
       <TimeProgressRing
         totalMinutes={liveTotalMinutes}
         breakMinutes={breakdown.breakMinutes}
@@ -157,20 +164,13 @@ export function ZeiterfassungDashboardHero({
         </p>
       ) : null}
 
-      <StaleRegion
-        stale={targetsStale && todayTarget !== undefined}
-        onRetry={onRetryTargets}
-        notice="Das Tagesziel konnte nicht aktualisiert werden und ist eventuell nicht mehr aktuell."
-        className="flex flex-col items-center"
-      >
-        <ZeiterfassungTodayTargetNote
-          todayTarget={todayTarget}
-          todayTargetHint={todayTargetHint}
-          workPercentage={workPercentage}
-        />
-      </StaleRegion>
+      <ZeiterfassungTodayTargetNote
+        todayTarget={todayTarget}
+        todayTargetHint={todayTargetHint}
+        workPercentage={workPercentage}
+      />
 
       <ZeiterfassungTimeBreakdown totals={totals} />
-    </div>
+    </StaleRegion>
   );
 }

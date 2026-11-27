@@ -116,7 +116,10 @@ describe("the Zeiterfassung's target after a failed targets read", () => {
     const stale = renderHero(true, todayTarget);
     expect(stale).toContain(TARGET_NOTICE);
     expect(stale).toContain('Erneut laden');
-    expect(stale).toContain('data-stale="true"');
+    // The ring and today's overtime measure against the same target: they sit inside the region.
+    const region = stale.slice(stale.indexOf('data-stale="true"'));
+    expect(region).toContain('Gesamtzeit');
+    expect(region).toContain('Überstunden heute');
     expect(renderHero(false, todayTarget)).not.toContain(TARGET_NOTICE);
   });
 
