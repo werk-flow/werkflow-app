@@ -24,7 +24,7 @@ import { offerDocument } from './document';
 import { readOffer, readOfferRevisions } from './reads';
 import type { OfferDetail } from './types';
 
-// „Als gesendet festhalten“ (supabase/migrations/20270401100000_send_an_offer_and_keep_each_sent_revision.sql).
+// „Als gesendet festhalten“ (supabase/migrations/20270501100000_send_an_offer_and_keep_each_sent_revision.sql).
 // The server renders the saved draft with the company profile, as the
 // preview does, stores the PDF under a new document id, and send_offer
 // freezes the revision, registers and files that PDF and sets „Gesendet“ in

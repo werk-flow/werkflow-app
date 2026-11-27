@@ -6,8 +6,8 @@
 --    channel the office named, the Auftraggeber and the Rechnungsempfänger
 --    with the recipient's name and address as they were, the sender's company
 --    profile and the Einsatzort as rendered (`snapshot`), and the Titel and
---    Positionen with their amounts (`content`, built here from the draft's
---    rows), with the rendered PDF as a filed document. A guard refuses every
+--    Positionen with their amounts and no cost (`content`, built here from
+--    the draft's rows), with the rendered PDF as a filed document. A guard refuses every
 --    change and delete, whoever writes, but a deleted person's set null and
 --    the organization's teardown.
 -- 2. send_offer: in one transaction it checks the draft is still at the
@@ -90,8 +90,8 @@ create index offer_revisions_recipient_idx on public.offer_revisions (recipient_
 create index offer_revisions_document_idx on public.offer_revisions (document_id, organization_id);
 create index offer_revisions_sent_by_idx on public.offer_revisions (sent_by);
 
--- The server reads and writes the revisions; no signed-in role reads a row,
--- because the content keeps each Position's hidden purchase cost.
+-- The server reads and writes the revisions, like the offer content they
+-- freeze; no signed-in role reads a row.
 alter table public.offer_revisions enable row level security;
 revoke all on table public.offer_revisions from public, anon, authenticated, service_role;
 grant select, insert on table public.offer_revisions to service_role;
@@ -249,7 +249,9 @@ begin
     raise exception 'offer_empty';
   end if;
 
-  -- The content as stored, with each priced Position's printed number (a text line has none).
+  -- The content as stored, with each priced Position's printed number (a text line has none)
+  -- and its article or Leistung, and without its cost (20270501090000): a revision keeps what
+  -- the customer got, never the office's calculation.
   select coalesce(jsonb_agg(jsonb_build_object(
       'number', section.position::text,
       'title', section.title,
@@ -261,8 +263,7 @@ begin
           'quantity', numbered.quantity::text, 'unit', numbered.unit, 'unitLabel', numbered.unit_label,
           'unitPriceCents', numbered.unit_price_cents, 'priceQuantity', numbered.price_quantity,
           'taxRateBasisPoints', numbered.tax_rate_basis_points, 'amountCents', numbered.amount_cents,
-          'itemId', numbered.item_id, 'purchaseCostCents', numbered.purchase_cost_cents,
-          'purchasePriceQuantity', numbered.purchase_price_quantity
+          'itemId', numbered.item_id, 'leistungId', numbered.leistung_id
         )) order by numbered.position)
         from (
           select line.*, count(*) filter (where line.kind <> 'text')

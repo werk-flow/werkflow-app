@@ -164,6 +164,24 @@ const draft = {
           name: 'Hinweis zur Ausführung',
           description: 'Nach Absprache mit der Hausverwaltung.',
         },
+        // A Position from a Leistung, as get_offer answers it: a free Position with its source and no cost.
+        {
+          kind: 'free',
+          name: 'Wartung Gastherme',
+          description: '',
+          quantity: '1.000',
+          unit: 'flat_rate',
+          unitPriceCents: 12900,
+          priceQuantity: 1,
+          taxRateBasisPoints: 1900,
+          source: {
+            kind: 'leistung',
+            id: '97100000-0000-4000-8000-000000000001',
+            number: 'L-001',
+            name: 'Wartung Gastherme',
+            archived: false,
+          },
+        },
       ],
     },
   ],
@@ -272,6 +290,8 @@ assert.ok(
   previewText.includes('Hausverwaltung Lindenhof GmbH') && previewText.includes('WEG Lindenstraße 5'),
 );
 assert.ok(previewText.includes('Hinweis zur Ausführung'), previewText);
+// The Leistung's Position prints with its number and amount like the one typed by hand.
+assert.ok(/1\.2\s*Wartung Gastherme/.test(previewText) && previewText.includes('129,00'), previewText);
 assert.ok(
   previewText.includes('Haustechnik Sonnenberg GmbH') && !previewText.includes('Fremde'),
   previewText,
@@ -313,6 +333,13 @@ for (const printed of [
 ]) {
   assert.ok(snapshot.includes(printed), `${printed} missing from ${snapshot}`);
 }
+// The document path reads the offer without its costs: get_offer_with_costs is the office editor's read.
+assert.deepEqual(
+  [...new Set(world.rpcCalls.map((call) => call.name))].filter((name) => name.startsWith('get_offer')),
+  ['get_offer'],
+);
+// The snapshot the send passes carries no cost.
+assert.ok(!/cost/i.test(snapshot), snapshot);
 assert.equal(sendCall?.args.p_storage_path, first.path);
 assert.equal(sendCall?.args.p_document_id, sent.documentId);
 assert.ok(String(first.path).startsWith(`${ORGANIZATION_A}/${sent.documentId}/`));

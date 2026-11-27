@@ -1,5 +1,5 @@
 -- The office records an offer as sent, and every sent revision stays as it was
--- (migration 20270401100000_send_an_offer_and_keep_each_sent_revision.sql).
+-- (migration 20270501100000_send_an_offer_and_keep_each_sent_revision.sql).
 begin;
 
 insert into auth.users (
@@ -71,13 +71,24 @@ create function pg_temp.id(p_name text) returns uuid language sql as $$
 $$;
 grant execute on function pg_temp.id(text) to service_role, authenticated;
 
--- One Titel with a priced Position and a text line; 2 × 100,00 € at 19 %.
+-- A Leistung of the organization (20270501090000).
+insert into public.leistungen (id, organization_id, leistung_number, name, kind, unit, tax_rate_basis_points)
+values ('38070000-0000-4000-8000-000000000060', '38070000-0000-4000-8000-000000000010', 'L-1',
+  'Wartung Gastherme', 'pauschale', 'flat_rate', 1900);
+
+-- One Titel with a typed Position, a text line and a Position from the
+-- Leistung, both priced ones with the office's cost: 2 × 100,00 € and
+-- 1 × 129,00 € at 19 %.
 create function pg_temp.content() returns jsonb language sql as $$
-  select '[{"title": "Heizung", "netCents": 20000, "positions": [
+  select '[{"title": "Heizung", "netCents": 32900, "positions": [
     {"kind": "free", "name": "Monteurstunde", "description": "", "quantity": "2", "unit": "hour",
      "unitLabel": "Std.", "unitPriceCents": 10000, "priceQuantity": 1, "taxRateBasisPoints": 1900,
-     "amountCents": 20000},
-    {"kind": "text", "name": "Hinweis", "description": "Nach Absprache mit der Hausverwaltung."}]}]'::jsonb;
+     "amountCents": 20000, "purchaseCost": {"amountCents": 6000, "priceQuantity": 1}},
+    {"kind": "text", "name": "Hinweis", "description": "Nach Absprache mit der Hausverwaltung."},
+    {"kind": "free", "name": "Wartung Gastherme", "description": "", "quantity": "1", "unit": "flat_rate",
+     "unitLabel": "psch", "unitPriceCents": 12900, "priceQuantity": 1, "taxRateBasisPoints": 1900,
+     "amountCents": 12900, "source": {"kind": "leistung", "id": "38070000-0000-4000-8000-000000000060"},
+     "purchaseCost": {"amountCents": 8000, "priceQuantity": 1}}]}]'::jsonb;
 $$;
 grant execute on function pg_temp.content() to service_role;
 
@@ -107,10 +118,12 @@ select 'empty', public.create_offer('38070000-0000-4000-8000-000000000002', '380
   gen_random_uuid(), 'Ohne Positionen', '38070000-0000-4000-8000-000000000020', null, null, null, null);
 select public.save_offer_content('38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010',
   pg_temp.id(name), 1, gen_random_uuid(), pg_temp.content(),
-  '{"netCents": 20000, "taxCents": 3800, "grossCents": 23800}')
+  '{"netCents": 32900, "taxCents": 6251, "grossCents": 39151}')
 from ids where name in ('first', 'second');
 
--- Sending freezes revision 1: the content with its amounts, the recipient as
+-- Sending freezes revision 1: the content with its amounts and sources and
+-- without the costs the draft holds, the Leistung's Position numbered like any
+-- priced one, the recipient as
 -- rendered, the PDF as a filed offer document of the ten-year class linked to
 -- the offer and its customer only, „Gesendet“, and the history with the channel.
 do $$
@@ -130,14 +143,23 @@ begin
   if v_revision.revision is distinct from 1 or v_revision.channel is distinct from 'post'
     or v_revision.recipient_name is distinct from 'WEG Lindenstraße 5'
     or v_revision.recipient_address is distinct from 'Lindenstraße 5, 10115 Berlin'
-    or v_revision.gross_cents is distinct from 23800::bigint
+    or v_revision.gross_cents is distinct from 39151::bigint
     or v_revision.sent_by is distinct from '38070000-0000-4000-8000-000000000002'::uuid
     or v_revision.document_id is distinct from '38070000-0000-4000-8000-000000000301'::uuid
     or v_revision.content #> '{0,positions,0}' is distinct from '{"number": "1.1", "kind": "free",
       "name": "Monteurstunde", "description": "", "quantity": "2.000", "unit": "hour", "unitLabel": "Std.",
       "unitPriceCents": 10000, "priceQuantity": 1, "taxRateBasisPoints": 1900, "amountCents": 20000}'::jsonb
     or v_revision.content #> '{0,positions,1}' is distinct from '{"kind": "text", "name": "Hinweis",
-      "description": "Nach Absprache mit der Hausverwaltung."}'::jsonb then
+      "description": "Nach Absprache mit der Hausverwaltung."}'::jsonb
+    or v_revision.content #> '{0,positions,2}' is distinct from '{"number": "1.2", "kind": "free",
+      "name": "Wartung Gastherme", "description": "", "quantity": "1.000", "unit": "flat_rate",
+      "unitLabel": "psch", "unitPriceCents": 12900, "priceQuantity": 1, "taxRateBasisPoints": 1900,
+      "amountCents": 12900, "leistungId": "38070000-0000-4000-8000-000000000060"}'::jsonb
+    -- The draft held both costs; no field of the frozen revision names one.
+    or (select count(*) from public.offer_positions line
+        where line.organization_id = '38070000-0000-4000-8000-000000000010'
+          and line.offer_id = pg_temp.id('first') and line.purchase_cost_cents is not null) <> 2
+    or to_jsonb(v_revision)::text ~* 'cost|margin' then
     raise exception 'the sent revision is %', to_jsonb(v_revision);
   end if;
   select * into v_document from public.documents
@@ -288,7 +310,7 @@ begin
       - 'sentOn' is distinct from jsonb_build_object('revision', 1, 'channel', 'post',
         'validUntil', (select valid_until from public.offer_revisions
           where organization_id = '38070000-0000-4000-8000-000000000010' and offer_id = pg_temp.id('first')),
-        'grossCents', 23800, 'recipientName', 'WEG Lindenstraße 5',
+        'grossCents', 39151, 'recipientName', 'WEG Lindenstraße 5',
         'documentId', '38070000-0000-4000-8000-000000000301',
         'sentBy', '{"firstName": "Max", "lastName": "Mustermann", "email": "send-buero@example.test"}'::jsonb)
     or (select recipient_address from public.offer_revisions
