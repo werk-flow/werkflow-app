@@ -19,6 +19,7 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Input } from '@/components/ui/input';
 import { Field } from '@/components/ui/field';
+import { FileInput } from '@/components/ui/file-input';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBusyIds } from '@/hooks/use-busy-id';
@@ -64,6 +65,7 @@ function PersonnelEvidenceUploadDialog({
   onOpenChange,
   formId,
   fieldErrors,
+  fileName,
   documentType,
   onFileChange,
   onDocumentTypeChange,
@@ -75,6 +77,7 @@ function PersonnelEvidenceUploadDialog({
   onOpenChange: (open: boolean) => void;
   formId: string;
   fieldErrors: EvidenceFieldErrors;
+  fileName: string | null;
   documentType: string;
   onFileChange: (file: File | null) => void;
   onDocumentTypeChange: (documentType: string) => void;
@@ -101,7 +104,7 @@ function PersonnelEvidenceUploadDialog({
             }}
           >
             <Field label="Datei" htmlFor="own-evidence-file" required error={fieldErrors.file}>
-              <Input type="file" onChange={(event) => onFileChange(event.target.files?.[0] ?? null)} />
+              <FileInput buttonLabel="Nachweis auswählen" fileName={fileName} onSelect={onFileChange} />
             </Field>
             <Field label="Dokumentart" htmlFor="own-evidence-type" required error={fieldErrors.type}>
               <Input value={documentType} onChange={(event) => onDocumentTypeChange(event.target.value)} />
@@ -301,7 +304,7 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
       <PersonnelOwnActionsHeader
         prestart={prestart}
         onUpload={() => {
-          // The file input remounts empty, so a file from an earlier opening must not upload.
+          // Each opening starts without a file, so a file from an earlier opening never uploads.
           setFile(null);
           setError(null);
           setFieldErrors({});
@@ -340,6 +343,7 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
         onOpenChange={setUploadOpen}
         formId={evidenceFormId}
         fieldErrors={fieldErrors}
+        fileName={file?.name ?? null}
         documentType={documentType}
         onFileChange={setFile}
         onDocumentTypeChange={setDocumentType}

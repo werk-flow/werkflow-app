@@ -134,6 +134,7 @@ export function usePersonnelLifecycleDocuments(lifecycle: PersonnelLifecycleCont
   return {
     uploadOpen,
     setUploadOpen,
+    file,
     setFile,
     documentType,
     setDocumentType,
