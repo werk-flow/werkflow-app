@@ -466,3 +466,62 @@ test('an article read that ends after „Neu laden“ adds no Position', async (
   await expect(editor.getByText('Summe Titel 2: 0,00 €')).toBeVisible();
   await expect(editor.getByRole('textbox', { name: 'Bezeichnung' })).toHaveCount(0);
 });
+
+// A Bedarfs- or Alternativposition counts in no sum; an Alternativposition is
+// preset to the Normalposition above it, and a save stops at „Alternative zu“
+// while it names none.
+test('an Alternativposition names its Position and difference, stays out of the sums and needs a Normalposition', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'offers');
+  const editor = page.getByRole('form', { name: 'Titel und Positionen' });
+  const save = editor.getByRole('button', { name: 'Speichern', exact: true });
+  await editor.getByRole('button', { name: 'Titel hinzufügen', exact: true }).click();
+  await editor.getByRole('textbox', { name: 'Titel 1' }).fill('Wärmeerzeuger');
+  const field = (position: number, name: string) =>
+    editor.locator(`#offer-section-0-position-${position}-${name}`);
+  for (const [position, name, price] of [
+    [0, 'Wandgerät 24 kW', '100,00'],
+    [1, 'Wandgerät 18 kW', '80,00'],
+  ] as const) {
+    await editor.getByRole('button', { name: 'Position', exact: true }).click();
+    await field(position, 'name').fill(name);
+    await field(position, 'price').fill(price);
+  }
+  await field(1, 'alternative-type').click();
+  await page.getByRole('option', { name: 'Alternativposition', exact: true }).click();
+  await expect(editor.getByRole('combobox', { name: 'Alternative zu' })).toContainText(
+    '1.1 · Wandgerät 24 kW',
+  );
+  await expect(
+    editor.getByText('Alternativposition zu 1.1, Minderpreis 20,00 €. Nicht in der Summe.'),
+  ).toBeVisible();
+  await expect(editor.getByText('(80,00 €)')).toBeVisible();
+  await expect(editor.getByText('Summe Titel 1: 100,00 €')).toBeVisible();
+  await expect(editor.getByText('1 Bedarfs- oder Alternativposition zählt nicht mit.')).toBeVisible();
+
+  await field(0, 'alternative-type').click();
+  await page.getByRole('option', { name: 'Bedarfsposition', exact: true }).click();
+  await save.click();
+  await expect(
+    editor.getByText('Wähle die Position, statt der diese Alternative angeboten wird.'),
+  ).toBeVisible();
+  await expect(editor.getByRole('combobox', { name: 'Alternative zu' })).toBeFocused();
+  expect(await page.evaluate(() => window.uiContractWrites.calls)).toEqual([]);
+
+  // 1.1 normal again: the Alternativposition still holds it.
+  await field(0, 'alternative-type').click();
+  await page.getByRole('option', { name: 'Normalposition', exact: true }).click();
+  await save.click();
+  await expectHeldWrite(page, 'save-offer-content');
+  expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
+    sections: [
+      {
+        positions: [
+          { name: 'Wandgerät 24 kW', positionType: { kind: 'normal' } },
+          { name: 'Wandgerät 18 kW', positionType: { kind: 'alternative', alternativeTo: 1 } },
+        ],
+      },
+    ],
+  });
+});

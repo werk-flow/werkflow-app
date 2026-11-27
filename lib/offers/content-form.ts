@@ -17,6 +17,7 @@ import type {
   OfferCostedSection,
   OfferPosition,
   OfferPositionCost,
+  OfferPositionType,
   OfferPriceSource,
   OfferSection,
 } from './types';
@@ -31,7 +32,8 @@ import type {
 // kept nor checked by the save. Each refusal is a German sentence keyed by the
 // control's id, so the editor marks the field and focuses the first
 // (focusFirstInvalidField). The server parses the same limits again
-// (action-schemas.ts).
+// (action-schemas.ts). An Alternativposition holds its Position by the
+// editor's key, so moving either keeps the pair; the parse names the place.
 
 export type PositionForm = DraftLineForm & {
   kind: OfferPosition['kind'];
@@ -42,9 +44,12 @@ export type PositionForm = DraftLineForm & {
   markup: string;
   /** Where the price came from; „manuell“ once the office types a price or a markup sets one. */
   priceSource: OfferPriceSource;
+  positionType: OfferPositionType['kind'];
+  /** The key of the Position an Alternativposition stands for; null until the office picks one. */
+  alternativeTo: string | null;
 };
 
-type PositionField = 'name' | 'quantity' | 'unit' | 'price' | 'cost' | 'markup';
+type PositionField = 'name' | 'alternative' | 'quantity' | 'unit' | 'price' | 'cost' | 'markup';
 export type SectionForm = { key: string; title: string; positions: PositionForm[] };
 
 export type ParsedContent =
@@ -67,7 +72,8 @@ export function contentFormOf(sections: readonly OfferCostedSection[], keyPrefix
     key: `${keyPrefix}-${sectionIndex}`,
     title: section.title,
     positions: section.positions.map((position, positionIndex) => {
-      const key = `${keyPrefix}-${sectionIndex}-${positionIndex}`;
+      const keyAt = (index: number) => `${keyPrefix}-${sectionIndex}-${index}`;
+      const key = keyAt(positionIndex);
       if (position.kind === 'text') {
         return { ...emptyPosition(key, 'text'), name: position.name, description: position.description };
       }
@@ -84,6 +90,11 @@ export function contentFormOf(sections: readonly OfferCostedSection[], keyPrefix
         taxRateBasisPoints: position.taxRateBasisPoints,
         source: position.source,
         priceSource: position.priceSource,
+        positionType: position.positionType.kind,
+        alternativeTo:
+          position.positionType.kind === 'alternative'
+            ? keyAt(position.positionType.alternativeTo - 1)
+            : null,
       };
     }),
   }));
@@ -101,7 +112,14 @@ function costFields(cost: OfferPositionCost | null, priceQuantity: PriceQuantity
 /** A new position of a kind: a free one starts as one piece at the standard rate. */
 export function emptyPosition(key: string, kind: OfferPosition['kind']): PositionForm {
   const line = emptyLine(key);
-  return { ...line, kind, ...costFields(null, line.priceQuantity), priceSource: { kind: 'manuell' } };
+  return {
+    ...line,
+    kind,
+    ...costFields(null, line.priceQuantity),
+    priceSource: { kind: 'manuell' },
+    positionType: 'normal',
+    alternativeTo: null,
+  };
 }
 
 /**
@@ -125,6 +143,8 @@ export function catalogPositionForm(key: string, line: OfferCatalogLine): Positi
     taxRateBasisPoints: line.taxRateBasisPoints,
     source: line.source,
     priceSource: line.priceSource,
+    positionType: 'normal',
+    alternativeTo: null,
   };
 }
 
@@ -210,7 +230,32 @@ function costCentsOf(text: string): number | null | undefined {
   return parseEuroCents(text, MAX_COST_CENTS);
 }
 
-const PRICED_FIELDS = ['name', 'quantity', 'unit', 'price', 'cost'] as const;
+const PRICED_FIELDS = ['name', 'alternative', 'quantity', 'unit', 'price', 'cost'] as const;
+
+/** Whether a position of the editor counts in the sums: a normal priced one, which an Alternativposition can name. */
+export function isNormalPricedForm(position: PositionForm): boolean {
+  return position.kind === 'free' && position.positionType === 'normal';
+}
+
+/**
+ * A priced position's type with the place of an Alternativposition's
+ * Position in `positions`, its Titel; undefined with a sentence while that
+ * Position is not a normal priced one of the Titel.
+ */
+function parsePositionType(
+  position: PositionForm,
+  positions: readonly PositionForm[],
+  typeError: (sentence: string) => void,
+): OfferPositionType | undefined {
+  if (position.positionType !== 'alternative') return { kind: position.positionType };
+  const index = positions.findIndex((candidate) => candidate.key === position.alternativeTo);
+  const base = positions[index];
+  if (!base || !isNormalPricedForm(base)) {
+    typeError('Wähle die Position, statt der diese Alternative angeboten wird.');
+    return undefined;
+  }
+  return { kind: 'alternative', alternativeTo: index + 1 };
+}
 
 /**
  * The cost of a priced position as typed: null when empty, undefined with a
@@ -251,11 +296,15 @@ function priceSourceClaim(priceSource: OfferPriceSource): PriceSourceClaim {
 
 function parsePosition(
   position: PositionForm,
+  positions: readonly PositionForm[],
   fieldId: (field: PositionField) => string,
   errors: Record<string, string>,
 ): OfferPosition | null {
   if (position.kind === 'free') {
     const lineErrors: Record<string, string> = {};
+    const positionType = parsePositionType(position, positions, (sentence) => {
+      lineErrors[fieldId('alternative')] = sentence;
+    });
     const values = parsePricedLine(position, fieldId, lineErrors);
     const unitKnown = isInventoryUnitCode(position.unit);
     if (!unitKnown) lineErrors[fieldId('unit')] = 'Wähle eine Einheit.';
@@ -268,8 +317,15 @@ function parsePosition(
       if (sentence) errors[fieldId(field)] = sentence;
     }
     const source = position.source ? { kind: position.source.kind, id: position.source.id } : null;
-    return values && unitKnown && cost !== undefined
-      ? { kind: 'free', ...values, source, cost, priceSource: priceSourceClaim(position.priceSource) }
+    return values && unitKnown && cost !== undefined && positionType
+      ? {
+          kind: 'free',
+          ...values,
+          positionType,
+          source,
+          cost,
+          priceSource: priceSourceClaim(position.priceSource),
+        }
       : null;
   }
   const name = position.name.trim();
@@ -284,7 +340,12 @@ export function parseContentForm(sections: readonly SectionForm[]): ParsedConten
     const title = section.title.trim();
     if (!title) errors[contentFieldId(sectionIndex, 'title')] = 'Gib dem Titel einen Namen.';
     const positions = section.positions.map((position, index) =>
-      parsePosition(position, (field) => contentFieldId(sectionIndex, { position: index, field }), errors),
+      parsePosition(
+        position,
+        section.positions,
+        (field) => contentFieldId(sectionIndex, { position: index, field }),
+        errors,
+      ),
     );
     return { title, positions: positions.filter((position) => position !== null) };
   });
@@ -345,11 +406,16 @@ export function liveContentFigures(
     : parseContentForm(
         named.map((section, sectionIndex) => ({
           ...section,
-          positions: section.positions.map((position, index) =>
-            first.errors[contentFieldId(sectionIndex, { position: index, field: 'cost' })]
-              ? { ...position, cost: '' }
-              : position,
-          ),
+          positions: section.positions.map((position, index) => ({
+            ...position,
+            // A cost still being typed counts as none; an Alternativposition still without its Position stays outside the sums.
+            ...(first.errors[contentFieldId(sectionIndex, { position: index, field: 'cost' })] && {
+              cost: '',
+            }),
+            ...(first.errors[contentFieldId(sectionIndex, { position: index, field: 'alternative' })] && {
+              positionType: 'bedarf' as const,
+            }),
+          })),
         })),
       );
   if (!parsed.ok) return null;

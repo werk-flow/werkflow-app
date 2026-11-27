@@ -2,13 +2,14 @@ import { INVENTORY_UNITS } from '@/lib/inventory/units';
 import { draftAmounts, type DraftAmounts } from '@/lib/invoices/amounts';
 import type { InvoiceLineValues } from '@/lib/invoices/types';
 import { lineCostCents } from './calculation';
-import type { OfferFreePosition, OfferPosition, OfferSection } from './types';
+import type { OfferFreePosition, OfferPosition, OfferPositionType, OfferSection } from './types';
 
 // The amounts of an offer come from the one invoice core, as an invoice's do,
 // so an invoice of the same positions later agrees with the offer: each priced
 // position by the shared line rule, VAT per rate on the sum of that rate's
-// positions. A Titel's subtotal is the sum of its positions; a text line has
-// no amount. The editor shows them while the office types; the server
+// positions. A Titel's subtotal is the sum of its normal positions; a text
+// line has no amount. A Bedarfs- or Alternativposition has its own amount by
+// the same line rule, and no sum or VAT counts it. The editor shows them while the office types; the server
 // computes them again from the parsed input and stores what it computed.
 
 export type OfferAmounts = DraftAmounts & {
@@ -16,30 +17,45 @@ export type OfferAmounts = DraftAmounts & {
   sections: Array<{ netCents: number; positionCents: Array<number | null> }>;
 };
 
+type PricedPosition = { kind: 'free'; positionType: OfferPositionType } & InvoiceLineValues;
+
 /**
  * Titel as their amounts read them: each Position's kind and line values. A
  * Position's source and cost play no part, so a document's content, which
  * carries no cost, computes by the same rule as the editor's.
  */
-type PricedSection = { positions: ReadonlyArray<{ kind: 'text' } | ({ kind: 'free' } & InvoiceLineValues)> };
+type PricedSection = { positions: ReadonlyArray<{ kind: 'text' } | PricedPosition> };
+
+/** Whether a position counts in its Titel's subtotal, the totals and the VAT: a normal priced one. */
+export function countsInTotal(
+  position: { kind: 'text' } | Pick<PricedPosition, 'kind' | 'positionType'>,
+): boolean {
+  return position.kind === 'free' && position.positionType.kind === 'normal';
+}
 
 /** Every amount of an offer's content. Throws a RangeError on a position the line rule refuses. */
 export function offerAmounts<Section extends PricedSection>(sections: readonly Section[]): OfferAmounts {
   const priced = sections.flatMap((section) =>
     section.positions.flatMap((position) => (position.kind === 'free' ? [position] : [])),
   );
-  const amounts = draftAmounts(priced);
-  const lineCents = [...amounts.lineNetCents].reverse();
+  const amounts = draftAmounts(priced.filter(countsInTotal));
+  // Outside the sums each one still takes its amount by the line rule, rounded once.
+  const outside = draftAmounts(priced.filter((position) => !countsInTotal(position)));
+  const countedCents = [...amounts.lineNetCents].reverse();
+  const outsideCents = [...outside.lineNetCents].reverse();
   return {
     ...amounts,
     sections: sections.map((section) => {
+      let netCents = 0;
       const positionCents = section.positions.map((position) => {
         if (position.kind === 'text') return null;
-        const cents = lineCents.pop();
+        const counts = countsInTotal(position);
+        const cents = counts ? countedCents.pop() : outsideCents.pop();
         if (cents === undefined) throw new RangeError('A priced position has no computed amount.');
+        if (counts) netCents += cents;
         return cents;
       });
-      return { netCents: positionCents.reduce<number>((sum, cents) => sum + (cents ?? 0), 0), positionCents };
+      return { netCents, positionCents };
     }),
   };
 }

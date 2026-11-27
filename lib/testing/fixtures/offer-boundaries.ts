@@ -153,9 +153,11 @@ assert.deepEqual(
 
 // The content save: a field worker is refused before the database, another
 // organization's offer by the one function call, and Büro saves its own
-// offer as itself with the amounts the server computed.
+// offer as itself with the amounts the server computed, which leave out its
+// Bedarfs- and Alternativposition.
 const servicePosition = {
   kind: 'free' as const,
+  positionType: { kind: 'normal' as const },
   name: 'Wartung Gastherme',
   description: '',
   quantity: '1.5',
@@ -176,6 +178,12 @@ const content = {
       positions: [
         servicePosition,
         { kind: 'text' as const, name: 'Hinweis', description: 'Ersatzteile nach Aufwand.' },
+        { ...servicePosition, name: 'Abgasmessung', positionType: { kind: 'bedarf' as const } },
+        {
+          ...servicePosition,
+          name: 'Wartung mit Brennerreinigung',
+          positionType: { kind: 'alternative' as const, alternativeTo: 1 },
+        },
       ],
     },
   ],
@@ -228,6 +236,7 @@ assert.deepEqual(
     call.args.p_actor_id,
     call.args.p_offer_id,
     call.args.p_totals,
+    JSON.stringify(call.args.p_sections).match(/"positionType":\{[^}]*\}/g),
   ]),
   [
     [
@@ -237,6 +246,11 @@ assert.deepEqual(
       ownOfferId,
       // 1,5 h at 72,50 € is 108,75 €; 19 % VAT on it is 20,6625 €.
       { netCents: 10875, taxCents: 2066, grossCents: 12941 },
+      [
+        '"positionType":{"kind":"normal"}',
+        '"positionType":{"kind":"bedarf"}',
+        '"positionType":{"kind":"alternative","alternativeTo":1}',
+      ],
     ],
   ],
 );
@@ -303,8 +317,8 @@ world.rpc = ({ name }) =>
 const sparse = await readOfferWithCosts(ORGANIZATION_A, ownOfferId);
 assert.equal(sparse?.site?.address, '12345');
 
-// A stored cost above what the editor takes (any article price may stand there) still loads, and
-// a Position saved before price sources were kept reads as „manuell“.
+// A stored cost above what the editor takes (any article price may stand there) still loads, a
+// Position saved before price sources were kept reads as „manuell“, and one without a type as normal.
 world.rpc = ({ name }) =>
   name === 'get_offer_with_costs'
     ? {
@@ -346,6 +360,7 @@ assert.deepEqual(
     kind: 'free',
     name: 'Pressfitting 15 mm',
     description: '',
+    positionType: { kind: 'normal' },
     quantity: '1000',
     unit: 'piece',
     unitPriceCents: 99_000_000,

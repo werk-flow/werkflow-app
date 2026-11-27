@@ -34,6 +34,8 @@ export type DocumentPosition = {
   priceQuantity?: number;
   amountCents: number;
   kind: 'standard' | 'bedarf' | 'alternative';
+  /** An Alternativposition's Position as printed and its amount less that Position's; printed in its mark. */
+  alternativeTo?: { number: string; differenceCents: number };
 };
 
 /** A text line between the positions: its text and description, without number, quantity or amount. */

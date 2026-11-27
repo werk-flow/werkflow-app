@@ -39,6 +39,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   after_snapshot: 'Stand danach',
   after_state: 'Zustand danach',
   allocation_kind: 'Zuordnungsart',
+  alternative_to: 'Alternative zu Position',
   amount_cents: 'Betrag (Cent)',
   anfahrt_discount_tenths: 'Rabatt Anfahrt (Zehntelprozent)',
   application_id: 'Anwendung-ID',

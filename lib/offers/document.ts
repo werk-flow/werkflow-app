@@ -1,4 +1,9 @@
-import type { BusinessDocument, DocumentTotals } from '@/lib/document-rendering/model';
+import type {
+  BusinessDocument,
+  DocumentPosition,
+  DocumentTextLine,
+  DocumentTotals,
+} from '@/lib/document-rendering/model';
 import { unitShortLabelOrStored } from '@/lib/inventory/article-terms-format';
 import { taxRateBasisPoints } from '@/lib/invoicing/calculate';
 import { formatGermanDate } from '@/lib/utils';
@@ -9,7 +14,9 @@ import type { OfferDetail } from './types';
 // An offer as the PDF its customer gets, mapped into the renderer's plain
 // model. The preview and the sent revision both render through this one
 // mapping, with the amounts of the one offer rule, so what the office sees is
-// what is stored.
+// what is stored. A Bedarfs- or Alternativposition prints its amount in
+// parentheses, outside the sums; an Alternativposition names its Position and
+// the difference.
 
 type Letterhead = Pick<BusinessDocument, 'sender' | 'footerColumns' | 'stationery'>;
 
@@ -68,21 +75,35 @@ export function offerDocument(
         number,
         title: section.title,
         subtotalCents: computed.netCents,
-        positions: section.positions.map((position, index) =>
-          position.kind === 'text'
-            ? { kind: 'text', text: position.name, description: position.description }
-            : {
-                kind: 'standard',
-                number: numbers[index] ?? '',
-                text: position.name,
-                description: position.description,
-                quantity: position.quantity,
-                unitLabel: unitShortLabelOrStored(position.unit),
-                unitPriceCents: position.unitPriceCents,
-                priceQuantity: position.priceQuantity,
-                amountCents: priced(computed.positionCents[index]),
-              },
-        ),
+        positions: section.positions.map((position, index): DocumentPosition | DocumentTextLine => {
+          if (position.kind === 'text') {
+            return { kind: 'text', text: position.name, description: position.description };
+          }
+          const amountCents = priced(computed.positionCents[index]);
+          const printed = {
+            number: numbers[index] ?? '',
+            text: position.name,
+            description: position.description,
+            quantity: position.quantity,
+            unitLabel: unitShortLabelOrStored(position.unit),
+            unitPriceCents: position.unitPriceCents,
+            priceQuantity: position.priceQuantity,
+            amountCents,
+          };
+          const type = position.positionType;
+          if (type.kind === 'normal') return { kind: 'standard', ...printed };
+          if (type.kind === 'bedarf') return { kind: 'bedarf', ...printed };
+          // Its Position is a normal priced one of the same Titel (action-schemas.ts, the database's key).
+          const base = type.alternativeTo - 1;
+          return {
+            kind: 'alternative',
+            ...printed,
+            alternativeTo: {
+              number: numbers[base] ?? '',
+              differenceCents: amountCents - priced(computed.positionCents[base]),
+            },
+          };
+        }),
       };
     }),
     totals: {

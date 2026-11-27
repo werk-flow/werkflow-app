@@ -30,6 +30,7 @@ import type { OfferPosition } from '@/lib/offers/types';
 import { OfferCatalogPicker } from './offer-article-picker';
 import { PositionCostFields } from './offer-position-cost-fields';
 import { PositionPriceSourceNote } from './offer-price-source-note';
+import { PositionTypeFields } from './offer-position-type-fields';
 
 type Errors = Record<string, string | undefined>;
 
@@ -199,6 +200,7 @@ function PositionList({
           number={numbers[index] ?? null}
           position={position}
           figures={figures?.[index] ?? null}
+          titel={{ index, positions, numbers, figures }}
           onChange={(next) => onChange(positions.map((current, at) => (at === index ? next : current)))}
           order={{
             index,
@@ -269,12 +271,19 @@ function SectionFooter({
 }
 
 type PositionProps = {
-  fieldId: (field: 'name' | 'quantity' | 'unit' | 'price' | 'cost' | 'markup') => string;
+  fieldId: (field: 'name' | 'alternative' | 'quantity' | 'unit' | 'price' | 'cost' | 'markup') => string;
   /** As printed, for example `1.2`; null for a text line. */
   number: string | null;
   position: PositionForm;
   /** The position's amount, cost and margin, or null while it cannot be read or for a text line. */
   figures: PositionFigures | null;
+  /** The position's place among its Titel's positions, their numbers and figures, which an Alternativposition names. */
+  titel: {
+    index: number;
+    positions: readonly PositionForm[];
+    numbers: ReadonlyArray<string | null>;
+    figures: ReadonlyArray<PositionFigures | null> | null;
+  };
   onChange: (position: PositionForm) => void;
   order: { index: number; count: number; onMove: (direction: -1 | 1) => void; onRemove: () => void };
   errors: Errors;
@@ -286,18 +295,21 @@ function PositionFields({
   number,
   position,
   figures,
+  titel,
   onChange,
   order,
   errors,
   disabled,
 }: PositionProps) {
   const label = number ? `Position ${number}` : 'Text';
+  const typeBadge = { normal: null, bedarf: 'Bedarf', alternative: 'Alternative' }[position.positionType];
   return (
     <li className="space-y-3 p-3 sm:p-4">
       {/* The number and the order buttons share a line above the fields, at every width. */}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-muted-foreground tabular-nums">
+        <span className="flex items-center gap-2 text-sm text-muted-foreground tabular-nums">
           {number ?? <Badge variant="secondary">Text</Badge>}
+          {position.kind === 'free' && typeBadge && <Badge variant="outline">{typeBadge}</Badge>}
         </span>
         <OrderButtons label={label} {...order} disabled={disabled} />
       </div>
@@ -325,6 +337,13 @@ function PositionFields({
       </div>
       {position.kind === 'free' && (
         <>
+          <PositionTypeFields
+            alternativeId={fieldId('alternative')}
+            {...titel}
+            onChange={onChange}
+            error={errors[fieldId('alternative')]}
+            disabled={disabled}
+          />
           <PositionAmountFields
             fieldId={fieldId}
             position={position}
@@ -356,7 +375,7 @@ function PositionAmountFields({
   onChange,
   errors,
   disabled,
-}: Omit<PositionProps, 'number' | 'order'>) {
+}: Omit<PositionProps, 'number' | 'order' | 'titel'>) {
   const unitId = fieldId('unit');
   const taxId = `${fieldId('price')}-tax`;
   return (
@@ -414,8 +433,14 @@ function PositionAmountFields({
         </Select>
       </Field>
       <p className="col-span-2 text-right text-sm font-medium tabular-nums sm:col-span-1 sm:min-w-28 sm:pb-2">
-        <span className="sr-only">Betrag netto: </span>
-        {figures === null ? '–' : formatEuroCents(figures.saleCents)}
+        <span className="sr-only">
+          {position.positionType === 'normal' ? 'Betrag netto: ' : 'Betrag netto, nicht in der Summe: '}
+        </span>
+        {figures === null
+          ? '–'
+          : position.positionType === 'normal'
+            ? formatEuroCents(figures.saleCents)
+            : `(${formatEuroCents(figures.saleCents)})`}
       </p>
     </div>
   );
