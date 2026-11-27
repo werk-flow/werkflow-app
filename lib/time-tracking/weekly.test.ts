@@ -9,7 +9,7 @@ import {
 } from './segments';
 import { computeBreakdownForSettings, type BreakPolicy } from './settings';
 import type { TimeEntry } from './types';
-import { buildWeeklyTimeData, computeWeekLabel, getTodayIndex, getWeekBounds } from './weekly';
+import { buildWeeklyTimeData, computeWeekLabel, getTodayIndex, getWeekBounds, targetsOfWeek } from './weekly';
 
 // The server renders in UTC. 2026-09-27T22:30Z is Sunday in UTC but Monday
 // 00:30 in Berlin (CEST): the overview must already show the new week.
@@ -154,5 +154,15 @@ describe('a day whose target is unknown', () => {
 
     expect(weekDay?.workMinutes).toBe(600);
     expect(weekDay?.overtimeMinutes).toBe(0);
+  });
+});
+
+describe('targets kept from an earlier read', () => {
+  test('apply only to the week they were read for', () => {
+    const lastWeek = [{ ...mondayTarget(480), date: '2026-08-31' }];
+    expect(targetsOfWeek(lastWeek, MONDAY)).toBeUndefined();
+    const thisWeek = [mondayTarget(480)];
+    expect(targetsOfWeek(thisWeek, MONDAY)).toBe(thisWeek);
+    expect(targetsOfWeek(undefined, MONDAY)).toBeUndefined();
   });
 });

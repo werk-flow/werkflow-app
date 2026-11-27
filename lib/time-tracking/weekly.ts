@@ -60,6 +60,15 @@ export function computeWeekLabel(monday: Date): WeeklyTimeLabel {
   };
 }
 
+/**
+ * Targets kept from an earlier read, only while they belong to the week that
+ * starts on `monday`: after the week turns, last week's holidays and absences
+ * must never stand in for this week's days.
+ */
+export function targetsOfWeek(targets: DailyTarget[] | undefined, monday: Date): DailyTarget[] | undefined {
+  return targets?.[0]?.date === formatBerlinLocalDate(monday) ? targets : undefined;
+}
+
 export function buildWeeklyTimeData(
   entries: TimeEntry[],
   monday: Date,

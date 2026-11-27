@@ -10,6 +10,7 @@ import {
   computeWeekLabel,
   getTodayIndex,
   getWeekBounds,
+  targetsOfWeek,
 } from '@/lib/time-tracking/weekly';
 import { breakPolicyKey, type BreakPolicy } from '@/lib/time-tracking/settings';
 
@@ -124,7 +125,9 @@ export function useWeeklyTimeData({
         return { ok: false, error: result.error };
       }
 
-      const nextTargets = targetsResult.success ? targetsResult.targets : lastKnownTargetsRef.current;
+      const nextTargets = targetsResult.success
+        ? targetsResult.targets
+        : targetsOfWeek(lastKnownTargetsRef.current, monday);
       lastKnownTargetsRef.current = nextTargets;
 
       const weekData = buildWeeklyTimeData(result.entries || [], monday, livePolicy, nextTargets);
