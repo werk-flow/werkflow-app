@@ -6,15 +6,25 @@ import {
   liveClockStateOf,
   liveDayEntriesOf,
   liveDayTarget,
+  reclassification,
 } from '@/lib/testing/live-day-arbitraries';
-import { canonicalDayTotals } from './clock-day-totals';
+import { applyApprovedTimeCorrections, correctedEntriesInWindow } from '@/lib/time-corrections/projection';
+import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
+import { applyTransitionEcho } from './clock-echo';
 import { liveMinutes } from './helpers';
 import { computeZeiterfassungLiveTotals } from './live-totals';
 import { memberLiveDay, memberStatusOf } from './member-day';
 import { createActivitySelection, type TimeSegmentFact } from './segments';
-import type { BreakPolicy, TimeBreakdown } from './settings';
+import { buildBreakPolicyHistoryEntry, type BreakPolicy, type TimeBreakdown } from './settings';
 import type { LiveClockState, TimeEntry } from './types';
-import { buildWeeklyTimeData, computeWeekLabel, getTodayIndex, getWeekBounds, targetsOfWeek } from './weekly';
+import {
+  buildWeeklyTimeData,
+  computeWeekLabel,
+  dayBreakPolicy,
+  getTodayIndex,
+  getWeekBounds,
+  targetsOfWeek,
+} from './weekly';
 
 const { clockTotalsState } = await import('./canonical-clock-state');
 
@@ -116,13 +126,28 @@ describe('standby in the day and the week', () => {
 /** Monday 17:00 Berlin, after every closed segment of the fixtures. */
 const AFTER_THE_DAY = Date.parse('2026-09-07T15:00:00.000Z');
 
-/** Today's clock state as the server builds it from the day's segments; the last one may still run. */
-function clockStateOf(segments: TimeSegmentFact[], policy: BreakPolicy): LiveClockState {
-  return liveClockStateOf(
-    segments,
-    clockTotalsState(canonicalDayTotals(segments, MONDAY, MONDAY_END), policy),
-    AFTER_THE_DAY,
-  );
+/**
+ * Today's clock state at `nowMs` as the server builds it from the day's entries with the approved
+ * corrections applied; the last segment may still run.
+ */
+function clockStateOf(
+  segments: TimeSegmentFact[],
+  policy: BreakPolicy,
+  nowMs: number,
+  applications: TimeCorrectionApplicationProjection[],
+): LiveClockState {
+  const now = new Date(nowMs);
+  const dayEntries = correctedEntriesInWindow(liveDayEntriesOf(segments, now), applications, 'org', {
+    fromMs: MONDAY.getTime(),
+    toMs: MONDAY_END.getTime(),
+  });
+  const running = segments.some((fact) => fact.endedAt === null);
+  return liveClockStateOf(segments, clockTotalsState(dayEntries, policy, running, now), nowMs);
+}
+
+/** The clock state's own split of a closed day, which the phone keeps offline: it has no target. */
+function closedClockTotals(segments: TimeSegmentFact[], policy: BreakPolicy) {
+  return clockTotalsState(liveDayEntriesOf(segments), policy, false, new Date(AFTER_THE_DAY));
 }
 
 /**
@@ -135,14 +160,19 @@ function todaysSplits(
   policy: BreakPolicy,
   targetMinutes: number | undefined,
   nowMs: number,
+  applications: TimeCorrectionApplicationProjection[] = [],
 ): { dashboard: TimeBreakdown; mitarbeiter: TimeBreakdown } {
   setSystemTime(new Date(nowMs));
-  const state = clockStateOf(segments, policy);
+  const state = clockStateOf(segments, policy, nowMs, applications);
   const presence = liveMinutes(state.todayMinutes, state.statusStartedAt, nowMs);
-  const status = memberStatusOf(liveDayEntriesOf(segments), policy);
+  // The office reads the member's entries with the approved corrections applied (getTimeEntries).
+  const status = memberStatusOf(
+    applyApprovedTimeCorrections(liveDayEntriesOf(segments), applications, 'org'),
+    policy,
+  );
   return {
     dashboard: computeZeiterfassungLiveTotals(state, presence, targetMinutes, nowMs).breakdown,
-    mitarbeiter: memberLiveDay(status, policy, targetMinutes, nowMs).breakdown,
+    mitarbeiter: memberLiveDay(status, targetMinutes, nowMs).breakdown,
   };
 }
 
@@ -171,8 +201,7 @@ describe('today’s totals and the week', () => {
       dashboard: WEEK_SPLIT,
       mitarbeiter: WEEK_SPLIT,
     });
-    // The clock state's own split, which the phone keeps offline, has no target.
-    expect(clockTotalsState(canonicalDayTotals(closed, MONDAY, MONDAY_END), STANDBY_POLICY)).toMatchObject({
+    expect(closedClockTotals(closed, STANDBY_POLICY)).toMatchObject({
       workMinutes: 480,
       breakMinutes: 0,
     });
@@ -251,8 +280,118 @@ describe('today’s totals and the week', () => {
       dashboard: noOvertime,
       mitarbeiter: noOvertime,
     });
-    expect(clockTotalsState(canonicalDayTotals(tenHours, MONDAY, MONDAY_END), STANDBY_POLICY)).toMatchObject({
+    expect(closedClockTotals(tenHours, STANDBY_POLICY)).toMatchObject({
       workMinutes: 570,
+    });
+  });
+});
+
+describe('today’s totals after a change the week sees', () => {
+  // 07:00–13:00 work, then 13:00–14:00 standby, clocked out at 14:00 Berlin.
+  const sixHoursAndStandby = [
+    segment('work', 'work', '2026-09-07T05:00:00.000Z', '2026-09-07T11:00:00.000Z'),
+    segment('standby', 'standby', '2026-09-07T11:00:00.000Z', '2026-09-07T12:00:00.000Z'),
+  ];
+  /** The rule `earlier` until 14:30 Berlin, after the clock-out, and `later` from then on. */
+  const changedAfterClockOut = (earlier: BreakPolicy, later: BreakPolicy): BreakPolicy => ({
+    ...later,
+    breakPolicyHistory: [
+      buildBreakPolicyHistoryEntry(earlier, new Date(0).toISOString()),
+      buildBreakPolicyHistoryEntry(later, '2026-09-07T12:30:00.000Z'),
+    ],
+  });
+
+  test('keep the break rule of the day’s last entry when the first step rises after clock-out', () => {
+    const policy = changedAfterClockOut(STANDBY_POLICY, {
+      ...STANDBY_POLICY,
+      autoBreakThresholdMinutes: 420,
+    });
+    const [weekDay] = buildWeeklyTimeData(liveDayEntriesOf(sixHoursAndStandby), MONDAY, policy, [
+      liveDayTarget(420),
+    ]);
+    const weekSplit = { workMinutes: 390, breakMinutes: 30, overtimeMinutes: 0 };
+
+    expect(weekDay).toMatchObject(weekSplit);
+    expect(todaysSplits(sixHoursAndStandby, policy, 420, AFTER_THE_DAY)).toEqual({
+      dashboard: weekSplit,
+      mitarbeiter: weekSplit,
+    });
+  });
+
+  test('deduct no automatic break from a manual day when the automatic rule starts after clock-out', () => {
+    const policy = changedAfterClockOut({ ...STANDBY_POLICY, breakMode: 'manual' }, STANDBY_POLICY);
+    const sixHours = sixHoursAndStandby.slice(0, 1);
+    const manualSplit = { workMinutes: 360, breakMinutes: 0, overtimeMinutes: 0 };
+
+    expect(todaysSplits(sixHours, policy, 480, AFTER_THE_DAY)).toEqual({
+      dashboard: manualSplit,
+      mitarbeiter: manualSplit,
+    });
+  });
+
+  test('count a clock-in after the change by the current rule, before the server answers too', () => {
+    const policy = changedAfterClockOut(STANDBY_POLICY, { ...STANDBY_POLICY, breakMode: 'manual' });
+    const sixHours = sixHoursAndStandby.slice(0, 1);
+    setSystemTime(new Date(AFTER_THE_DAY));
+    const closed = clockStateOf(sixHours, policy, AFTER_THE_DAY, []);
+    expect(computeZeiterfassungLiveTotals(closed, closed.todayMinutes, 480, AFTER_THE_DAY).breakdown).toEqual(
+      {
+        workMinutes: 330,
+        breakMinutes: 30,
+        overtimeMinutes: 0,
+      },
+    );
+
+    // Clocked in again at 17:00 Berlin; an hour later the server has not answered yet.
+    const echo = applyTransitionEcho(
+      closed,
+      createActivitySelection('work'),
+      { outcome: 'active', sessionId: 'session-2', segmentId: 'segment-2', version: 1, recoveryReason: null },
+      new Date(AFTER_THE_DAY),
+    );
+    const anHourLater = AFTER_THE_DAY + 60 * 60_000;
+    const presence = liveMinutes(echo.todayMinutes, echo.statusStartedAt, anHourLater);
+
+    expect(computeZeiterfassungLiveTotals(echo, presence, 480, anHourLater).breakdown).toEqual({
+      workMinutes: 420,
+      breakMinutes: 0,
+      overtimeMinutes: 0,
+    });
+  });
+
+  test('choose the rule by the entries the totals count, not by an entry still ahead', () => {
+    const policy = changedAfterClockOut({ ...STANDBY_POLICY, breakMode: 'manual' }, STANDBY_POLICY);
+    setSystemTime(new Date(AFTER_THE_DAY));
+    const sixHours = liveDayEntriesOf(sixHoursAndStandby.slice(0, 1));
+    // An entry added for 18:00 Berlin, read at 17:00 Berlin: its minutes do not count yet.
+    const ahead = sixHours.map((entry) => ({
+      ...entry,
+      id: `ahead-${entry.id}`,
+      timestamp: '2026-09-07T16:00:00.000Z',
+    }));
+
+    expect(dayBreakPolicy(policy, [...sixHours, ...ahead], false).breakMode).toBe('manual');
+  });
+
+  test('count a same-day reclassification of standby as work like the corrected week', () => {
+    // 07:00–12:00 work, then three hours of standby that an approved correction makes work.
+    const workThenStandby = [
+      segment('work', 'work', '2026-09-07T05:00:00.000Z', '2026-09-07T10:00:00.000Z'),
+      segment('standby', 'standby', '2026-09-07T10:00:00.000Z', '2026-09-07T13:00:00.000Z'),
+    ];
+    const applications = [reclassification(workThenStandby, 'standby', new Date(AFTER_THE_DAY))];
+    const [weekDay] = buildWeeklyTimeData(
+      applyApprovedTimeCorrections(liveDayEntriesOf(workThenStandby), applications, 'org'),
+      MONDAY,
+      STANDBY_POLICY,
+      [liveDayTarget(420)],
+    );
+    const weekSplit = { workMinutes: 420, breakMinutes: 30, overtimeMinutes: 30 };
+
+    expect(weekDay).toMatchObject({ ...weekSplit, standbyMinutes: 0 });
+    expect(todaysSplits(workThenStandby, STANDBY_POLICY, 420, AFTER_THE_DAY, applications)).toEqual({
+      dashboard: weekSplit,
+      mitarbeiter: weekSplit,
     });
   });
 });

@@ -12,7 +12,32 @@ export type ClockStateEvent = {
   old: Record<string, unknown> | null;
 };
 
-export function isClockStateEventRelevant(event: ClockStateEvent, activeJobId: string | null): boolean {
+/**
+ * Whether a time correction request's event can change the time of one of
+ * `userIds`: its subject or its requester is one of them. A manager receives
+ * every request of the organization, so a view of one person's time re-reads
+ * only for that person's requests, in proportion to their pending work. A
+ * payload that lacks either person (a deletion notice, a partial row) is
+ * read, never guessed.
+ * Events of every other table pass.
+ */
+export function isCorrectionEventFor(event: ClockStateEvent, userIds: readonly string[]): boolean {
+  if (event.table !== 'time_correction_requests') return true;
+  const row = event.new ?? event.old;
+  const subject = row?.subject_user_id;
+  const requester = row?.requested_by;
+  // A payload missing either person can't rule the event out: read it.
+  if (subject === undefined || requester === undefined) return true;
+  return userIds.some((userId) => userId === subject || userId === requester);
+}
+
+export function isClockStateEventRelevant(
+  event: ClockStateEvent,
+  activeJobId: string | null,
+  viewerId: string | null,
+): boolean {
+  if (event.table === 'time_correction_requests')
+    return isCorrectionEventFor(event, viewerId ? [viewerId] : []);
   if (event.table !== 'jobs') return true;
   const row = event.new ?? event.old;
   const rowId = row?.id;

@@ -1,12 +1,17 @@
 import fc from 'fast-check';
 import type { DailyTarget } from '@/lib/personnel/targets';
+import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
 import type { clockTotalsState } from '@/lib/time-tracking/canonical-clock-state';
 import {
   createActivitySelection,
   projectTimeSegmentsToLegacyTransitions,
   type TimeSegmentFact,
 } from '@/lib/time-tracking/segments';
-import type { BreakPolicy } from '@/lib/time-tracking/settings';
+import {
+  buildBreakPolicyHistoryEntry,
+  currentBreakPolicy,
+  type BreakPolicy,
+} from '@/lib/time-tracking/settings';
 import type { LiveClockState, TimeEntry, WeeklyTimeDataPoint } from '@/lib/time-tracking/types';
 import { buildWeeklyTimeData } from '@/lib/time-tracking/weekly';
 import { automaticBreakRuleArbitrary } from './break-rule-arbitraries';
@@ -135,6 +140,30 @@ export const liveDayPolicyArbitrary: fc.Arbitrary<BreakPolicy> = fc
   .tuple(automaticBreakRuleArbitrary, fc.boolean())
   .map(([rule, manual]) => ({ ...rule, breakMode: manual ? 'manual' : 'automatic', breakPolicyHistory: [] }));
 
+/**
+ * A live day whose rule an admin changed between its first minute and `nowMs`: during the day,
+ * or after its last entry while nobody runs. The earlier version holds from the first recorded one.
+ */
+export const liveDayWithRuleChangeArbitrary: fc.Arbitrary<{ day: LiveDay; policy: BreakPolicy }> =
+  liveDayArbitrary.chain((day) =>
+    fc
+      .tuple(
+        liveDayPolicyArbitrary,
+        liveDayPolicyArbitrary,
+        fc.integer({ min: Date.parse(day.segments[0]?.startedAt ?? ''), max: day.nowMs }),
+      )
+      .map(([earlier, later, changeMs]) => ({
+        day,
+        policy: {
+          ...currentBreakPolicy(later),
+          breakPolicyHistory: [
+            buildBreakPolicyHistoryEntry(earlier, new Date(0).toISOString()),
+            buildBreakPolicyHistoryEntry(later, new Date(changeMs).toISOString()),
+          ],
+        },
+      })),
+  );
+
 /** A known target of up to ten hours, or an unknown one. */
 export const liveDayTargetArbitrary: fc.Arbitrary<number | undefined> = fc.option(
   fc.integer({ min: 0, max: 600 }),
@@ -158,14 +187,18 @@ export function liveDayTarget(targetMinutes: number): DailyTarget {
   };
 }
 
-/** The week's split of the live day once it has ended at `nowMs`; an unknown target leaves the week without one. */
+/**
+ * The week's split of the live day once it has ended at `nowMs`, with the approved corrections
+ * applied (`correct`); an unknown target leaves the week without one.
+ */
 export function weekDayOf(
   day: LiveDay,
   policy: BreakPolicy,
   target: number | undefined,
+  correct: (entries: TimeEntry[]) => TimeEntry[] = (entries) => entries,
 ): WeeklyTimeDataPoint | undefined {
   const [weekDay] = buildWeeklyTimeData(
-    liveDayEntriesOf(endedAtNow(day)),
+    correct(liveDayEntriesOf(endedAtNow(day))),
     LIVE_DAY_START,
     policy,
     target === undefined ? undefined : [liveDayTarget(target)],
@@ -191,9 +224,57 @@ export function liveDayEntriesOf(segments: TimeSegmentFact[], now: Date = new Da
       createdAt: point.timestamp,
       updatedAt: point.timestamp,
       activityKind: kindOf.get(point.segmentId),
+      canonicalSegmentId: point.segmentId,
+      sourceKind: 'canonical_segment',
     }),
   );
 }
+
+/**
+ * An approved correction that reclassifies one closed segment of the day, work as standby or
+ * standby as work, at the same times: it replaces the segment's entries with facts of the other
+ * activity, as the week and the clock read them.
+ */
+export function reclassification(
+  segments: TimeSegmentFact[],
+  segmentId: string,
+  now: Date,
+): TimeCorrectionApplicationProjection {
+  const replaced = liveDayEntriesOf(segments, now).filter((entry) => entry.canonicalSegmentId === segmentId);
+  return {
+    applicationId: `reclassify-${segmentId}`,
+    requestId: `request-${segmentId}`,
+    appliedAt: now.toISOString(),
+    appliedBy: 'office',
+    sourceFingerprint: segmentId,
+    snapshot: {
+      schemaVersion: 1,
+      facts: replaced.map((entry, index) => ({
+        factId: `fact-${index}`,
+        employeeRecordId: 'record',
+        userId: entry.userId,
+        entryType: entry.entryType,
+        timestamp: entry.timestamp,
+        jobId: null,
+        activityKind: entry.activityKind === 'standby' ? 'work' : 'standby',
+        isManual: false,
+      })),
+    },
+    sources: [{ kind: 'canonical_segment', id: segmentId, version: segmentId }],
+  };
+}
+
+/** A live day with one closed work or standby segment to reclassify. */
+export const liveDayWithReclassifiableSegmentArbitrary: fc.Arbitrary<{ day: LiveDay; segmentId: string }> =
+  liveDayArbitrary
+    .map((day) => ({
+      day,
+      candidates: day.segments.filter((fact) => fact.endedAt !== null && fact.kind !== 'break'),
+    }))
+    .filter(({ candidates }) => candidates.length > 0)
+    .chain(({ day, candidates }) =>
+      fc.constantFrom(...candidates).map((fact) => ({ day, segmentId: fact.id })),
+    );
 
 /**
  * Today's clock state as the server builds it: `totals` are `clockTotalsState` of the day's

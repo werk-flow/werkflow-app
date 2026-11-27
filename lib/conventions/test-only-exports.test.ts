@@ -29,8 +29,6 @@ const KNOWN_TEST_SEAMS: readonly string[] = [
   'lib/supabase/query-batches.ts#ID_BATCH_SIZE',
   'lib/supabase/query-batches.ts#ROW_PAGE_SIZE',
   'lib/time-accounts/calculation.ts#roundSecondsToMinutes',
-  'lib/time-tracking/closed-period-dates.ts#entryBusinessDate',
-  'lib/time-tracking/segments.ts#getSegmentDurationMinutes',
   'lib/time-tracking/validation-messages.ts#TIME_VALIDATION_CODES',
   'lib/vacation/balance.ts#listIsoDatesInRange',
   'lib/work-lifecycle/types.ts#WORK_TRANSITIONS',
