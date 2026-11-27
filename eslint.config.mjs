@@ -855,11 +855,21 @@ const editJobDialogPattern = {
   message:
     'Load the job edit form on intent with lazyDialog (components/shared/lazy-dialog.tsx), so roles that cannot edit a job never download it (lab.field.cold-start).',
 };
+// Every WerkFlow KI tool goes through defineTool, which carries its roles,
+// control level, audit kind and data classes into the registry walks
+// (werk-flow/werkflow-planning#531, B2). The SDK's own tool helpers stay there.
+const aiToolHelperPath = {
+  name: 'ai',
+  importNames: ['tool', 'dynamicTool'],
+  message:
+    'Define a WerkFlow KI tool with defineTool (lib/ai/tools/define-tool.ts) and list it in lib/ai/tools/registry.ts; docs/technical/security.md, "Add an agent tool".',
+};
 function importRestrictions({
   realtimeHooks = true,
   libLayer = false,
   radixPrimitives = true,
   aiSdk = true,
+  aiToolHelpers = true,
 } = {}) {
   return [
     'error',
@@ -867,6 +877,7 @@ function importRestrictions({
       paths: [
         sonnerImportPath,
         reactDomClientImportPath,
+        ...(aiToolHelpers ? [aiToolHelperPath] : []),
         ...(realtimeHooks
           ? [
               {
@@ -1659,6 +1670,13 @@ const eslintConfig = defineConfig([
     files: ['lib/ai/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': importRestrictions({ libLayer: true, aiSdk: false }),
+    },
+  },
+  // The one module that turns a defined tool into the SDK's tool.
+  {
+    files: ['lib/ai/tools/define-tool.ts'],
+    rules: {
+      'no-restricted-imports': importRestrictions({ libLayer: true, aiSdk: false, aiToolHelpers: false }),
     },
   },
   // The registry wraps the Radix primitives; it keeps every other import ban.

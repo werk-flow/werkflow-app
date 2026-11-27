@@ -14,7 +14,7 @@ Every rule here is hard, even where only review enforces it; virtue 3 in `AGENTS
 6. Filter every service-role query on the table by `organization_id`, or add a reviewed `tenant-scope:` comment.
 7. Run `bun run test:verify --group sql:security`, `bun run migrations:check`, `bun run types:check -- --local` and `bun run test:unit lib/conventions/tenant-scope.test.ts`.
 
-Wrong turn: a policy that checks membership but not the role: every member reads managers' rows through the Data API.
+Wrong turn: a policy checking membership but not role: every member reads managers' rows through the Data API.
 
 ### Add a Server Action or route handler
 
@@ -56,7 +56,7 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 
 ### Requests
 
-- **Server Actions.** Every exported action has a boundary test for a foreign id or a lower role, unless it is self-scoped and takes no id.
+- **Server Actions.** Every exported action and [agent tool](../features/ai-automations.md#add-an-agent-tool) has a boundary test for a foreign id or a lower role, unless it is self-scoped and takes no id.
 - **Route handlers.** Each handler or its action authenticates the caller; field sync also takes bearer tokens, Stripe's and Resend's webhooks only signatures. No response or redirect carries an error's message or details.
 - **Auth links.** No browser client reads a URL session (`auth-url-session.spec.ts`). A GET redeems an invite only after a code exchange in that request; a reset hash waits in an httpOnly cookie for the reset page's click (`lib/auth/recovery-link.ts`).
 - **Email in URLs.** No URL carries a provider message or email address. The next step reads the address from an httpOnly cookie scoped to its page (`lib/auth/address-cookies.ts`), the invite row, or the session.
@@ -160,7 +160,7 @@ List each owner-accepted residual exposure until it closes.
 | Privileged server reads and actions | Identity, membership, role, object and lifecycle rules load again on each request and render. Scheduled restrictions apply at read time. |
 | Direct database clients | RLS consults current membership and effective personnel access. A valid JWT alone grants no organization access. |
 | Realtime | INSERT and UPDATE use the table's current RLS. Deletion notices use the protected transport. Freshness inside one organization is no evidence of tenant denial. |
-| Signed file URLs already issued | A URL is a bearer capability: revocation stops new signing, an issued URL lives until expiry. |
+| Signed file URLs already issued | A URL is a bearer capability: revocation stops new signing; issued ones live until expiry. |
 | Auth sessions | [Supabase sign-out](https://supabase.com/docs/guides/auth/signout) lets an issued access token live until expiry. In an incident, suspend operational access ([runbook](recovery-and-incidents.md)). |
 
 ## Sensitive data and owner decisions

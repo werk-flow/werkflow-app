@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { type ModelMessage, streamText } from 'ai';
+import { type ModelMessage, type ToolSet, streamText } from 'ai';
 
 import { type AiContext, type AiThreadMessage, buildAiContext, serializedInput } from '@/lib/ai/context';
 import { AI_MODEL_PRICE, type AiTokenUsage, costMicroUsd } from '@/lib/ai/cost';
@@ -16,6 +16,16 @@ import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import { AI_PROMPT_VERSION } from '@/lib/ai/prompt/system-prompt';
 import { isAiReleasedFor } from '@/lib/ai/release-gate';
 import { readAiOrganizationSwitch } from '@/lib/ai/settings';
+import { toToolSet } from '@/lib/ai/tools/define-tool';
+import { aiToolsFor } from '@/lib/ai/tools/registry';
+import {
+  type ToolCalls,
+  newToolCalls,
+  recordPendingCalls,
+  recordUnrunCalls,
+  runTool,
+} from '@/lib/ai/tools/tool-calls';
+import { boundedWrite } from '@/lib/ai/bounded-write';
 import { AI_TURN_FAILURE_MESSAGES } from '@/lib/ai/turn-messages';
 import { logError } from '@/lib/logging';
 import type { OrgRole } from '@/lib/roles';
@@ -233,33 +243,6 @@ async function readHistory(
     });
 }
 
-type DatabaseWrite = PromiseLike<{ error: { message: string } | null }>;
-
-/**
- * Runs an idempotent database write under its time limit, at most `tries`
- * times while time is left. A write past its limit counts as failed, though
- * it may still land: the caller then keeps the run's provisional charge,
- * which only ever overstates. `landed` names a refusal that means an earlier
- * try already wrote.
- */
-async function boundedWrite(
-  label: string,
-  limitMs: number,
-  tries: number,
-  write: (signal: AbortSignal) => DatabaseWrite,
-  landed: (message: string) => boolean = () => false,
-): Promise<boolean> {
-  const signal = AbortSignal.timeout(limitMs);
-  let failure: unknown = 'timeout';
-  for (let attempt = 0; attempt < tries && !signal.aborted; attempt += 1) {
-    const { error } = await write(signal);
-    if (!error || landed(error.message)) return true;
-    failure = error;
-  }
-  logError(label, failure);
-  return false;
-}
-
 /**
  * Ends the run's reservation at the cost the ledger recorded. When it cannot,
  * the reservation stays as the run's provisional charge, and the database job
@@ -299,6 +282,7 @@ type RunContext = TurnContext & {
   modelContext: AiContext;
   /** Aborts when the turn's total time is up, counted from the request's arrival. */
   turnSignal: AbortSignal;
+  toolCalls: ToolCalls;
 };
 
 /** The run's answer so far, with what is left of its one retry allowance. */
@@ -332,22 +316,25 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
     Math.max(0, limits.totalTimeoutMs - (Date.now() - command.receivedAt)),
   );
   let end: AiTurnEnd;
+  const toolCalls = newToolCalls();
   try {
     const history = await readHistory(context.admin, command, context.userItem.sequence, turnSignal);
     if (history === 'load_failed') {
       end = turnSignal.aborted ? failedEnd('cancelled', 'timeout') : failedEnd('failed', 'interrupted');
     } else {
       const modelContext = await buildAiContext({
-        role: command.role,
+        tools: aiToolsFor(command.role),
         thread: [...history, { role: 'user', text: command.text }],
         inputTokenCap: limits.maxInputTokens,
       });
-      end = await runSteps({ ...context, modelContext, turnSignal }, answer);
+      end = await runSteps({ ...context, modelContext, turnSignal, toolCalls }, answer);
     }
   } catch (error) {
     logError('aiTurn: run failed', error instanceof Error ? error.name : 'unknown');
     end = failedEnd('failed', 'interrupted');
   }
+  // A tool still running when the turn ended gets its ledger row before the run settles (B19).
+  await recordPendingCalls({ ...context, toolCalls });
   const body =
     end.status === 'complete' ? { text: answer.text } : { text: answer.text, failure: end.failure };
   await answer.saving;
@@ -441,7 +428,7 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
     }
     if (outcome.finishReason === 'length') return failedEnd('cancelled', 'answer_too_long');
     if (outcome.finishReason === 'content-filter') return failedEnd('failed', 'model_refused');
-    // A step that ends in tool calls continues; no tool exists yet, so the SDK answers each call with an error.
+    // A step that ends in tool calls continues with their results.
     if (outcome.finishReason !== 'tool-calls') return { status: 'complete' };
     messages = [...messages, ...outcome.responseMessages];
   }
@@ -472,10 +459,12 @@ async function runStep(
     // Every attempt is ledgered at its cost before anything else, so a retry never goes uncounted (B15).
     const usage = result.ok ? result.usage : (result.usage ?? estimatedUsage(step.prompt, billed, limits));
     const key = `${context.runKey}:${step.step}:${attempt}`;
-    if (!(await recordAttempt(context, key, usage, outcome))) {
-      answer.ledgerFailed = true;
-      return { kind: 'failed', failure: 'interrupted' };
-    }
+    const costRecorded = await recordAttempt(context, key, usage, outcome);
+    // Every call the attempt emitted is recorded before its outcome counts or a retry starts (B19),
+    // also when its cost row failed and the run keeps its provisional charge.
+    await recordUnrunCalls(context);
+    if (!costRecorded) answer.ledgerFailed = true;
+    if (!costRecorded || context.toolCalls.unrecorded) return { kind: 'failed', failure: 'interrupted' };
     if (result.ok) {
       return {
         kind: 'finished',
@@ -513,7 +502,9 @@ async function runAttempt(
   const result = streamText({
     model: context.model,
     instructions: context.modelContext.instructions,
-    tools: context.modelContext.tools,
+    tools: prepareStep(context),
+    // One call at a time, so none starts after another's ledger row failed.
+    toolCallConcurrency: 1,
     messages: step.messages,
     maxOutputTokens: limits.maxOutputTokens,
     // The harness retries, so it can ledger each attempt and never retry a spend limit.
@@ -543,6 +534,8 @@ async function runAttempt(
         answer.text += part.text;
         context.sink.text(part.text);
         savePartial(context, answer);
+      } else if (part.type === 'tool-call') {
+        context.toolCalls.seen.set(part.toolCallId, part.toolName);
       } else if (part.type === 'start-step') {
         // The provider accepted the request: from here on it bills the prompt.
         started = true;
@@ -660,4 +653,14 @@ async function recordAttempt(
         })
         .abortSignal(signal),
   );
+}
+
+/**
+ * The tools of the next model step: the caller's role's tools (B6), without
+ * any memory write once the turn read untrusted text (B10).
+ */
+function prepareStep(context: RunContext): ToolSet {
+  const { tools } = context.modelContext;
+  const offered = context.toolCalls.tainted ? tools.filter((tool) => !tool.writesMemory) : tools;
+  return toToolSet(offered, (tool, input, toolCallId) => runTool(context, tool, input, toolCallId));
 }

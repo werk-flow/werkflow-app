@@ -113,7 +113,7 @@ The look-ahead does not cover:
 | Step | Who | Action |
 | --- | --- | --- |
 | Detect | Anyone | Confirm on the dashboards. Capture time, route and error code. Copy no customer data into chat. |
-| Contain | Owner, then agent | The owner decides whether to pause the Vercel project when exposure is suspected. Rotate the affected secret in its provider: an agent generates and sets every value it can create; the owner supplies passwords and tokens of the owner's accounts. Update every place that holds it: Vercel env, Supabase function secrets, the env backups, and the owner's password manager. Deleting a leaked value from a file does not revoke it. |
+| Contain | Owner, then agent | The owner decides whether to pause the Vercel project when exposure is suspected. [KI runbook](../features/ai-automations.md#incident-runbook). Rotate the affected secret in its provider: an agent generates and sets every value it can create; the owner supplies passwords and tokens of the owner's accounts. Update every place that holds it: Vercel env, Supabase function secrets, the env backups, and the owner's password manager. Deleting a leaked value from a file does not revoke it. |
 | Revoke access | Owner | Suspend the user's operational access, then revoke Auth sessions and reset the credential. An issued access token or file URL stays valid until it expires. For a leaving admin, transfer the organization first. |
 | Preserve evidence | Agent or owner | Export the relevant log excerpts, identifiers redacted, into `.agent-logs/incidents/<date>/`. |
 | Restore | Owner with agent | Follow the restore procedures above. |

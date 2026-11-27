@@ -63,6 +63,10 @@ const streamedText = (events: Awaited<ReturnType<typeof readTurn>>) =>
 
 // A role-play request the model falls for changes neither its instructions nor its tools, and the
 // tool it asks for never runs (B6, B21).
+const ROLE_TOOLS = {
+  employee: ['auftraege_finden'],
+  admin: ['artikel_finden', 'auftraege_finden', 'kunden_finden'],
+} as const;
 for (const role of ['employee', 'admin'] as const) {
   resetAiTables(world);
   signInAs(world, role);
@@ -74,7 +78,11 @@ for (const role of ['employee', 'admin'] as const) {
   assert.equal(world.streamRequests.length, 2, 'the turn must take the step after the refused tool call');
   for (const request of world.streamRequests) {
     assert.deepEqual(systemOf(request), [AI_SYSTEM_PROMPT], 'a role-play must not change the system prompt');
-    assert.equal(request.tools?.length ?? 0, 0, `the ${role} model must be offered no tool`);
+    assert.deepEqual(
+      (request.tools ?? []).map((tool) => tool.name).toSorted(),
+      ROLE_TOOLS[role],
+      `the ${role} model must be offered its role's tools and nothing else`,
+    );
   }
   const results = (world.streamRequests[1]?.prompt ?? []).flatMap((message) =>
     message.role === 'tool' ? message.content : [],
