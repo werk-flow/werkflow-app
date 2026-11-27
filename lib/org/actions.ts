@@ -13,7 +13,6 @@ import { getAuthenticatedUser } from '@/lib/data/cached';
 import { resolveActionContextFor } from '@/lib/org/action-context';
 import { getOrganizationNameValidationError, normalizeOrganizationName } from '@/lib/org/schemas';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { runSignalsWaitingForOrganization } from '@/lib/werkflow-billing/waiting-signals';
 
 /**
  * Sets the active organization cookie. `resolveActiveOrgId` re-checks
@@ -118,7 +117,11 @@ export async function createOrganization(name: string): Promise<CreateOrganizati
     }
 
     // A card Checkout's first invoice signals arrived before this organization existed.
-    after(() => runSignalsWaitingForOrganization(organizationId));
+    // Loaded here, so the billing stack stays out of every route that loads these actions.
+    after(async () => {
+      const { runSignalsWaitingForOrganization } = await import('@/lib/werkflow-billing/waiting-signals');
+      await runSignalsWaitingForOrganization(organizationId);
+    });
 
     // Set the org cookie to the new organization
     const cookieStore = await cookies();
