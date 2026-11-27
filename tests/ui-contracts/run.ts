@@ -64,13 +64,14 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^(?:@\/lib\/offers\/actions|@\/lib\/invoices\/line-source-actions|next\/navigation)$/,
+                  /^(?:@\/lib\/offers\/(?:send-)?actions|@\/lib\/invoices\/line-source-actions|next\/navigation)$/,
               },
               (args) => {
                 if (
                   args.path === '@/lib/offers/actions' ||
                   args.importer.endsWith('create-offer-dialog.tsx') ||
-                  args.importer.endsWith('offer-article-picker.tsx')
+                  args.importer.endsWith('offer-article-picker.tsx') ||
+                  args.importer.endsWith('offer-sending.tsx')
                 )
                   return { path: join(import.meta.dir, 'offers-service-boundaries.ts') };
               },
@@ -311,6 +312,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/service-reports\/delivery-actions$/ }, (args) => {
               if (args.importer.endsWith('service-report-delivery-dialog.tsx'))
                 return { path: join(import.meta.dir, 'service-report-delivery-boundaries.tsx') };
+            });
+            // An offer revision's „Versenden“ sends through a held stand-in.
+            builder.onResolve({ filter: /^@\/lib\/offers\/delivery-actions$/ }, (args) => {
+              if (args.importer.endsWith('offer-revision-delivery.tsx'))
+                return { path: join(import.meta.dir, 'offer-delivery-boundaries.tsx') };
             });
             // The WerkFlow KI chat sends its turns, and hears its live channel, through stand-ins the spec drives.
             builder.onResolve({ filter: /^\.\/(?:turn-client|use-ki-live)$/ }, (args) => {

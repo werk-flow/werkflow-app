@@ -221,25 +221,32 @@ function mockCachedReads(world: ActionWorld): void {
   });
   const caller = () =>
     world.callerId === null ? null : { id: world.callerId, email: 'caller@example.test' };
+  const operational = () =>
+    world.memberships.filter(
+      ({ accessState }) =>
+        getMembershipAccessMode(
+          {
+            hasAccessBlocker: false,
+            accessLifecycle: accessState
+              ? { state: accessState, scheduledState: null, scheduledFor: null }
+              : null,
+          },
+          Date.now(),
+        ) === 'operational',
+    );
   mock.module('@/lib/data/cached', () => ({
     // Any tag name resolves to a string; `installActionWorld` replaces invalidation itself.
     CACHE_TAGS: new Proxy({}, { get: (_target, tag) => () => String(tag) }),
     getAuthenticatedUser: async () => caller(),
-    getCachedMemberships: async () =>
-      world.memberships
-        .filter(
-          ({ accessState }) =>
-            getMembershipAccessMode(
-              {
-                hasAccessBlocker: false,
-                accessLifecycle: accessState
-                  ? { state: accessState, scheduledState: null, scheduledFor: null }
-                  : null,
-              },
-              Date.now(),
-            ) === 'operational',
-        )
-        .map(({ orgId, role }) => asMembership({ orgId, role })),
+    getCachedMemberships: async () => operational().map(({ orgId, role }) => asMembership({ orgId, role })),
+    // The caller's record in an organization where their access is operational.
+    getOwnEmployeeRecordId: async (userId: string, organizationId: string) => {
+      if (!operational().some(({ orgId }) => orgId === organizationId)) return null;
+      const record = tableRows(world, 'employee_records').find(
+        (row) => row.organization_id === organizationId && row.user_id === userId,
+      );
+      return typeof record?.id === 'string' ? record.id : null;
+    },
     getCachedUser: async () => ({ data: { user: caller() } }),
     getCachedPrestartMemberships: async () =>
       world.prestartOrganizationIds.map((orgId) => asMembership({ orgId, role: 'employee' })),

@@ -1,6 +1,7 @@
 import { FileCheck2 } from 'lucide-react';
 import Link from 'next/link';
 
+import { OfferRevisionDelivery } from '@/components/angebote/offer-revision-delivery';
 import { SectionTitle } from '@/components/shared/section-title';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,13 +12,30 @@ import { formatGermanDate } from '@/lib/utils';
 /**
  * The sent revisions of an offer, newest first, each with the day, the
  * channel the office named and its filed PDF in the library. An older
- * revision stays readable, marked as replaced by the next.
+ * revision stays readable, marked as replaced by the next. While the offer is
+ * the draft of its next revision, the list says so above the newest sent one.
+ * „Versenden“ emails the newest through E2c's delivery; a replaced one lists its sends.
  */
-export function OfferRevisions({ revisions }: { revisions: readonly OfferRevision[] }) {
-  if (revisions.length === 0) return null;
+export function OfferRevisions({
+  offerId,
+  revisions,
+  editing,
+}: {
+  offerId: string;
+  revisions: readonly OfferRevision[];
+  /** The offer is a draft again: the draft of the revision after the newest sent one. */
+  editing: boolean;
+}) {
+  const [newest] = revisions;
+  if (!newest) return null;
   return (
     <section aria-labelledby="offer-revisions-title" className="space-y-3">
       <SectionTitle id="offer-revisions-title">Gesendete Revisionen</SectionTitle>
+      {editing && (
+        <p className="text-sm text-muted-foreground">
+          {`Du bearbeitest Revision ${newest.revision + 1}. Bis du sie als gesendet festhältst, bleibt Revision ${newest.revision} die zuletzt gesendete.`}
+        </p>
+      )}
       <ul className="divide-y rounded-lg border bg-card shadow-xs">
         {revisions.map((revision, index) => {
           const replacedBy = index > 0 ? revisions[index - 1]?.revision : undefined;
@@ -46,9 +64,17 @@ export function OfferRevisions({ revisions }: { revisions: readonly OfferRevisio
                   </p>
                 </div>
               </div>
-              <Button asChild variant="outline" size="sm" className="self-start sm:self-auto">
-                <Link href={`/dokumente?document=${revision.documentId}`}>PDF öffnen</Link>
-              </Button>
+              <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+                <OfferRevisionDelivery
+                  offerId={offerId}
+                  revision={revision.revision}
+                  recipientName={revision.recipientName}
+                  replacedBy={replacedBy}
+                />
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/dokumente?document=${revision.documentId}`}>PDF öffnen</Link>
+                </Button>
+              </div>
             </li>
           );
         })}

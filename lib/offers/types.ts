@@ -12,7 +12,7 @@ import { z } from '@/lib/zod';
 // a Position's article in 20270301090000_take_offer_positions_from_articles.sql,
 // its Leistung and its cost in 20270501090000_calculate_offers_with_leistungen_and_costs.sql,
 // its price source in 20270601100000_price_new_offer_positions_by_customer_conditions.sql,
-// its type in 20270601170000_keep_bedarfs_and_alternativpositionen_out_of_an_offer_total.sql).
+// its type in 20270701100000_keep_bedarfs_and_alternativpositionen_out_of_an_offer_total.sql).
 
 /** Every status the database check allows; this release writes `entwurf` and `gesendet`. */
 export const OFFER_STATUSES = ['entwurf', 'gesendet', 'angenommen', 'abgelehnt', 'zurueckgezogen'] as const;
@@ -131,7 +131,7 @@ export type OfferDetail = {
   sections: OfferStoredSection[];
 };
 
-/** An offer as the office's editor reads it (readOfferWithCosts): the same, each priced Position with its cost and price source. */
+/** An offer as the office's editor reads it (readOfferWithRevisions): each priced Position with its cost and price source. */
 export type OfferWithCosts = Omit<OfferDetail, 'sections'> & { sections: OfferCostedSection[] };
 
 /** How the office says it sent a revision; WerkFlow itself sends nothing. */

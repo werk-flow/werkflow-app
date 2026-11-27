@@ -147,10 +147,9 @@ export async function recordOfferSent(
   const input = parsed.data;
   const offer = await readOffer(context.orgId, input.offerId);
   if (!offer) return { success: false, error: 'offer_not_found' };
-  if (offer.status !== 'entwurf') return sendRendered(context, input, offer, null);
-  if (offer.version !== input.expectedVersion || offer.contentVersion !== input.expectedContentVersion) {
-    return { success: false, error: 'offer_changed' };
-  }
+  // Sent meanwhile, or sent and opened as the next revision's draft: the one call answers the recorded
+  // send of these versions, or refuses with offer_changed, before anything is rendered or stored.
+  if (movedOn(offer, input)) return sendRendered(context, input, offer, null);
   const issuedOn = getBusinessTodayIso();
   const rendered = await renderOfferPdf(context, offer, issuedOn).catch((error: unknown) => {
     logError('recordOfferSent: render failed', error);
@@ -159,9 +158,10 @@ export async function recordOfferSent(
   if (!rendered) return { success: false, error: 'render_failed' };
   // Only the PDF the office saw is filed: a changed customer, profile or day renders other bytes.
   if (contentHashOf(rendered.bytes) !== input.previewHash) {
-    // Another send of this draft may have committed between the reads: it answers its revision.
+    // Another send of this draft may have committed between the reads, and the next revision may
+    // have started since: the one call answers its revision.
     const now = await readOffer(context.orgId, input.offerId);
-    if (now && now.status !== 'entwurf') return sendRendered(context, input, now, null);
+    if (now && movedOn(now, input)) return sendRendered(context, input, now, null);
     return { success: false, error: 'preview_outdated' };
   }
   const fileName = `Angebot ${offer.offerNumber} Revision ${rendered.revision}.pdf`;
@@ -171,6 +171,18 @@ export async function recordOfferSent(
   });
   if (!stored) return { success: false, error: 'save_failed' };
   return sendRendered(context, input, offer, { stored, issuedOn, snapshot: rendered.snapshot });
+}
+
+/** The offer is no longer the draft at the versions the office previewed. */
+function movedOn(
+  offer: OfferDetail,
+  input: Pick<z.output<typeof sendOfferSchema>, 'expectedVersion' | 'expectedContentVersion'>,
+): boolean {
+  return (
+    offer.status !== 'entwurf' ||
+    offer.version !== input.expectedVersion ||
+    offer.contentVersion !== input.expectedContentVersion
+  );
 }
 
 /** The one send_offer call; without a rendering it can only answer a repeat or refuse. */

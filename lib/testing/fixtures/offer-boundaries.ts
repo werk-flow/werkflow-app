@@ -3,7 +3,7 @@
 // customer, offer or recipient is refused by the one database function the
 // action calls, the office's writes carry their own organization and actor,
 // and the pages read only the caller's organization.
-// supabase/tests/offers.sql proves the function's refusals, grants and history.
+// supabase/tests/offers.sql and offer_sending.sql prove the functions' refusals, grants and history.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import { CALLER_ID, ORGANIZATION_A, signInAs } from './action-boundary-world';
@@ -23,7 +23,9 @@ mock.module('next/cache', () => ({
   revalidateTag: () => {},
 }));
 
-const { createOffer, saveOfferContent, updateOffer } = await import('@/lib/offers/actions');
+const { createOffer, saveOfferContent, startOfferRevision, updateOffer } = await import(
+  '@/lib/offers/actions'
+);
 const { default: OffersPage } = await import('@/app/(app)/angebote/page');
 const { default: OfferPage } = await import('@/app/(app)/angebote/[offerId]/page');
 
@@ -255,6 +257,63 @@ assert.deepEqual(
   ],
 );
 
+// „Bearbeiten“ of a sent offer: a field worker is refused before the database,
+// another organization's offer by the one function call, and Büro starts the
+// next revision of its own offer as itself.
+const start = {
+  offerId: ownOfferId,
+  expectedVersion: 2,
+  attemptKey: '96000000-0000-4000-8000-000000000004',
+};
+signInAs(world, 'employee');
+await assertRefused(
+  world,
+  [['startOfferRevision', () => startOfferRevision(start)]],
+  { success: false, error: 'not_authorized' },
+  'none',
+);
+for (const role of ['admin', 'buero'] as const) {
+  signInAs(world, role);
+  refuseForeignIds(world, new Map([[foreignOfferId, 'offer_not_found']]), {
+    revision: 2,
+    version: 3,
+    updatedAt: '2026-11-27T08:00:00.123456+00:00',
+    replay: false,
+  });
+  await assertRefused(
+    world,
+    [['startOfferRevision foreign offer', () => startOfferRevision({ ...start, offerId: foreignOfferId })]],
+    { success: false, error: 'offer_not_found' },
+    'one-call',
+  );
+}
+await assertRefused(
+  world,
+  [['startOfferRevision bad offer id', () => startOfferRevision({ ...start, offerId: 'not-a-uuid' })]],
+  { success: false, error: 'invalid_input' },
+  'none',
+);
+world.rpcCalls.length = 0;
+revalidated.length = 0;
+assert.deepEqual(await startOfferRevision(start), {
+  success: true,
+  offerId: ownOfferId,
+  revision: 2,
+  version: 3,
+  updatedAt: '2026-11-27T08:00:00.123456+00:00',
+});
+assert.deepEqual(
+  world.rpcCalls.map((call) => [
+    call.name,
+    call.args.p_organization_id,
+    call.args.p_actor_id,
+    call.args.p_offer_id,
+    call.args.p_expected_version,
+  ]),
+  [['start_offer_revision', ORGANIZATION_A, CALLER_ID, ownOfferId, 2]],
+);
+assert.deepEqual(revalidated, [`/angebote/${ownOfferId}`]);
+
 // A refusal for another session's newer save renders the offer's page into its
 // answer, so the editor can offer that content at once.
 world.rpc = () => ({ data: null, error: { code: 'P0001', message: 'offer_changed' } });
@@ -262,11 +321,11 @@ revalidated.length = 0;
 assert.deepEqual(await saveOfferContent(content), { success: false, error: 'offer_changed' });
 assert.deepEqual(revalidated, [`/angebote/${ownOfferId}`]);
 
-// The pages read only the caller's organization.
+// The pages read only the caller's organization; another organization's offer reads as none.
 world.rpc = ({ name }) =>
   name === 'list_offer_page'
     ? { data: { total: 0, hasAny: false, rows: [] }, error: null }
-    : { data: null, error: null };
+    : { data: name === 'get_offer_with_revisions' ? { offer: null, revisions: [] } : null, error: null };
 world.rpcCalls.length = 0;
 await renderTree(() => OffersPage({ searchParams: Promise.resolve({}) }));
 await renderTree(() => OfferPage({ params: Promise.resolve({ offerId: foreignOfferId }) }));
@@ -274,17 +333,19 @@ assert.deepEqual(
   world.rpcCalls.map((call) => [call.name, call.args.p_organization_id]),
   [
     ['list_offer_page', ORGANIZATION_A],
-    ['get_offer_with_costs', ORGANIZATION_A],
+    ['get_offer_with_revisions', ORGANIZATION_A],
   ],
 );
 
 // A site may lack address parts (client_sites.street, postal_code and city allow null):
 // its offer still reads, and the header names what the site has.
-const { readOfferWithCosts } = await import('@/lib/offers/reads');
+const { readOfferWithRevisions } = await import('@/lib/offers/reads');
+/** get_offer_with_revisions's answer: the offer as get_offer_with_costs answers it, and no sent revision. */
+const pageOf = (offer: unknown) => ({ offer, revisions: [] });
 world.rpc = ({ name }) =>
-  name === 'get_offer_with_costs'
+  name === 'get_offer_with_revisions'
     ? {
-        data: {
+        data: pageOf({
           costs: [],
           priceSources: [],
           offer: {
@@ -310,19 +371,19 @@ world.rpc = ({ name }) =>
             work: null,
             sections: [],
           },
-        },
+        }),
         error: null,
       }
     : { data: null, error: null };
-const sparse = await readOfferWithCosts(ORGANIZATION_A, ownOfferId);
+const sparse = (await readOfferWithRevisions(ORGANIZATION_A, ownOfferId))?.offer;
 assert.equal(sparse?.site?.address, '12345');
 
 // A stored cost above what the editor takes (any article price may stand there) still loads, a
 // Position saved before price sources were kept reads as „manuell“, and one without a type as normal.
 world.rpc = ({ name }) =>
-  name === 'get_offer_with_costs'
+  name === 'get_offer_with_revisions'
     ? {
-        data: {
+        data: pageOf({
           costs: [[{ amountCents: 250_000_000, priceQuantity: 1000 }]],
           priceSources: [[null]],
           offer: {
@@ -349,11 +410,11 @@ world.rpc = ({ name }) =>
               },
             ],
           },
-        },
+        }),
         error: null,
       }
     : { data: null, error: null };
-const costly = await readOfferWithCosts(ORGANIZATION_A, ownOfferId);
+const costly = (await readOfferWithRevisions(ORGANIZATION_A, ownOfferId))?.offer;
 assert.deepEqual(
   costly?.sections[0]?.positions[0],
   {

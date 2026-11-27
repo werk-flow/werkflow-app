@@ -35,6 +35,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/refuse-pattern-kill.ts\"",
+            "timeout": 20
+          },
+          {
+            "type": "command",
             "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/refuse-unresolvable-delete.ts\"",
             "timeout": 20
           },

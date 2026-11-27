@@ -21,19 +21,23 @@ export const storedVersionSchema = z.literal(STORED_RECORD_VERSION);
 const minutes = z.number();
 const text = z.string();
 
+const storedBreakPolicySchema = z.object({
+  breakMode: z.enum(['manual', 'automatic']),
+  autoBreakThresholdMinutes: minutes,
+  autoBreakDurationMinutes: minutes,
+  // A clock stored before the nine-hour step has none: it reads as one step.
+  secondStep: z
+    .object({ thresholdMinutes: minutes, durationMinutes: minutes })
+    .nullish()
+    .transform((step) => step ?? null),
+});
+
 /** The clock the server last confirmed, as a phone stores it: without job, customer and project names. */
 const storedClockFactsSchema = z.object({
   organizationId: text,
-  breakPolicy: z.object({
-    breakMode: z.enum(['manual', 'automatic']),
-    autoBreakThresholdMinutes: minutes,
-    autoBreakDurationMinutes: minutes,
-    // A clock stored before the nine-hour step has none: it reads as one step.
-    secondStep: z
-      .object({ thresholdMinutes: minutes, durationMinutes: minutes })
-      .nullish()
-      .transform((step) => step ?? null),
-  }),
+  breakPolicy: storedBreakPolicySchema,
+  // A clock stored before the day's own rule has none: its day counts by the current rule.
+  dayBreakPolicy: storedBreakPolicySchema.nullish().transform((policy) => policy ?? null),
   status: z.enum(['clocked_out', 'working', 'on_break']),
   isClockedIn: z.boolean(),
   isOnBreak: z.boolean(),
@@ -43,6 +47,8 @@ const storedClockFactsSchema = z.object({
   todayMinutes: minutes,
   workMinutes: minutes,
   breakMinutes: minutes,
+  // A clock stored before the tracked break has none: its break is the tracked one wherever a manual rule reads it.
+  trackedBreakMinutes: minutes.optional(),
   standbyMinutes: minutes,
   travelMinutes: minutes,
   calloutMinutes: minutes,
@@ -66,8 +72,13 @@ const storedClockFactsSchema = z.object({
 export type StoredClockFacts = z.infer<typeof storedClockFactsSchema>;
 
 /** The stored clock as the live clock the outbox applies its events to; names stay empty until the server's next read. */
-function liveClockOf(stored: StoredClockFacts): LiveClockState {
-  return { ...stored, activeJobInfo: null, resumeJobInfo: null };
+function liveClockOf({ trackedBreakMinutes, ...stored }: StoredClockFacts): LiveClockState {
+  return {
+    ...stored,
+    trackedBreakMinutes: trackedBreakMinutes ?? stored.breakMinutes,
+    activeJobInfo: null,
+    resumeJobInfo: null,
+  };
 }
 
 /** Reads a stored clock into the live clock. */

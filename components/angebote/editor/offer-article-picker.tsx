@@ -76,8 +76,11 @@ export function OfferCatalogPicker({
   id: string;
   /** The accessible name, naming the Titel, because every Titel has one. */
   label: string;
-  /** The pick is an own change at once, so another session's content cannot move its Titel meanwhile. */
-  onPick: () => void;
+  /**
+   * The pick is an own change at once, so another session's content cannot move
+   * its Titel meanwhile. It answers the release a read that adds nothing calls.
+   */
+  onPick: () => () => void;
   onAdd: (line: OfferCatalogLine) => void;
   disabled: boolean;
 }) {
@@ -91,7 +94,7 @@ export function OfferCatalogPicker({
   const add = (entryId: string) => {
     if (!entryId) return;
     setPicked(entryId);
-    onPick();
+    const release = onPick();
     void run(async () => {
       setError(null);
       setRetryId(null);
@@ -102,6 +105,8 @@ export function OfferCatalogPicker({
       ).catch(() => null);
       setPicked('');
       if (!result?.success) {
+        // Nothing was added: the editor has no change of this pick to save.
+        release();
         setError(result ? describeFailure(result.error, catalog.messages, catalog.failed) : catalog.failed);
         // A reason of the entry stays; any other failure may pass on a second try.
         if (!result || !Object.hasOwn(catalog.messages, result.error)) setRetryId(entryId);

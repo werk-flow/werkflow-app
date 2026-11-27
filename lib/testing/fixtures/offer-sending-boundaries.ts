@@ -194,13 +194,17 @@ let sendAnswer: (args: Record<string, unknown>) => {
 };
 /** Another tab's send that commits right after this request's first read of the draft. */
 let sentElsewhere = false;
+/** After that send, another tab opens revision 2 as a draft at newer versions. */
+let revisedElsewhere = false;
 let offerReads = 0;
 world.rpc = ({ name, args }) => {
   if (args.p_organization_id !== ORGANIZATION_A) return { data: null, error: null };
   if (name === 'get_offer') {
     offerReads += 1;
-    const status = sentElsewhere && offerReads > 1 ? 'gesendet' : 'entwurf';
-    return { data: args.p_offer_id === offerId ? { ...draft, status } : null, error: null };
+    const later = sentElsewhere && offerReads > 1;
+    const status = later && !revisedElsewhere ? 'gesendet' : 'entwurf';
+    const versions = later && revisedElsewhere ? { version: 5, contentVersion: 6 } : {};
+    return { data: args.p_offer_id === offerId ? { ...draft, ...versions, status } : null, error: null };
   }
   if (name === 'list_offer_revisions') {
     const first = {
@@ -366,10 +370,34 @@ world.rpcCalls.length = 0;
 assert.deepEqual(await send(), { success: true, offerId, revision: 1, documentId: sentDocumentId });
 assert.equal(world.rpcCalls.find((call) => call.name === 'send_offer')?.args.p_document_id, undefined);
 assert.equal(stored.length, 3);
-sentElsewhere = false;
 
-// A draft another session saved meanwhile is refused before anything is rendered or stored.
+// The same, and a third tab opened revision 2 before the reread: the draft at newer versions still
+// lets the one call answer the recorded revision 1, never preview_outdated.
+revisedElsewhere = true;
+offerReads = 0;
+world.rpcCalls.length = 0;
+assert.deepEqual(await send(), { success: true, offerId, revision: 1, documentId: sentDocumentId });
+assert.equal(world.rpcCalls.find((call) => call.name === 'send_offer')?.args.p_document_id, undefined);
+assert.equal(stored.length, 3);
+sentElsewhere = false;
+revisedElsewhere = false;
+
+// A draft another session saved meanwhile is refused by the one call, before anything is rendered or stored.
+sendAnswer = () => ({ data: null, error: { code: 'P0001', message: 'offer_changed' } });
+world.rpcCalls.length = 0;
 assert.deepEqual(await send({ expectedContentVersion: 3 }), { success: false, error: 'offer_changed' });
+assert.equal(stored.length, 3);
+assert.equal(world.rpcCalls.find((call) => call.name === 'send_offer')?.args.p_document_id, undefined);
+
+// A press repeated after its send committed and another tab opened revision 2 as a draft: the draft is
+// at newer versions, and the one call still answers the recorded revision 1, storing nothing.
+sendAnswer = () => ({ data: { revision: 1, documentId: sentDocumentId, replay: true }, error: null });
+assert.deepEqual(await send({ expectedVersion: 2, expectedContentVersion: 3 }), {
+  success: true,
+  offerId,
+  revision: 1,
+  documentId: sentDocumentId,
+});
 assert.equal(stored.length, 3);
 
 // The field worker on a job of the same customer gets no signed URL for the sent PDF;

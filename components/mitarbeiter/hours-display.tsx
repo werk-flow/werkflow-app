@@ -3,16 +3,14 @@
 import { useMemo } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { useMountedWallClockTick } from '@/hooks/use-wall-clock-tick';
-import { liveMinutes } from '@/lib/time-tracking/helpers';
+import { memberLiveDay, type MemberStatus } from '@/lib/time-tracking/member-day';
 import { cn } from '@/lib/utils';
 import { getNoTargetReason, type DailyTarget } from '@/lib/personnel/targets';
 import { HIDDEN_STATUS_HINT, type StatusVisibility } from './member-status-visibility';
 
 interface HoursDisplayProps {
-  status?: 'clocked_out' | 'working' | 'on_break' | undefined;
-  isClockedIn: boolean;
-  statusStartedAt: string | null;
-  workMinutes: number;
+  /** The member's status today; none yet reads as nothing recorded. */
+  status?: MemberStatus | undefined;
   visibility?: StatusVisibility | undefined;
   /** Resolved daily target (P1-04); without it the progress is unknown, never measured against 8h. */
   target?: DailyTarget | undefined;
@@ -34,20 +32,16 @@ function formatPercentage(percentage: number): string {
   return `${Math.round(percentage)}%`;
 }
 
-export function HoursDisplay({
-  isClockedIn,
-  status,
-  statusStartedAt,
-  workMinutes,
-  visibility = 'visible',
-  target,
-}: HoursDisplayProps) {
-  const effectiveStatus = status ?? (isClockedIn ? 'working' : 'clocked_out');
-  // Only a working member's minutes grow; the server and the hydrating render
-  // show the recorded minutes, the tick adds the running ones after mount.
-  const runningSince = effectiveStatus === 'working' ? statusStartedAt : null;
-  const nowMs = useMountedWallClockTick(60_000, runningSince !== null);
-  const totalMinutes = nowMs === null ? workMinutes : liveMinutes(workMinutes, runningSince, nowMs);
+export function HoursDisplay({ status, visibility = 'visible', target }: HoursDisplayProps) {
+  const effectiveStatus = status?.status ?? 'clocked_out';
+  // The server and the hydrating render show the recorded minutes, the tick
+  // adds the running ones after mount, split by the day rule as the detail
+  // and the week split them (`memberLiveDay`). It ticks for every running
+  // activity, as the detail does: a tracked break under the automatic rule
+  // still counts toward its steps.
+  const nowMs = useMountedWallClockTick(60_000, status?.isClockedIn ?? false);
+  const { breakdown } = memberLiveDay(status, target?.targetMinutes, nowMs);
+  const totalMinutes = breakdown.workMinutes + breakdown.overtimeMinutes;
 
   const goalMinutes = target?.targetMinutes ?? 0;
   // Visible exception, not a silent assumption: mark unconfigured members.

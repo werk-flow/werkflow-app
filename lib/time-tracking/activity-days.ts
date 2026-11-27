@@ -1,4 +1,3 @@
-import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import {
   intervalAnchor,
   isMomentaryInterval,
@@ -6,6 +5,7 @@ import {
   type ActivityInterval,
 } from './activity-intervals';
 import type { TimeEntry, TimeEntryStatus } from './types';
+import { entryBusinessDate } from './closed-period-dates';
 
 // An employee's Verlauf as days of activities. It lives beside the pairing so
 // the work pack's first load carries only what „Meine Zeit“ renders.
@@ -27,7 +27,7 @@ export function activityDays(
   const days = new Map<string, ActivityInterval[]>();
   for (const interval of pairActivityIntervals(entries, now)) {
     if (isMomentaryInterval(interval) || (status && interval.status !== status)) continue;
-    const date = formatBerlinLocalDate(intervalAnchor(interval).timestamp);
+    const date = entryBusinessDate(intervalAnchor(interval));
     const day = days.get(date);
     if (day) day.push(interval);
     else days.set(date, [interval]);

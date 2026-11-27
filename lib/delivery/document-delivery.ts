@@ -61,6 +61,8 @@ const refusal = writeRefusalFor(
     'invoice_not_issued',
     'service_report_not_found',
     'service_report_stale',
+    'offer_revision_not_found',
+    'offer_revision_superseded',
     'document_not_found',
     'delivery_not_found',
     'delivery_not_retryable',
@@ -218,7 +220,7 @@ async function recordedOutcome(
     createSupabaseAdminClient()
       .from('document_deliveries')
       .select(
-        'state, failure_code, channel, subject_kind, invoice_id, service_report_id, document_id, recipient_email, email_subject, message_text',
+        'state, failure_code, channel, subject_kind, invoice_id, service_report_id, offer_revision_id, document_id, recipient_email, email_subject, message_text',
       )
       .eq('organization_id', caller.orgId)
       .eq('attempt_key', request.attemptKey)
@@ -229,7 +231,7 @@ async function recordedOutcome(
   const sameMail =
     data?.channel === 'email' &&
     data.subject_kind === request.subject.kind &&
-    (data.invoice_id ?? data.service_report_id) === request.subject.id &&
+    (data.invoice_id ?? data.service_report_id ?? data.offer_revision_id) === request.subject.id &&
     data.document_id === request.documentId &&
     data.recipient_email === request.recipient &&
     data.email_subject === request.emailSubject &&

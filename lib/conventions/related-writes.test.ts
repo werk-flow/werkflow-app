@@ -58,6 +58,8 @@ const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
   'lib/invoices/delivery-actions.ts::retryInvoiceDelivery': DOCUMENT_MAIL_ORDER,
   'lib/service-reports/delivery-actions.ts::sendServiceReportEmail': DOCUMENT_MAIL_ORDER,
   'lib/service-reports/delivery-actions.ts::retryServiceReportDelivery': DOCUMENT_MAIL_ORDER,
+  'lib/offers/delivery-actions.ts::sendOfferRevisionEmail': DOCUMENT_MAIL_ORDER,
+  'lib/offers/delivery-actions.ts::retryOfferRevisionDelivery': DOCUMENT_MAIL_ORDER,
   'lib/personnel/actions.ts::sendPersonnelInvite':
     'Ordered around a mail: the invite is written in one transaction before the mail, and the append-only „Einladung versendet“ history row only after the mail went out, because a mail cannot join a transaction.',
   'lib/invites/actions.ts::sendOrgInvite':

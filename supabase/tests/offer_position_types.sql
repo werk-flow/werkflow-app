@@ -1,7 +1,7 @@
 -- An offer Position can be a Bedarfsposition or an Alternativposition to a
 -- normal Position of its Titel; neither counts in a sum, and a sent revision
 -- keeps both without a cost; a saved price source names a condition of its
--- organization (migration 20270601170000_keep_bedarfs_and_alternativpositionen_out_of_an_offer_total.sql).
+-- organization (migration 20270701100000_keep_bedarfs_and_alternativpositionen_out_of_an_offer_total.sql).
 begin;
 
 insert into auth.users (

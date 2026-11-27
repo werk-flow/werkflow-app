@@ -1681,6 +1681,7 @@ export type Database = {
           invoice_id: string | null;
           message_text: string | null;
           note: string;
+          offer_revision_id: string | null;
           organization_id: string;
           outcome_unknown_at: string | null;
           provider_message_id: string | null;
@@ -1708,6 +1709,7 @@ export type Database = {
           invoice_id?: string | null;
           message_text?: string | null;
           note?: string;
+          offer_revision_id?: string | null;
           organization_id: string;
           outcome_unknown_at?: string | null;
           provider_message_id?: string | null;
@@ -1735,6 +1737,7 @@ export type Database = {
           invoice_id?: string | null;
           message_text?: string | null;
           note?: string;
+          offer_revision_id?: string | null;
           organization_id?: string;
           outcome_unknown_at?: string | null;
           provider_message_id?: string | null;
@@ -1766,6 +1769,13 @@ export type Database = {
             columns: ["invoice_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "invoices";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "document_deliveries_offer_revision_fk";
+            columns: ["offer_revision_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offer_revisions";
             referencedColumns: ["id", "organization_id"];
           },
           {
@@ -19971,6 +19981,10 @@ export type Database = {
         Args: { p_offer_id: string; p_organization_id: string };
         Returns: Json;
       };
+      get_offer_with_revisions: {
+        Args: { p_offer_id: string; p_organization_id: string };
+        Returns: Json;
+      };
       get_org_members_for_user: {
         Args: { p_org_id: string; p_user_id: string };
         Returns: {
@@ -23240,6 +23254,16 @@ export type Database = {
           user_item_sequence: number;
           verdict: string;
         }[];
+      };
+      start_offer_revision: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_expected_version: number;
+          p_offer_id: string;
+          p_organization_id: string;
+        };
+        Returns: Json;
       };
       start_organization_export: {
         Args: {

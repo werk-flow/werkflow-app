@@ -2,6 +2,17 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=\"$(git rev-parse --show-toplevel)\" || exit 0; bun \"$root/.claude/hooks/refuse-pattern-kill.ts\"",
+            "timeout": 20,
+            "statusMessage": "Checking that only recorded processes are stopped"
+          }
+        ]
+      },
+      {
         "matcher": "^(apply_patch|Edit|Write|Bash)$",
         "hooks": [
           {

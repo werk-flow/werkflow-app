@@ -36,8 +36,8 @@ import { workflowsFolder } from '../../lib/testing/ci-workflow';
 //   It prints {"start": [...], "stop": [...], "unanswered": [...], "wakeAt": "<ISO time>"}:
 //     release   Dispatch the release on GitHub Actions, which decides like a scheduled run:
 //               gh workflow run release.yml --ref main -f scheduled=true. Never on a branch. Named
-//               only while release.yml has no `schedule` trigger: GitHub's cron and hold start it
-//               otherwise, and one weekday never gets two releases.
+//               only while release.yml has no `schedule` trigger, so one weekday never gets two
+//               releases. On GitHub Actions the ci-alert timer dispatches it instead.
 //     nightly   A full run of main's head: CI_EVENT=full CI_FULL_REASON='Nightly run'.
 //     full      A full run of main's head: CI_EVENT=full CI_FULL_REASON='Full run on main'.
 //     midnight  bun scripts/ci/job.ts midnight in that run, then its browser shards after Fast.

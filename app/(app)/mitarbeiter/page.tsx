@@ -161,6 +161,11 @@ async function MitarbeiterData({ activeOrgId, userId, currentUserRole }: Mitarbe
         personnelProfileNames={personnelProfileNames}
         targetsByUserId={targetsResult.success ? targetsResult.targetsByUserId : undefined}
         removalBlockedByUserId={removalBlockedByUserId}
+        nextHolderAccessChangeAt={
+          responsibilitySettingsResult.success
+            ? responsibilitySettingsResult.data.nextHolderAccessChangeAt
+            : null
+        }
         currentUserId={userId}
         currentUserRole={currentUserRole}
         organizationId={activeOrgId}

@@ -62,6 +62,10 @@ Agents hold four keys per machine (`pc`, `mac`, `netcup`) for DEV, staging and t
 - `.claude/hooks/refuse-boat-key-reads.ts` refuses an agent's read, print, copy or search of a workstation secret file and names who reads it instead: the key file, the Boat key, the hand-out file, the Supabase CLI's login, `~/.werkflow-stripe-sandbox/`, and `.env.live-backup` in any checkout.
 - Agents get no Resend, R2 or Vercel API key: none can be limited to staging. They check mail through the app's records on DEV, files through the app's downloads, and Vercel through the Vercel MCP connector.
 
+## Stop your own run
+
+Stop only a PID your run recorded or use the tool's own stop. Process patterns can kill other agents' runs on the shared machine. The Tier 1 [pattern-kill hook](../../.claude/hooks/refuse-pattern-kill.ts) refuses `pkill`, `killall`, piped kill targets and targets from command substitutions. Record a background PID with `$!` in the same command.
+
 ## Background jobs
 
 The three agent machines (`pc`, `mac`, `netcup`) share one setup. Apart from OS and hardware, they differ only in the jobs below. The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-planning`, as systemd user timers on Linux and launchd agents on the Mac (`ops/install-mac.py`). `werkflow-uptime` is a system timer (`ops/uptime-install.sh`). The [production watcher](recovery-and-incidents.md#monitoring) runs on GitHub, and no machine holds its token.
@@ -71,7 +75,7 @@ The three agent machines (`pc`, `mac`, `netcup`) share one setup. Apart from OS 
 | `worktree-cleanup`: removes finished worktrees and their branches, and fast-forwards each root checkout's `main` | Each machine, for itself |
 | Load watch (`workstation-load`), [notifier](#keep-the-agents-moving) | Each machine, for itself; the notifier's GitHub read on the netcup VM |
 | `boat-starts`: counts Boat's machine starts per day and raises an alert before the plan's limit | The netcup VM; the PC only while the VM is gone (a shared lease) |
-| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert`, which also starts a late [production watcher](recovery-and-incidents.md#monitoring) run | The netcup VM; the PC only while the VM is gone (a shared lease) |
+| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert`, which also starts a late [production watcher](recovery-and-incidents.md#monitoring) run and the weekday release | The netcup VM; the PC only while the VM is gone (a shared lease) |
 | [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The netcup VM, beside its stack; no other copy |
 | `report-dispatch`: starts one report thread per waiting [problem report](../features/problem-reports.md#current-product-baseline), blockers first; does nothing while the hand-out is off | The netcup VM, the one machine with the hand-out [file](environments.md#credentials). The Mac's installer and the Linux unit skip a machine without it |
 | `werkflow-uptime`: every 5 minutes, checks that PROD's and DEV's login pages and Supabase health endpoints answer | The netcup VM |

@@ -105,7 +105,7 @@ export const CI_DAG: Readonly<Record<CiJob, CiJobSpec>> = {
   components: {
     name: 'Component contracts',
     needs: ['plan'],
-    events: CI_EVENTS,
+    events: AFTER_REVIEW,
     reusable: true,
     prepare: ['install', 'playwright', 'playwright-packages'],
     timeoutMinutes: 20,

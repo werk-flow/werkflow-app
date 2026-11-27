@@ -17,6 +17,7 @@ mock.module('@/lib/data/cached', () => ({
   CACHE_TAGS: {},
   getAuthenticatedUser: async () => (authenticated ? { id: 'caller' } : null),
   getCachedMemberships: async () => memberships,
+  getOwnEmployeeRecordId: forbiddenRead,
   getCachedOrganizationSettings: forbiddenRead,
   getCachedOrganizationCalendar: forbiddenRead,
 }));

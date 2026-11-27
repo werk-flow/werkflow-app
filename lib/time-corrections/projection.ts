@@ -1,5 +1,6 @@
 import { compareTimeEntries } from '@/lib/time-tracking/entry-order';
 import type { TimeEntry } from '@/lib/time-tracking/types';
+import { isInEntryWindow } from '@/lib/time-tracking/work-sessions';
 
 import { correctionFactToEntry, type TimeCorrectionApplicationProjection } from './types';
 
@@ -50,4 +51,21 @@ export function applyApprovedTimeCorrections(
     ),
     ...correctedEntries,
   ].sort(compareTimeEntries);
+}
+
+/**
+ * The entries with the approved corrections applied, then only those inside
+ * the window, its ends included, and the clock-out at the next midnight that
+ * closes its last day (`isInEntryWindow`): a corrected fact outside it never
+ * pairs with an entry inside.
+ */
+export function correctedEntriesInWindow(
+  entries: readonly TimeEntry[],
+  applications: readonly TimeCorrectionApplicationProjection[],
+  organizationId: string,
+  window: { fromMs: number; toMs: number },
+): TimeEntry[] {
+  return applyApprovedTimeCorrections(entries, applications, organizationId).filter((entry) =>
+    isInEntryWindow(entry, window),
+  );
 }

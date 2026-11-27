@@ -4,6 +4,7 @@ import {
   approvalTargetRole,
   canHolderApproveTarget,
   getResponsibilitiesStrandedByEmployeeRemoval,
+  getNextSelectedHolderAccessChangeAt,
   resolveEffectiveResponsibility,
   type ResponsibilityConfiguration,
   type ResponsibilityDelegation,
@@ -383,5 +384,86 @@ describe('approval scope over a personnel record', () => {
     const admin = holderOf('admin-user');
     expect(canHolderApproveTarget(admin, 'former-user', null)).toBe(true);
     expect(canHolderApproveTarget(admin, 'admin-user', 'admin')).toBe(false);
+  });
+});
+
+describe('selected holder access deadline', () => {
+  const now = Date.parse('2026-08-10T10:00:00.000Z');
+  const resolve = (
+    responsibility: OrganizationResponsibility,
+    configurations: ResponsibilityConfiguration[],
+  ) =>
+    resolveEffectiveResponsibility({
+      responsibility,
+      actionTime: new Date(now).toISOString(),
+      businessDate: '2026-08-10',
+      members,
+      configurations,
+      delegations: [],
+    });
+  const baseHolder = {
+    employeeRecordId: 'buero-record',
+    userId: 'buero-user',
+    isLastingHolder: true,
+    source: {
+      kind: 'direct_assignment',
+      configurationId: 'selected-version',
+      assignmentId: 'direct-assignment',
+    },
+  } as const;
+  const effective = {
+    time_approval: resolve('time_approval', [directConfiguration]),
+    leave_approval: resolve('leave_approval', []),
+  };
+
+  test('only selected base holders set the earliest future access deadline', () => {
+    const schedules = new Map([
+      ['buero-record', '2026-08-10T12:00:00.000Z'],
+      ['admin-record', '2026-08-10T11:00:00.000Z'],
+      ['unrelated-record', '2026-08-10T10:01:00.000Z'],
+    ]);
+    expect(getNextSelectedHolderAccessChangeAt(effective, schedules, now)).toBe('2026-08-10T12:00:00.000Z');
+    expect(
+      getNextSelectedHolderAccessChangeAt(effective, schedules, Date.parse('2026-08-10T12:00:00.000Z')),
+    ).toBeNull();
+    expect(getNextSelectedHolderAccessChangeAt(effective, new Map(), now)).toBeNull();
+  });
+
+  test('the earliest of several selected base holders wins, ignoring past and due steps', () => {
+    const selected = {
+      ...effective.time_approval,
+      holders: [
+        ...effective.time_approval.holders,
+        { ...baseHolder, employeeRecordId: 'later' },
+        { ...baseHolder, employeeRecordId: 'past' },
+        { ...baseHolder, employeeRecordId: 'due' },
+        {
+          ...baseHolder,
+          employeeRecordId: 'delegate',
+          source: {
+            kind: 'delegation' as const,
+            configurationId: 'selected-version',
+            delegationId: 'delegation',
+            delegatedFromEmployeeRecordId: 'buero-record',
+            validFrom: '2026-08-10',
+            validUntil: '2026-08-11',
+            inheritedSource: baseHolder.source,
+          },
+        },
+      ],
+    };
+    expect(
+      getNextSelectedHolderAccessChangeAt(
+        { time_approval: selected },
+        new Map([
+          ['buero-record', '2026-08-10T12:00:00.000Z'],
+          ['later', '2026-08-10T13:00:00.000Z'],
+          ['past', '2026-08-10T09:00:00.000Z'],
+          ['due', '2026-08-10T10:00:00.000Z'],
+          ['delegate', '2026-08-10T10:01:00.000Z'],
+        ]),
+        now,
+      ),
+    ).toBe('2026-08-10T12:00:00.000Z');
   });
 });
