@@ -978,11 +978,11 @@ export async function uploadProtectedPersonnelFile(
   const lifecycle = personnelLifecycle(page);
   await lifecycle.getByRole('button', { name: LIFECYCLE_CONTROLS.file, exact: true }).click();
   const dialog = page.getByRole('dialog', { name: LIFECYCLE_CONTROLS.uploadDialog });
-  await dialog.getByLabel(LIFECYCLE_CONTROLS.file).setInputFiles({
-    name: input.fileName,
-    mimeType: 'text/plain',
-    buffer: Buffer.from(input.content),
-  });
+  const chooser = page.waitForEvent('filechooser');
+  await dialog.getByRole('button', { name: LIFECYCLE_CONTROLS.file, exact: true }).click();
+  await (
+    await chooser
+  ).setFiles({ name: input.fileName, mimeType: 'text/plain', buffer: Buffer.from(input.content) });
   await dialog.getByLabel(LIFECYCLE_CONTROLS.documentType).fill(input.documentType);
   if (input.accessClass) {
     await selectFromSearchable(

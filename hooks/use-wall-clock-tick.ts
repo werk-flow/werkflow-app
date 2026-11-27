@@ -81,11 +81,16 @@ const hydrating = () => true;
  * hydrating render, so both render the same text, and the current instant
  * right after hydration. A component that mounts on the client without
  * hydration (a client navigation, a dialog) reads the clock in its first
- * render. Refreshed every `periodMs` while `enabled`.
+ * render. Refreshed every `periodMs` while `enabled` and until the `until`
+ * instant has passed.
  */
-export function useMountedWallClockTick(periodMs: number, enabled = true): number | null {
+export function useMountedWallClockTick(
+  periodMs: number,
+  enabled = true,
+  until: number | null = null,
+): number | null {
   const isHydrating = useSyncExternalStore(subscribeToNothing, notHydrating, hydrating);
   const [now, setNow] = useState<number | null>(() => (isHydrating ? null : Date.now()));
-  useTickEffect(setNow, periodMs, enabled, null);
+  useTickEffect(setNow, periodMs, enabled, until);
   return now;
 }

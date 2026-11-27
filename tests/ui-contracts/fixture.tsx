@@ -1,7 +1,11 @@
 import { PlanningOptionContractFixture } from './planning-option-boundaries';
 import { RouteRefreshFixture } from './route-refresh-boundaries';
 import { PresentationFixture } from './presentation-fixture';
-import { CreateClientContractFixture, CustomerContractFixture } from './customer-boundaries';
+import {
+  CreateClientContractFixture,
+  CustomerContractFixture,
+  CustomerMenuEditContractFixture,
+} from './customer-boundaries';
 import { RequestCaptureContractFixture } from './request-capture-boundaries';
 import { RequestAttachContractFixture } from './request-attach-boundaries';
 import { GlobalSearchContractFixture } from './global-search-boundaries';
@@ -80,7 +84,11 @@ import {
 } from './inventory-movements-boundaries';
 import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
 import { OffersContractFixture } from './offers-boundaries';
-import { InvoiceEditorContractFixture, InvoiceSettingsContractFixture } from './invoice-editor-boundaries';
+import {
+  InvoiceDeliveriesContractFixture,
+  InvoiceEditorContractFixture,
+  InvoiceSettingsContractFixture,
+} from './invoice-editor-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -648,6 +656,8 @@ createRoot(root).render(
     <CustomerContractFixture />
   ) : window.uiContractFixture === 'customer-create' ? (
     <CreateClientContractFixture />
+  ) : window.uiContractFixture === 'customer-menu-edit' ? (
+    <CustomerMenuEditContractFixture />
   ) : window.uiContractFixture === 'request-capture' ? (
     <RequestCaptureContractFixture />
   ) : window.uiContractFixture === 'request-attach' ? (
@@ -662,6 +672,10 @@ createRoot(root).render(
     <InvoiceEditorContractFixture />
   ) : window.uiContractFixture === 'invoice-settings' ? (
     <InvoiceSettingsContractFixture />
+  ) : window.uiContractFixture === 'invoice-deliveries-issued' ? (
+    <InvoiceDeliveriesContractFixture cancelled={false} />
+  ) : window.uiContractFixture === 'invoice-deliveries-cancelled' ? (
+    <InvoiceDeliveriesContractFixture cancelled />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>

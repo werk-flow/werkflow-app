@@ -13,6 +13,7 @@ export interface HealthDependencies {
   resendApiKey: string | undefined;
   fromEmail: string | undefined;
   secretKeys: string | undefined;
+  localMailCapture: string | undefined;
   sendRequest?: (url: string, init: RequestInit) => Promise<Response>;
   logError?: (code: string, status?: number) => void;
 }
@@ -93,6 +94,9 @@ export function createHealthHandler(
       ).configured
         ? 'ok'
         : 'failed',
+      // The local stack's Mailpit setting from supabase/config.toml. Only the hosted projects' health
+      // is read, and there the mail functions refuse to send while it is set (_shared/mail-delivery.ts).
+      local_mail_capture: dependencies.localMailCapture === undefined ? 'ok' : 'failed',
     };
     const ok = Object.values(checks).every((state) => state === 'ok');
     return Response.json({ ok, checks }, { status: ok ? 200 : 503, headers: noStore });
