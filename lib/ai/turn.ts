@@ -416,21 +416,21 @@ function failedEnd(status: 'failed' | 'cancelled', failure: AiTurnFailure): AiTu
 
 /**
  * Whether the answer is still being written: only the person's stop finishes
- * it while its run is open, and a lost thread takes it away.
+ * it while its run is open. The database rechecks the author's effective access.
  */
 async function readAnswerOpen(context: RunContext): Promise<'open' | Halt | 'load_failed'> {
-  const { data, error } = await context.admin
-    .from('ai_thread_items')
-    .select('status')
-    .eq('organization_id', context.command.organizationId)
-    .eq('id', context.assistantItem.id)
-    .maybeSingle();
+  const { data, error } = await context.admin.rpc('read_ai_answer_status', {
+    p_organization_id: context.command.organizationId,
+    p_user_id: context.command.userId,
+    p_item_id: context.assistantItem.id,
+  });
   if (error) {
+    if (LOST_ACCESS.has(error.message)) return 'revoked';
     logError('aiTurn: answer read failed', error);
     return 'load_failed';
   }
-  if (!data) return 'revoked';
-  return data.status === 'streaming' ? 'open' : 'stopped';
+  if (!data) return 'load_failed';
+  return data === 'streaming' ? 'open' : 'stopped';
 }
 
 /**

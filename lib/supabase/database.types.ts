@@ -20964,6 +20964,14 @@ export type Database = {
         Args: { p_organization_id: string; p_paths: string[] };
         Returns: undefined;
       };
+      read_ai_answer_status: {
+        Args: {
+          p_item_id: string;
+          p_organization_id: string;
+          p_user_id: string;
+        };
+        Returns: Database["public"]["Enums"]["ai_thread_item_status"];
+      };
       read_inventory_item_prices_on_day: {
         Args: {
           p_item_ids: string[];

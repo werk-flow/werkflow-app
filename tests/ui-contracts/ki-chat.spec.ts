@@ -793,6 +793,41 @@ test('an answer that completed before the stop landed shows whole, with no stop'
   await expect(timeline(page).getByText('Du hast die Antwort angehalten.', { exact: true })).toHaveCount(0);
 });
 
+test("an earlier turn's failed stop never shows on the next turn's draft", async ({ page }) => {
+  await openChat(page);
+  await sendInThreadA(page, 'Wie entlüfte ich?');
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await page.evaluate(() => {
+    window.uiContractKiHeldStops = [];
+  });
+  await stopButton(page).click();
+  await expect.poll(() => page.evaluate(() => window.uiContractKiHeldStops?.length)).toBe(1);
+  await emit(page, { type: 'text', delta: 'Erst das Ventil.' });
+  await emit(page, { type: 'end', status: 'complete' });
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'answered' }));
+  await expect(page.getByRole('button', { name: 'Senden', exact: true })).toBeVisible();
+  await composer(page).fill('Und danach?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u2', sequence: 3 },
+    assistantItem: { id: 'a2', sequence: 4 },
+  });
+  await page.evaluate(() => window.uiContractKiHeldStops?.shift()?.release(false));
+  await emit(page, { type: 'text', delta: 'Dann den Druck prüfen.' });
+  await expect(timeline(page).getByText('Dann den Druck prüfen.', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('alert').filter({
+      hasText: 'Die Antwort konnte nicht angehalten werden. Versuch es noch einmal.',
+    }),
+  ).toHaveCount(0);
+  await expect(stopButton(page)).not.toHaveAttribute('aria-busy');
+});
+
 test('a stop the server did not take lets the answer run on and says so', async ({ page }) => {
   await openChat(page);
   const command = await sendInThreadA(page, 'Wie entlüfte ich?');

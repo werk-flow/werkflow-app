@@ -177,6 +177,42 @@ const outputCap = costMicroUsd(
   assert.equal(providerAttempts(world).length, 1, 'the step that ran is in the ledger');
 }
 
+// Suspending the author between steps leaves the answer streaming, but access is gone.
+{
+  resetAiTables(world);
+  world.afterAttempt = () => {
+    world.afterAttempt = null;
+    world.memberships = [{ orgId: ORGANIZATION_A, role: 'employee', accessState: 'suspended' }];
+  };
+  const events = await readTurn(world, await postTurn('[replay:zwei-schritte] Lies den Auftrag.'));
+  assert.equal(world.streamRequests.length, 1, 'a suspended author must start no second provider request');
+  assert.equal(events.at(-1)?.failure, 'revoked');
+  assert.deepEqual(runStatus(), ['cancelled'], 'a revoked run settles at what was spent');
+  assert.equal(providerAttempts(world).length, 1, 'only the step that ran is charged');
+}
+
+// An access read that cannot complete refuses the next step too.
+{
+  resetAiTables(world);
+  const answer = world.rpc;
+  world.afterAttempt = () => {
+    world.afterAttempt = null;
+    world.rpc = (call) =>
+      call.name === 'read_ai_answer_status'
+        ? { data: null, error: { message: 'connection failed' } }
+        : answer(call);
+  };
+  const events = await readTurn(world, await postTurn('[replay:zwei-schritte] Lies den Auftrag.'));
+  world.rpc = answer;
+  assert.equal(
+    world.streamRequests.length,
+    1,
+    'an undecidable access read must start no second provider request',
+  );
+  assert.equal(events.at(-1)?.failure, 'undecidable');
+  assert.deepEqual(runStatus(), ['cancelled']);
+}
+
 // A stop that lands while a tool still reads: the partial save in flight sees it and aborts the
 // request with the call still running. The call gets its ledger row before the run settles (B19).
 {

@@ -577,22 +577,24 @@ function useStop(refs: {
   setError: (error: { draft: string; message: string } | null) => void;
 }) {
   const { liveRef, leftRef, hostRef, update, setError } = refs;
+  const stopOwnerRef = useRef<string | null>(null);
   const requestStop = useCallback(
     (turn: LiveTurn) => {
       const host = hostRef.current;
+      stopOwnerRef.current = turn.commandId;
       void stopTurn({
         organizationId: host.organizationId,
         threadId: turn.threadId,
         commandId: turn.commandId,
       }).then((taken) => {
-        if (taken || leftRef.current) return;
+        if (taken || leftRef.current || stopOwnerRef.current !== turn.commandId) return;
         // The answer runs on: the screen shows it again, or the channel does once the turn has settled.
         if (liveRef.current?.commandId === turn.commandId)
           update((current) => ({ ...current, stoppedAt: null }));
         setError({ draft: draftKey(host.userId, host.organizationId, turn.threadId), message: STOP_FAILED });
       });
     },
-    [liveRef, leftRef, hostRef, update, setError],
+    [liveRef, leftRef, stopOwnerRef, hostRef, update, setError],
   );
   const stop = useCallback(() => {
     const turn = liveRef.current;
@@ -601,7 +603,10 @@ function useStop(refs: {
     update((current) => ({ ...current, stoppedAt: current.answer.length }));
     if (turn.started) requestStop(turn);
   }, [liveRef, update, setError, requestStop]);
-  return { requestStop, stop };
+  const invalidateStop = useCallback(() => {
+    stopOwnerRef.current = null;
+  }, []);
+  return { requestStop, stop, invalidateStop };
 }
 
 /** The one turn that runs at a time: it sends, streams the answer and puts it into its thread when it ends. */
@@ -633,7 +638,7 @@ function useLiveTurn(host: TurnHost) {
     setLive(liveRef.current);
   }, []);
 
-  const { requestStop, stop } = useStop({ liveRef, leftRef, hostRef, update, setError });
+  const { requestStop, stop, invalidateStop } = useStop({ liveRef, leftRef, hostRef, update, setError });
 
   const receive = useCallback(
     (event: TurnEvent) => {
@@ -673,6 +678,7 @@ function useLiveTurn(host: TurnHost) {
         return setError({ draft, message: describeTurnRefusal('run_active') });
       }
       const { target, commandId } = commandFor(text, host, takeRetry(draft));
+      invalidateStop();
       holdSending({ draft, threadId: target, commandId, text });
       host.supersedeReads(target);
       const controller = new AbortController();
@@ -690,7 +696,7 @@ function useLiveTurn(host: TurnHost) {
         onEvent: receive,
       }).then((outcome) => finish(turn, outcome));
     },
-    [receive, finish],
+    [receive, finish, invalidateStop],
   );
   return { live, error, send, stop, draft: draftFor(host, live) };
 }

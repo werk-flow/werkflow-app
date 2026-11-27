@@ -139,6 +139,22 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
     }
     case 'start_ai_turn':
       return startTurn(world, args);
+    case 'read_ai_answer_status': {
+      const item = rows('ai_thread_items').find(
+        (row) => row.id === args.p_item_id && row.organization_id === organizationId,
+      );
+      if (!item) return raise('ai_thread_item_not_found');
+      const member = world.memberships.find((row) => row.orgId === organizationId);
+      if (!member || (member.accessState && member.accessState !== 'active'))
+        return raise('ai_actor_without_access');
+      const thread = rows('ai_threads').find(
+        (row) =>
+          row.id === item.thread_id &&
+          row.organization_id === organizationId &&
+          row.user_id === args.p_user_id,
+      );
+      return thread ? ok(item.status) : raise('ai_thread_not_found');
+    }
     case 'update_ai_thread_item': {
       const item = rows('ai_thread_items').find(
         (row) => row.id === args.p_item_id && row.organization_id === organizationId,

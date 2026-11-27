@@ -446,4 +446,66 @@ begin
 end;
 $$;
 
+-- A step reads the same effective access as a save, including a scheduled suspension
+-- whose deadline passed without any write to the answer or current access state.
+select public.append_ai_thread_item('af000000-0000-4000-8000-000000000010',
+  'af000000-0000-4000-8000-000000000002', 'af000000-0000-4000-8000-000000000020',
+  'assistant_message', 'streaming', '{"text":"Bis hier"}', 'access-gate:assistant');
+do $$
+declare
+  answer_id uuid := (select id from public.ai_thread_items
+    where organization_id = 'af000000-0000-4000-8000-000000000010'
+      and thread_id = 'af000000-0000-4000-8000-000000000020' and idempotency_key = 'access-gate:assistant');
+  employee_id uuid := (select id from public.employee_records
+    where organization_id = 'af000000-0000-4000-8000-000000000010'
+      and user_id = 'af000000-0000-4000-8000-000000000002');
+  api_role text;
+begin
+  foreach api_role in array array['anon', 'authenticated'] loop
+    if has_function_privilege(api_role, 'public.read_ai_answer_status(uuid, uuid, uuid)', 'execute') then
+      raise exception 'A client role may read the privileged WerkFlow KI step gate: %', api_role;
+    end if;
+  end loop;
+  if not has_function_privilege('service_role', 'public.read_ai_answer_status(uuid, uuid, uuid)', 'execute') then
+    raise exception 'service_role lost execute on read_ai_answer_status';
+  end if;
+  if public.read_ai_answer_status('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000002', answer_id) is distinct from 'streaming' then
+    raise exception 'An active author lost the open step gate';
+  end if;
+  begin
+    perform public.read_ai_answer_status('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000001', answer_id);
+    raise exception 'Another member read the author''s step gate';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_thread_not_found' then raise; end if;
+  end;
+  insert into public.personnel_access_lifecycles (organization_id, employee_record_id, state, state_effective_at)
+  values ('af000000-0000-4000-8000-000000000010', employee_id, 'suspended', now());
+  begin
+    perform public.read_ai_answer_status('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000002', answer_id);
+    raise exception 'A suspended author passed the step gate';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_actor_without_access' then raise; end if;
+  end;
+  update public.personnel_access_lifecycles
+  set state = 'active', scheduled_state = 'suspended', scheduled_for = now() + interval '1 day'
+  where employee_record_id = employee_id and organization_id = 'af000000-0000-4000-8000-000000000010';
+  if public.read_ai_answer_status('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000002', answer_id) is distinct from 'streaming' then
+    raise exception 'A future suspension closed the step gate early';
+  end if;
+  update public.personnel_access_lifecycles set scheduled_for = now() - interval '1 minute'
+  where employee_record_id = employee_id and organization_id = 'af000000-0000-4000-8000-000000000010';
+  begin
+    perform public.read_ai_answer_status('af000000-0000-4000-8000-000000000010',
+      'af000000-0000-4000-8000-000000000002', answer_id);
+    raise exception 'A scheduled suspension past its deadline passed the step gate';
+  exception when raise_exception then
+    if sqlerrm <> 'ai_actor_without_access' then raise; end if;
+  end;
+end;
+$$;
+
 rollback;

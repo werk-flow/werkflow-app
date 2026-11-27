@@ -87,3 +87,27 @@ end;
 $$;
 revoke all on function public.cancel_ai_turn(uuid, uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.cancel_ai_turn(uuid, uuid, uuid, text) to service_role;
+
+-- The per-step read uses the same access and authorship rule as a save.
+-- Scheduled access changes take effect at read time, before another provider request.
+create function public.read_ai_answer_status(
+  p_organization_id uuid,
+  p_user_id uuid,
+  p_item_id uuid
+)
+returns public.ai_thread_item_status
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_thread_id uuid;
+  v_status public.ai_thread_item_status;
+begin
+  select item.thread_id, item.status into v_thread_id, v_status
+  from public.ai_thread_items item
+  where item.id = p_item_id and item.organization_id = p_organization_id;
+  if not found then raise exception 'ai_thread_item_not_found'; end if;
+  perform app_private.assert_ai_thread_author(p_organization_id, p_user_id, v_thread_id);
+  return v_status;
+end;
+$$;
+revoke all on function public.read_ai_answer_status(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.read_ai_answer_status(uuid, uuid, uuid) to service_role;
