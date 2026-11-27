@@ -32,8 +32,8 @@
 -- checks of the snapshot and the rendered original stay the server's, as they
 -- were.
 --
--- Expand-only: replaced guards and functions with their signatures, two new
--- trigger functions, a line comparison, three new triggers.
+-- Expand-only: replaced guards and functions with their signatures, three new
+-- trigger functions, a line comparison, four new triggers.
 --
 -- Prevention: Tier 1 (the guards), Tier 2 supabase/tests/invoice_issue.sql
 -- and supabase/tests/invoice_cancel.sql.
@@ -456,6 +456,31 @@ create constraint trigger invoice_history_kept after insert on public.invoice_ev
   deferrable initially deferred
   for each row when (new.event_type in ('issued', 'cancelled'))
   execute function app_private.check_invoice_history_kept();
+
+-- An issued Stornorechnung's original is Storniert at commit, also when its issue inserted no history
+-- entry, as beside an entry written before this migration. Refusal: invoice_history_unkept.
+create function app_private.check_storno_original_cancelled()
+returns trigger
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+begin
+  if not exists (
+    select 1 from public.invoices original
+    where original.id = new.cancels_invoice_id and original.organization_id = new.organization_id
+      and original.status = 'storniert')
+  then
+    raise exception 'invoice_history_unkept';
+  end if;
+  return null;
+end;
+$$;
+revoke all on function app_private.check_storno_original_cancelled() from public, anon, authenticated, service_role;
+create constraint trigger storno_original_cancelled after update on public.invoices
+  deferrable initially deferred
+  for each row when (old.status = 'entwurf' and new.status <> 'entwurf' and new.cancels_invoice_id is not null)
+  execute function app_private.check_storno_original_cancelled();
 
 -- 5. As in 20270205090000_issue_invoices_with_gapless_numbers.sql, except
 -- that the history entry comes first, as guard_issued_invoice requires, and

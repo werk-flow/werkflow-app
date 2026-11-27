@@ -523,6 +523,36 @@ from (values
   ('a Stornorechnung with something due', format(
     'update public.invoices set payment_due_days = 14 where id = %L', pg_temp.id('kept storno')))
 ) as cases(label, statement);
+-- An issue that inserts no history entry still meets the commit-time check: beside a matching `issued` entry
+-- written before (seeded past the triggers), the Stornorechnung issued directly while its original stays
+-- Ausgestellt is refused at commit (here at once).
+savepoint seeded_issue_entry;
+reset role;
+set local session_replication_role = replica;
+insert into public.invoice_events (organization_id, invoice_id, event_type, status, version, payload, actor_id,
+  attempt_key)
+select storno.organization_id, storno.id, 'issued', 'ausgestellt', 2,
+  jsonb_build_object('invoiceNumber', public.get_invoice_settings(storno.organization_id) ->> 'nextInvoiceNumber',
+    'issueDate', (now() at time zone 'Europe/Berlin')::date, 'grossCents', storno.gross_cents),
+  '38080000-0000-4000-8000-000000000002', gen_random_uuid()
+from public.invoices storno where storno.id = pg_temp.id('kept storno');
+set local session_replication_role = origin;
+set local role service_role;
+select pg_temp.expect_refusal('a Stornorechnung issued beside an earlier issue entry, its original Ausgestellt',
+  format($sql$do $x$ begin
+    update public.invoices storno set status = 'ausgestellt', version = 2, issued_at = now(),
+      issue_date = (now() at time zone 'Europe/Berlin')::date, issued_by = %1$L, updated_by = %1$L,
+      invoice_number = public.get_invoice_settings(storno.organization_id) ->> 'nextInvoiceNumber',
+      issue_snapshot = kept.issue_snapshot, logo_storage_path = kept.logo_storage_path,
+      stationery_first_storage_path = kept.stationery_first_storage_path,
+      stationery_following_storage_path = kept.stationery_following_storage_path
+    from issued kept where storno.id = %2$L and kept.id = %3$L;
+    set constraints all immediate;
+  end $x$$sql$, '38080000-0000-4000-8000-000000000002', pg_temp.id('kept storno'), pg_temp.id('kept')),
+  'invoice_history_unkept');
+rollback to savepoint seeded_issue_entry;
+release savepoint seeded_issue_entry;
+set constraints invoice_history_kept, storno_original_cancelled deferred;
 select pg_temp.issue_kept_storno();
 -- At commit (here at once) no issued Stornorechnung stands beside an original still Ausgestellt.
 select pg_temp.expect_refusal('a Stornorechnung issued beside an original still Ausgestellt',
@@ -616,7 +646,7 @@ select pg_temp.expect_refusal('move the correction to another invoice',
   format('update public.invoices set corrects_invoice_id = %L where id = %L', pg_temp.id('kept'),
     pg_temp.id('correction')), 'invoice_link_fixed');
 -- Every issue's and cancel's history entry stands beside its finished issue or cancel, as at commit.
-set constraints invoice_history_kept immediate;
+set constraints invoice_history_kept, storno_original_cancelled immediate;
 reset role;
 
 -- An employee and another organization read neither the Stornorechnung nor the correction; the office reads both.
