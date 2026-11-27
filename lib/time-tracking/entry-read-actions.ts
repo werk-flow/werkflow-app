@@ -30,7 +30,7 @@ import { getCanonicalTimeEntries } from './canonical-entries';
 import { readWindowProjections } from './entry-window-projections';
 import type { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/actions';
 import { loadApprovedCorrectionProjection } from '@/lib/time-corrections/approved-projection';
-import { applyApprovedTimeCorrections } from '@/lib/time-corrections/projection';
+import { applyApprovedTimeCorrections, correctedEntriesInWindow } from '@/lib/time-corrections/projection';
 import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
 import { verifyCurrentMembership } from './action-access';
 import { isManagerRole, type OrgRole } from '@/lib/roles';
@@ -102,20 +102,17 @@ function visibleWindowEntries(input: {
   const visibleCanonicalEntries = input.canonicalEntries.filter((entry) =>
     canViewEntries(callerRole, entry.userId, callerId),
   );
-  const projectedEntries = applyApprovedTimeCorrections(
+  const projectedEntries = correctedEntriesInWindow(
     [...toTimeEntries(visibleEntries), ...visibleCanonicalEntries],
     input.applications,
     input.organizationId,
-  ).filter((entry) => {
-    const timestamp = Date.parse(entry.timestamp);
-    return (
+    { fromMs: fromTimestamp, toMs: toTimestamp },
+  ).filter(
+    (entry) =>
       canViewEntries(callerRole, entry.userId, callerId) &&
-      timestamp >= fromTimestamp &&
-      timestamp <= toTimestamp &&
       (!userId || entry.userId === userId) &&
-      (!status || entry.status === status)
-    );
-  });
+      (!status || entry.status === status),
+  );
   const officialEntries = markPendingCorrections(projectedEntries, input.pendingSources);
   return officialEntries.sort(
     (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),

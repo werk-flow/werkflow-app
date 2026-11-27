@@ -6,8 +6,15 @@ import {
   deriveCurrentClockState,
   liveMinutes,
 } from './helpers';
-import { computeDayBreakdown, type BreakPolicyValues, type TimeBreakdown } from './settings';
+import { isEffectiveEntry } from './effective-entries';
+import {
+  computeDayBreakdown,
+  type BreakPolicy,
+  type BreakPolicyValues,
+  type TimeBreakdown,
+} from './settings';
 import type { TimeEntry, WorkSession } from './types';
+import { dayBreakPolicy } from './weekly';
 
 // One member's day for the office's live views (the Mitarbeiter list and
 // detail), from that member's entries of today, split by the same day rule
@@ -27,12 +34,14 @@ export type MemberStatus = {
   isOnStandby: boolean;
   workMinutes: number;
   breakMinutes: number;
+  /** The rule the day counts by (`dayBreakPolicy`): the current one while the clock runs. */
+  breakPolicy: BreakPolicyValues;
 };
 
 /** The member's most recent clock-in that still counts: pending included, rejected and pending_delete excluded. */
 function latestClockInEntry(memberEntries: TimeEntry[]): TimeEntry | undefined {
   return memberEntries
-    .filter((e) => e.entryType === 'clock_in' && e.status !== 'rejected' && e.status !== 'pending_delete')
+    .filter((e) => e.entryType === 'clock_in' && isEffectiveEntry(e))
     .sort((a, b) => {
       const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       if (diff !== 0) return diff;
@@ -40,9 +49,13 @@ function latestClockInEntry(memberEntries: TimeEntry[]): TimeEntry | undefined {
     })[0];
 }
 
+/** A member without a status has recorded nothing today. */
+const NO_TIME: TimeBreakdown = { workMinutes: 0, breakMinutes: 0, overtimeMinutes: 0 };
+
 /** One member's status today, from that member's entries of the day. */
-export function memberStatusOf(memberEntries: TimeEntry[], breakPolicy: BreakPolicyValues): MemberStatus {
+export function memberStatusOf(memberEntries: TimeEntry[], settings: BreakPolicy): MemberStatus {
   const currentState = deriveCurrentClockState(memberEntries);
+  const breakPolicy = dayBreakPolicy(settings, memberEntries, currentState.isClockedIn);
   const workSessions = calculateWorkSessions(memberEntries);
   const breakSessions = calculateBreakSessions(memberEntries);
   const isStandby = (session: WorkSession) => session.clockIn?.activityKind === 'standby';
@@ -82,36 +95,35 @@ export function memberStatusOf(memberEntries: TimeEntry[], breakPolicy: BreakPol
       currentState.status === 'working' && runningSession !== undefined && isStandby(runningSession),
     workMinutes: breakdown.workMinutes,
     breakMinutes: breakdown.breakMinutes,
+    breakPolicy,
   };
 }
 
 /**
  * A member's day at `nowMs`: the recorded minutes and the running activity,
- * split by the same day rule as the week. A running standby grows the
+ * split under the status's rule as the week splits the day. A running standby grows the
  * standby, a running break the tracked break (which only a manual rule
  * reads: under the automatic one the status carries the deducted break). An unknown target
- * (`undefined`) owes no overtime.
+ * (`undefined`) owes no overtime. Before the client knows the time (`nowMs`
+ * null) the day holds the recorded minutes only.
  */
 export function memberLiveDay(
   status: MemberStatus | undefined,
-  breakPolicy: BreakPolicyValues,
   targetMinutes: number | undefined,
-  nowMs: number,
+  nowMs: number | null,
 ): { presenceMinutes: number; breakdown: TimeBreakdown } {
-  const runningSince = status?.isClockedIn ? status.statusStartedAt : null;
-  const runningAs = (running: boolean | undefined) => (running ? runningSince : null);
-  const presenceMinutes = liveMinutes(status?.todayMinutes ?? 0, runningSince, nowMs);
+  if (!status) return { presenceMinutes: 0, breakdown: NO_TIME };
+  const runningSince = nowMs !== null && status.isClockedIn ? status.statusStartedAt : null;
+  const runningAs = (running: boolean) => (running ? runningSince : null);
+  const atMs = nowMs ?? 0;
+  const presenceMinutes = liveMinutes(status.todayMinutes, runningSince, atMs);
   const breakdown = computeDayBreakdown(
     {
       presenceMinutes,
-      standbyMinutes: liveMinutes(status?.standbyMinutes ?? 0, runningAs(status?.isOnStandby), nowMs),
-      trackedBreakMinutes: liveMinutes(
-        status?.breakMinutes ?? 0,
-        runningAs(status?.status === 'on_break'),
-        nowMs,
-      ),
+      standbyMinutes: liveMinutes(status.standbyMinutes, runningAs(status.isOnStandby), atMs),
+      trackedBreakMinutes: liveMinutes(status.breakMinutes, runningAs(status.status === 'on_break'), atMs),
     },
-    breakPolicy,
+    status.breakPolicy,
     targetMinutes,
   );
   return { presenceMinutes, breakdown };

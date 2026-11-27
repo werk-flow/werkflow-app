@@ -1,12 +1,16 @@
 // Today's totals of the clock state keep every minute recorded today: the
 // closed segments of every session of the day, open or ended, and the legacy
-// entries beside them. A clock-out never resets the day to zero. The file
-// spawns itself: module mocks stay in the child.
+// entries beside them, with the day's approved corrections applied and under
+// the rule of the day's last entry, as the week counts the day. A clock-out
+// never resets the day to zero. The file spawns itself: module mocks stay in
+// the child.
 import assert from 'node:assert/strict';
 import { expect, mock, setSystemTime, test } from 'bun:test';
 import { getLocalDayStart } from '@/lib/date-time/berlin';
 import { isJsonRecord } from '@/lib/supabase/json';
 import { createInMemoryAdmin, type InMemoryTables } from '@/lib/testing/fixtures/in-memory-admin';
+import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
+import { buildBreakPolicyHistoryEntry, type BreakPolicy } from './settings';
 
 const FIXTURE_FLAG = 'CLOCK_DAY_FIXTURE';
 
@@ -59,8 +63,43 @@ function sessionRow(id: string, from: number, to: number | null, segments: Segme
   };
 }
 
+/** An approved correction that makes a closed work segment standby, at the same times. */
+function reclassifyAsStandby(
+  segmentId: string,
+  from: number,
+  to: number,
+): TimeCorrectionApplicationProjection {
+  const fact = (entryType: 'clock_in' | 'clock_out', minutes: number) => ({
+    factId: `${segmentId}-${entryType}`,
+    employeeRecordId: employeeRecord,
+    userId: employee,
+    entryType,
+    timestamp: todayAt(minutes),
+    jobId: job,
+    activityKind: 'standby' as const,
+    isManual: false,
+  });
+  return {
+    applicationId: `reclassify-${segmentId}`,
+    requestId: `request-${segmentId}`,
+    appliedAt: todayAt(to),
+    appliedBy: employee,
+    sourceFingerprint: segmentId,
+    snapshot: { schemaVersion: 1, facts: [fact('clock_in', from), fact('clock_out', to)] },
+    sources: [{ kind: 'canonical_segment', id: segmentId, version: segmentId }],
+  };
+}
+
 async function runFixture(): Promise<void> {
   setSystemTime(NOW);
+  const settings: BreakPolicy = {
+    breakMode: 'manual',
+    autoBreakThresholdMinutes: 360,
+    autoBreakDurationMinutes: 30,
+    secondStep: null,
+    breakPolicyHistory: [],
+  };
+  let applications: TimeCorrectionApplicationProjection[] = [];
   const tables: InMemoryTables = {
     time_sessions: [],
     time_entries: [],
@@ -85,12 +124,11 @@ async function runFixture(): Promise<void> {
     CACHE_TAGS: {},
     getAuthenticatedUser: async () => ({ id: employee }),
     getCachedMemberships: async () => [{ orgId: organization, role: 'employee' }],
-    getCachedOrganizationSettings: async () => ({
-      breakMode: 'manual',
-      autoBreakThresholdMinutes: 360,
-      autoBreakDurationMinutes: 30,
-    }),
+    getCachedOrganizationSettings: async () => settings,
     getCachedOrganizationCalendar: async () => null,
+  }));
+  mock.module('@/lib/time-corrections/approved-projection', () => ({
+    loadApprovedCorrectionProjection: async () => applications,
   }));
   const { getCurrentClockState } = await import('./clock-state-actions');
   // The segments also stand as their own table, for the reads that name it.
@@ -166,6 +204,34 @@ async function runFixture(): Promise<void> {
   assert.equal(second.todayMinutes, 15 + 3 + 10, 'the day counts every session and the manual entry');
   assert.equal(second.travelMinutes, 1);
   assert.equal(second.resumeActivity?.kind, 'work');
+
+  // A closed seven-hour day whose last two hours an approved correction made
+  // standby: five hours reach no six-hour step, as in the corrected week.
+  settings.breakMode = 'automatic';
+  tables.time_entries = [];
+  tables.time_sessions = [
+    sessionRow(morningSession, 120, 540, [
+      { id: 'early', kind: 'work', from: 120, to: 420 },
+      { id: 'late', kind: 'work', from: 420, to: 540 },
+    ]),
+  ];
+  applications = [reclassifyAsStandby('late', 420, 540)];
+  const corrected = await readState();
+  assert.equal(corrected.standbyMinutes, 120, 'the clock counts the corrected standby');
+  assert.equal(corrected.breakMinutes, 0, 'the standby stays out of the six-hour step');
+  assert.equal(corrected.workMinutes, 420);
+
+  // The same day without the correction, under manual breaks until the
+  // automatic rule was saved after its clock-out: the day keeps manual breaks.
+  applications = [];
+  settings.breakPolicyHistory = [
+    buildBreakPolicyHistoryEntry({ ...settings, breakMode: 'manual' }, new Date(0).toISOString()),
+    buildBreakPolicyHistoryEntry(settings, todayAt(600)),
+  ];
+  const ruleChanged = await readState();
+  assert.equal(ruleChanged.breakPolicy.breakMode, 'manual', 'the day counts by its last entry’s rule');
+  assert.equal(ruleChanged.breakMinutes, 0);
+  assert.equal(ruleChanged.workMinutes, 420);
 }
 
 if (process.env[FIXTURE_FLAG] === '1') {

@@ -485,6 +485,23 @@ export function calculateTotalMinutes(sessions: WorkSession[]): number {
   }, 0);
 }
 
+/**
+ * The minutes of the closed work sessions per activity, by the activity each
+ * session starts with. They are parts of the working time, never added to it.
+ */
+export function sessionActivityMinutes(
+  sessions: WorkSession[],
+): Record<'travelMinutes' | 'standbyMinutes' | 'calloutMinutes' | 'internalMinutes', number> {
+  const minutesOf = (kind: TimeEntry['activityKind']) =>
+    calculateTotalMinutes(sessions.filter((session) => session.clockIn?.activityKind === kind));
+  return {
+    travelMinutes: minutesOf('travel'),
+    standbyMinutes: minutesOf('standby'),
+    calloutMinutes: minutesOf('callout'),
+    internalMinutes: minutesOf('internal_activity'),
+  };
+}
+
 export function calculateBreakMinutes(sessions: BreakSession[]): number {
   return sessions.reduce((total, session) => {
     return total + (session.durationMinutes || 0);

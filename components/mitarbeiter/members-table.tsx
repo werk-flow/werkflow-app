@@ -90,14 +90,7 @@ function MemberCardStatus({ status, isStatusLoading, statusVisibility, target }:
         isPending={status?.isPending ?? false}
         visibility={statusVisibility}
       />
-      <HoursDisplay
-        status={status?.status}
-        isClockedIn={status?.isClockedIn ?? false}
-        statusStartedAt={status?.statusStartedAt ?? null}
-        workMinutes={status?.workMinutes ?? 0}
-        visibility={statusVisibility}
-        target={target}
-      />
+      <HoursDisplay status={status} visibility={statusVisibility} target={target} />
     </div>
   );
 }
@@ -124,14 +117,7 @@ function MemberStatusCells({ status, isStatusLoading, statusVisibility, target }
         {showStatusSkeleton ? (
           PROGRESS_SKELETON
         ) : (
-          <HoursDisplay
-            status={status?.status}
-            isClockedIn={status?.isClockedIn ?? false}
-            statusStartedAt={status?.statusStartedAt ?? null}
-            workMinutes={status?.workMinutes ?? 0}
-            visibility={statusVisibility}
-            target={target}
-          />
+          <HoursDisplay status={status} visibility={statusVisibility} target={target} />
         )}
       </TableCell>
     </>

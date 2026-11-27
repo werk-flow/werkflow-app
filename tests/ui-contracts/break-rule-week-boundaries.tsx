@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 // The week views under a break rule that changed midweek: the Zeiterfassung
 // week chart and the Mitarbeiter detail read the week on the client and must
 // resolve each day against the rule version that applied to it.
 import { WeeklyHoursChart } from '@/components/zeiterfassung/weekly-hours-chart';
+import { HoursDisplay } from '@/components/mitarbeiter/hours-display';
 import { MitarbeiterDetailTimeCards } from '@/components/mitarbeiter/mitarbeiter-detail-time-cards';
 import { useMitarbeiterDetailLiveTime } from '@/components/mitarbeiter/use-mitarbeiter-detail-live-time';
+import { useMemberStatus } from '@/hooks/use-member-status';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { EMPTY_HOLIDAY_CALENDAR, resolveDailyTargets, type DailyTarget } from '@/lib/personnel/targets';
 import { addLocalDays } from '@/lib/date-time/berlin';
@@ -56,12 +58,16 @@ function entry(id: string, entryType: TimeEntry['entryType'], timestamp: string)
   };
 }
 
-/** Ten hours on Monday, 7 September 2026, and on Tuesday, both 07:00 to 17:00 Berlin. */
+/**
+ * Ten hours on Monday, 7 September 2026, and on Tuesday, both 07:00 to 17:00 Berlin, and
+ * Wednesday's shift, running without a break since 04:00 Berlin.
+ */
 const WEEK_ENTRIES: TimeEntry[] = [
   entry('30000000-0000-4000-8000-000000000001', 'clock_in', '2026-09-07T05:00:00.000Z'),
   entry('30000000-0000-4000-8000-000000000002', 'clock_out', '2026-09-07T15:00:00.000Z'),
   entry('30000000-0000-4000-8000-000000000003', 'clock_in', '2026-09-08T05:00:00.000Z'),
   entry('30000000-0000-4000-8000-000000000004', 'clock_out', '2026-09-08T15:00:00.000Z'),
+  entry('30000000-0000-4000-8000-000000000005', 'clock_in', '2026-09-09T02:00:00.000Z'),
 ];
 
 /** The `time-entries` read: the recorded entries inside the requested range. */
@@ -182,6 +188,21 @@ function MitarbeiterDetailWeek() {
   );
 }
 
+/** The member's row on the Mitarbeiter list: today's progress against Wednesday's target. */
+function MitarbeiterListRow() {
+  const memberIds = useMemo(() => [USER_ID], []);
+  const { statusMap } = useMemberStatus({
+    organizationId: ORGANIZATION_ID,
+    memberIds,
+    breakPolicy: RULE_CHANGED_ON_TUESDAY,
+  });
+  return (
+    <section aria-label="Mitarbeiter-Liste">
+      <HoursDisplay status={statusMap[USER_ID]} target={readBreakRuleWeekTargets().targets[2]} />
+    </section>
+  );
+}
+
 /**
  * The week of a page that stays open while another session saves the rule:
  * its server data never changes; the saved rule arrives only through the
@@ -231,6 +252,7 @@ export function BreakRuleWeekFixture() {
     <RealtimeProvider>
       <ZeiterfassungWeek breakPolicy={RULE_CHANGED_ON_TUESDAY} label="Zeiterfassung" />
       <MitarbeiterDetailWeek />
+      <MitarbeiterListRow />
       <ZeiterfassungWeekAcrossASave />
       <ZeiterfassungWeekLive />
     </RealtimeProvider>

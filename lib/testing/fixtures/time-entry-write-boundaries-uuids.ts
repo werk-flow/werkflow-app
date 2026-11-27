@@ -195,9 +195,11 @@ const createAdmin = () => {
       }
       return query;
     },
-    rpc: async (name: string, args: Record<string, unknown> = {}) => {
+    // Not async: a set-returning function's answer chains `order` and `range`.
+    rpc: (name: string, args: Record<string, unknown> = {}) => {
       rpcCalls.push({ name, args });
-      if (rpcRefusal) return { data: null, error: { code: 'P0001', message: rpcRefusal }, count: null };
+      if (rpcRefusal)
+        return Promise.resolve({ data: null, error: { code: 'P0001', message: rpcRefusal }, count: null });
       return admin.rpc(name, args);
     },
   };

@@ -51,3 +51,20 @@ export function applyApprovedTimeCorrections(
     ...correctedEntries,
   ].sort(compareTimeEntries);
 }
+
+/**
+ * The entries with the approved corrections applied, then only those inside
+ * the window, its ends included: a corrected fact outside it never pairs with
+ * an entry inside.
+ */
+export function correctedEntriesInWindow(
+  entries: readonly TimeEntry[],
+  applications: readonly TimeCorrectionApplicationProjection[],
+  organizationId: string,
+  window: { fromMs: number; toMs: number },
+): TimeEntry[] {
+  return applyApprovedTimeCorrections(entries, applications, organizationId).filter((entry) => {
+    const timestamp = Date.parse(entry.timestamp);
+    return timestamp >= window.fromMs && timestamp <= window.toMs;
+  });
+}

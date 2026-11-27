@@ -381,10 +381,13 @@ export function createInMemoryAdmin(
   tables: InMemoryTables,
   columnDefaults: Record<string, () => Row> = {},
   beforeWrite?: BeforeWrite,
-): { from: (table: string) => InMemoryQuery; rpc: (name: string, args?: Row) => Promise<QueryResult> } {
+): {
+  from: (table: string) => InMemoryQuery;
+  rpc: (name: string, args?: Row) => PromiseLike<QueryResult>;
+} {
   return {
     from: (table) => new InMemoryQuery(tables, table, columnDefaults[table] ?? (() => ({})), beforeWrite),
-    rpc: async (name, args = {}) => {
+    rpc: (name, args = {}) => {
       if (
         name === 'review_time_entries' ||
         name === 'delete_time_entries' ||
@@ -393,7 +396,9 @@ export function createInMemoryAdmin(
         return runTimeEntryBatch(tables, name, args);
       if (name === 'decide_entry_change_request') return decideEntryChangeRequest(tables, args);
       if (name === 'update_time_entry') return updateTimeEntry(tables, args);
-      return { data: [], error: null, count: null };
+      // Any other function reads like an unseeded table of its name: no rows, and it
+      // chains `order` and `range` as a set-returning function does.
+      return new InMemoryQuery(tables, `rpc:${name}`, () => ({})).select();
     },
   };
 }

@@ -6,6 +6,7 @@ import { MitarbeiterDetailTimeCards } from '@/components/mitarbeiter/mitarbeiter
 import type { MitarbeiterDetailLiveTime } from '@/components/mitarbeiter/use-mitarbeiter-detail-live-time';
 import { EMPTY_HOLIDAY_CALENDAR, resolveDailyTargets, type DailyTarget } from '@/lib/personnel/targets';
 import { getBusinessWeekDates } from '@/lib/personnel/schedule';
+import type { MemberStatus } from '@/lib/time-tracking/member-day';
 import { computeWeekLabel, getTodayIndex, getWeekBounds } from '@/lib/time-tracking/weekly';
 
 // werk-flow/werkflow-planning#53: the detail page's status card measured the
@@ -120,19 +121,38 @@ describe('the personnel detail status card', () => {
   });
 });
 
+/** A member clocked out today after `workMinutes` without a break, under manual breaks. */
+function clockedOut(workMinutes: number): MemberStatus {
+  return {
+    status: 'clocked_out',
+    isClockedIn: false,
+    isOnBreak: false,
+    isPending: false,
+    clockInTime: null,
+    statusStartedAt: null,
+    todayMinutes: workMinutes,
+    standbyMinutes: 0,
+    isOnStandby: false,
+    workMinutes,
+    breakMinutes: 0,
+    breakPolicy: {
+      breakMode: 'manual',
+      autoBreakThresholdMinutes: 360,
+      autoBreakDurationMinutes: 30,
+      secondStep: null,
+    },
+  };
+}
+
 describe('the member list progress', () => {
   test('without a resolved target the row shows no progress against 8 h', () => {
-    const markup = renderToStaticMarkup(
-      <HoursDisplay isClockedIn={false} statusStartedAt={null} workMinutes={240} />,
-    );
+    const markup = renderToStaticMarkup(<HoursDisplay status={clockedOut(240)} />);
     expect(markup).toContain('Tagesfortschritt: Tagesziel nicht geladen');
     expect(markup).not.toContain('50%');
   });
 
   test('a resolved 8,5-hour day measures against 8,5 hours', () => {
-    const markup = renderToStaticMarkup(
-      <HoursDisplay isClockedIn={false} statusStartedAt={null} workMinutes={255} target={todayTarget} />,
-    );
+    const markup = renderToStaticMarkup(<HoursDisplay status={clockedOut(255)} target={todayTarget} />);
     expect(markup).toContain('Tagesfortschritt: 50%');
   });
 });
@@ -150,12 +170,7 @@ describe('the member list marker for a person without Wochenplan', () => {
   // weekend row took the no-target branch, which did not render it.
   test('stays on the weekend, when the default owes no target', () => {
     const markup = renderToStaticMarkup(
-      <HoursDisplay
-        isClockedIn={false}
-        statusStartedAt={null}
-        workMinutes={0}
-        target={unconfigured('2026-10-31', null)}
-      />,
+      <HoursDisplay status={clockedOut(0)} target={unconfigured('2026-10-31', null)} />,
     );
     expect(markup).toContain('Tagesfortschritt: Wochenende');
     expect(markup).toContain('aria-label="Kein Arbeitszeitmodell hinterlegt"');
@@ -163,12 +178,7 @@ describe('the member list marker for a person without Wochenplan', () => {
 
   test('is gone after the exit date', () => {
     const markup = renderToStaticMarkup(
-      <HoursDisplay
-        isClockedIn={false}
-        statusStartedAt={null}
-        workMinutes={0}
-        target={unconfigured('2026-10-30', '2026-10-29')}
-      />,
+      <HoursDisplay status={clockedOut(0)} target={unconfigured('2026-10-30', '2026-10-29')} />,
     );
     expect(markup).toContain('Tagesfortschritt: Ausgeschieden');
     expect(markup).not.toContain('Kein Arbeitszeitmodell hinterlegt');

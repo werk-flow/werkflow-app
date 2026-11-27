@@ -5,7 +5,8 @@ import { getJobDisplayTitle } from '@/lib/jobs/types';
 import type { AdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import type { Tables } from '@/lib/supabase/database.types';
-import { combineClockDayTotals, canonicalDayTotals, type ClockDayTotals } from './clock-day-totals';
+import { projectedTransitionEntries } from './canonical-entries';
+import { clockDayTotals } from './clock-day-totals';
 import { readResumeActivity } from './resume-activity';
 import {
   toTimeActivitySelection,
@@ -13,8 +14,9 @@ import {
   UNUSUALLY_LONG_SESSION_MS,
   type TimeSegmentFact,
 } from './segments';
-import { computeDayBreakdown, currentBreakPolicy, type BreakPolicy } from './settings';
-import type { ClockJobInfo, LiveClockState, TimeActivitySelection } from './types';
+import { computeDayBreakdown, type BreakPolicy } from './settings';
+import type { ClockJobInfo, LiveClockState, TimeActivitySelection, TimeEntry } from './types';
+import { dayBreakPolicy } from './weekly';
 
 // The caller's canonical clock day for getCurrentClockState: the segments of
 // every session that overlaps today and, while one is open, its live state.
@@ -29,6 +31,8 @@ export type CanonicalClockDay = {
   openSession: OpenSession | null;
   /** Every segment of today's sessions that overlaps the Berlin day, in start order. */
   segments: TimeSegmentFact[];
+  /** The segments' transitions inside the day, as the week reads them (`getCanonicalTimeEntries`). */
+  entries: TimeEntry[];
 };
 
 /**
@@ -38,7 +42,7 @@ export type CanonicalClockDay = {
  */
 export async function readCanonicalClockDay(
   admin: AdminClient,
-  input: { organizationId: string; userId: string; dayStart: Date; dayEnd: Date },
+  input: { organizationId: string; userId: string; dayStart: Date; dayEnd: Date; now: Date },
 ): Promise<CanonicalClockDay | null> {
   const dayStart = input.dayStart.toISOString();
   const dayEnd = input.dayEnd.toISOString();
@@ -47,7 +51,7 @@ export async function readCanonicalClockDay(
       admin
         .from('time_sessions')
         .select(
-          'id, status, started_at, ended_at, version, recovery_reason, time_segments(id, session_id, organization_id, employee_record_id, kind, allocation_kind, job_id, internal_type, travel_route, travel_role, standby_context, started_at, ended_at)',
+          'id, status, started_at, ended_at, version, recovery_reason, time_segments(id, session_id, organization_id, employee_record_id, kind, allocation_kind, job_id, internal_type, travel_route, travel_role, standby_context, started_at, ended_at, created_at, updated_at)',
         )
         .eq('organization_id', input.organizationId)
         .eq('user_id', input.userId)
@@ -64,10 +68,24 @@ export async function readCanonicalClockDay(
     logReadErrors('readCanonicalClockDay: read failed', error);
     return null;
   }
-  const segments = data
-    .flatMap((session) => session.time_segments.map((row) => toTimeSegmentFact(row)))
-    .sort((left, right) => left.startedAt.localeCompare(right.startedAt) || left.id.localeCompare(right.id));
-  return { openSession: data.find((session) => session.ended_at === null) ?? null, segments };
+  const rows = data
+    .flatMap((session) => session.time_segments.map((row) => ({ row, segment: toTimeSegmentFact(row) })))
+    .sort(
+      (left, right) =>
+        left.segment.startedAt.localeCompare(right.segment.startedAt) ||
+        left.segment.id.localeCompare(right.segment.id),
+    );
+  // Every segment read here is the caller's own.
+  const userByEmployee = new Map(rows.map(({ segment }) => [segment.employeeRecordId, input.userId]));
+  return {
+    openSession: data.find((session) => session.ended_at === null) ?? null,
+    segments: rows.map(({ segment }) => segment),
+    entries: projectedTransitionEntries(rows, userByEmployee, {
+      from: input.dayStart,
+      to: input.dayEnd,
+      now: input.now,
+    }),
+  };
 }
 
 async function readClockJobInfo(
@@ -140,22 +158,17 @@ export async function readClockJobs(
 }
 
 /**
- * The live state of the open canonical session. Today's totals count every
- * closed segment of the day, of this session and of the ones before it, plus
- * the legacy entries' minutes; the running segment counts from its start on
- * the client.
+ * The live state of the open canonical session, with today's totals
+ * (`clockTotalsState`); the running segment counts from its start on the client.
  */
 export async function buildCanonicalClockState(
   admin: AdminClient,
   input: {
     organizationId: string;
-    settings: BreakPolicy;
+    totals: ClockTotalsState;
     session: OpenSession;
     day: CanonicalClockDay;
-    legacyTotals: ClockDayTotals;
     now: Date;
-    dayStart: Date;
-    dayEnd: Date;
   },
 ): Promise<ActionResult<{ state: LiveClockState }>> {
   const { organizationId, session } = input;
@@ -177,14 +190,10 @@ export async function buildCanonicalClockState(
     resumeActivity?.jobId ?? null,
   );
   if (!jobs.success) return jobs;
-  const totals = combineClockDayTotals(
-    input.legacyTotals,
-    canonicalDayTotals(input.day.segments, input.dayStart, input.dayEnd),
-  );
   return {
     success: true,
     state: {
-      ...clockTotalsState(totals, input.settings),
+      ...input.totals,
       organizationId,
       status: current?.kind === 'break' ? 'on_break' : 'working',
       isClockedIn: true,
@@ -228,11 +237,7 @@ function sessionRecoveryReason(session: OpenSession, now: Date): string | null {
   return sessionNeedsRecovery(session, now) ? 'unusually_long' : null;
 }
 
-/** The settings and today's totals of a clock state, after the organization's break mode. */
-export function clockTotalsState(
-  totals: ClockDayTotals,
-  settings: BreakPolicy,
-): Pick<
+export type ClockTotalsState = Pick<
   LiveClockState,
   | 'breakPolicy'
   | 'todayMinutes'
@@ -243,7 +248,22 @@ export function clockTotalsState(
   | 'standbyMinutes'
   | 'calloutMinutes'
   | 'internalMinutes'
-> {
+>;
+
+/**
+ * Today's totals of a clock state and the rule they count by, from the day's
+ * entries with the approved corrections applied, as the week reads the day:
+ * the rule at the day's last entry once clocked out, the current one while
+ * the clock runs (`dayBreakPolicy`).
+ */
+export function clockTotalsState(
+  dayEntries: TimeEntry[],
+  settings: BreakPolicy,
+  running: boolean,
+  now: Date,
+): ClockTotalsState {
+  const totals = clockDayTotals(dayEntries, now);
+  const breakPolicy = dayBreakPolicy(settings, dayEntries, running);
   // The state carries no target: its work minutes owe no overtime.
   const breakdown = computeDayBreakdown(
     {
@@ -251,11 +271,11 @@ export function clockTotalsState(
       standbyMinutes: totals.standbyMinutes,
       trackedBreakMinutes: totals.breakMinutes,
     },
-    settings,
+    breakPolicy,
     undefined,
   );
   return {
-    breakPolicy: currentBreakPolicy(settings),
+    breakPolicy,
     todayMinutes: totals.presenceMinutes,
     workMinutes: breakdown.workMinutes,
     breakMinutes: breakdown.breakMinutes,

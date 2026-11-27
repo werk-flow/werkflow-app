@@ -46,6 +46,19 @@ for (const region of ['Zeiterfassung', 'Mitarbeiter']) {
   });
 }
 
+test('Mitarbeiter: the list deducts the automatic break from a running shift, as the detail does', async ({
+  page,
+}) => {
+  await mountBreakRuleWeek(page);
+
+  // Six hours past the first step, eight running without a break: 7 h 30 of an 8 h day.
+  const detail = page.getByRole('region', { name: 'Mitarbeiter', exact: true });
+  await expect(detail).toContainText(`${formatDuration(450)} / ${formatDuration(480)} (94%)`);
+  await expect(
+    page.getByRole('region', { name: 'Mitarbeiter-Liste', exact: true }).getByRole('progressbar'),
+  ).toHaveAttribute('aria-label', 'Tagesfortschritt: 94%');
+});
+
 test('Zeiterfassung: a rule saved in another session rebuilds the open week, also without earlier versions', async ({
   page,
 }) => {

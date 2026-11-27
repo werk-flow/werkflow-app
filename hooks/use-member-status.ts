@@ -5,7 +5,7 @@ import { logError } from '@/lib/logging';
 import { memberStatusOf, type MemberStatus } from '@/lib/time-tracking/member-day';
 import { readInBackground, type BackgroundReadFailure } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import { breakPolicyKey, type BreakPolicyValues } from '@/lib/time-tracking/settings';
+import { breakPolicyKey, type BreakPolicy } from '@/lib/time-tracking/settings';
 import type { GetTimeEntriesParams, GetTimeEntriesResult } from '@/lib/time-tracking/types';
 
 type MemberStatusMap = Record<string, MemberStatus>;
@@ -22,8 +22,8 @@ function fetchTimeEntries(
 interface UseMemberStatusOptions {
   organizationId: string;
   memberIds: string[];
-  /** Today's break rule: a member's status counts today only. */
-  breakPolicy: BreakPolicyValues;
+  /** The break rule with its earlier versions: a day after clock-out counts by the one at its last entry. */
+  breakPolicy: BreakPolicy;
   /** Enable or disable fetching. Default: true */
   enabled?: boolean;
 }
