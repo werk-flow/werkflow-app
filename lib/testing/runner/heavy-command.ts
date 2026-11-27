@@ -163,19 +163,22 @@ export function eslintTargets(args: readonly string[]): string[] {
   return targets.length ? targets : ['.'];
 }
 
+/** A part of a whole-repository lint: the paths it lints, without the files its ignore patterns match. */
+export type LintPart = { readonly paths: readonly string[]; readonly ignores: readonly string[] };
+
 /**
  * The parts of a whole-repository lint, one eslint process each. A type-aware lint keeps what it
  * learned about each linted file until its process exits: the checker's types and the token nodes
  * typescript-estree caches on every source file. Each process starts from the whole program, about
  * 1.7 GiB live, and grows by 0.4 to 0.8 MiB per linted file, most under lib/. One process over the
- * repository's 4,200 files reached 3.8 GiB live of its 4 GiB heap. Every file falls into a part:
- * the `lib/[a-m]*` and `lib/[n-z]*` halves only ignore each other.
+ * repository's 4,200 files reached 3.8 GiB live of its 4 GiB heap. The second part ignores exactly
+ * what the first lints, so every file falls into one part.
  */
-const WHOLE_LINT_PARTS: readonly (readonly string[])[] = [
-  ['lib', '--ignore-pattern', 'lib/[n-z]*'],
-  ['lib', '--ignore-pattern', 'lib/[a-m]*', '--ignore-pattern', 'lib/testing'],
-  ['lib/testing', 'tests'],
-  ['.', '--ignore-pattern', 'lib', '--ignore-pattern', 'tests'],
+export const WHOLE_LINT_PARTS: readonly LintPart[] = [
+  { paths: ['lib'], ignores: ['lib/[n-z]*'] },
+  { paths: ['lib'], ignores: ['lib/[!n-z]*', 'lib/testing'] },
+  { paths: ['lib/testing', 'tests'], ignores: [] },
+  { paths: ['.'], ignores: ['lib', 'tests'] },
 ];
 
 /**
@@ -185,14 +188,24 @@ const WHOLE_LINT_PARTS: readonly (readonly string[])[] = [
  */
 const LINT_PART_HEAP_MB = 3072;
 
+/** Flags that keep their meaning when the whole repository lints in parts. */
+const PART_SAFE_FLAGS = new Set(['--fix']);
+
 /**
  * The eslint argument lists `bun run lint` runs one after another, and the heap each gets. A lint
- * that names no path lints the whole repository in WHOLE_LINT_PARTS; a lint of named paths runs as
- * one process with the heavy heap.
+ * of the whole repository, with no argument or only `--fix`, runs in WHOLE_LINT_PARTS. Any other
+ * lint (named paths, a formatter, an output file, a warning limit, its own ignores, stdin) runs as
+ * one process with the heavy heap, as eslint documents it.
  */
 export function lintRuns(args: readonly string[]): { runs: string[][]; heapMb: number } {
-  if (operands(args, ESLINT_VALUE_FLAGS).length) return { runs: [[...args]], heapMb: HEAVY_NODE_HEAP_MB };
-  return { runs: WHOLE_LINT_PARTS.map((part) => [...args, ...part]), heapMb: LINT_PART_HEAP_MB };
+  if (!args.every((arg) => PART_SAFE_FLAGS.has(arg)))
+    return { runs: [[...args]], heapMb: HEAVY_NODE_HEAP_MB };
+  const runs = WHOLE_LINT_PARTS.map(({ paths, ignores }) => [
+    ...args,
+    ...paths,
+    ...ignores.flatMap((pattern) => ['--ignore-pattern', pattern]),
+  ]);
+  return { runs, heapMb: LINT_PART_HEAP_MB };
 }
 
 const TSC_VALUE_FLAGS = new Set([
