@@ -699,7 +699,7 @@ insert into public.inventory_items (id, organization_id, name, item_type, unit, 
  'material', 'piece', null, false),
 ('38040000-0000-4000-8000-000000000079', '38040000-0000-4000-8000-000000000011', 'Fremdes Rohr',
  'material', 'meter', null, true);
--- 80: a Leistung, 81: an archived one, 89: another organization's (20270401090000).
+-- 80: a Leistung, 81: an archived one, 89: another organization's (20270501090000).
 insert into public.leistungen (id, organization_id, leistung_number, name, kind, unit, tax_rate_basis_points,
   archived_at) values
 ('38040000-0000-4000-8000-000000000080', '38040000-0000-4000-8000-000000000010', 'L-7', 'Monteurstunde',
@@ -828,7 +828,7 @@ select pg_temp.expect_refusal('deleting a named article',
   'delete from public.inventory_items where id = ''38040000-0000-4000-8000-000000000070''', '23503');
 
 -- A Position taken from a Leistung, and a cost on any priced Position
--- (migration 20270401090000_calculate_offers_with_leistungen_and_costs.sql).
+-- (migration 20270501090000_calculate_offers_with_leistungen_and_costs.sql).
 set local role service_role;
 create function pg_temp.leistung_line(p_leistung text, p_cost jsonb) returns jsonb language sql as $$
   select jsonb_build_object('kind', 'free', 'name', 'Monteurstunde', 'description', '', 'quantity', '2.5',

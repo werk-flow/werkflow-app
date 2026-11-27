@@ -50,6 +50,10 @@ test('the planned visit prefills the timeline, and another person never inherits
   await expect(job).toContainText('000000000153');
   await check.click();
   await expect(result).toHaveText('1 Tätigkeiten');
+  // The job picker asks for the jobs of the person whose time is added, so it marks theirs.
+  await expect
+    .poll(() => page.evaluate(() => window.optionContract.requests.map((request) => request.subjectUserId)))
+    .toEqual(['contract-user-a']);
 
   await page.getByRole('button', { name: 'Andere Person', exact: true }).click();
   await expect(timeline).toHaveAttribute('aria-busy', 'true');

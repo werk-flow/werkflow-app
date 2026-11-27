@@ -20,7 +20,7 @@ begin;
 -- Until the rollback, no other session writes these tables, no autovacuum or ANALYZE runs on them,
 -- and a concurrent run of this file waits. Another worktree's writes to them wait about a second.
 lock table public.clients, public.projects, public.jobs, public.job_assignments, public.documents,
-  public.time_entries, public.planning_occurrences in share row exclusive mode;
+  public.time_entries, public.planning_occurrences, public.maintenance_due_work in share row exclusive mode;
 create temp table hot_ids as select gen_random_uuid() run, gen_random_uuid() owner,
   gen_random_uuid() large_org, gen_random_uuid() small_org, gen_random_uuid() large_worker, gen_random_uuid() small_worker;
 grant select on hot_ids to service_role;
@@ -87,6 +87,48 @@ create function pg_temp.seed() returns void language sql as $$
   from generate_series(1,2) o, generate_series(0,364) d, generate_series(0,3) s where (o=1 or d between 337 and 343);
 $$;
 
+-- One maintenance plan per organization with the same open due work: ten items from five days
+-- ago and twenty beyond the Aufgaben window. The large one also holds three years of completed
+-- visits. Maintenance rows are written only through their functions; the seed bypasses their
+-- write guards, so it runs as the owner in replica mode and sets every reference itself.
+create function pg_temp.seed_maintenance() returns void language sql as $$
+  insert into public.clients(id,organization_id,name)
+  select pg_temp.id('maintenance-client',o,1),pg_temp.org(o),'Wartungskunde' from generate_series(1,2) o;
+  insert into public.client_sites(id,organization_id,client_id,name,is_primary,created_by)
+  select pg_temp.id('site',o,1),pg_temp.org(o),pg_temp.id('maintenance-client',o,1),'Heizzentrale',true,owner
+  from hot_ids, generate_series(1,2) o;
+  insert into public.installed_equipment(id,organization_id,client_id,site_id,equipment_number,name,category,state,created_by,updated_by)
+  select pg_temp.id('equipment',o,1),pg_temp.org(o),pg_temp.id('maintenance-client',o,1),pg_temp.id('site',o,1),
+    'HE'||o,'Gasbrennwertkessel','heat_generation','active',owner,owner
+  from hot_ids, generate_series(1,2) o;
+  insert into public.work_templates(id,organization_id,target_type)
+  select pg_temp.id('template',o,1),pg_temp.org(o),'job' from generate_series(1,2) o;
+  insert into public.work_template_versions(id,organization_id,template_id,version_number,name)
+  select pg_temp.id('template-version',o,1),pg_temp.org(o),pg_temp.id('template',o,1),1,'Wartung' from generate_series(1,2) o;
+  insert into public.maintenance_plans(id,organization_id,plan_number,client_id,site_id,status,current_revision_id,created_by,updated_by)
+  select pg_temp.id('plan',o,1),pg_temp.org(o),'HW'||o,pg_temp.id('maintenance-client',o,1),pg_temp.id('site',o,1),'active',
+    pg_temp.id('revision',o,1),owner,owner
+  from hot_ids, generate_series(1,2) o;
+  insert into public.maintenance_plan_revisions(id,organization_id,maintenance_plan_id,revision_number,template_version_id,
+    effective_from_date,first_due_date,interval_months,planned_duration_minutes,next_due_basis,reason,created_by)
+  select pg_temp.id('revision',o,1),pg_temp.org(o),pg_temp.id('plan',o,1),1,pg_temp.id('template-version',o,1),
+    '2023-01-01','2023-01-01',1,60,'planned_due_date','Erstanlage',owner
+  from hot_ids, generate_series(1,2) o;
+  insert into public.maintenance_plan_revision_equipment(organization_id,maintenance_plan_revision_id,equipment_id,created_by)
+  select pg_temp.org(o),pg_temp.id('revision',o,1),pg_temp.id('equipment',o,1),owner from hot_ids, generate_series(1,2) o;
+  insert into public.maintenance_due_work(id,organization_id,maintenance_plan_id,maintenance_plan_revision_id,original_due_date,
+    due_date,window_start_date,window_end_date,status,scope_outcome,completed_on,created_by,updated_by)
+  select pg_temp.id('due',o,d),pg_temp.org(o),pg_temp.id('plan',o,1),pg_temp.id('revision',o,1),day,day,day-7,day+7,
+    case when d<0 then 'completed' else 'open' end::public.maintenance_due_status,
+    case when d<0 then 'complete'::public.maintenance_scope_outcome end, case when d<0 then day end, owner, owner
+  from hot_ids, generate_series(1,2) o, generate_series(-1095,29) d,
+    lateral (select (now() at time zone 'Europe/Berlin')::date + case when d<0 then d-6 when d<10 then d-5 else d+20 end as day) due_day
+  where (o=1 or d>=0);
+$$;
+set local session_replication_role = replica;
+select pg_temp.seed_maintenance();
+set local session_replication_role = origin;
+
 -- Per public table: sequential scans, and rows touched so far in this transaction.
 create function pg_temp.table_reads() returns table(rel text, seq_scans bigint, touched bigint) language sql as $$
   select c.relname::text, pg_stat_get_xact_numscans(c.oid),
@@ -144,8 +186,9 @@ do $$ declare
       and status='pending' order by created_at desc, id limit 1000$q$),
     -- Aufgaben: the handover candidates (lib/attention/handover-tasks.ts).
     'aufgaben-handover-candidates', jsonb_build_array('{jobs,projects}', 'select * from public.list_handover_candidate_projects(%1$L)'),
-    -- Aufgaben: the office's pending sets with the jobs to plan (lib/attention/manager-sets.ts).
-    'aufgaben-office-sets', jsonb_build_array('{jobs,planning_occurrences}', 'select public.read_manager_attention_sets(%1$L, 10000)'),
+    -- Aufgaben: the office's pending sets with the jobs to plan and the due maintenance (lib/attention/manager-sets.ts).
+    'aufgaben-office-sets', jsonb_build_array('{jobs,planning_occurrences,maintenance_due_work}',
+      'select public.read_manager_attention_sets(%1$L, 10000)'),
     -- Aufträge: the first page of active work for a manager and an employee (lib/jobs/list-server.ts).
     'auftraege-manager', jsonb_build_array('{jobs,projects}',
       format('select public.list_job_entries_page(%%1$L,%%2$L,true,jsonb_build_object(''active'',%L::jsonb))', job_query)),

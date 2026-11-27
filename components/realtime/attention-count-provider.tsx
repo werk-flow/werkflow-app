@@ -96,6 +96,8 @@ export function AttentionCountProvider({
       'jobs',
       'projects',
       'work_handover_packages',
+      'maintenance_plans',
+      'maintenance_due_work',
       'attention_read_states',
       'organization_responsibility_configurations',
       'organization_responsibility_assignments',

@@ -1,5 +1,6 @@
 import { after } from 'next/server';
 
+import { hasVisibleText } from '@/lib/ai/context';
 import { AI_TURN_LIMITS } from '@/lib/ai/limits';
 import { type AiTurnRefusal, startAiTurn } from '@/lib/ai/turn';
 import { createTurnEventStream } from '@/lib/ai/turn-stream';
@@ -17,7 +18,8 @@ const privateHeaders = { 'Cache-Control': 'private, no-store' };
 const turnSchema = z.object({
   organizationId: uuidSchema,
   commandId: uuidSchema,
-  text: z.string().trim().min(1).max(AI_TURN_LIMITS.chat.maxMessageCharacters),
+  // A message of invisible characters alone is empty to the model, so it is refused before it is saved.
+  text: z.string().trim().min(1).max(AI_TURN_LIMITS.chat.maxMessageCharacters).refine(hasVisibleText),
 });
 
 const REFUSAL_STATUS: Readonly<Record<AiTurnRefusal, number>> = {
@@ -54,11 +56,12 @@ export async function POST(
   try {
     const auth = await resolveActionContextFor(parsed.data.organizationId);
     if (!auth.success) return refuse(auth.error, auth.error === 'not_authenticated' ? 401 : 403);
-    const { userId, orgId } = auth.context;
+    const { userId, orgId, role } = auth.context;
     const start = await startAiTurn({
       entryPoint: 'chat',
       organizationId: orgId,
       userId,
+      role,
       threadId: threadId.data,
       commandId: parsed.data.commandId,
       receivedAt,

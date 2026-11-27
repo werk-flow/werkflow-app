@@ -80,8 +80,8 @@
         },
         "stylesheet": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 21862, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 117895, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 21991, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 119049, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -440,6 +440,24 @@
           },
           "runKeys": ["2026-11-21T055139543Z-159aab"],
           "reason": "#560: area skeletons load lazily, so the layout carries no office UI and this payload is smaller; nothing is missing"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "stylesheet",
+          "from": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 21862, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 117895, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 21991, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 119049, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-26T223155072Z-87e9ea"],
+          "reason": "main's start-up stylesheet grew from the utilities of merged features since #335 (cff553792), each PR inside the tolerance: Tailwind's minified output of app/globals.css rose from 114,458 to 115,612 B (+1,154), equal to this run's decoded growth (117,895 to 119,049); requests stay 2. Per first-parent PR, compiled at each commit: #485 Rechnung editor +422 (sm:grid-cols-[repeat(4,minmax(0,1fr))_auto], sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)], sm:col-span-1, sm:min-w-28, sm:pb-2, pt-8, items-stretch); #415 stock movement history +257 (lg:flex, lg:flex-wrap, lg:w-40/44/48/64, max-w-40); #410 Leistungen prices +214 (sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)], sm:w-48, w-[56px], w-[80px], w-[180px]); #389 support queue +110 (list-decimal, sm:w-60, whitespace-pre); #333 leaver handover +107 (sm:grid-cols-[minmax(0,1fr)_minmax(0,14rem)], border-warning); #538 invoice catalog line +107 (sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]); #359 banner action stacks +95 (-my-1.5, sm:my-0); #379 offline photos +94 (object-cover, sm:grid-cols-5); #391 site access proposal +93 (-my-3.5, min-w-11); #395 frozen billing parties +90 (mb-1.5, whitespace-pre-line); #329 problem reports +84 (max-h-[60dvh], md:inline, w-[72px]); #499 header search +66 (max-sm:h-dvh, max-sm:max-h-dvh); #325 customer archive +60 (basis-full, sm:basis-auto); #474 wholesaler import +59 (sm:grid-cols-[auto_1fr]); #370 Einsatzort parties +47 (pl-5.5); #348 activities +45 (basis-64); #316 install hint +41 (pointer-events-auto); #467 overdue maintenance +41 (@3xl/maintenance:block); #406 company profile +30 (sm:ml-auto); #464 offers +25 (w-[240px]); #476 Anlage on phone +23 (sm:w-auto); #407 CSV import +16 (border-warning). Removals: #319 -463 (marquee, motion-reduce utilities, -space-x-1.5, border-background, sm:max-w-80), #364 -292 (glow animations, ease-out), #376 -122 (row highlight), #398 -95 (@md:grid-cols-2). Every added utility is a className in a rendered component; no dead class, duplicate rule or safelist."
         }
       ]
     },
@@ -1631,8 +1649,8 @@
         },
         "stylesheet": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 21862, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 117895, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 21991, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 119049, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -1946,6 +1964,24 @@
           },
           "runKeys": ["2026-11-25T201457413Z-60398d"],
           "reason": "#560 (lazy area skeletons, owner decision werk-flow/werkflow-planning#29) took about 56 KB from the office start-up while its file count fell from 36 to 35, so the byte gate never judged it and 573,760 B stayed the reference. main alone measures 35 files and 517,227 to 517,296 B in every merge-queue run of 2026-11-23 and on Boat at f0cc2488 (run 2026-11-25T202112704Z-d31d88: 517,239 B). This PR adds one start-up file and so re-gates the bytes: 36 files, 518,772 B on Boat (CI queue on b7e0bb7b: 518,792). Module comparison of the /auftraege entry chunks of the CI builds of b7e0bb7b (run 45206669016) and 6aa10d1b (run 45210197405): both hold the same 431 start-up modules; only the hashed ids of the two server-action stubs updateJob and transitionTimeActivity differ. Turbopack packs five (app) layout chunks into six (1,505,550 to 1,505,675 B raw over all entry files). Nothing is missing or later."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "stylesheet",
+          "from": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 21862, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 117895, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 21991, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 119049, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-26T223155072Z-9b0c39"],
+          "reason": "main's start-up stylesheet grew from the utilities of merged features since #335 (cff553792), each PR inside the tolerance: Tailwind's minified output of app/globals.css rose from 114,458 to 115,612 B (+1,154), equal to this run's decoded growth (117,895 to 119,049); requests stay 2. Per first-parent PR, compiled at each commit: #485 Rechnung editor +422 (sm:grid-cols-[repeat(4,minmax(0,1fr))_auto], sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)], sm:col-span-1, sm:min-w-28, sm:pb-2, pt-8, items-stretch); #415 stock movement history +257 (lg:flex, lg:flex-wrap, lg:w-40/44/48/64, max-w-40); #410 Leistungen prices +214 (sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)], sm:w-48, w-[56px], w-[80px], w-[180px]); #389 support queue +110 (list-decimal, sm:w-60, whitespace-pre); #333 leaver handover +107 (sm:grid-cols-[minmax(0,1fr)_minmax(0,14rem)], border-warning); #538 invoice catalog line +107 (sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]); #359 banner action stacks +95 (-my-1.5, sm:my-0); #379 offline photos +94 (object-cover, sm:grid-cols-5); #391 site access proposal +93 (-my-3.5, min-w-11); #395 frozen billing parties +90 (mb-1.5, whitespace-pre-line); #329 problem reports +84 (max-h-[60dvh], md:inline, w-[72px]); #499 header search +66 (max-sm:h-dvh, max-sm:max-h-dvh); #325 customer archive +60 (basis-full, sm:basis-auto); #474 wholesaler import +59 (sm:grid-cols-[auto_1fr]); #370 Einsatzort parties +47 (pl-5.5); #348 activities +45 (basis-64); #316 install hint +41 (pointer-events-auto); #467 overdue maintenance +41 (@3xl/maintenance:block); #406 company profile +30 (sm:ml-auto); #464 offers +25 (w-[240px]); #476 Anlage on phone +23 (sm:w-auto); #407 CSV import +16 (border-warning). Removals: #319 -463 (marquee, motion-reduce utilities, -space-x-1.5, border-background, sm:max-w-80), #364 -292 (glow animations, ease-out), #376 -122 (row highlight), #398 -95 (@md:grid-cols-2). Every added utility is a className in a rendered component; no dead class, duplicate rule or safelist."
         }
       ]
     },

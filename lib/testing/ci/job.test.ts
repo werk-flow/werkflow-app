@@ -627,13 +627,18 @@ test('off GitHub Actions the midnight job never sleeps: started before its hold 
         },
       });
       // A job that slept for its hold would outlast the test's timeout.
-      const code = runJob(root, 'midnight', {
-        CI_EVENT: 'integration',
-        CI_RESULTS_DIR: run,
-        CI_PRODUCER: 'mac-standin',
-        CI_RUN_URL: RUN_URL,
-        GITHUB_ACTIONS: '',
-      });
+      const code = runJob(
+        root,
+        'midnight',
+        {
+          CI_EVENT: 'integration',
+          CI_RESULTS_DIR: run,
+          CI_PRODUCER: 'mac-standin',
+          CI_RUN_URL: RUN_URL,
+          GITHUB_ACTIONS: '',
+        },
+        { fixedClock: true },
+      );
       const midnight = readResult(join(run, resultFileName('midnight', null)));
       expect([name, code, 'status' in midnight && midnight.status]).toEqual([
         name,

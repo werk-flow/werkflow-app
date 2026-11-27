@@ -41,3 +41,8 @@ export function parseMaintenanceWorkspaceQuery(
     coveragePage: parseListPage(single(MAINTENANCE_PAGE_PARAMS.coverages)),
   };
 }
+
+/** The Wartung workspace searched for one plan: its due items lead the due list, by due date. */
+export function maintenancePlanSearchHref(planNumber: string): string {
+  return `/service/wartung?q=${encodeURIComponent(planNumber)}`;
+}

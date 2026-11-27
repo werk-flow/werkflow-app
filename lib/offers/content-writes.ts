@@ -16,7 +16,7 @@ import { offerContentArgument } from './amounts';
 // (supabase/migrations/20270201090000_write_titel_and_positionen_into_an_offer.sql).
 // Beside each priced Position it stores the Position's own cost, hidden from
 // every client role: the cost the office took over with an article or a
-// Leistung, or typed (20270401090000_calculate_offers_with_leistungen_and_costs.sql).
+// Leistung, or typed (20270501090000_calculate_offers_with_leistungen_and_costs.sql).
 
 const contentRefusal = writeRefusalFor(
   new Set([

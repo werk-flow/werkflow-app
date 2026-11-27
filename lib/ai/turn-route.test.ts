@@ -24,3 +24,7 @@ test('a WerkFlow KI turn runs under its step limit, switches, budget, retry rule
 test('no chat text of a turn, its answer or a provider failure reaches a log', async () => {
   await runFixture('ai-turn-log-sentinel');
 });
+
+test('hidden characters and a role-play reach the model neither as instructions nor as tools', async () => {
+  await runFixture('ai-turn-context');
+});

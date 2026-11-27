@@ -1,6 +1,7 @@
 // The merge queue's reading of GitHub: every open pull request against main with what the queue
 // decides by (lib/testing/ci/queue.ts).
 import { z } from 'zod';
+import { GROWTH_APPROVAL_LABELS } from '../publication/shrink-only-lists';
 import type { QueuedPull } from './queue';
 
 const gitHubPullSchema = z.object({
@@ -77,7 +78,9 @@ export function pullsFromGitHub(pages: unknown): QueuedPull[] {
       queuedAt: node.autoMergeRequest?.enabledAt ?? null,
       check: check ?? 'MISSING',
       mergeState: node.mergeStateStatus,
-      listGrowthApproved: node.labels.nodes.some((label) => label.name === 'approved: list growth'),
+      growthApprovals: GROWTH_APPROVAL_LABELS.filter((approval) =>
+        node.labels.nodes.some((label) => label.name === approval),
+      ).toSorted(),
     };
   });
 }

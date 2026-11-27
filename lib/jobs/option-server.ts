@@ -3,7 +3,9 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database as DatabaseSchema } from '@/lib/supabase/database.types';
 
+import type { ActionFailure } from '@/lib/action-result';
 import { logReadErrors } from '@/lib/data/read-request-cache';
+import { formatProfileName } from '@/lib/members/profile-name';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
@@ -82,6 +84,13 @@ export async function loadJobEntityOptions(context: AuthContext, input: Request)
   // entries keep database RLS; a verified identity alone grants no admin read.
   if (!context.isManagerOrAbove && !employeeMayRead(input))
     return { success: false, error: 'not_authorized' };
+  if (input.subjectUserId && input.purpose !== 'time-correction')
+    return { success: false, error: 'invalid_input' };
+  if (input.kind === 'jobs' && input.purpose === 'time-correction') {
+    const mark = await correctionAssignmentMark(context, input.subjectUserId);
+    if (!mark.success) return mark;
+    return loadJobOptions(createSupabaseAdminClient(), context, input, mark);
+  }
   if (readsOrganizationJobs(context, input)) {
     const admin = createSupabaseAdminClient();
     if (input.kind === 'projects') return loadProjectOptions(admin, context, input);
@@ -91,12 +100,53 @@ export async function loadJobEntityOptions(context: AuthContext, input: Request)
     if (input.kind === 'coverages') return loadCoverageOptions(admin, context, input);
     if (input.kind === 'equipment') return loadEquipmentOptions(admin, context, input);
     if (input.kind === 'clients') return loadClientOptions(admin, context, input);
-    return loadJobOptions(admin, context, input);
+    return loadJobOptions(admin, context, input, null);
   }
   const database = await createSupabaseServerClient();
   return input.kind === 'clients'
     ? loadClientOptions(database, context, input)
-    : loadJobOptions(database, context, input);
+    : loadJobOptions(database, context, input, null);
+}
+
+/** Whose assigned jobs a correction's picker marks, and the mark's text. */
+type AssignmentMark = { success: true; userId: string; label: string };
+
+/**
+ * The person a time correction is for: the caller, or for Admin and Büro
+ * another member of the active organization. An employee asks only for
+ * themselves; a person outside the organization is refused before any job
+ * or name is read.
+ */
+async function correctionAssignmentMark(
+  context: AuthContext,
+  subjectUserId: string | undefined,
+): Promise<AssignmentMark | ActionFailure<'not_authorized' | 'options_failed'>> {
+  if (!subjectUserId || subjectUserId === context.userId)
+    return { success: true, userId: context.userId, label: 'Dir zugewiesen' };
+  if (!context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
+  const admin = createSupabaseAdminClient();
+  const member = await admin
+    .from('organization_members')
+    .select('user_id')
+    .eq('organization_id', context.orgId)
+    .eq('user_id', subjectUserId)
+    .maybeSingle();
+  if (member.error) {
+    logReadErrors('correctionAssignmentMark: membership read failed', member.error);
+    return { success: false, error: 'options_failed' };
+  }
+  if (!member.data) return { success: false, error: 'not_authorized' };
+  const profile = await admin
+    .from('profiles')
+    .select('first_name,last_name,email')
+    .eq('id', subjectUserId)
+    .maybeSingle();
+  if (profile.error) {
+    logReadErrors('correctionAssignmentMark: name read failed', profile.error);
+    return { success: false, error: 'options_failed' };
+  }
+  const name = profile.data ? formatProfileName(profile.data) : 'Unbekannt';
+  return { success: true, userId: subjectUserId, label: `${name} zugewiesen` };
 }
 
 /** Search text without the characters PostgREST filter strings treat as syntax, quoting or wildcards. */
@@ -298,25 +348,24 @@ type JobOptionRow = {
 /**
  * One job as a picker choice. The number leads, as people name a job by it. A
  * manager sees a job without a title by its description; an employee by its
- * number alone. A correction lists the whole organization's jobs, so the
- * caller's own stand out.
+ * number alone. A correction lists the whole organization's jobs, so the jobs
+ * of the person whose time it changes stand out.
  */
 function jobOption(
   row: JobOptionRow,
   context: AuthContext,
-  input: Request,
+  mark: AssignmentMark | null,
   descriptions: Map<string, string | null>,
 ): JobEntityOption {
   const title = context.isManagerOrAbove
     ? getJobDisplayTitle({ title: row.title, description: descriptions.get(row.id) ?? null })
     : row.title.trim();
-  const ownCorrectionJob =
-    input.purpose === 'time-correction' &&
-    row.job_assignments.some((assignment) => assignment.user_id === context.userId);
+  const marked =
+    mark !== null && row.job_assignments.some((assignment) => assignment.user_id === mark.userId);
   return {
     value: row.id,
     label: [row.job_number, title].filter(Boolean).join(' · ') || '—',
-    ...(ownCorrectionJob ? { description: 'Dir zugewiesen' } : {}),
+    ...(marked ? { description: mark.label } : {}),
     number: row.job_number,
     clientId: row.client_id,
     projectId: row.project_id,
@@ -328,6 +377,7 @@ async function loadJobOptions(
   database: Database,
   context: AuthContext,
   input: Request,
+  mark: AssignmentMark | null,
 ): Promise<JobOptionResult> {
   // An employee never reads a job's description: not as a label, not as a
   // search term that would test hidden text with yes-or-no answers. The page
@@ -385,7 +435,7 @@ async function loadJobOptions(
     ? await descriptionsOfUntitledJobs(database, context, [...page.data, ...selected.data])
     : new Map<string, string | null>();
   if (!descriptions) return { success: false, error: 'options_failed' };
-  const map = (row: JobOptionRow): JobEntityOption => jobOption(row, context, input, descriptions);
+  const map = (row: JobOptionRow): JobEntityOption => jobOption(row, context, mark, descriptions);
   return {
     success: true,
     options: page.data.slice(0, PAGE_SIZE).map(map),

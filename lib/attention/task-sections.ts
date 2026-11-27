@@ -8,7 +8,8 @@ import type { AttentionTask } from './types';
  * promise to the customer is already broken. Time-bound decisions follow: time
  * approvals (MiLoG timeliness), vacation requests, the visits an approved
  * vacation takes a planned person away from, the jobs whose last visit passed
- * unfinished, and open Anfragen. A field worker's access proposal follows the
+ * unfinished, and the maintenance due or overdue without a visit. Open
+ * Anfragen follow. A field worker's access proposal follows the
  * join requests: both wait for one office decision. The handover backlog comes
  * last, because it waits without a deadline.
  */
@@ -18,6 +19,7 @@ const ATTENTION_TASK_SECTION_ORDER = [
   'vacation',
   'visitReplan',
   'overdueJob',
+  'dueMaintenance',
   'request',
   'joinRequest',
   'siteAccess',
@@ -42,6 +44,7 @@ const SECTION_OF_TASK_KIND = {
   planning_visit_replan: 'visitReplan',
   site_access_proposal: 'siteAccess',
   job_past_last_visit: 'overdueJob',
+  maintenance_due: 'dueMaintenance',
   client_request_open: 'request',
   client_request_callback_overdue: 'callback',
   organization_join_request: 'joinRequest',

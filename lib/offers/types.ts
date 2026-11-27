@@ -9,7 +9,7 @@ import { z } from '@/lib/zod';
 // its header changes in 20261230110000_change_the_header_of_a_draft_offer.sql,
 // its content in 20270201090000_write_titel_and_positionen_into_an_offer.sql,
 // a Position's article in 20270301090000_take_offer_positions_from_articles.sql,
-// its Leistung and its cost in 20270401090000_calculate_offers_with_leistungen_and_costs.sql).
+// its Leistung and its cost in 20270501090000_calculate_offers_with_leistungen_and_costs.sql).
 
 /** Every status the database check allows; this release writes only `entwurf`. */
 export const OFFER_STATUSES = ['entwurf', 'gesendet', 'angenommen', 'abgelehnt', 'zurueckgezogen'] as const;
