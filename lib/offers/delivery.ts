@@ -10,6 +10,8 @@ import { formatEuroCents } from '@/lib/document-rendering/format';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { formatGermanDate } from '@/lib/utils';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { z } from '@/lib/zod';
 
 import type { OfferRevisionDelivery } from './delivery-types';
 
@@ -19,16 +21,22 @@ import type { OfferRevisionDelivery } from './delivery-types';
 // names. lock_delivery_document checks the organization again, and that no
 // later revision replaced it. E2a's offer and revisions are only read.
 
-type RevisionRow = {
-  id: string;
-  revision: number;
-  document_id: string;
-  offer_number: string;
-  title: string;
-  valid_until: string;
-  gross_cents: number;
-  recipient_client_id: string;
-};
+const revisionRowSchema = z.object({
+  id: uuidSchema,
+  revision: z.number().int().min(1),
+  document_id: uuidSchema,
+  offer_number: z.string(),
+  title: z.string(),
+  valid_until: z.iso.date(),
+  gross_cents: z.number().int(),
+  recipient_client_id: uuidSchema,
+});
+type RevisionRow = z.output<typeof revisionRowSchema>;
+
+/** The revision named and, when one replaced it, the next. */
+const revisionRowsSchema = z.array(revisionRowSchema).max(2);
+
+const offerContactSchema = z.object({ contact_id: uuidSchema.nullable() }).nullable();
 
 /** The next revision, which replaced this one; null while it is the newest. */
 type DeliveryRevision = RevisionRow & { replacedBy: number | null };
@@ -52,8 +60,9 @@ export async function readDeliveryRevision(
       .order('revision')
       .limit(2),
   );
-  if (error) throw new Error('offer_revision_read_failed');
-  const [own, later] = data ?? [];
+  const rows = revisionRowsSchema.safeParse(data ?? []);
+  if (error || !rows.success) throw new Error('offer_revision_read_failed');
+  const [own, later] = rows.data;
   if (!own || own.revision !== offer.revision) return null;
   return { ...own, replacedBy: later?.revision ?? null };
 }
@@ -92,11 +101,12 @@ async function readOfferMailDefaults(
       .eq('id', offerId)
       .maybeSingle(),
   );
-  if (offer.error) throw new Error('offer_read_failed');
+  const contact = offerContactSchema.safeParse(offer.data);
+  if (offer.error || !contact.success) throw new Error('offer_read_failed');
   const [recipient, sender] = await Promise.all([
     readRecipientEmail(caller.orgId, {
       clientId: revision.recipient_client_id,
-      contactId: offer.data?.contact_id ?? null,
+      contactId: contact.data?.contact_id ?? null,
     }),
     readDeliverySender(caller),
   ]);

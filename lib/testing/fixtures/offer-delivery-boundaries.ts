@@ -162,13 +162,21 @@ world.rpc = ({ name, args }) => {
     return { data: { total: 0, rows: [] }, error: null };
   }
   if (name === 'request_document_delivery') {
-    const revision = tableRows(world, 'offer_revisions').find(
+    // As the function: an earlier attempt under the key answers from the record before any subject check.
+    const earlier = deliveries.find((delivery) => delivery.attemptKey === args.p_attempt_key);
+    if (earlier) return { data: payloadOf(earlier, false), error: null };
+    const revisions = tableRows(world, 'offer_revisions');
+    const revision = revisions.find(
       (row) => row.id === args.p_subject_id && row.organization_id === ORGANIZATION_A,
     );
     if (args.p_subject_kind !== 'offer_revision' || !revision) return refused('offer_revision_not_found');
+    if (
+      revisions.some(
+        (row) => row.offer_id === revision.offer_id && Number(row.revision) > Number(revision.revision),
+      )
+    )
+      return refused('offer_revision_superseded');
     if (args.p_document_id !== revision.document_id) return refused('document_not_found');
-    const earlier = deliveries.find((delivery) => delivery.attemptKey === args.p_attempt_key);
-    if (earlier) return { data: payloadOf(earlier, false), error: null };
     const delivery: Delivery = {
       id: crypto.randomUUID(),
       organizationId: ORGANIZATION_A,
@@ -357,12 +365,14 @@ assert.deepEqual([second.revisionId, second.documentId], [secondRevisionId, seco
 assert.deepEqual(attachmentsOf(mailsOf(second.id)[0]), [
   ['Angebot ANG-2037-0007.pdf', [...filedOf(secondDocumentId).bytes]],
 ]);
-await assertRefused(
-  world,
-  [['sendOfferRevisionEmail replaced revision', () => send(1, crypto.randomUUID())]],
-  { success: false, error: 'offer_revision_superseded' },
-  'reads',
-);
+assert.deepEqual(await send(1, crypto.randomUUID()), { success: false, error: 'offer_revision_superseded' });
+assert.equal(memoryOutbox.messages().length, 2, 'a replaced revision was sent');
+// Revision 1's press repeated after its answer was lost answers from the record, also now
+// that revision 2 replaced it, and sends nothing again.
+world.rpcCalls.length = 0;
+assert.deepEqual(await send(1, firstKey), { success: true, state: 'sent', failureCode: null });
+assert.equal(callsNamed('request_document_delivery').length, 1);
+assert.equal(mailsOf(first.id).length, 1, 'the replayed press sent revision 1 again');
 assert.equal(memoryOutbox.messages().length, 2);
 // Its „Versand“ read names the revision that replaced it, so a stale page's dialog turns read-only.
 const replacedRead = await getOfferRevisionDelivery({ offerId, revision: 1 });

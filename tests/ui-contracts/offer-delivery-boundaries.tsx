@@ -2,11 +2,10 @@
 // revision 2 and revision 1, which revision 2 replaced, and revision 4 on a
 // stale page whose read learns that revision 5 replaced it. Each read
 // answers at once with one failed email still inside its retry window; the
-// email is held until the spec answers (held-write-boundary.ts), and a retry
-// is no write this contract expects.
+// email and the retry are held until the spec answers (held-write-boundary.ts).
 import { OfferRevisionDelivery } from '@/components/angebote/offer-revision-delivery';
 import { BannerProvider } from '@/components/ui/banner';
-import { holdWrite, unexpectedWrite } from './held-write-boundary';
+import { holdWrite } from './held-write-boundary';
 
 const OFFER_ID = '98400000-0000-4000-8000-000000000001';
 const HOUR = 3_600_000;
@@ -57,7 +56,12 @@ export const sendOfferRevisionEmail = async (input: unknown) => {
     : { success: true as const, state: 'sent' as const, failureCode: null };
 };
 
-export const retryOfferRevisionDelivery = unexpectedWrite;
+export const retryOfferRevisionDelivery = async (input: unknown) => {
+  const refusal = await holdWrite('retryOfferRevisionDelivery', input);
+  return refusal
+    ? { success: false as const, error: refusal }
+    : { success: true as const, state: 'sent' as const, failureCode: null, outcomeUnknown: false };
+};
 
 export function OfferDeliveryContractFixture(): React.JSX.Element {
   return (

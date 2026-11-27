@@ -3,7 +3,7 @@ import { visibleText } from '../golden/support/steps/shared';
 import { answerHeldWrite, openContractFixture } from './open-fixture';
 
 // „Versenden“ on a sent offer's revisions (components/angebote/offer-revision-delivery.tsx):
-// the newest revision takes an email and a retry; a revision a later one
+// the newest revision takes an email, which closes the dialog, and a retry; a revision a later one
 // replaced lists its sends read-only and offers neither, also when only the
 // dialog's read knows of the later revision.
 
@@ -37,6 +37,30 @@ test('the newest revision is sent by email and retried; a replaced revision list
   await expect(newest.getByLabel('Empfänger')).toBeDisabled();
   await answerHeldWrite(page, null);
   await expect(visibleText(page, 'Das Angebot ist an einkauf@lindenhof.example versendet.')).toBeVisible();
+  await expect(newest, 'a confirmed send left its dialog open').toBeHidden();
+});
+
+test('„Erneut senden“ retries the failed email of the newest revision, pending until its answer', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'offer-delivery');
+  await page
+    .getByRole('region', { name: 'Aktuelle Seite' })
+    .getByRole('button', { name: 'Versenden' })
+    .click();
+  const dialog = page.getByRole('dialog', { name: 'Angebot versenden' });
+  const retry = dialog.getByRole('button', { name: 'Erneut senden' });
+  await retry.click();
+  await expect(retry, 'the retry shows no pending state while its answer is held').toBeDisabled();
+  expect(
+    await page.evaluate(() => window.uiContractWrites.calls.at(-1)),
+    'the retry did not name the failed delivery and the attempt the row showed',
+  ).toEqual({
+    kind: 'retryOfferRevisionDelivery',
+    input: { deliveryId: '98400000-0000-4000-8000-000000000601', expectedAttempt: 1 },
+  });
+  await answerHeldWrite(page, null);
+  await expect(visibleText(page, 'E-Mail an verwaltung@lindenhof.example versendet.')).toBeVisible();
 });
 
 test('a stale page’s newest revision turns read-only when its read names a later revision', async ({

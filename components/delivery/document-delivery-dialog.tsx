@@ -110,11 +110,11 @@ function EmailStep({
   host: DocumentDeliveryHost;
   action: StepAction<SendEmail>;
   form: DeliveryMailDefaults;
-  /** The form's new state; null once it went out. */
-  setForm: (form: DeliveryMailDefaults | null) => void;
+  setForm: (form: DeliveryMailDefaults) => void;
   attempt: PayloadAttemptKey;
   sentBefore: string | null;
-  onDone: () => void;
+  /** The send's answer: one that went out closes the dialog, a failure returns to the sends. */
+  onDone: (state: DeliveryState) => void;
   onBack: () => void;
 }): ReactElement {
   const { showBanner } = useBanner();
@@ -133,9 +133,8 @@ function EmailStep({
     if (!result) return setError(SEND_FAILED);
     if (!result.success) return setError(describeFailure(result.error, host.failures, SEND_FAILED));
     attempt.settle();
-    if (result.state !== 'failed') setForm(null);
     showBanner(sendBanner(result, host.documentName, form.recipient.trim()));
-    onDone();
+    onDone(result.state);
   };
   return (
     <form onSubmit={submit} className="contents" noValidate aria-busy={isPending || undefined}>
@@ -183,8 +182,6 @@ function ManualStep({
     const result = await run({ attemptKey, note: note.value }).catch(() => null);
     if (!result) return setError(RECORD_FAILED);
     if (!result.success) return setError(describeFailure(result.error, host.failures, RECORD_FAILED));
-    note.attempt.settle();
-    note.set('');
     showBanner({ variant: 'success', message: `${host.documentName} ist als manuell versendet vermerkt.` });
     onDone();
   };
@@ -320,14 +317,16 @@ export function DocumentDeliveryDialog({
     manual ? manual(input) : NO_MANUAL(input),
   );
   const retrying = useServerAction((input: Parameters<RetryDelivery>[0]) => retry(input));
-  const recordsManual = manual !== undefined;
   const read = useClientRead({
     read: host.read,
     deps: host.readKey,
     failureMessage: (code) => describeFailure(code, host.failures, host.loadFailure),
   });
   const delivery = read.data?.delivery;
-  const done = () => {
+  // Success closes the dialog and its Banner confirms; a failed email returns to the sends,
+  // where „Erneut senden“ repeats it.
+  const sent = (state: DeliveryState) => {
+    if (state !== 'failed') return onClose();
     setStep('overview');
     read.reload();
   };
@@ -341,9 +340,7 @@ export function DocumentDeliveryDialog({
   // The email step opens on a current read of the sends, so its note of an earlier email is current too.
   const defaults = !read.loading && !read.failure ? delivery?.defaults : null;
   const shown: Step =
-    host.closed || (step === 'email' && !defaults) || (step === 'manual' && !recordsManual)
-      ? 'overview'
-      : step;
+    host.closed || (step === 'email' && !defaults) || (step === 'manual' && !manual) ? 'overview' : step;
   const description = host.closed ?? host.descriptions[shown] ?? host.descriptions.overview;
   return (
     <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()} pending={pending}>
@@ -362,18 +359,18 @@ export function DocumentDeliveryDialog({
             setForm={setDraft}
             attempt={emailAttempt}
             sentBefore={priorEmailAdvice(delivery.list.entries)}
-            onDone={done}
+            onDone={sent}
             onBack={back}
           />
         ) : shown === 'manual' ? (
-          <ManualStep host={host} action={recording} note={noteDraft} onDone={done} onBack={back} />
+          <ManualStep host={host} action={recording} note={noteDraft} onDone={onClose} onBack={back} />
         ) : (
           <OverviewStep
             host={host}
             read={read}
             retry={retrying.run}
             retrying={retrying.isPending}
-            recordsManual={recordsManual}
+            recordsManual={manual !== undefined}
             onClose={onClose}
             onStep={openStep}
           />

@@ -20,7 +20,7 @@ import { offerRevisionRefSchema } from './delivery-types';
 // „Per E-Mail senden“ and „Erneut senden“ for a sent offer revision, through
 // E2c's delivery (lib/delivery/). Admin and Büro only; the attachment is
 // always the revision's own filed PDF, read on the server, never one the
-// client names. A revision a later one replaced is not sent.
+// client names. A revision a later one replaced is not sent again.
 
 const sendOfferRevisionEmailSchema = sendDocumentEmailSchema.extend(offerRevisionRefSchema.shape);
 const retryOfferRevisionDeliverySchema = z.object({
@@ -29,15 +29,19 @@ const retryOfferRevisionDeliverySchema = z.object({
   expectedAttempt: z.number().int().min(1),
 });
 
-/** The caller, and the id and filed PDF of the offer's newest revision when it is the one named. */
-async function sendableRevision(
+/**
+ * The caller, and the id and filed PDF of the named revision. Whether a later
+ * revision replaced it is request_document_delivery's question: a press
+ * repeated after a lost answer replays from the record first, and only a new
+ * send of a replaced revision is refused (offer_revision_superseded).
+ */
+async function namedRevision(
   offer: z.output<typeof offerRevisionRefSchema>,
 ): Promise<ActionResult<{ context: ActionContext; revisionId: string; documentId: string }>> {
   const caller = await resolveManagerContext();
   if (!caller.success) return caller;
   const revision = await readDeliveryRevision(caller.context, offer);
   if (!revision) return { success: false, error: 'offer_revision_not_found' };
-  if (revision.replacedBy !== null) return { success: false, error: 'offer_revision_superseded' };
   return {
     success: true,
     context: caller.context,
@@ -54,7 +58,7 @@ export async function sendOfferRevisionEmail(
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
   try {
-    const target = await sendableRevision(input);
+    const target = await namedRevision(input);
     if (!target.success) return target;
     return await sendDocument(target.context, {
       attemptKey: input.attemptKey,
