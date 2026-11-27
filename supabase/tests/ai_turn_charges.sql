@@ -312,7 +312,8 @@ insert into public.ai_threads (id, organization_id, user_id, title) values
 insert into public.ai_runs (id, organization_id, thread_id, user_id, idempotency_key, reserved_micro_usd, created_at)
 values ('af000000-0000-4000-8000-000000000044', 'af000000-0000-4000-8000-000000000010',
   'af000000-0000-4000-8000-000000000024', 'af000000-0000-4000-8000-000000000001', 'midnight-run', 30000000,
-  (date_trunc('month', now() at time zone 'Europe/Berlin') at time zone 'Europe/Berlin') - interval '1 minute');
+  -- Older than 15 minutes on any day, so it never counts as the person's open run.
+  (date_trunc('month', now() at time zone 'Europe/Berlin') at time zone 'Europe/Berlin') - interval '20 minutes');
 insert into public.ai_run_attempts (organization_id, run_id, idempotency_key, model_id, prompt_version,
   input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, outcome, created_at) values
 ('af000000-0000-4000-8000-000000000010', 'af000000-0000-4000-8000-000000000044', 'midnight-run:1:0',
