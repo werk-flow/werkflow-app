@@ -210,6 +210,8 @@ const SECTION_SKELETONS = {
       </SettingsCardSkeleton>
       <SettingsCardSkeleton columns={1}>
         <DocumentSampleRowSkeleton />
+        {/* The Musterangebot's inline PDF (components/shared/pdf-frame.tsx). */}
+        <Skeleton className="h-[70dvh] w-full" />
       </SettingsCardSkeleton>
     </>
   ),

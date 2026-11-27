@@ -1,11 +1,11 @@
 name: Production alert
 
 # Opens, updates or closes a production alert for ops/ci-alert.py in werkflow-planning: a
-# scheduled release that never started, and the production watcher's deploy, server-error,
-# handled-failure and watcher alerts. The PC's gh acts as the owner, and GitHub tells nobody of
-# their own actions, so an issue it opened and assigned would reach no inbox. This job writes as
-# github-actions, so the owner's assignment notifies them
-# (docs/technical/recovery-and-incidents.md#monitoring).
+# scheduled release that never started, and a Boat key about to expire. That script's gh acts as
+# the owner, and GitHub tells nobody of their own actions, so an issue it opened and assigned would
+# reach no inbox. This job writes as github-actions, so the owner's assignment notifies them
+# (docs/technical/recovery-and-incidents.md#monitoring). The production watcher's alerts come from
+# prod-watch.yml, which writes as github-actions itself.
 on:
   workflow_dispatch:
     inputs:
@@ -15,10 +15,6 @@ on:
         options:
           - 'CI alert: release'
           - 'CI alert: release (proof)'
-          - 'Production alert: deploy'
-          - 'Production alert: server errors'
-          - 'Production alert: handled failures'
-          - 'Production alert: watcher'
           - 'Owner action: Boat key'
       action:
         description: keep opens the alert or comments on the open one; close closes it
@@ -35,8 +31,7 @@ on:
 permissions: {}
 
 # One group per alert, so two writes to one issue never race. GitHub keeps only the newest
-# pending run of a group and cancels the older one; ops/prod_watch.py dispatches again when
-# its run ends cancelled or failed.
+# pending run of a group and cancels the older one.
 concurrency:
   group: production-alert-${{ inputs.title }}
   cancel-in-progress: false

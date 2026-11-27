@@ -5,9 +5,9 @@ import { type ShellWord, SCRIPT_FLAG, SHELLS, program, readShell } from './shell
 
 // Only the process that uses a workstation secret reads it
 // (docs/technical/machine-setup.md, "Agent keys"): the Boat API key, the
-// problem-report hand-out secret, the agents' staging keys, the production
-// watcher's token, the Supabase CLI's login, the old Stripe sandbox folder, and
-// a checkout's PROD keys in `.env.live-backup`. The PreToolUse hook
+// problem-report hand-out secret, the agents' staging keys, the Supabase CLI's
+// login, the old Stripe sandbox folder, and a checkout's PROD keys in
+// `.env.live-backup`. The PreToolUse hook
 // .claude/hooks/refuse-boat-key-reads.ts refuses an agent's call that would
 // read, print, copy or search one of these files, for Claude Code and Codex alike.
 //
@@ -73,14 +73,6 @@ const GUARDED_SECRETS: readonly GuardedSecret[] = [
       'Only the process that uses an agent key reads it, through lib/security/staging-agent-keys.ts, ' +
       'and never prints it: `bun run agent-access:check` checks every key and prints ok, failed or missing ' +
       '(docs/technical/machine-setup.md, "Agent keys").',
-  },
-  {
-    files: ['.config/werkflow/prod-watch.env'],
-    holds: "the production watcher's Vercel token",
-    mention: /prod-watch\.env/,
-    instead:
-      'Only the production watcher, ops/prod_watch.py, reads its token ' +
-      '(docs/technical/recovery-and-incidents.md, "Monitoring").',
   },
   {
     files: ['.supabase/access-token'],

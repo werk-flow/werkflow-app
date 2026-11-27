@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { temporaryDirectory } from './temporary-directory';
-import { workflowsFolder } from './ci-workflow';
+import { readWorkflow, workflowsFolder } from './ci-workflow';
 import { GITHUB_CURL_STUB } from './github-api-stub';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
@@ -151,7 +151,7 @@ test('a green run closes a duplicate a race left behind', () => {
   ]);
 });
 
-// The production watcher closes its own alert and says why (.github/workflows/production-alert.yml).
+// The production watcher closes its own alert and says why (.github/workflows/prod-watch.yml).
 test('a close with a note says why, with the run', () => {
   writeOpenIssues([{ number: 14, title: 'Production alert: deploy' }]);
   expect(issueWrites(['close', 'Production alert: deploy', 'Production serves its head again.'])).toEqual([
@@ -159,7 +159,7 @@ test('a close with a note says why, with the run', () => {
   ]);
 });
 
-// The workflow's step for the watcher's handled-failure count (lib/logging.ts, `werkflow.failure`).
+// The production watcher's handled-failure alert (lib/production-watch/watch.ts, `werkflow.failure`).
 test('repeated handled failures keep one assigned issue open until the watcher closes it', () => {
   const title = 'Production alert: handled failures';
   const production = { AFFECTS_PRODUCTION: 'true' };
@@ -186,20 +186,19 @@ test('repeated handled failures keep one assigned issue open until the watcher c
   ]);
 });
 
-test('the production alert workflow offers every title the production watcher and the Boat key check raise', () => {
-  const workflow = readFileSync(join(repositoryRoot, workflowsFolder(), 'production-alert.yml'), 'utf8');
-  for (const title of [
+// ops/ci-alert.py in werkflow-planning dispatches only these titles; the production watcher writes
+// its own alerts in prod-watch.yml, so a choice no caller raises is gone.
+test('the production alert workflow offers exactly the titles the release check and the Boat key check raise', () => {
+  const workflow = readWorkflow('production-alert.yml');
+  expect(workflow.at('on', 'workflow_dispatch', 'inputs', 'title', 'options')).toEqual([
     'CI alert: release',
-    'Production alert: deploy',
-    'Production alert: server errors',
-    'Production alert: handled failures',
-    'Production alert: watcher',
+    'CI alert: release (proof)',
     'Owner action: Boat key',
-  ])
-    expect(workflow).toContain(`- '${title}'\n`);
-  expect(workflow).toContain('alert-issue.sh "$ACTION" "$TITLE" "$NOTE"');
+  ]);
+  const text = readFileSync(join(repositoryRoot, workflowsFolder(), 'production-alert.yml'), 'utf8');
+  expect(text).toContain('alert-issue.sh "$ACTION" "$TITLE" "$NOTE"');
   // A pending run replaces the older pending run of its group, so one alert cannot drop another's.
-  expect(workflow).toContain('group: production-alert-${{ inputs.title }}\n');
+  expect(text).toContain('group: production-alert-${{ inputs.title }}\n');
 });
 
 // The recovery rehearsal runs on the owner's PC, outside GitHub Actions (ops/recovery-rehearsal.py in werkflow-planning).
