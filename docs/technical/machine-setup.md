@@ -62,6 +62,10 @@ Agents hold four keys per machine (`pc`, `mac`, `netcup`) for DEV, staging and t
 - `.claude/hooks/refuse-boat-key-reads.ts` refuses an agent's read, print, copy or search of a workstation secret file and names who reads it instead: the key file, the Boat key, the hand-out file, the Supabase CLI's login, `~/.werkflow-stripe-sandbox/`, and `.env.live-backup` in any checkout.
 - Agents get no Resend, R2 or Vercel API key: none can be limited to staging. They check mail through the app's records on DEV, files through the app's downloads, and Vercel through the Vercel MCP connector.
 
+## Stop your own run
+
+Stop only a PID your run recorded or use the tool's own stop. Process patterns can kill other agents' runs on the shared machine. The Tier 1 [pattern-kill hook](../../.claude/hooks/refuse-pattern-kill.ts) refuses `pkill`, `killall`, piped kill targets and targets from command substitutions. Record a background PID with `$!` in the same command.
+
 ## Background jobs
 
 The three agent machines (`pc`, `mac`, `netcup`) share one setup. Apart from OS and hardware, they differ only in the jobs below. The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-planning`, as systemd user timers on Linux and launchd agents on the Mac (`ops/install-mac.py`). `werkflow-uptime` is a system timer (`ops/uptime-install.sh`). The [production watcher](recovery-and-incidents.md#monitoring) runs on GitHub, and no machine holds its token.
