@@ -10,14 +10,18 @@
 
 -- 1. One row per application, snapshot and person: the first and last fact
 -- timestamp of that person in that snapshot. Both snapshots count: moving time
--- out of a window still suppresses its original source there.
+-- out of a window still suppresses its original source there. Facts without a
+-- person (a legacy transition the snapshot names only by its time) share one
+-- row without user_id, which only the organization's read finds, as before.
 create table public.time_correction_application_spans (
+  id bigint generated always as identity primary key,
   application_id uuid not null references public.time_correction_applications (id) on delete cascade,
   organization_id uuid not null references public.organizations (id) on delete cascade,
   snapshot text not null check (snapshot in ('before', 'after')),
-  user_id uuid not null,
+  user_id uuid,
   span tstzrange not null,
-  primary key (application_id, snapshot, user_id)
+  constraint time_correction_application_spans_person_unique
+    unique nulls not distinct (application_id, snapshot, user_id)
 );
 -- Range overlap with an equality on organization and person (btree_gist).
 create index time_correction_application_spans_person_span_idx
@@ -32,7 +36,7 @@ revoke all on table public.time_correction_application_spans from public, anon, 
 grant select on table public.time_correction_application_spans to service_role;
 
 -- 2. The spans of one application, from its two snapshots. A fact without a
--- person or a time names no one's window.
+-- time lies in no window.
 create function app_private.time_correction_snapshot_spans(p_before jsonb, p_after jsonb)
 returns table (snapshot text, user_id uuid, span tstzrange)
 language sql immutable set search_path to '' as $$
@@ -43,7 +47,7 @@ language sql immutable set search_path to '' as $$
     union all
     select 'after', fact from pg_catalog.jsonb_array_elements(p_after -> 'facts') fact
   ) facts
-  where facts.fact ->> 'userId' is not null and facts.fact ->> 'timestamp' is not null
+  where facts.fact ->> 'timestamp' is not null
   group by facts.snapshot, (facts.fact ->> 'userId')::uuid;
 $$;
 revoke all on function app_private.time_correction_snapshot_spans(jsonb, jsonb) from public, anon, authenticated, service_role;
@@ -114,8 +118,10 @@ cross join lateral app_private.time_correction_snapshot_spans(application.before
 -- 5. The read, same signature and rows as before. Without person and window it
 -- returns the organization's history (correction validation). Otherwise it
 -- starts from the spans: a fact interval that overlaps the window, inclusive at
--- both ends, includes overnight facts whose endpoints lie outside it. Each
--- branch's parameter test is a one-time filter, so only one branch runs.
+-- both ends, includes overnight facts whose endpoints lie outside it. The
+-- matching ids are collected first (an InitPlan), so the applications are
+-- fetched by primary key whatever the planner estimates. Each branch's
+-- parameter test is a one-time filter, so only one branch runs.
 create or replace function public.read_time_correction_applications(
   p_organization_id uuid,
   p_user_ids uuid[] default null,
@@ -131,19 +137,19 @@ language sql stable security invoker set search_path = '' as $$
   select application.* from public.time_correction_applications application
   where application.organization_id = p_organization_id
     and p_user_ids is not null
-    and application.id in (
-      select span.application_id from public.time_correction_application_spans span
+    and application.id = any (array(
+      select distinct span.application_id from public.time_correction_application_spans span
       where span.organization_id = p_organization_id
         and span.user_id = any (p_user_ids)
         and span.span && pg_catalog.tstzrange(p_from, p_to, '[]')
-    )
+    ))
   union all
   select application.* from public.time_correction_applications application
   where application.organization_id = p_organization_id
     and p_user_ids is null and (p_from is not null or p_to is not null)
-    and application.id in (
-      select span.application_id from public.time_correction_application_spans span
+    and application.id = any (array(
+      select distinct span.application_id from public.time_correction_application_spans span
       where span.organization_id = p_organization_id
         and span.span && pg_catalog.tstzrange(p_from, p_to, '[]')
-    );
+    ));
 $$;

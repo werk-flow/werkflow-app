@@ -597,6 +597,12 @@ begin
       cross join lateral app_private.time_correction_snapshot_spans(application.before_snapshot, application.applied_snapshot) spans
       where application.organization_id = '22000000-0000-0000-0000-000000000010')
   ) then raise exception 'an application''s spans differ from its snapshots'; end if;
+  -- The approved deletion names its legacy entry by time only, without a person: the organization's
+  -- window still finds it, so the office's week hides the deleted entry.
+  if not exists (select 1 from public.read_time_correction_applications(
+      '22000000-0000-0000-0000-000000000010', null, '2026-09-01T00:00:00Z', '2026-09-01T23:59:59Z') application
+    where application.before_snapshot @> '{"facts":[{"kind":"legacy_transition"}]}')
+  then raise exception 'the organization''s window lost a fact without a person'; end if;
 end;
 $$;
 set local role service_role;
