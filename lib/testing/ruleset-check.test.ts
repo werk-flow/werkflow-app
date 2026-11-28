@@ -131,9 +131,9 @@ test('GitHub Actions allowed to bypass, or a production ruleset that stops refus
   expect(check(liveMain(), { ...liveProduction(), current_user_can_bypass: 'always' }).output).toContain(
     'production: lets GitHub Actions bypass nothing',
   );
-  const unread = liveMain();
-  delete unread.current_user_can_bypass;
-  expect(check(unread, liveProduction()).output).toContain('main: lets GitHub Actions bypass nothing');
+  expect(
+    check({ ...liveMain(), current_user_can_bypass: 'pull_requests_only' }, liveProduction()).output,
+  ).toContain('main: lets GitHub Actions bypass nothing');
   expect(check(liveMain(), { ...liveProduction(), enforcement: 'evaluate' }).output).toContain(
     'production: is active',
   );
@@ -147,4 +147,14 @@ test('an unreadable ruleset proves nothing and says so with its own exit code', 
   const result = check(liveMain(), liveProduction());
   expect(result.status).toBe(2);
   expect(result.output).toContain('GitHub did not return the main ruleset');
+});
+
+test('an answer without the caller’s bypass, or one that is no JSON, proves nothing (exit 2), never drift', () => {
+  const unread = liveMain();
+  delete unread.current_user_can_bypass;
+  const missing = check(unread, liveProduction());
+  expect(missing.status).toBe(2);
+  expect(missing.output).toContain('not a whole ruleset');
+  writeFileSync(join(stub, 'gh'), '#!/usr/bin/env bash\necho \'{"rules": [\'\n');
+  expect(check(liveMain(), liveProduction()).status).toBe(2);
 });

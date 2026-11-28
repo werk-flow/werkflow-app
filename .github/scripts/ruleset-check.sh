@@ -21,6 +21,13 @@ main="$(gh api "repos/${GH_REPO}/rulesets/${main_ruleset}")" \
   || { echo "::error::GitHub did not return the main ruleset ${main_ruleset}."; exit 2; }
 production="$(gh api "repos/${GH_REPO}/rulesets/${production_ruleset}")" \
   || { echo "::error::GitHub did not return the production ruleset ${production_ruleset}."; exit 2; }
+# An answer that is no ruleset, or that does not say what the job token may bypass, proves nothing.
+for name in main production; do
+  ruleset="$main"
+  test "$name" = main || ruleset="$production"
+  jq -e 'type == "object" and (.rules | type) == "array" and (.current_user_can_bypass | type) == "string"' <<< "$ruleset" > /dev/null 2>&1 \
+    || { echo "::error::GitHub's answer for the ${name} ruleset is not a whole ruleset with the caller's bypass."; exit 2; }
+done
 
 # Adds "<name>: <expectation>" to the drift when the jq check is not true.
 expect() {
