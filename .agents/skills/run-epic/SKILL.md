@@ -7,7 +7,7 @@ description: Use when you lead an epic: a goal that needs several pull requests,
 
 You are the lead thread: you plan, start children, merge and close. Children write the code. A delegated child cannot watch a PR, so you are each child PR's own thread: you watch it, label a level 2 child for [the CodeRabbit queue](../../../docs/technical/coderabbit.md#the-coderabbit-queue), and merge it.
 
-The planning repo `werk-flow/werkflow-planning` is private. Its clone sits beside this repository's main checkout. This repo is public: never copy planning content into it. Cite an issue as `werk-flow/werkflow-planning#<n>`.
+The private `werk-flow/werkflow-planning` clone sits beside the main checkout. Never copy its content into this public repo. Cite issues as `werk-flow/werkflow-planning#<n>`.
 
 ## 1. Plan
 
@@ -30,6 +30,10 @@ Never ask about the breakdown or scope again. From here, [Decide or ask](../../.
 
 ## 3. Start children
 
+### Choose models
+
+Leads stay on Opus 5.5 (`claude-opus-5-5`). Use GPT 6.1 Sol subagents through Codex, with high or xhigh effort, for clear-cut, scoped tasks with an exact start and finish line. Sanity-read each result before using it. Give complex, out-of-the-box or architecture work to Opus 5.5 subagents. Never use Sonnet.
+
 Start each child of the current stage with `delegate_task` (`isolation: "worktree"`, `mode: "async"`). The prompt names the child issue and the shared brief, and says:
 
 - Read the epic, the child issue and the brief before writing.
@@ -41,16 +45,16 @@ Start each child of the current stage with `delegate_task` (`isolation: "worktre
 - Never end your turn while a shell run you wait on is going: your turn end is your hand-back ([wait for a long run](../../../docs/technical/testing.md#wait-for-a-long-run)).
 - End with: `PR <full URL>, head <SHA>, checks and reviews <state>.`
 
-End your turn. A child's completion notice wakes you, and so does a PR watch, so do not poll them. When T3 drops a child's hand-back, the notifier passes it on. A shell run wakes nobody: [start it notified](../../../docs/technical/testing.md#wait-for-a-long-run).
+End your turn. Completion notices and PR watches wake you. Never poll. The notifier delivers dropped hand-backs. A shell run wakes nobody: [start it notified](../../../docs/technical/testing.md#wait-for-a-long-run).
 
 ## 4. Keep the three lists
 
-The epic issue holds a **State** section and three lists ([Decide or ask](../../../AGENTS.md#decide-or-ask)). A fresh lead must be able to take over from the epic issue alone ([hand over](#hand-over-at-about-400k)).
+Keep **State** and three lists on the epic ([Decide or ask](../../../AGENTS.md#decide-or-ask)), enough for a fresh lead to [take over](#hand-over-at-about-400k).
 
 - **State.** The current stage, and one line per open child: issue, PR, head SHA, where it stands (building, in review, waiting for the owner, ready to merge) and your next step. Update it on every hand-back, merge and stage start, before you end the turn.
 
 - **Decided without the owner.** One line per decision, yours and each child's: what, why, the PR.
-- **Owner queue.** One entry per owner item, posted once: what the owner decides or does, your recommendation first, numbered steps where the owner must act, and what waits for it. Ask the same item through the question tool, so T3 shows it to the owner; the notifier reminds a lead whose Owner queue entry has no question open in T3. Keep every child going that does not depend on it.
+- **Owner queue.** One entry per owner item, posted once: what the owner decides or does, your recommendation first, numbered steps where the owner must act, and what waits for it. Ask the same item through the question tool in the same turn; the notifier reminds a lead whose Owner queue entry has no question open in T3. Keep every child going that does not depend on it.
   - A sign-in or account login is always an owner step; no agent starts one ([security](../../../docs/technical/security.md#never)). Its entry names the machine, the window, the exact command and what the owner should see. Ask the owner through the question tool at once, so T3 flags it, and keep working on everything that does not need it.
 - **For the owner to look at.** Captures of the screens and copy you accepted ([rendered design acceptance](../../../docs/technical/standards-audit.md#rendered-design-acceptance)), each lab reference accepted with `lab-counts accept`, and where to try a user-visible speed change. Nothing waits for this list.
 
@@ -110,6 +114,6 @@ A fresh lead reads the epic issue, `gh pr view` of each open child PR, and its o
 
 1. On the merged `main`, run the feature's end-to-end journeys: `bun run test:verify --group <ids> --fresh` with its `golden:*` and `audit:*` groups from `lib/testing/selection/test-groups.ts`. A wave end adds `bun run test:verify --mode release`. [Start each notified](../../../docs/technical/testing.md#wait-for-a-long-run).
 2. Check that each child updated the **Current Product Baseline** of every spec whose behavior it changed.
-3. Check every done-when of the epic against `main`.
+3. Check every done-when and the [enforcement backlog](../../../docs/technical/enforcement-ladder-backlog.md) rows the epic touches against `main`.
 4. Comment the result on the epic: each child with its PR, targets before and after, decisions you made, anything unverified. Close the epic.
 5. Report the same to the owner, outcome first, with the open Owner queue entries.

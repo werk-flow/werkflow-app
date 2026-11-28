@@ -14,7 +14,7 @@ You take one problem report from fetch to its end, alone. The owner does not wat
 - **Placeholders stay placeholders.** `[Kunde 1]` and its kind replace a scrubbed name. Never try to find out who it was.
 - **One door.** Reach the hand-out only through `bun scripts/report-thread.ts`. Never read its secret file, print the environment, or call the hand-out another way. The hand-out and the write-back are the only production data you touch (werk-flow/werkflow-planning#21). Every other rule of `AGENTS.md` about PROD holds.
 - **One thread per report.** The fetch claims the report, and no agent takes it again. If your run dies after the fetch, the report waits in support's queue for a person.
-- **Models.** A helper you start runs on `claude-opus-5-5` for code, on `claude-sonnet-5-5` or `claude-haiku-5-5` for reading. Never Fable. `sol-loop` picks its own model.
+- **Models.** Follow [the epic model rule](../run-epic/SKILL.md#choose-models). `sol-loop` picks its own model.
 
 ## 1. Fetch
 
@@ -45,7 +45,7 @@ Fix it end to end without the owner. Follow the `full-send` skill from its step 
 
 - **Branch.** Your worktree and branch `t3/report-<first 8 characters of the id>` are this thread's. Wait for `.t3/setup-done`.
 - **Test first** at the cheapest boundary ([testing](../../../docs/technical/testing.md#choose-the-boundary-for-a-rule)). Watch it fail, then pass. Its data is made up from scratch, never taken from the copy.
-- **Review level** by [the rule](../../../docs/technical/coderabbit.md#choose-the-review-level). Money and time are level 2 and keep their CodeRabbit review.
+- **Review level** by [the rule](../../../docs/technical/coderabbit.md#choose-the-review-level). Money and time are level 2 and get [the broker's external review](../../../docs/technical/coderabbit.md#the-coderabbit-queue).
 - **PR.** Problem in your own words; cite `report <id>` and nothing of the copy.
 - **Where `full-send` says ask:** stop with a report instead.
 - **Release.** A blocker may release the same day: once its merge commit has a green `Check` on `main`, run `gh workflow run release` ([release and rollback](../../../docs/technical/environments.md#release-and-rollback)). Any other fix ships with the weekday release.

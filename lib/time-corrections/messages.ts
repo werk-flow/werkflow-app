@@ -25,6 +25,8 @@ export const TIME_CORRECTION_FAILURE_MESSAGES: Readonly<Partial<Record<string, s
   time_correction_stale_source: 'Der ursprüngliche Eintrag hat sich geändert. Bitte lade neu.',
   calendar_incomplete_source:
     'Wähle die ganze Arbeitszeit von Beginn bis Ende aus. Eine laufende Buchung musst du vorher beenden.',
+  time_correction_multiple_intervals:
+    'Diese Korrektur betrifft mehrere Zeiträume einer bereits korrigierten Zeit. Hier kannst du nur die Uhrzeit ändern.',
   time_correction_multiple_application_sources:
     'Bereits korrigierte Zeiten kannst du nur einzeln korrigieren.',
   not_responsible: 'Du darfst die Zeit dieser Person nicht direkt korrigieren.',
