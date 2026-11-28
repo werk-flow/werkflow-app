@@ -2,6 +2,7 @@ import { AlertTriangle, CircleCheck } from 'lucide-react';
 
 import { AiInlineText } from '@/components/shared/ai-markdown';
 import { Badge } from '@/components/ui/badge';
+import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import type { LieferscheinCard } from '@/lib/ui/ki-lieferschein';
 
 /**
@@ -71,7 +72,10 @@ export function KiLieferscheinCard({ card }: { card: LieferscheinCard }): React.
         )
       )}
       {!card.matched && (
-        <p className="text-xs text-muted-foreground">Die Artikel konnten nicht abgeglichen werden.</p>
+        <p className="text-xs text-muted-foreground">
+          Die Artikel konnten nicht abgeglichen werden. Bitte {AI_PRODUCT_NAME}, den Lieferschein noch einmal
+          zu lesen.
+        </p>
       )}
       <p className="text-xs text-muted-foreground">
         Nichts ist gebucht. Prüf jede Position am Lieferschein, bevor du sie übernimmst.

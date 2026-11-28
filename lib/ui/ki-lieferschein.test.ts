@@ -114,3 +114,13 @@ test('a line without a quantity still shows its unit and pack content', () => {
     'VE à 10 · GC-15015 · Kupferrohr 15 x 1 mm',
   );
 });
+
+test('a line whose EAN names another article shows both its number and its EAN', () => {
+  const [first] = RESULT.positionen;
+  const abgleich = { ...first?.abgleich, mengeInBasiseinheit: null, hinweise: ['ean_abweichend'] };
+  const card = lieferscheinCard({ ...RESULT, positionen: [{ ...first, abgleich }] });
+  expect([card?.lines[0]?.delivered, card?.lines[0]?.problems]).toEqual([
+    '4 Stange · GC-15015 · EAN 4012345000158 · Kupferrohr 15 x 1 mm',
+    ['EAN gehört zu einem anderen eigenen Artikel'],
+  ]);
+});

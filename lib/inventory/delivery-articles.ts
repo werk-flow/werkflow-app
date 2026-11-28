@@ -187,12 +187,14 @@ export async function readDeliveryCatalogArticles(
   }
   const supplierIds = [...new Set(articles.data.map((row) => row.supplier_id))];
   if (supplierIds.length === 0) return [];
-  const suppliers = await admin
-    .from('inventory_suppliers')
-    .select('id, name')
-    .eq('organization_id', orgId)
-    .in('id', supplierIds)
-    .abortSignal(signal);
+  const suppliers = await readInBatches(supplierIds, (batch) =>
+    admin
+      .from('inventory_suppliers')
+      .select('id, name')
+      .eq('organization_id', orgId)
+      .in('id', [...batch])
+      .abortSignal(signal),
+  );
   if (suppliers.error) {
     logReadErrors('readDeliveryCatalogArticles: supplier read failed', suppliers.error);
     return 'failed';

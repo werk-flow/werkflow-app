@@ -119,6 +119,9 @@ test('a printed pack content that differs from the stored conversion gives no qu
     baseQuantity: null,
     problems: ['packung_abweichend'],
   });
+  // WerkFlow's own short label converts through the stored pack too.
+  const ktn = line({ artikelnummer: 'GC-15100', menge: 2, einheit: 'Ktn' });
+  expect(matchDeliveryLine(ktn, [CARTON])).toMatchObject({ baseQuantity: 20, problems: [] });
   const line10 = line({ artikelnummer: 'GC-15100', menge: 2, einheit: 'Karton', packungsinhalt: 10 });
   expect(matchDeliveryLine(line10, [CARTON])).toMatchObject({ baseQuantity: 20, problems: [] });
 });

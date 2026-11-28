@@ -101,7 +101,11 @@ export function lieferscheinCard(result: unknown): LieferscheinCard | null {
         nr: line.nr,
         delivered: joined([
           quantity,
-          line.artikelnummer?.text ?? (line.ean && `EAN ${line.ean}`),
+          line.artikelnummer?.text,
+          // The EAN shows when it is the line's only number, or when it names another article.
+          line.ean && (!line.artikelnummer || match?.hinweise.includes('ean_abweichend'))
+            ? `EAN ${line.ean}`
+            : null,
           line.beschreibung?.text,
         ]),
         match: article
