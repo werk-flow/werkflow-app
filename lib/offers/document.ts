@@ -45,7 +45,7 @@ function priced(amountCents: number | null | undefined): number {
 }
 
 /** Number and revision, date, validity, the customer when someone else receives it, and the Einsatzort. */
-function metaRowsOf(offer: PrintedOffer, sending: { issuedOn: string; revision: number }) {
+function offerMetaRows(offer: PrintedOffer, sending: { issuedOn: string; revision: number }) {
   return [
     { label: 'Angebot', value: `${offer.offerNumber}, Revision ${sending.revision}` },
     { label: 'Datum', value: formatGermanDate(sending.issuedOn) },
@@ -101,7 +101,7 @@ export function offerDocument(
     ...letterhead,
     recipientLines: [offer.recipient.name, ...addressTextLines(offer.recipient.address)],
     title: `Angebot: ${offer.title}`,
-    metaRows: metaRowsOf(offer, sending),
+    metaRows: offerMetaRows(offer, sending),
     openingText: offer.openingText,
     sections: offer.sections.map((section, sectionIndex) => {
       const number = String(sectionIndex + 1);

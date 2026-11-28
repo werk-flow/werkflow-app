@@ -259,13 +259,12 @@ function positionFlow(
         drawLeft(page, text, columnsOf(box).textLeft, top, fonts.regular, BODY_SIZE),
       ),
     ),
-    ...(mark
-      ? [
-          tableLine(SMALL_LEADING + 1, (page, top, box) =>
-            drawLeft(page, mark, columnsOf(box).textLeft, top + 1, fonts.bold, SMALL_SIZE, MUTED),
-          ),
-        ]
-      : []),
+    // A mark wraps within the text column, as a Nachlass's parts by rate may run long.
+    ...(mark ? wrap(mark, fonts.bold, SMALL_SIZE, textWidth) : []).map((text) =>
+      tableLine(SMALL_LEADING + 1, (page, top, box) =>
+        drawLeft(page, text, columnsOf(box).textLeft, top + 1, fonts.bold, SMALL_SIZE, MUTED),
+      ),
+    ),
   ];
   const last = head.at(-1);
   if (last && !descriptionLines.length) {

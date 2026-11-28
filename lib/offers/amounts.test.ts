@@ -287,6 +287,26 @@ describe('a Nachlass or Zuschlag', () => {
     expect(amounts.totals).toEqual({ lineNetCents: 0, taxCents: 0, grossCents: 0 });
   });
 
+  test('the order of Nachlässe and Zuschläge never changes a total, near the safe range too', () => {
+    // 500 lines at the line bound at 0 %, then 18 Zuschläge of 100 % of the offer and 18 Nachlässe:
+    // added one by one, the Zuschläge alone would pass the safe integer range.
+    const atBound = free('Fernwärmestation', '100000', 10_000_000, { taxRateBasisPoints: 0 });
+    const of = (direction: 'rabatt' | 'zuschlag') =>
+      adjustment('Anpassung', { direction, scope: 'angebot', percentHundredths: 10_000 });
+    type Direction = 'rabatt' | 'zuschlag';
+    const offer = (order: ReadonlyArray<Direction>): OfferSection[] => [
+      { title: 'Material', positions: Array.from({ length: 500 }, () => atBound) },
+      { title: 'Nachlässe', positions: order.map(of) },
+    ];
+    const grouped = Array.from({ length: 36 }, (_, index): Direction => (index < 18 ? 'zuschlag' : 'rabatt'));
+    const alternating = Array.from(
+      { length: 36 },
+      (_, index): Direction => (index % 2 === 0 ? 'zuschlag' : 'rabatt'),
+    );
+    expect(offerAmounts(offer(grouped)).totals).toEqual(offerAmounts(offer(alternating)).totals);
+    expect(offerAmounts(offer(grouped)).totals.lineNetCents).toBe(500_000_000_000_000);
+  });
+
   test('a percentage of nothing is zero and has no part', () => {
     const amounts = offerAmounts([
       {

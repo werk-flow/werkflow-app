@@ -1,6 +1,12 @@
 import type { PriceQuantity } from '@/lib/inventory/line-amount';
 import { isInventoryUnitCode } from '@/lib/inventory/units';
-import { emptyLine, parsePricedLine, quantityInput, type DraftLineForm } from '@/lib/invoices/draft-form';
+import {
+  emptyLine,
+  parsePricedLine,
+  percentInput,
+  quantityInput,
+  type DraftLineForm,
+} from '@/lib/invoices/draft-form';
 import type { OfferCatalogLine } from '@/lib/invoices/line-sources';
 import { centsToEuroInput, MAX_PRICE_CENTS, parseEuroCents } from '@/lib/price-catalog/money';
 import { MAX_ADJUSTMENT_HUNDREDTHS, offerAmounts, type OfferAmounts } from './amounts';
@@ -156,14 +162,6 @@ const ADJUSTMENT_NAMES: Record<OfferAdjustment['direction'], string> = {
   rabatt: 'Nachlass',
   zuschlag: 'Zuschlag',
 };
-
-/** „2,5“ from 250 hundredths of a percent. */
-function percentInput(hundredths: number): string {
-  const fraction = String(hundredths % 100)
-    .padStart(2, '0')
-    .replace(/0+$/, '');
-  return `${Math.trunc(hundredths / 100)}${fraction ? `,${fraction}` : ''}`;
-}
 
 function adjustmentForm(key: string, position: Extract<OfferPosition, { kind: 'adjustment' }>): PositionForm {
   const { adjustment } = position;

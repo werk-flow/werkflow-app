@@ -89,12 +89,12 @@ function adjustmentParts(adjustment: OfferAdjustment, covered: readonly CoveredL
 }
 
 /**
- * A part as the invoice core takes lines: flat rates of at most one line's
- * bound each, a credit for a negative part. A part may exceed that bound, as
- * the sum of its rate's lines does; split, it adds to its rate's VAT basis
- * all the same.
+ * An amount at one rate as the invoice core takes lines: flat rates of at
+ * most one line's bound each, a credit for a negative amount. It may exceed
+ * that bound, as the sum of its rate's lines does; split, it adds to its
+ * rate's VAT basis all the same.
  */
-function partLines(part: AdjustmentPart): InvoiceLineValues[] {
+function invoiceLinesOfPart(part: AdjustmentPart): InvoiceLineValues[] {
   const lines: InvoiceLineValues[] = [];
   for (let rest = Math.abs(part.amountCents); rest > 0; rest -= MAX_LINE_NET_CENTS) {
     lines.push({
@@ -108,6 +108,27 @@ function partLines(part: AdjustmentPart): InvoiceLineValues[] {
     });
   }
   return lines;
+}
+
+/**
+ * Every Nachlass's and Zuschlag's parts as the invoice core takes them: per
+ * VAT rate, their sum, added exactly first, so no order of them sums past the
+ * safe range on the way to a total that fits.
+ */
+function adjustmentLines(parts: ReadonlyArray<AdjustmentPart[] | null>): InvoiceLineValues[] {
+  const byRate = new Map<InvoiceTaxRate, bigint>();
+  for (const part of parts.flatMap((lineParts) => lineParts ?? [])) {
+    byRate.set(
+      part.taxRateBasisPoints,
+      (byRate.get(part.taxRateBasisPoints) ?? BigInt(0)) + BigInt(part.amountCents),
+    );
+  }
+  return [...byRate].flatMap(([taxRateBasisPoints, cents]) => {
+    const amountCents = Number(cents);
+    if (!Number.isSafeInteger(amountCents))
+      throw new RangeError('A sum of Nachlässe exceeds the safe range.');
+    return invoiceLinesOfPart({ taxRateBasisPoints, amountCents });
+  });
 }
 
 const sumOf = (parts: readonly AdjustmentPart[]) =>
@@ -151,11 +172,8 @@ export function offerAmounts<Section extends PricedSection>(sections: readonly S
         : null,
     ),
   );
-  const amounts = draftAmounts([
-    ...priced.filter(isNormalPriced),
-    ...parts.flat().flatMap((lineParts) => (lineParts ?? []).flatMap(partLines)),
-  ]);
-  // lineNetCents holds the counted lines, each part of a Nachlass or Zuschlag as one.
+  const amounts = draftAmounts([...priced.filter(isNormalPriced), ...adjustmentLines(parts.flat())]);
+  // lineNetCents holds the counted lines, then each rate's Nachlässe and Zuschläge.
   return {
     ...amounts,
     adjustmentParts: parts,

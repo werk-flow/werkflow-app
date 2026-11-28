@@ -15,56 +15,74 @@ import {
   type PositionForm,
 } from '@/lib/offers/content-form';
 
-const DIRECTION_LABELS: Record<PositionForm['adjustment'], string> = {
-  rabatt: 'Nachlass',
-  zuschlag: 'Zuschlag',
-};
+const DIRECTIONS = [
+  ['rabatt', 'Nachlass'],
+  ['zuschlag', 'Zuschlag'],
+] as const;
 
-const SCOPE_LABELS: Record<PositionForm['adjustmentScope'], string> = {
-  titel: 'Titel',
-  angebot: 'Angebot',
-  betrag: 'Fester Betrag',
-};
+const SCOPES = [
+  ['titel', 'Titel'],
+  ['angebot', 'Angebot'],
+  ['betrag', 'Fester Betrag'],
+] as const;
 
-/** A plain select of a few fixed choices with its label. */
-function ChoiceField<Value extends string>({
+/** „Art“ (Nachlass or Zuschlag) and „Bezogen auf“ (Titel, Angebot or a fixed amount). */
+function AdjustmentChoiceFields({
   id,
-  label,
-  value,
-  labels,
+  position,
   onChange,
   disabled,
 }: {
   id: string;
-  label: string;
-  value: Value;
-  labels: Record<Value, string>;
-  onChange: (value: Value) => void;
+  position: PositionForm;
+  onChange: (position: PositionForm) => void;
   disabled: boolean;
 }) {
-  const choices = Object.keys(labels).filter((key): key is Value => key in labels);
   return (
-    <Field label={label} htmlFor={id}>
-      <Select
-        value={value}
-        onValueChange={(next) => {
-          const choice = choices.find((candidate) => candidate === next);
-          if (choice) onChange(choice);
-        }}
-        disabled={disabled}
-      >
-        <SelectTrigger id={id} className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {choices.map((choice) => (
-            <SelectItem key={choice} value={choice}>
-              {labels[choice]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </Field>
+    <>
+      <Field label="Art" htmlFor={`${id}-direction`}>
+        <Select
+          value={position.adjustment}
+          onValueChange={(next) => {
+            const direction = DIRECTIONS.find(([value]) => value === next)?.[0];
+            if (direction) onChange(withAdjustmentDirection(position, direction));
+          }}
+          disabled={disabled}
+        >
+          <SelectTrigger id={`${id}-direction`} className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DIRECTIONS.map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Bezogen auf" htmlFor={`${id}-scope`}>
+        <Select
+          value={position.adjustmentScope}
+          onValueChange={(next) => {
+            const adjustmentScope = SCOPES.find(([value]) => value === next)?.[0];
+            if (adjustmentScope) onChange({ ...position, adjustmentScope });
+          }}
+          disabled={disabled}
+        >
+          <SelectTrigger id={`${id}-scope`} className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SCOPES.map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+    </>
   );
 }
 
@@ -223,20 +241,10 @@ export function AdjustmentFields({
   return (
     <>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-end">
-        <ChoiceField
-          id={`${fieldId('percent')}-direction`}
-          label="Art"
-          value={position.adjustment}
-          labels={DIRECTION_LABELS}
-          onChange={(direction) => onChange(withAdjustmentDirection(position, direction))}
-          disabled={disabled}
-        />
-        <ChoiceField
-          id={`${fieldId('percent')}-scope`}
-          label="Bezogen auf"
-          value={position.adjustmentScope}
-          labels={SCOPE_LABELS}
-          onChange={(adjustmentScope) => onChange({ ...position, adjustmentScope })}
+        <AdjustmentChoiceFields
+          id={fieldId('percent')}
+          position={position}
+          onChange={onChange}
           disabled={disabled}
         />
         <AdjustmentValueFields
