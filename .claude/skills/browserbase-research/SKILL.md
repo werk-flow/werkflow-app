@@ -7,7 +7,7 @@ description: Use for deep or large web research for WerkFlow (market, competitor
 
 Browserbase is the default tool for deep WerkFlow research: a run of many searches and pages. Its free plan has a monthly quota that all three agent machines share, so spend it in this order: Search, then Fetch, then a browser.
 
-`bun run browserbase -- <command>` is the only way in. It runs the `browse` CLI pinned in `package.json` and hands it the [agent key](../../../docs/technical/machine-setup.md#agent-keys) only for a call that needs it. Never run `browse` or `bunx browse` yourself, and never pass a key: the wrapper refuses `--api-key` and `--base-url`.
+`bun run browserbase -- <command>` is the only way in. It sends Search and Fetch itself with the [agent key](../../../docs/technical/machine-setup.md#agent-keys), and runs the `browse` CLI pinned in `package.json` as the browser driver, without the key. Never run `browse` or `bunx browse` yourself, and never pass a key: the wrapper refuses `--api-key` and `--base-url`.
 
 ## Fit beside other tools
 
@@ -21,7 +21,7 @@ Every query, URL and page goes to a third party and into model context.
 
 - Open public pages only. Never open staging, PROD, a preview deployment, a WerkFlow app URL, a page behind our credentials, or a page with customer or personal data. WerkFlow's public website is fine.
 - Write queries from public facts only. A query never holds a customer, a person, an address, a phone number, a price we quoted, a beta partner detail, or an unpublished plan or number. Ask "Heizlastberechnung Software Vergleich", never a question that names the beta partner or a customer.
-- The wrapper refuses some of this: WerkFlow, Supabase, R2, local and IP hosts, and e-mail addresses, phone numbers and IBANs in a query. Its check is a backstop. The rule above is wider, and it is yours to keep.
+- The wrapper refuses some of this: WerkFlow, Supabase, R2, local and IP hosts, and e-mail addresses, phone numbers and IBANs in a query or a domain filter. It checks only the address you name: a redirect or a link you click is yours to judge. Its check is a backstop. The rule above is wider, and it is yours to keep.
 
 ## Before a large run
 
@@ -36,7 +36,7 @@ bun run browserbase -- search "Wärmepumpe Förderung BEG 2026" --num-results 10
 bun run browserbase -- search "Wartungsvertrag Heizung Pflichten" --include-domains zvshk.de,bafa.de
 ```
 
-One query per call, in quotes. Each call spends one of the month's searches, whatever `--num-results` is, so ask for up to 25 results rather than repeating a query. `--mode deep` and `--mode deep-lite` and a people search are refused.
+One query per call, in quotes. Each call spends one of the month's searches, whatever `--num-results` is, so ask for up to 25 results rather than repeating a query. Other filters: `--exclude-domains` (public hosts, comma-separated), `--start-published-date YYYY-MM-DD` and `--output <file>`.
 
 ## Fetch
 
@@ -45,7 +45,7 @@ bun run browserbase -- fetch https://www.bafa.de/DE/Energie/Effiziente_Gebaeude/
 bun run browserbase -- fetch https://www.zvshk.de/ --output ~/scratch/zvshk.html
 ```
 
-Fetch returns a page's raw HTML without running JavaScript, up to 5 MB. The free plan has no markdown or JSON extraction, so the wrapper asks for `raw` and refuses the other formats and `--proxies`. HTML is long: write it to a file with `--output` and search it there instead of reading it into context. For a readable text view of one page, open it with `drive` and take a `snapshot`, which spends nothing.
+Fetch returns a page's raw HTML without running JavaScript, up to 5 MB. The free plan has no markdown or JSON extraction, so the wrapper always asks for `raw`. It never follows a redirect: on a 301 or 302, fetch the new address yourself if it is public. HTML is long: write it to a file with `--output` and search it there instead of reading it into context. For a readable text view of one page, open it with `drive` and take a `snapshot`, which spends nothing.
 
 ## A browser
 
@@ -70,7 +70,7 @@ Use a browser only for a page that Fetch cannot read: one that renders with Java
 
   Stop the session as soon as you have the page. An open session spends minutes while you think.
 
-`drive` refuses `--remote`, `--cdp` and `--auto-connect`, and every command that is not a page action.
+`drive` refuses `--remote`, `--cdp`, `--auto-connect` and the Chrome flags, and every command that is not a page action, `eval` and `status` included. `remote stop` ends only a session this machine opened.
 
 ## When it fails
 

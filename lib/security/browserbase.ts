@@ -112,43 +112,35 @@ export function searchTextRefusal(text: string): string | undefined {
 /** The flags a command accepts: those that take a value and those that stand alone. */
 type FlagSpec = { values: ReadonlySet<string>; switches: ReadonlySet<string> };
 
-const SEARCH_FLAGS: FlagSpec = {
-  values: new Set([
-    'num-results',
-    'provider',
-    'mode',
-    'output',
-    'include-domains',
-    'exclude-domains',
-    'start-published-date',
-    'end-published-date',
-    'category',
-    'user-location',
-    'objective',
-    'max-age-hours',
-  ]),
-  switches: new Set(['excerpts', 'moderation']),
-};
-
 /**
- * `--proxies` is left out: the free plan has no proxy bandwidth. `--format` takes only `raw`: the
- * free plan answers 402 to `markdown` and `json`, which Browserbase bills as an extraction.
+ * Search takes few filters on purpose: each one is text that goes to a third party, so each has a
+ * guard. Deep modes, a people category and free-text objectives stay out.
  */
-const FETCH_FLAGS: FlagSpec = {
-  values: new Set(['format', 'output']),
-  switches: new Set(['allow-redirects', 'allow-insecure-ssl']),
+const SEARCH_FLAGS: FlagSpec = {
+  values: new Set(['num-results', 'include-domains', 'exclude-domains', 'start-published-date', 'output']),
+  switches: new Set(),
 };
 
+/** Fetch never follows a redirect, which could lead past the URL guard, and never uses proxies. */
+const FETCH_FLAGS: FlagSpec = { values: new Set(['output']), switches: new Set() };
+
+/** `open` and `tab new` name a page, so their flags are listed exactly and their URL is checked. */
+const OPEN_FLAGS: FlagSpec = {
+  values: new Set(['session', 'timeout', 'wait']),
+  switches: new Set(['headed', 'headless', 'local']),
+};
+const TAB_NEW_FLAGS: FlagSpec = { values: new Set(['session']), switches: new Set() };
+
 /**
- * Driver commands that work on a page already open. Left out: `cdp`, `daemon`, `doctor`, `network`
- * and `discord` (diagnostics and side channels), `upload` (sends a local file to the page), and every
- * cloud, functions, skills and templates command.
+ * Driver commands that act on a page already open. Left out: `status` (prints a cloud session's
+ * connect URL), `eval` (runs any script), `cdp`, `daemon`, `doctor`, `network` and `discord`
+ * (diagnostics and side channels), `upload` (sends a local file to the page), and every cloud,
+ * functions, skills and templates command.
  */
 const DRIVER_COMMANDS = new Set([
   'back',
   'click',
   'cursor',
-  'eval',
   'fill',
   'forward',
   'get',
@@ -161,7 +153,6 @@ const DRIVER_COMMANDS = new Set([
   'screenshot',
   'select',
   'snapshot',
-  'status',
   'stop',
   'tab',
   'type',
@@ -170,24 +161,46 @@ const DRIVER_COMMANDS = new Set([
 ]);
 
 /**
- * Driver flags that would leave the local browser: `--remote` starts a recorded cloud session,
- * `--cdp` and `--auto-connect` attach to a browser that may carry someone's sign-ins.
+ * Driver flags no command takes: `--remote` starts a recorded cloud session, `--cdp`,
+ * `--auto-connect` and `--target-id` attach to a browser that may carry someone's sign-ins, and the
+ * Chrome flags could swap the browser's temporary profile for a real one.
  */
-const REFUSED_DRIVER_FLAGS = new Set(['remote', 'cdp', 'auto-connect', 'verified', 'proxies']);
+const REFUSED_DRIVER_FLAGS = new Set([
+  'remote',
+  'cdp',
+  'auto-connect',
+  'target-id',
+  'verified',
+  'proxies',
+  'chrome-arg',
+  'ignore-default-chrome-arg',
+  'default-chrome-args',
+]);
 
 /** Flags no command takes: the key comes from the key file, and only to Browserbase's own API. */
 const REFUSED_EVERYWHERE = new Set(['api-key', 'base-url']);
+
+/** The body of a Browserbase Search request. */
+export type SearchRequest = {
+  query: string;
+  numResults?: number;
+  includeDomains?: string[];
+  excludeDomains?: string[];
+  startPublishedDate?: string;
+};
 
 /** What `bun run browserbase` does with its arguments. */
 export type Plan =
   | { kind: 'refused'; reason: string }
   | { kind: 'quota' }
-  /** A Browserbase API call through the CLI, with the key, counted when `call` is set. */
-  | { kind: 'cloud'; call: CallKind; args: readonly string[] }
-  /** A local driver command, without the key. */
+  /** A counted Search call, which the wrapper sends itself. */
+  | { kind: 'search'; request: SearchRequest; output: string | undefined }
+  /** A counted raw Fetch call, which the wrapper sends itself. */
+  | { kind: 'fetch'; url: string; output: string | undefined }
+  /** A driver command on the local browser or an open cloud session, without the key. */
   | { kind: 'drive'; args: readonly string[] }
   | { kind: 'remote-open'; url: string; session: string }
-  | { kind: 'remote-stop'; sessionId: string; session: string };
+  | { kind: 'remote-stop'; sessionId: string };
 
 const refused = (reason: string): Plan => ({ kind: 'refused', reason });
 
@@ -199,7 +212,7 @@ function flagName(arg: string): string | undefined {
 
 /**
  * Splits arguments into positionals and flag values by a spec. A flag outside the spec refuses the
- * call, so a new CLI flag stays unusable until it is reviewed here.
+ * call, so a new CLI flag stays unusable until it is reviewed here. A refusal never quotes a value.
  */
 function parseFlags(
   args: readonly string[],
@@ -211,7 +224,7 @@ function parseFlags(
     const arg = args[index] ?? '';
     const name = flagName(arg);
     if (name === undefined) {
-      if (arg.startsWith('-')) return { refusal: `${arg} is no flag this command takes` };
+      if (arg.startsWith('-')) return { refusal: 'an argument is no flag this command takes' };
       positionals.push(arg);
       continue;
     }
@@ -225,22 +238,50 @@ function parseFlags(
   return { positionals, values };
 }
 
+/** A domain filter entry: a public host, a `*.` wildcard host, or a host with a path prefix. */
+const DOMAIN_ENTRY = /^(?:\*\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/[\w./-]*)?$/i;
+
+/** The filter's entries, or why one may not leave the machine. A refusal never quotes an entry. */
+function domainFilter(flag: string, value: string | undefined): string[] | { refusal: string } | undefined {
+  if (value === undefined) return undefined;
+  const entries = value.split(',').map((entry) => entry.trim());
+  for (const entry of entries) {
+    const host = entry.replace(/^\*\./, '').split('/')[0] ?? '';
+    if (!DOMAIN_ENTRY.test(entry) || urlRefusal(`https://${host}`) || searchTextRefusal(entry))
+      return { refusal: `--${flag} takes public hostnames only` };
+  }
+  return entries;
+}
+
 function planSearch(args: readonly string[]): Plan {
   const parsed = parseFlags(args, SEARCH_FLAGS);
   if ('refusal' in parsed) return refused(parsed.refusal);
   const [query, ...extra] = parsed.positionals;
   if (!query || extra.length) return refused('name exactly one query, in quotes');
-  for (const [what, text] of [
-    ['the query', query],
-    ['--objective', parsed.values.get('objective') ?? ''],
-  ] as const) {
-    const reason = searchTextRefusal(text);
-    if (reason) return refused(`${what} goes to a third party, and ${reason}`);
+  const reason = searchTextRefusal(query);
+  if (reason) return refused(`the query goes to a third party, and ${reason}`);
+  const request: SearchRequest = { query };
+  const count = parsed.values.get('num-results');
+  if (count !== undefined) {
+    const numResults = Number(count);
+    if (!Number.isInteger(numResults) || numResults < 1 || numResults > 25)
+      return refused('--num-results takes 1 to 25');
+    request.numResults = numResults;
   }
-  const mode = parsed.values.get('mode');
-  if (mode === 'deep' || mode === 'deep-lite') return refused(`--mode ${mode} is outside the free searches`);
-  if (parsed.values.get('category') === 'people') return refused('a people search looks up personal data');
-  return { kind: 'cloud', call: 'search', args: ['cloud', 'search', ...args] };
+  for (const [flag, key] of [
+    ['include-domains', 'includeDomains'],
+    ['exclude-domains', 'excludeDomains'],
+  ] as const) {
+    const entries = domainFilter(flag, parsed.values.get(flag));
+    if (entries !== undefined && 'refusal' in entries) return refused(entries.refusal);
+    if (entries) request[key] = entries;
+  }
+  const since = parsed.values.get('start-published-date');
+  if (since !== undefined) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) return refused('--start-published-date takes YYYY-MM-DD');
+    request.startPublishedDate = `${since}T00:00:00Z`;
+  }
+  return { kind: 'search', request, output: parsed.values.get('output') };
 }
 
 function planFetch(args: readonly string[]): Plan {
@@ -249,19 +290,19 @@ function planFetch(args: readonly string[]): Plan {
   const [url, ...extra] = parsed.positionals;
   if (!url || extra.length) return refused('name exactly one URL');
   const reason = urlRefusal(url);
-  if (reason) return refused(`${url} is no public research page: ${reason}`);
-  const format = parsed.values.get('format');
-  if (format !== undefined && format !== 'raw')
-    return refused('--format takes only raw: the free plan has no markdown or JSON extraction');
-  // The CLI's default is markdown, which the free plan refuses after counting the call.
-  const raw = format === undefined ? ['--format', 'raw'] : [];
-  return { kind: 'cloud', call: 'fetch', args: ['cloud', 'fetch', ...args, ...raw] };
+  if (reason) return refused(`the URL is no public research page: ${reason}`);
+  return { kind: 'fetch', url, output: parsed.values.get('output') };
 }
 
-/** The URL `open` or `tab new` names, with `https://` added as the driver adds it to a bare host. */
-function pageUrl(arg: string): string {
-  // `localhost:3000` is a host and port, not a scheme.
-  return /^[a-z][a-z0-9+.-]*:(?!\d)/i.test(arg) ? arg : `https://${arg}`;
+/** A command that names a page: exactly one URL among its positionals, checked as the driver reads it. */
+function planOpen(args: readonly string[], spec: FlagSpec, skip: number): Plan {
+  const parsed = parseFlags(args.slice(skip), spec);
+  if ('refusal' in parsed) return refused(parsed.refusal);
+  const [target, ...extra] = parsed.positionals;
+  if (target === undefined || extra.length) return refused('name exactly one URL');
+  // The driver opens only a full URL, so the URL checked is the URL opened.
+  const reason = urlRefusal(target);
+  return reason ? refused(`the URL is no public research page: ${reason}`) : { kind: 'drive', args };
 }
 
 function planDrive(args: readonly string[]): Plan {
@@ -271,43 +312,38 @@ function planDrive(args: readonly string[]): Plan {
   for (const arg of rest) {
     const name = flagName(arg);
     if (name !== undefined && REFUSED_DRIVER_FLAGS.has(name))
-      return refused(`--${name} leaves the local browser; open a cloud browser with \`remote open\``);
+      return refused(
+        `--${name} leaves the local browser or its profile; use \`remote open\` for a cloud browser`,
+      );
   }
-  const opens = command === 'open' ? rest[0] : command === 'tab' && rest[0] === 'new' ? rest[1] : undefined;
-  const targets = [
-    ...(opens !== undefined && flagName(opens) === undefined ? [pageUrl(opens)] : []),
-    ...rest.filter((arg) => /^https?:\/\//i.test(arg)),
-  ];
-  for (const target of targets) {
-    const reason = urlRefusal(target);
-    if (reason) return refused(`${target} is no public research page: ${reason}`);
-  }
+  if (command === 'open') return planOpen(args, OPEN_FLAGS, 1);
+  if (command === 'tab' && rest[0] === 'new') return planOpen(args, TAB_NEW_FLAGS, 2);
   return { kind: 'drive', args };
 }
 
-const SESSION_NAME = /^[a-z][a-z0-9-]{0,40}$/;
+export const SESSION_NAME = /^[a-z][a-z0-9-]{0,40}$/;
 
 function planRemote(args: readonly string[]): Plan {
   const [action, target, ...rest] = args;
-  let session = 'remote';
-  if (rest.length) {
-    const [flag, value, ...extra] = rest;
-    if (flag !== '--session' || value === undefined || extra.length || !SESSION_NAME.test(value))
-      return refused('remote takes only --session <name> after its target');
-    session = value;
-  }
   if (action === 'open' && target !== undefined) {
-    const url = pageUrl(target);
+    let session = 'remote';
+    if (rest.length) {
+      const [flag, value, ...extra] = rest;
+      if (flag !== '--session' || value === undefined || extra.length || !SESSION_NAME.test(value))
+        return refused('remote open takes only --session <name> after its URL');
+      session = value;
+    }
+    const url = target;
     const reason = urlRefusal(url);
     return reason
-      ? refused(`${url} is no public research page: ${reason}`)
+      ? refused(`the URL is no public research page: ${reason}`)
       : { kind: 'remote-open', url, session };
   }
-  if (action === 'stop' && target !== undefined) {
+  if (action === 'stop' && target !== undefined && !rest.length) {
     if (!isUuid(target)) return refused('remote stop takes the session id that remote open printed');
-    return { kind: 'remote-stop', sessionId: target, session };
+    return { kind: 'remote-stop', sessionId: target };
   }
-  return refused('use remote open <url> or remote stop <session id>');
+  return refused('use remote open <url> [--session <name>] or remote stop <session id>');
 }
 
 /** What `bun run browserbase -- <args>` may do. */
@@ -331,17 +367,32 @@ export function planBrowserbase(argv: readonly string[]): Plan {
   }
 }
 
-/** Variables the CLI reads that could redirect the key or change what it sends. */
-const CLI_VARIABLE = /^(?:BROWSERBASE_|BROWSE_|BB_)/;
+/** What a failed Browserbase call prints: its status and what to do, never its body. */
+export function apiFailure(what: string, status: number): string {
+  const hint =
+    status === 401
+      ? ' The key was refused; run `bun run agent-access:check`.'
+      : status === 402
+        ? " The plan's allocation for this call is spent. Stop the run."
+        : status === 429
+          ? ' The rate limit was hit. Run calls one after another.'
+          : '';
+  return `${what} failed with HTTP ${status}.${hint}`;
+}
 
 /**
- * The CLI's environment: the caller's, without any variable the CLI reads, then the key only when
- * the call needs it. Update checks, telemetry and `.env` loading are off, so the CLI reads nothing
- * from the checkout and sends nothing but the call.
+ * Variables the CLI reads that could change what it sends or prints: its own, and `DEBUG`, under
+ * which its libraries print requests, a cloud session's connect URL among them.
+ */
+const CLI_VARIABLE = /^(?:BROWSERBASE_|BROWSE_|BB_|STAGEHAND_|DEBUG$|NODE_DEBUG$)/;
+
+/**
+ * The driver's environment: the caller's, without any variable the CLI reads. The driver never gets
+ * the key. Update checks, telemetry and `.env` loading are off, so it reads nothing from the checkout.
  */
 export function browseEnvironment(
   env: Readonly<Record<string, string | undefined>>,
-  options: { key?: string | undefined; chromePath?: string | undefined },
+  chromePath: string | undefined,
 ): Record<string, string> {
   const kept = Object.entries(env).filter(
     (entry): entry is [string, string] => entry[1] !== undefined && !CLI_VARIABLE.test(entry[0]),
@@ -352,7 +403,6 @@ export function browseEnvironment(
     BROWSE_DISABLE_UPDATE_CHECK: '1',
     BROWSERBASE_TELEMETRY_DISABLED: '1',
     DO_NOT_TRACK: '1',
-    ...(options.key ? { BROWSERBASE_API_KEY: options.key } : {}),
-    ...(options.chromePath && !env.CHROME_PATH ? { CHROME_PATH: options.chromePath } : {}),
+    ...(chromePath && !env.CHROME_PATH ? { CHROME_PATH: chromePath } : {}),
   };
 }

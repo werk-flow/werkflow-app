@@ -4,6 +4,7 @@ import {
   type Ledger,
   LEDGER_WINDOW_MS,
   MACHINE_CALL_SHARE,
+  apiFailure,
   browseEnvironment,
   callsLeft,
   parseLedger,
@@ -28,15 +29,19 @@ test('the key never goes anywhere but Browserbase: --api-key and --base-url refu
     expect(refusalOf(...argv), argv.join(' ')).toContain('refused: the wrapper sends the key');
 });
 
-test('the CLI environment drops every variable that could redirect the key and adds the key only when asked', () => {
+test('the driver environment drops every variable that could change what the CLI sends or prints', () => {
   const env = browseEnvironment(
     {
       PATH: '/usr/bin',
+      BROWSERBASE_API_KEY: 'bb_live_MadeUp',
       BROWSERBASE_BASE_URL: 'https://collector.example',
       BROWSE_LOAD_DOTENV: '1',
       BB_X: '1',
+      STAGEHAND_EXTENSION_ARCHIVE_PATH: '/elsewhere.zip',
+      DEBUG: 'true',
+      NODE_DEBUG: 'http',
     },
-    {},
+    undefined,
   );
   expect(env).toEqual({
     PATH: '/usr/bin',
@@ -45,9 +50,15 @@ test('the CLI environment drops every variable that could redirect the key and a
     BROWSERBASE_TELEMETRY_DISABLED: '1',
     DO_NOT_TRACK: '1',
   });
-  expect(browseEnvironment({}, { key: 'k' }).BROWSERBASE_API_KEY).toBe('k');
-  expect(browseEnvironment({ CHROME_PATH: '/own' }, { chromePath: '/pw' }).CHROME_PATH).toBe('/own');
-  expect(browseEnvironment({}, { chromePath: '/pw' }).CHROME_PATH).toBe('/pw');
+  expect(browseEnvironment({ CHROME_PATH: '/own' }, '/pw').CHROME_PATH).toBe('/own');
+  expect(browseEnvironment({}, '/pw').CHROME_PATH).toBe('/pw');
+});
+
+test('a failed call prints its status and a hint, never its body', () => {
+  expect(apiFailure('Search', 402)).toBe(
+    "Search failed with HTTP 402. The plan's allocation for this call is spent. Stop the run.",
+  );
+  expect(apiFailure('Fetch', 500)).toBe('Fetch failed with HTTP 500.');
 });
 
 test('public research pages pass; WerkFlow systems, local hosts and other schemes are refused', () => {
@@ -84,69 +95,122 @@ test('a search text with personal or system detail is refused before it leaves t
   expect(searchTextRefusal('Rückruf 0711 1234567')).toContain('phone');
   expect(searchTextRefusal('DE89 3704 0044 0532 0130 00')).toContain('IBAN');
   expect(searchTextRefusal('app.werk-flow.app login')).toContain('WerkFlow');
-  expect(refusalOf('search', 'Heizlast', '--objective', 'für kunde@example.de')).toContain('--objective');
 });
 
-test('search and fetch become counted CLI calls; flags outside the reviewed set refuse', () => {
-  expect(planBrowserbase(['search', 'Wärmepumpe Förderung 2026', '--num-results', '5'])).toEqual({
-    kind: 'cloud',
-    call: 'search',
-    args: ['cloud', 'search', 'Wärmepumpe Förderung 2026', '--num-results', '5'],
+test('search becomes one request body; every filter is checked and unreviewed flags refuse', () => {
+  expect(
+    planBrowserbase([
+      'search',
+      'Wärmepumpe Förderung 2026',
+      '--num-results',
+      '5',
+      '--include-domains',
+      'bafa.de,*.kfw.de,zvshk.de/themen',
+      '--start-published-date=2026-01-01',
+    ]),
+  ).toEqual({
+    kind: 'search',
+    request: {
+      query: 'Wärmepumpe Förderung 2026',
+      numResults: 5,
+      includeDomains: ['bafa.de', '*.kfw.de', 'zvshk.de/themen'],
+      startPublishedDate: '2026-01-01T00:00:00Z',
+    },
+    output: undefined,
   });
-  expect(planBrowserbase(['fetch', 'https://example.com', '--format=raw'])).toEqual({
-    kind: 'cloud',
-    call: 'fetch',
-    args: ['cloud', 'fetch', 'https://example.com', '--format=raw'],
-  });
-  // The CLI defaults to markdown, which the free plan refuses after counting the call.
-  expect(planBrowserbase(['fetch', 'https://example.com'])).toEqual({
-    kind: 'cloud',
-    call: 'fetch',
-    args: ['cloud', 'fetch', 'https://example.com', '--format', 'raw'],
-  });
-  expect(refusalOf('search', 'a', '--mode', 'deep')).toContain('outside the free searches');
-  expect(refusalOf('search', 'a', '--category', 'people')).toContain('personal data');
+  for (const filter of ['app.werk-flow.app', 'localhost', 'kunde@example.de', 'bafa.de,10.0.0.1'])
+    expect(refusalOf('search', 'a', '--exclude-domains', filter), filter).toContain('public hostnames only');
+  expect(refusalOf('search', 'a', '--num-results', '26')).toContain('1 to 25');
+  for (const flag of ['--mode', '--category', '--objective', '--provider'])
+    expect(refusalOf('search', 'a', flag, 'x'), flag).toContain('no flag this command takes');
   expect(refusalOf('search', 'a', 'b')).toContain('exactly one query');
-  expect(refusalOf('fetch', 'https://example.com', '--proxies')).toContain('--proxies');
-  for (const format of ['markdown', 'json'])
-    expect(refusalOf('fetch', 'https://example.com', '--format', format), format).toContain('only raw');
+});
+
+test('fetch becomes one raw request; redirects, proxies and formats are not choices', () => {
+  expect(planBrowserbase(['fetch', 'https://example.com', '--output', '/tmp/x.html'])).toEqual({
+    kind: 'fetch',
+    url: 'https://example.com',
+    output: '/tmp/x.html',
+  });
+  for (const flag of ['--allow-redirects', '--proxies', '--format=markdown', '--allow-insecure-ssl'])
+    expect(refusalOf('fetch', 'https://example.com', flag), flag).toContain('no flag this command takes');
   expect(refusalOf('fetch', 'https://app.werk-flow.app/')).toContain('WerkFlow app');
 });
 
+test('a refusal never repeats the address it refused, so credentials in it stay out of the log', () => {
+  const secret = 'S3cretPassw0rd';
+  for (const argv of [
+    ['fetch', `https://user:${secret}@example.com/`],
+    ['drive', 'open', `https://user:${secret}@example.com/`],
+    ['remote', 'open', `https://user:${secret}@example.com/`],
+    ['search', 'a', '--include-domains', `${secret}@example.com`],
+    ['drive', 'open', '--session', 'x', '--bogus', secret],
+  ])
+    expect(refusalOf(...argv), argv[0]).not.toContain(secret);
+});
+
 test('drive runs local driver commands only, never a cloud or attached browser', () => {
-  expect(planBrowserbase(['drive', 'open', 'example.com'])).toEqual({
+  expect(planBrowserbase(['drive', 'open', 'https://example.com'])).toEqual({
     kind: 'drive',
-    args: ['open', 'example.com'],
+    args: ['open', 'https://example.com'],
   });
   expect(planBrowserbase(['drive', 'snapshot', '--session', 'remote'])).toEqual({
     kind: 'drive',
     args: ['snapshot', '--session', 'remote'],
   });
-  for (const flag of ['--remote', '--cdp', '--auto-connect'])
+  for (const flag of [
+    '--remote',
+    '--cdp',
+    '--auto-connect',
+    '--target-id',
+    '--chrome-arg',
+    '--no-default-chrome-args',
+  ])
     expect(refusalOf('drive', 'open', 'https://example.com', flag), flag).toContain(
       'leaves the local browser',
     );
-  for (const command of ['cloud', 'functions', 'skills', 'upload', 'cdp'])
+  for (const command of ['cloud', 'functions', 'skills', 'upload', 'cdp', 'eval', 'status'])
     expect(refusalOf('drive', command), command).toContain('driver command');
-  expect(refusalOf('drive', 'open', 'app.werk-flow.app')).toContain('WerkFlow app');
-  expect(refusalOf('drive', 'tab', 'new', 'localhost:3000')).toContain('local host');
+  expect(refusalOf('drive', 'open', 'https://app.werk-flow.app')).toContain('WerkFlow app');
+  // The driver opens only a full URL; a bare host is refused rather than guessed at.
+  expect(refusalOf('drive', 'open', 'app.werk-flow.app')).toContain('no URL');
+  expect(refusalOf('drive', 'tab', 'new', 'http://localhost:3000')).toContain('local host');
+});
+
+test('open and tab new check the URL wherever it stands among the flags', () => {
+  expect(refusalOf('drive', 'open', '--session', 'research', 'https://app.werk-flow.app')).toContain(
+    'WerkFlow app',
+  );
+  expect(refusalOf('drive', 'open', '--headed', 'http://127.0.0.1:3000')).toContain('IP address');
+  expect(refusalOf('drive', 'tab', 'new', '--session', 'research', 'http://localhost:3000')).toContain(
+    'local host',
+  );
+  expect(refusalOf('drive', 'open', 'https://example.com', 'https://app.werk-flow.app')).toContain(
+    'exactly one URL',
+  );
+  expect(refusalOf('drive', 'open', 'https://example.com', '--wait-for', 'x')).toContain(
+    'no flag this command takes',
+  );
+  expect(
+    planBrowserbase(['drive', 'open', '--session', 'research', 'https://example.com', '--timeout', '45000']),
+  ).toEqual({
+    kind: 'drive',
+    args: ['open', '--session', 'research', 'https://example.com', '--timeout', '45000'],
+  });
 });
 
 test('remote takes a public page or a session id, and nothing else', () => {
-  expect(planBrowserbase(['remote', 'open', 'example.com'])).toEqual({
+  expect(planBrowserbase(['remote', 'open', 'https://example.com', '--session', 'two'])).toEqual({
     kind: 'remote-open',
     url: 'https://example.com',
-    session: 'remote',
-  });
-  const id = '0f0e0d0c-0b0a-4908-8706-050403020100';
-  expect(planBrowserbase(['remote', 'stop', id, '--session', 'two'])).toEqual({
-    kind: 'remote-stop',
-    sessionId: id,
     session: 'two',
   });
+  const id = '0f0e0d0c-0b0a-4908-8706-050403020100';
+  expect(planBrowserbase(['remote', 'stop', id])).toEqual({ kind: 'remote-stop', sessionId: id });
+  expect(refusalOf('remote', 'stop', id, '--session', 'two')).toContain('remote stop <session id>');
   expect(refusalOf('remote', 'open', 'http://localhost')).toContain('local host');
   expect(refusalOf('remote', 'stop', 'abc')).toContain('session id');
-  expect(refusalOf('remote', 'open', 'example.com', '--verified')).toContain('--session');
+  expect(refusalOf('remote', 'open', 'https://example.com', '--verified')).toContain('--session');
 });
 
 test('a remote session starts only while a full session still fits the month', () => {
