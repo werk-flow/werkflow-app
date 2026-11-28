@@ -89,6 +89,15 @@ begin
     if v_role = 'anon'
       and has_table_privilege(v_role, 'public.employment_target_signals', 'SELECT')
     then raise exception '% reads the target signals', v_role; end if;
+    -- Realtime leaves out the columns its subscriber may not select, so a
+    -- client never receives the record id, also in an event queued before a clear.
+    if v_role = 'authenticated' and (
+      has_column_privilege(v_role, 'public.employment_target_signals', 'employee_record_id', 'SELECT')
+      or not has_column_privilege(v_role, 'public.employment_target_signals', 'id', 'SELECT')
+      or not has_column_privilege(v_role, 'public.employment_target_signals', 'organization_id', 'SELECT')
+      or not has_column_privilege(v_role, 'public.employment_target_signals', 'user_id', 'SELECT')
+      or not has_column_privilege(v_role, 'public.employment_target_signals', 'updated_at', 'SELECT'))
+    then raise exception '% selects the record id or misses an id or the timestamp', v_role; end if;
     if v_role is distinct from 'service_role'
       and has_function_privilege(v_role, 'app_private.signal_employment_target_change()', 'EXECUTE')
     then raise exception '% executes the signal trigger', v_role; end if;
@@ -197,9 +206,11 @@ begin
 end;
 $$;
 
--- The ids the client roles below name; they cannot read the records.
-select set_config('test.employee_record', pg_temp.record_of('58900000-0000-0000-0000-000000000002')::text, true);
-select set_config('test.colleague_record', pg_temp.record_of('58900000-0000-0000-0000-000000000003')::text, true);
+-- The signal ids the client roles below name.
+select set_config('test.employee_signal', (select id::text from public.employment_target_signals
+  where user_id = '58900000-0000-0000-0000-000000000002'), true);
+select set_config('test.colleague_signal', (select id::text from public.employment_target_signals
+  where user_id = '58900000-0000-0000-0000-000000000003'), true);
 
 -- The employee reads their own signal row, by its id or another person's id
 -- (the foreign-id read), and nothing else; nobody writes one.
@@ -213,9 +224,14 @@ begin
     raise exception 'the employee did not read exactly their own signal row';
   end if;
   if exists (select 1 from public.employment_target_signals
-      where employee_record_id = current_setting('test.colleague_record')::uuid) then
-    raise exception 'the employee read a colleague''s signal by its record id';
+      where id = current_setting('test.colleague_signal')::uuid) then
+    raise exception 'the employee read a colleague''s signal by its id';
   end if;
+  begin
+    perform employee_record_id from public.employment_target_signals;
+    raise exception 'the employee read the record id of their signal';
+  exception when insufficient_privilege then null;
+  end;
   begin
     update public.employment_target_signals set updated_at = now();
     raise exception 'the employee wrote a signal row';
@@ -243,7 +259,7 @@ do $$
 begin
   if exists (select 1 from public.employment_target_signals
       where organization_id = '58900000-0000-0000-0000-000000000010'
-        or employee_record_id = current_setting('test.employee_record')::uuid) then
+        or id = current_setting('test.employee_signal')::uuid) then
     raise exception 'another organization read a signal row';
   end if;
 end;
@@ -294,7 +310,7 @@ begin
 end;
 $$;
 
--- The former login still reads its one row, which names no record.
+-- The former login still reads its one row.
 set local role authenticated;
 select set_config('request.jwt.claims',
   '{"sub":"58900000-0000-0000-0000-000000000002","role":"authenticated"}', true);
@@ -303,11 +319,6 @@ begin
   if (select array_agg(id) from public.employment_target_signals)
     is distinct from array[current_setting('test.cleared_signal')::uuid] then
     raise exception 'the former login did not read exactly its cleared signal';
-  end if;
-  if exists (select 1 from public.employment_target_signals
-      where employee_record_id is not null
-        or employee_record_id = current_setting('test.unlinked_record')::uuid) then
-    raise exception 'the former login read the record it no longer holds';
   end if;
 end;
 $$;

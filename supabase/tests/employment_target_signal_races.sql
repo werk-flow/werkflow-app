@@ -12,9 +12,10 @@
 --    membership until it commits; the membership's removal waits for it and
 --    then retires the cleared row (werk-flow/werkflow-planning#621).
 -- 4. A membership removal holds the membership, as
---    remove_member_with_time_capture does before it takes the record; an
---    unlink of that login's record does not wait for it, and retires the row
---    instead of clearing it, so no row outlives the membership.
+--    remove_member_with_time_capture does before it checks the person's time;
+--    an unlink of that login's record waits for it. A refused removal leaves
+--    the login its cleared row, so it still hears of the unlink; a committed
+--    one leaves no row.
 --
 -- The sessions need committed rows, so this file writes one synthetic
 -- organization through dblink connections and deletes it at the start (a run
@@ -216,42 +217,77 @@ begin
   end if;
 end $$;
 
--- 4. The removal holds the membership; the unlink neither waits nor leaves a row.
+-- 4. The removal holds the membership; the unlink waits for it.
 create temporary table signal_race_leaver_record on commit drop as
 select record_id from dblink('signal_race_setup', $read$
   select id from public.employee_records
   where organization_id = '58910000-0000-4000-8000-000000000010'
     and user_id = '58910000-0000-4000-8000-000000000004'
 $read$) as record(record_id uuid);
-select dblink_exec('signal_race_first', 'begin');
-select locked from dblink('signal_race_first', $lock$
-  select 1 from public.organization_members
-  where organization_id = '58910000-0000-4000-8000-000000000010'
-    and user_id = '58910000-0000-4000-8000-000000000004'
-  for update
-$lock$) as first(locked integer);
-select dblink_exec('signal_race_second', 'set statement_timeout = ''5s''');
-select dblink_exec('signal_race_second', format(
-  'update public.employee_records set user_id = null where id = %L', (select record_id from signal_race_leaver_record)));
-select dblink_exec('signal_race_second', 'reset statement_timeout');
-select dblink_exec('signal_race_first', $remove$
-  delete from public.organization_members
-  where organization_id = '58910000-0000-4000-8000-000000000010'
-    and user_id = '58910000-0000-4000-8000-000000000004'
-$remove$);
-select dblink_exec('signal_race_first', 'commit');
 
-do $$
+-- Returns the login's cleared and total signal rows afterwards, as cleared/total.
+create function pg_temp.unlink_waits_for_held_membership(p_removal_commits boolean) returns text
+language plpgsql as $$
 declare
-  v_signals integer;
+  v_pid integer := (select pid from signal_race_second_pid);
+  v_deadline timestamptz := clock_timestamp() + interval '10 seconds';
+  v_signals text;
 begin
-  select signals into v_signals from dblink('signal_race_setup', $read$
-    select count(*)::integer from public.employment_target_signals
+  perform dblink_exec('signal_race_first', 'begin');
+  perform locked from dblink('signal_race_first', $lock$
+    select 1 from public.organization_members
     where organization_id = '58910000-0000-4000-8000-000000000010'
       and user_id = '58910000-0000-4000-8000-000000000004'
-  $read$) as state(signals integer);
-  if v_signals is distinct from 0 then
-    raise exception 'an unlink during a membership removal left a signal: %', v_signals;
+    for update
+  $lock$) as first(locked integer);
+  perform dblink_send_query('signal_race_second', format(
+    'update public.employee_records set user_id = null where id = %L',
+    (select record_id from signal_race_leaver_record)));
+  while cardinality(pg_blocking_pids(v_pid)) = 0 loop
+    if clock_timestamp() > v_deadline then
+      raise exception 'the unlink never waited for the held membership';
+    end if;
+  end loop;
+  if p_removal_commits then
+    perform dblink_exec('signal_race_first', $remove$
+      delete from public.organization_members
+      where organization_id = '58910000-0000-4000-8000-000000000010'
+        and user_id = '58910000-0000-4000-8000-000000000004'
+    $remove$);
+    perform dblink_exec('signal_race_first', 'commit');
+  else
+    perform dblink_exec('signal_race_first', 'rollback');
+  end if;
+  perform * from dblink_get_result('signal_race_second', false) as result(status text);
+  if dblink_error_message('signal_race_second') is distinct from 'OK' then
+    raise exception 'the unlink failed: %', dblink_error_message('signal_race_second');
+  end if;
+  perform * from dblink_get_result('signal_race_second', false) as result(status text);
+  select signals into v_signals from dblink('signal_race_setup', $read$
+    select (count(*) filter (where employee_record_id is null)) || '/' || count(*)
+    from public.employment_target_signals
+    where organization_id = '58910000-0000-4000-8000-000000000010'
+      and user_id = '58910000-0000-4000-8000-000000000004'
+  $read$) as state(signals text);
+  return v_signals;
+end;
+$$;
+
+do $$
+begin
+  if pg_temp.unlink_waits_for_held_membership(false) is distinct from '1/1' then
+    raise exception 'an unlink during a refused membership removal left no cleared signal';
+  end if;
+end $$;
+
+select dblink_exec('signal_race_setup', format(
+  'update public.employee_records set user_id = %L where id = %L',
+  '58910000-0000-4000-8000-000000000004', (select record_id from signal_race_leaver_record)));
+
+do $$
+begin
+  if pg_temp.unlink_waits_for_held_membership(true) is distinct from '0/0' then
+    raise exception 'an unlink during a committed membership removal left a signal';
   end if;
 end $$;
 

@@ -9,22 +9,40 @@
 -- and a timestamp, never the record the person no longer holds (the replica
 -- identity sends only id and organization_id as the old row).
 
+-- 0. A join inserts a membership, whose trigger creates the record and then
+-- writes a signal. Section 1 locks the signals and section 3 adds a trigger
+-- to the memberships, so the memberships are locked first, in that order.
+lock table public.organization_members in share row exclusive mode;
+
 -- 1. A cleared signal names no record.
 alter table public.employment_target_signals alter column employee_record_id drop not null;
+
+-- Realtime checks a queued event against the current row under its key but
+-- sends the row as the WAL holds it, without the columns the subscriber may
+-- not select. So an update queued while the login still held the record
+-- would reach it after the clear with that record's id. No client reads the
+-- record id: the views only hear that the row moved, then read again.
+-- @destructive: after release 8a73d1d0a: the deployed build never selects employment_target_signals, it only listens to the table
+revoke select on table public.employment_target_signals from authenticated;
+grant select (id, organization_id, user_id, updated_at) on table public.employment_target_signals to authenticated;
 
 -- 2. The record trigger clears the old login's row instead of deleting it.
 -- The key stays with the same login, so a queued event of it reaches nobody
 -- else; the new login still gets a new row and key, as before. A login that
 -- is no longer a member of the record's organization (its account or its
 -- membership is going) has nobody to tell, and its row goes as before. The
--- membership is locked with FOR KEY SHARE SKIP LOCKED, which never waits:
--- a membership removal holds its row before it takes the record
--- (remove_member_with_time_capture), so waiting for it here, under the record,
--- could deadlock. A held membership counts as leaving; a held lock stops a
--- concurrent removal until this commits, and that removal's trigger (section
--- 3) then sees the cleared row. A login that gets a record retires its earlier
--- cleared row: the new record's row tells it from now on, and a person holds
--- at most one record per organization (employee_records_org_user_unique).
+-- membership is read under FOR KEY SHARE: a removal that holds it is waited
+-- for, so a refused removal still leaves a cleared row and a committed one
+-- none; a removal that starts later waits for this commit, and its trigger
+-- (section 3) then sees the cleared row. A removal that holds the membership
+-- and then waits for this record (remove_member_with_time_capture, or an
+-- account deletion that ends the membership before it clears the login)
+-- deadlocks with it; Postgres cancels one, which the caller retries, and
+-- nothing is lost. Skipping a held membership instead would drop the signal
+-- of a person whose removal is then refused. A login that gets a record
+-- retires its earlier cleared row: the new record's row tells it from now on,
+-- and a person holds at most one record per organization
+-- (employee_records_org_user_unique).
 create or replace function app_private.signal_employment_target_change()
 returns trigger
 language plpgsql
@@ -63,7 +81,7 @@ begin
       perform 1 from public.organization_members membership
       where membership.organization_id = v_record.organization_id
         and membership.user_id = v_departed.user_id
-      for key share skip locked;
+      for key share;
       if found then
         update public.employment_target_signals signal
         set employee_record_id = null, updated_at = now()
