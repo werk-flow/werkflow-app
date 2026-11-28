@@ -24,7 +24,7 @@ import { toJson } from '@/lib/supabase/json';
 import { loadApprovedVacationSpansByRecord } from '@/lib/vacation/server';
 import { loadSchoolDaySpansByRecord } from '@/lib/personnel/school-day-server';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import { fingerprintSnapshot } from './capacity';
+import { compareByCodePoint, fingerprintSnapshot } from './capacity';
 import { addLocalDays, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 import { accessEndDatesByRecord } from './availability';
 import {
@@ -486,9 +486,8 @@ export async function assessPlanningOccurrences(input: {
   // The fingerprint follows the order of the visits and people, and callers
   // read them from the database without a fixed order. Sorted, a confirmation
   // that re-assesses the same plan matches the assessment the manager saw.
-  const byCodePoint = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
   const occurrences = [...input.occurrences].sort((left, right) =>
-    byCodePoint(left.originalStartLocal, right.originalStartLocal),
+    compareByCodePoint(left.originalStartLocal, right.originalStartLocal),
   );
   const assignmentsFor: AssignmentsForOccurrence = (occurrence) =>
     [
@@ -498,7 +497,7 @@ export async function assessPlanningOccurrences(input: {
           : input.assignments
         ).map((assignment) => [assignment.employeeRecordId, assignment]),
       ).values(),
-    ].sort((left, right) => byCodePoint(left.employeeRecordId, right.employeeRecordId));
+    ].sort((left, right) => compareByCodePoint(left.employeeRecordId, right.employeeRecordId));
   const employeeRecordIds = [
     ...new Set(
       occurrences.flatMap((occurrence) =>
