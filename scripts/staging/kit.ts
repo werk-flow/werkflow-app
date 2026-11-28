@@ -32,6 +32,7 @@ import {
   factLine,
   originsFact,
   isRunId,
+  namedStep,
   retentionRefusals,
   retireReason,
   retiredAs,
@@ -480,31 +481,46 @@ export type CheckoutMethod = 'card' | 'sepa';
 
 /**
  * Pays the open sandbox Checkout as a payer does, with Stripe's test card or test SEPA account, and
- * waits for staging's return page. Stripe asks for postcode and town only after a first submit.
+ * waits for staging's onboarding page, where the return lands. Each step waits for Stripe's own state and names itself when it
+ * fails. Stripe turns the one address field into street, postcode and town fields on its own after
+ * the street is typed, since the kit blocks its address search; the kit waits for that, then submits once.
  */
 export async function payInCheckout(page: Page, method: CheckoutMethod): Promise<void> {
-  await expect(page).toHaveURL(/^https:\/\/checkout\.stripe\.com\//, { timeout: TIMEOUT_MS });
   const form = page.frameLocator('iframe[src*="elements-inner"]').first();
-  if (method === 'card') {
-    await form.getByRole('button', { name: 'Karte', exact: true }).click({ timeout: TIMEOUT_MS * 2 });
-    await form.getByRole('textbox', { name: 'Kartennummer' }).fill('4242424242424242');
-    await form.getByRole('textbox', { name: 'Ablaufdatum (MM/JJ)' }).fill('12/34');
-    await form.getByRole('textbox', { name: 'Sicherheitscode' }).fill('123');
-  } else {
+  await namedStep('Checkout loaded', () =>
+    expect(page).toHaveURL(/^https:\/\/checkout\.stripe\.com\//, { timeout: TIMEOUT_MS }),
+  );
+  await namedStep(`${method} selected`, async () => {
     await form
-      .getByRole('button', { name: 'SEPA-Lastschrift', exact: true })
+      .getByRole('button', { name: method === 'card' ? 'Karte' : 'SEPA-Lastschrift', exact: true })
       .click({ timeout: TIMEOUT_MS * 2 });
-    await form.getByRole('textbox', { name: 'IBAN' }).fill('DE89370400440532013000');
-  }
-  await form.getByRole('textbox', { name: 'Vollständiger Name' }).fill('Agenten-Test');
-  await form.getByRole('combobox', { name: 'Adresse' }).fill('Teststraße 1');
-  await form.getByRole('combobox', { name: 'Adresse' }).press('Escape');
-  const submit = form.getByRole('button', { name: 'Kostenpflichtig abonnieren' });
-  await submit.click();
-  await form.getByRole('textbox', { name: 'Postleitzahl' }).fill('10115');
-  await form.getByRole('textbox', { name: 'Ort' }).fill('Berlin');
-  await submit.click();
-  await expect(page).toHaveURL(new RegExp(`^${STAGING_ORIGIN}/`), { timeout: TIMEOUT_MS * 2 });
+    if (method === 'card') {
+      await form.getByRole('textbox', { name: 'Kartennummer' }).fill('4242424242424242');
+      await form.getByRole('textbox', { name: 'Ablaufdatum (MM/JJ)' }).fill('12/34');
+      await form.getByRole('textbox', { name: 'Sicherheitscode' }).fill('123');
+    } else {
+      await form.getByRole('textbox', { name: 'IBAN' }).fill('DE89370400440532013000');
+    }
+    await form.getByRole('textbox', { name: 'Vollständiger Name' }).fill('Agenten-Test');
+  });
+  await namedStep('address shows postcode and town', async () => {
+    await form.getByRole('combobox', { name: 'Adresse', exact: true }).fill('Teststraße 1');
+    // The street moves into the expanded form's first line; postcode and town appear beside it.
+    await expect(form.getByRole('combobox', { name: 'Adresszeile 1' })).toHaveValue('Teststraße 1', {
+      timeout: TIMEOUT_MS,
+    });
+    await form.getByRole('textbox', { name: 'Postleitzahl' }).fill('10115');
+    await form.getByRole('textbox', { name: 'Ort' }).fill('Berlin');
+  });
+  await namedStep('submit reached onboarding', async () => {
+    const submit = form.getByRole('button', { name: 'Kostenpflichtig abonnieren' });
+    await expect(submit).toBeEnabled({ timeout: TIMEOUT_MS });
+    await submit.click();
+    // The return route redirects to onboarding in a second navigation: one wait covers both hops.
+    await expect(page).toHaveURL(new RegExp(`^${STAGING_ORIGIN}/onboarding/create-organization`), {
+      timeout: TIMEOUT_MS * 2,
+    });
+  });
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   actorRunId,
   factLine,
   failureText,
+  namedStep,
   newRunId,
   originsFact,
   redact,
@@ -294,6 +295,21 @@ describe('printing', () => {
         'MadeUpPassword-Aa1',
       ]),
     ).toBe('The DEV read answered 500 for [redacted].');
+  });
+
+  test('a named step fails with its name and the browser action, never the error text', async () => {
+    const wait = new Error(
+      'expect(page).toHaveURL(expected) failed\n\nReceived: https://checkout.example/c/pay/cs_test_made_up#x',
+    );
+    wait.name = 'TimeoutError';
+    const failure = await namedStep('returned to staging', () => Promise.reject(wait)).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(StagingFailure);
+    expect(failureText(failure, [])).toBe(
+      'returned to staging: expect(page).toHaveURL failed (TimeoutError)',
+    );
+    expect(await namedStep('loaded', () => Promise.resolve('cs_test_made_up'))).toBe('cs_test_made_up');
   });
 
   test('a fact line refuses a value that holds one of the run secrets', () => {

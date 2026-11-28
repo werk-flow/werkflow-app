@@ -77,7 +77,6 @@ async function payAndCreateOrganization(page: Page, admin: Actor, method: Checko
   await hydrated(page);
   await page.getByRole('button', { name: 'Weiter zur Zahlung' }).click();
   await payInCheckout(page, method);
-  await expect(page).toHaveURL(/\/onboarding\/create-organization/);
   await hydrated(page);
   await page.getByLabel('Name der Organisation').fill(runOrganizationName(admin.runId));
   await page.getByRole('button', { name: 'Organisation erstellen' }).click();
