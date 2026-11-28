@@ -7,6 +7,7 @@ import { readOriginal } from '../../lib/testing/staging/original';
 import {
   MEMBER_ROLES,
   StagingFailure,
+  namedStep,
   newRunId,
   runOrganizationName,
   type MemberRole,
@@ -77,7 +78,9 @@ async function payAndCreateOrganization(page: Page, admin: Actor, method: Checko
   await hydrated(page);
   await page.getByRole('button', { name: 'Weiter zur Zahlung' }).click();
   await payInCheckout(page, method);
-  await expect(page).toHaveURL(/\/onboarding\/create-organization/);
+  await namedStep('onboarding after Checkout', () =>
+    expect(page).toHaveURL(/\/onboarding\/create-organization/),
+  );
   await hydrated(page);
   await page.getByLabel('Name der Organisation').fill(runOrganizationName(admin.runId));
   await page.getByRole('button', { name: 'Organisation erstellen' }).click();

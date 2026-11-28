@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import { expect } from '@playwright/test';
 
-import { StagingFailure, newRunId, runOrganizationName } from '../../lib/testing/staging/runs';
+import { StagingFailure, namedStep, newRunId, runOrganizationName } from '../../lib/testing/staging/runs';
 import { hydrated } from '../../tests/golden/support/steps/interaction';
 import {
   cleanUp,
@@ -40,7 +40,9 @@ async function journey(): Promise<string> {
     await hydrated(page);
     await page.getByRole('button', { name: 'Weiter zur Zahlung' }).click();
     await payInCheckout(page, 'card');
-    await expect(page).toHaveURL(/\/onboarding\/create-organization/);
+    await namedStep('onboarding after Checkout', () =>
+      expect(page).toHaveURL(/\/onboarding\/create-organization/),
+    );
     kit.log('paid in the sandbox Checkout');
 
     await hydrated(page);

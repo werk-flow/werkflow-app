@@ -167,6 +167,18 @@ export function failureText(error: unknown, secrets: readonly string[]): string 
   return action ? `${action} failed (${kind})` : `${kind}`;
 }
 
+/**
+ * Runs one step of a journey whose failure names the step before the browser's action and kind, so
+ * two waits on the same action, such as two `toHaveURL`, print apart. Its words are the step's own.
+ */
+export async function namedStep<T>(step: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    throw new StagingFailure(`${step}: ${failureText(error, [])}`);
+  }
+}
+
 export type Fact = string | number | boolean | null;
 
 /**
