@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { fieldScopeFrom, isPriceText } from './field-scope';
+import { fieldScopeFrom } from './field-scope';
 import type { FieldScopeOrder } from './types';
 
 // The keys of a type and of every object type inside it.
@@ -93,18 +93,72 @@ describe('the field scope of an order', () => {
     ]);
   });
 
+  // One text line in one Titel, as the field reads it: kept, or left out with its empty Titel.
+  const shownText = (name: string) =>
+    fieldScopeFrom([
+      {
+        offerNumber: 'ANG-2026-014',
+        workKind: 'job',
+        sections: [
+          {
+            number: '1',
+            title: 'Montage',
+            lines: [{ kind: 'text', number: null, quantity: null, unitLabel: null, name, description: '' }],
+          },
+        ],
+      },
+    ])[0]?.sections.length === 1;
+
   test.each([
-    ['Alle Preise gelten vier Wochen', true],
-    ['Festpreis inkl. Anfahrt', true],
-    ['3 % Skonto bei Zahlung in 10 Tagen', true],
-    ['Zuzüglich 19 % MwSt.', true],
-    ['Pauschal 450 €', true],
-    ['Kosten für Entsorgung trägt der Kunde', true],
-    ['Heizungssteuerung neu verdrahten', false],
-    ['Heizlastberechnung liegt vor', false],
-    ['Zugang über den Hof', false],
-  ])('„%s“ is about money: %p', (name, expected) => {
-    expect(isPriceText({ name, description: '' })).toBe(expected);
+    ['Alle Preise gelten vier Wochen', false],
+    ['Festpreis inkl. Anfahrt', false],
+    ['3 % Skonto bei Zahlung in 10 Tagen', false],
+    ['Zuzüglich 19 % MwSt.', false],
+    ['Pauschal 450 €', false],
+    ['Pauschal 450,-', false],
+    ['Kosten für Entsorgung trägt der Kunde', false],
+    ['Heizungssteuerung neu verdrahten', true],
+    ['Heizlastberechnung liegt vor', true],
+    ['Zugang über den Hof', true],
+  ])('the text line „%s“ reaches the field: %p', (name, expected) => {
+    expect(shownText(name)).toBe(expected);
+  });
+
+  test('empties a Position’s description about money, leaves out a Position named after money and hides a Titel about money', () => {
+    const position = { kind: 'free', number: '1.1', quantity: '1.000', unitLabel: 'Stk.' };
+    expect(
+      fieldScopeFrom([
+        {
+          offerNumber: 'ANG-2026-014',
+          workKind: 'job',
+          sections: [
+            {
+              number: '1',
+              title: 'Preise Montage',
+              lines: [
+                { ...position, name: 'Montage', description: 'Montage inkl. Anfahrt für 450 €' },
+                { ...position, number: '1.2', name: 'Anfahrt pauschal 45,-', description: '' },
+              ],
+            },
+          ],
+        },
+      ])[0]?.sections,
+    ).toEqual([
+      {
+        number: '1',
+        title: 'Titel 1',
+        lines: [
+          {
+            kind: 'position',
+            number: '1.1',
+            name: 'Montage',
+            description: '',
+            quantity: '1.000',
+            unitLabel: 'Stk.',
+          },
+        ],
+      },
+    ]);
   });
 
   test('refuses a malformed answer instead of showing a part of it', () => {

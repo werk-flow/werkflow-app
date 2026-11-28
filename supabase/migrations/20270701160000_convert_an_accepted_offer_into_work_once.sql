@@ -9,12 +9,13 @@
 --    source. No cost: an Annahme holds none.
 -- 2. convert_offer_to_work: in one call it checks the offer is accepted and
 --    still at the version the office saw, creates a job or a project through
---    the create functions' own rules (or takes the job or project the offer
---    was written for), writes the order and its lines, sets the work's
+--    the create functions (or takes the job or project the offer was written
+--    for), writes the order and its lines, sets the work's
 --    Auftraggeber and Rechnungsempfänger to the accepted revision's through
 --    set_work_billing_parties, plans each article line's material through
 --    plan_job_material with the line as source, bumps the offer's version
---    and writes the offer's history. The order row is the work's record of
+--    and writes the offer's history; a project's open lead holding is touched
+--    so the lead's view reads again. The order row is the work's record of
 --    the conversion: who, when, from which Annahme. Nothing is scheduled,
 --    assigned or sent. A repeated press answers the first conversion; a
 --    second conversion is refused. The offer's row lock serialises two
@@ -151,7 +152,7 @@ create function public.convert_offer_to_work(
 )
 returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path to ''
 as $$
 declare
@@ -241,7 +242,7 @@ begin
       where site.organization_id = p_organization_id and site.id = v_site_id;
       -- The number lock first, so the next number is still free when the job takes it.
       perform pg_advisory_xact_lock(hashtextextended('job_number:' || p_organization_id::text, 0));
-      select (app_private.create_job_record(
+      select (public.create_job_with_assignments(
         p_organization_id, p_actor_id,
         jsonb_strip_nulls(jsonb_build_object('title', btrim(p_title), 'client_id', v_revision.client_id,
           'site_id', v_site_id, 'contact_id', v_contact_id, 'location', v_location,
@@ -250,7 +251,7 @@ begin
       )).id into v_job_id;
     else
       perform pg_advisory_xact_lock(hashtextextended('project_number:' || p_organization_id::text, 0));
-      select (app_private.create_project_record(
+      select (public.create_project_with_template(
         p_organization_id, p_actor_id,
         jsonb_strip_nulls(jsonb_build_object('name', btrim(p_title), 'client_id', v_revision.client_id,
           'site_id', v_site_id, 'contact_id', v_contact_id,
@@ -301,6 +302,12 @@ begin
       v_unplanned := v_unplanned || v_line.number;
     end if;
   end loop;
+
+  -- A project's lead may read none of its jobs: the touch of their open holding signals their view
+  -- (20261210120000_name_and_end_a_project_lead.sql). A job's change signals it through its trigger.
+  update public.work_leads work_lead set updated_at = now()
+  where work_lead.organization_id = p_organization_id and work_lead.ended_at is null
+    and work_lead.project_id = v_project_id;
 
   v_payload := jsonb_build_object('orderId', v_order_id, 'kind', v_kind,
     'workId', coalesce(v_job_id, v_project_id), 'unplannedPositions', to_jsonb(v_unplanned));

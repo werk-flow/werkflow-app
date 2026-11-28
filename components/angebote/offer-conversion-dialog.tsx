@@ -66,15 +66,21 @@ function targetOptions(offer: ConvertibleOffer): Array<{ value: OrderTarget; lab
   ];
 }
 
-/** „In Arbeit übernehmen“ of an accepted offer that has no work yet. */
-export function ConvertOfferButton({ offer }: { offer: ConvertibleOffer }) {
+/**
+ * „In Arbeit übernehmen“ of an accepted offer. Once the page shows the work
+ * (`converted`) the trigger goes, but an open dialog stays until its
+ * conversion has settled and its banner shows.
+ */
+export function ConvertOfferButton({ offer, converted }: { offer: ConvertibleOffer; converted: boolean }) {
   const hydrated = useHydrated();
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button type="button" disabled={!hydrated} onClick={() => setOpen(true)}>
-        In Arbeit übernehmen
-      </Button>
+      {!converted && (
+        <Button type="button" disabled={!hydrated} onClick={() => setOpen(true)}>
+          In Arbeit übernehmen
+        </Button>
+      )}
       {open && <OfferConversionDialog offer={offer} onClose={() => setOpen(false)} />}
     </>
   );

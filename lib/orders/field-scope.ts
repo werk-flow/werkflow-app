@@ -2,9 +2,11 @@ import { z } from '@/lib/zod';
 import type { FieldScopeLine, FieldScopeOrder } from './types';
 
 // The scope a field worker and a project lead read of an order: the answer of
-// get_work_scope, which already holds no price and no Nachlass, parsed into
-// FieldScopeOrder. A text line that talks about prices, payment or taxes is
-// left out here too: the field sees what to do, never what it costs.
+// get_work_scope, which already holds no price column and no Nachlass, parsed
+// into FieldScopeOrder. Every text the office wrote passes the same check
+// here too: a text line about money and a Position named after money are left
+// out, a Position's description about money is left empty, and a Titel named
+// after money shows only its number. The field sees what to do, never what it costs.
 
 const lineSchema = z.object({
   number: z.string().nullable(),
@@ -23,26 +25,22 @@ const scopeSchema = z.array(
   }),
 );
 
-/** Words and signs of a text line about money, which the field never reads. */
+/** Words and signs of a text about money, which the field never reads; „450,-“ is an amount. */
 const PRICE_TEXT =
-  /€|\beur\b|preis|rabatt|nachlass|skonto|zahlung|zahlbar|netto|brutto|mwst|umsatzsteuer|kosten|betrag|zuschlag/i;
-
-/** Whether a text line names a price, a discount, a payment or a tax. */
-export function isPriceText(line: { name: string; description: string }): boolean {
-  return PRICE_TEXT.test(line.name) || PRICE_TEXT.test(line.description);
-}
+  /€|\beur\b|\d\s*,[-–]|preis|rabatt|nachlass|skonto|zahlung|zahlbar|netto|brutto|mwst|umsatzsteuer|kosten|betrag|zuschlag/i;
 
 function fieldLine(line: z.infer<typeof lineSchema>): FieldScopeLine[] {
-  if (line.kind === 'text') {
-    return isPriceText(line) ? [] : [{ kind: 'text', name: line.name, description: line.description }];
-  }
+  const moneyDescription = PRICE_TEXT.test(line.description);
+  if (PRICE_TEXT.test(line.name) || (line.kind === 'text' && moneyDescription)) return [];
+  const description = moneyDescription ? '' : line.description;
+  if (line.kind === 'text') return [{ kind: 'text', name: line.name, description }];
   if (line.number === null || line.quantity === null || line.unitLabel === null) return [];
   return [
     {
       kind: 'position',
       number: line.number,
       name: line.name,
-      description: line.description,
+      description,
       quantity: line.quantity,
       unitLabel: line.unitLabel,
     },
@@ -59,7 +57,7 @@ export function fieldScopeFrom(data: unknown): FieldScopeOrder[] {
     sections: order.sections
       .map((section) => ({
         number: section.number,
-        title: section.title,
+        title: PRICE_TEXT.test(section.title) ? `Titel ${section.number}` : section.title,
         lines: section.lines.flatMap(fieldLine),
       }))
       .filter((section) => section.lines.length > 0),

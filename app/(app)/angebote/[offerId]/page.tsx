@@ -174,11 +174,11 @@ function OfferPageHeader({
               </>
             )}
             {/* Once work exists from the Annahme it stands; until then it can become work or be withdrawn. */}
+            {offer.status === 'angenommen' && work !== 'failed' && (
+              <ConvertOfferButton offer={offer} converted={work !== null} />
+            )}
             {offer.status === 'angenommen' && work === null && (
-              <>
-                <ConvertOfferButton offer={offer} />
-                <OfferReasonButton offer={offer} step="annahme" />
-              </>
+              <OfferReasonButton offer={offer} step="annahme" />
             )}
           </div>
         }

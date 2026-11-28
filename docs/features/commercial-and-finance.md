@@ -40,7 +40,7 @@ WerkFlow has offers with Titel, Positionen and totals, their recorded Annahme an
 - No offer uses the profile's tax rate yet; the Musterangebot keeps its fixed 19 %.
 - A Leistung's price applies per one unit; a VAT rate other than 19, 7 or 0 % cannot be chosen.
 - Kundenkonditionen price only a new offer Position from an article or a Leistung, by the conditions of the day it is added: an invoice line keeps the list price. A discount keys on the kind of line, never on an article category, a Pauschale, Gebühr or Fremdleistung takes none, and an own price exists only for a Leistung. A Position saved before price sources were kept reads „manuell“.
-- Not built: order confirmation, conversion of an accepted offer into work, contract, change order, billable measurement, credit, incoming bill, payment, open item, dunning, bank matching, accounting export, ledger.
+- Not built: order confirmation, contract, change order, billable measurement, credit, incoming bill, payment, open item, dunning, bank matching, accounting export, ledger.
 - A draft offer names its Rechnungsempfänger as a customer and keeps no copy of its name and address until it is sent.
 - In WerkFlow's own invoices, a discount, customer balance or tax in Stripe stops the issue. A credit note on an open invoice, or one that carries tax, raises the alarm and issues nothing.
 - No XRechnung and no § 13b. PDF/A is checked in CI, not at run time; the CII schema itself is not checked at run time. A stationery PDF prints as the plain letterhead on invoices.

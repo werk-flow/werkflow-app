@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { CreateOfferDialog } from '@/components/angebote/create-offer-dialog';
 import { AcceptOfferButton } from '@/components/angebote/offer-acceptance-dialog';
+import { ConvertOfferButton } from '@/components/angebote/offer-conversion-dialog';
 import { OfferContentEditor } from '@/components/angebote/editor/offer-content-editor';
 import { EditOfferHeaderButton } from '@/components/angebote/offer-header-dialog';
 import { StartOfferRevisionButton } from '@/components/angebote/offer-revision-start';
@@ -19,10 +20,14 @@ import type { OfferCostedSection, OfferWithCosts } from '@/lib/offers/types';
 // save's revalidated page would. „Vorschau“ reads the PDF the spec routes.
 // With `uiContractOfferSent` set before the bundle loads, the offer is sent
 // as revision 1, „Bearbeiten“ starts revision 2 instead, and „Annahme
-// erfassen“ records its Annahme with a Bedarfsposition to choose.
+// erfassen“ records its Annahme with a Bedarfsposition to choose. With
+// `uiContractOfferAccepted` set, the offer is accepted and „In Arbeit
+// übernehmen“ converts it; the spec renders the page with its work.
 declare global {
   interface Window {
     uiContractOfferSent?: boolean;
+    uiContractOfferAccepted?: boolean;
+    uiContractOfferConvertedRender: ((version: number) => void) | null;
     uiContractOfferServerRender: ((version: number) => void) | null;
     uiContractOfferContentRender: ((contentVersion: number, sections: OfferCostedSection[]) => void) | null;
   }
@@ -95,7 +100,13 @@ export function OffersContractFixture(): React.JSX.Element {
   const [version, setVersion] = useState(1);
   const [content, setContent] = useState({ contentVersion: 1, sections: OFFER.sections });
   const [sent] = useState(() => window.uiContractOfferSent === true);
+  const [accepted] = useState(() => window.uiContractOfferAccepted === true);
+  const [converted, setConverted] = useState(false);
   useEffect(() => {
+    window.uiContractOfferConvertedRender = (next) => {
+      setVersion(next);
+      setConverted(true);
+    };
     window.uiContractOfferServerRender = setVersion;
     window.uiContractOfferContentRender = (contentVersion, sections) =>
       setContent({ contentVersion, sections });
@@ -106,6 +117,7 @@ export function OffersContractFixture(): React.JSX.Element {
         <h1>Komponentenverträge</h1>
         <Button onClick={() => setOpen(true)}>Neues Angebot</Button>
         {open && <CreateOfferDialog onClose={() => setOpen(false)} />}
+        {accepted && <ConvertOfferButton offer={{ ...OFFER, version }} converted={converted} />}
         {sent ? (
           <>
             <StartOfferRevisionButton offer={{ ...OFFER, version }} sentRevision={1} />
