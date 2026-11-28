@@ -2,6 +2,7 @@
 
 import { ArrowLeft, Sparkles, SquarePen } from 'lucide-react';
 
+import { KiTimelineSkeleton } from '@/components/loading-states/ki-timeline-skeleton';
 import { PageBody } from '@/components/shared/page-shell';
 import { Button } from '@/components/ui/button';
 import { SectionError } from '@/components/ui/section-error';
@@ -10,7 +11,7 @@ import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import type { AiThreadWindow } from '@/lib/ai/thread-types';
 import { KiComposer } from './ki-composer';
 import { KiThreadList } from './ki-thread-list';
-import { KiTimeline, KiTimelineSkeleton, type TimelineEntry } from './ki-timeline';
+import { KiTimeline, type TimelineEntry } from './ki-timeline';
 import {
   answerMessage,
   type LiveTurn,

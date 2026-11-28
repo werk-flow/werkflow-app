@@ -5,7 +5,6 @@ import { memo } from 'react';
 import { AiMarkdown } from '@/components/shared/ai-markdown';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
-import { Skeleton } from '@/components/ui/skeleton';
 import type { AiChatMessage, AiThreadRow } from '@/lib/ai/thread-types';
 import { questionAnswer, rowRunning, timelineOrder } from '@/lib/ui/ki-rows';
 import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
@@ -47,18 +46,6 @@ const KiMessage = memo(function KiMessage({ message }: { message: TimelineMessag
     </li>
   );
 });
-
-export function KiTimelineSkeleton(): React.JSX.Element {
-  return (
-    <div className="space-y-6" aria-hidden="true">
-      <Skeleton className="ml-auto h-10 w-2/3 rounded-lg" />
-      <Skeleton className="h-4 w-full" />
-      <Skeleton className="h-4 w-2/3" />
-      <Skeleton className="ml-auto h-10 w-1/2 rounded-lg" />
-      <Skeleton className="h-4 w-3/4" />
-    </div>
-  );
-}
 
 /** A row of the agent's work, with what it derives from the rest of the thread. */
 function KiRow({

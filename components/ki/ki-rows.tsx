@@ -3,7 +3,7 @@
 import {
   Check,
   ChevronDown,
-  Circle,
+  CircleDashed,
   CircleCheck,
   ListTodo,
   MessageCircleQuestion,
@@ -215,7 +215,7 @@ export const KiTodoList = memo(function KiTodoList({ row }: { row: AiTodoRow }) 
             {step.done ? (
               <CircleCheck className="mt-0.5 size-4 shrink-0 text-success-text" aria-hidden="true" />
             ) : (
-              <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <CircleDashed className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             )}
             <span className={cn('min-w-0', step.done && 'text-muted-foreground line-through')}>
               <AiInlineText text={step.text} />
