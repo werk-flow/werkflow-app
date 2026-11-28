@@ -3,7 +3,7 @@ import 'server-only';
 import { type ModelMessage, type ToolSet, streamText } from 'ai';
 
 import { type AiContext, type AiThreadMessage, buildAiContext, serializedInput } from '@/lib/ai/context';
-import { AI_MODEL_PRICE, type AiTokenUsage, costMicroUsd } from '@/lib/ai/cost';
+import { AI_MODEL_PRICE, type AiTokenUsage, costMicroUsd, reportedUsage } from '@/lib/ai/cost';
 import {
   AI_TURN_LIMITS,
   AI_UPLOAD_LIMITS,
@@ -32,6 +32,8 @@ import {
   recordPendingCalls,
   recordUnrunCalls,
   runTool,
+  toolRunFor,
+  withinResultCapForSdkErrors,
 } from '@/lib/ai/tools/tool-calls';
 import { boundedWrite } from '@/lib/ai/bounded-write';
 import { AI_TURN_FAILURE_MESSAGES } from '@/lib/ai/turn-messages';
@@ -62,7 +64,7 @@ export type AiTurnCommand = {
   /** When the request arrived (epoch ms): the turn's total timeout counts from here. */
   receivedAt: number;
   text: string;
-  /** The person's uploads this message attaches; the model does not read them (KI-9 will). */
+  /** The person's uploads this message attaches; the model reads one only through a tool's extractor. */
   fileIds?: readonly string[];
 };
 
@@ -382,7 +384,8 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
       const modelContext = await buildAiContext({
         tools: aiToolsFor(command.role),
         thread: [...history, { role: 'user', text: command.text }],
-        inputTokenCap: limits.maxInputTokens,
+        // The thread leaves room for the turn's tool results, which share their own cap, and their framing.
+        inputTokenCap: limits.maxInputTokens - limits.maxToolResultBytes - limits.toolFramingBytes,
       });
       end = await runSteps({ ...context, modelContext, turnSignal, toolCalls }, answer);
     }
@@ -390,6 +393,8 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
     logError('aiTurn: run failed', error instanceof Error ? error.name : 'unknown');
     end = failedEnd('failed', 'interrupted');
   }
+  // A tool's model call still running when the turn ended is aborted with it and ledgered before the run settles.
+  await Promise.allSettled(toolCalls.runningModelCalls);
   // A tool still running when the turn ended gets its ledger row before the run settles (B19).
   await recordPendingCalls({ ...context, toolCalls });
   const body =
@@ -402,7 +407,8 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
   else if (!saved) end = failedEnd('failed', 'interrupted');
   // An attempt the ledger could not take leaves the run open: its reservation stays as the provisional charge.
   // Every other run settles at its recorded cost, a failed final save included, so the person's next turn may start.
-  if (!answer.ledgerFailed) await settleRun(context, end.status === 'complete' ? 'succeeded' : end.status);
+  if (!answer.ledgerFailed && !toolCalls.costUnrecorded)
+    await settleRun(context, end.status === 'complete' ? 'succeeded' : end.status);
   return end;
 }
 
@@ -520,6 +526,8 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
   let messages = context.modelContext.messages;
   for (let step = 1; ; step += 1) {
     if (step > limits.maxSteps) return failedEnd('cancelled', 'step_limit');
+    // Tool results past their cap would not fit the next step.
+    if (context.toolCalls.resultsOverflow) return failedEnd('failed', 'input_too_large');
     const gate = await readStepGate(context, answer, context.turnSignal);
     if (gate !== 'open') return failedEnd('cancelled', gate);
     if (!isAllowedModel(context.model)) return failedEnd('failed', 'provider_refused');
@@ -540,7 +548,7 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
     if (outcome.finishReason === 'content-filter') return failedEnd('failed', 'model_refused');
     // A step that ends in tool calls continues with their results; one that asked the person waits for them.
     if (outcome.finishReason !== 'tool-calls' || context.toolCalls.asked) return { status: 'complete' };
-    messages = [...messages, ...outcome.responseMessages];
+    messages = [...messages, ...withinResultCapForSdkErrors(context, outcome.responseMessages)];
   }
 }
 
@@ -618,7 +626,7 @@ async function runAttempt(
   const result = streamText({
     model: context.model,
     instructions: context.modelContext.instructions,
-    tools: prepareStep(context),
+    tools: prepareStep(context, answer),
     // One call at a time, so none starts after another's ledger row failed.
     toolCallConcurrency: 1,
     messages: step.messages,
@@ -655,7 +663,7 @@ async function runAttempt(
         // The provider accepted the request: from here on it bills the prompt.
         started = true;
       } else if (part.type === 'finish-step') {
-        usage = tokenUsage(part.usage);
+        usage = reportedUsage(part.usage);
         finishReason = part.finishReason;
       } else if (part.type === 'error') {
         return fail(part.error);
@@ -707,26 +715,6 @@ function savePartial(context: RunContext, answer: Answer): void {
   })();
 }
 
-type StreamUsage = {
-  inputTokens: number | undefined;
-  inputTokenDetails: {
-    noCacheTokens: number | undefined;
-    cacheReadTokens: number | undefined;
-    cacheWriteTokens: number | undefined;
-  };
-  outputTokens: number | undefined;
-};
-
-function tokenUsage(usage: StreamUsage): AiTokenUsage | null {
-  if (usage.inputTokens === undefined || usage.outputTokens === undefined) return null;
-  const cacheReadTokens = usage.inputTokenDetails.cacheReadTokens ?? 0;
-  const cacheWriteTokens = usage.inputTokenDetails.cacheWriteTokens ?? 0;
-  const inputTokens =
-    usage.inputTokenDetails.noCacheTokens ??
-    Math.max(0, usage.inputTokens - cacheReadTokens - cacheWriteTokens);
-  return { inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens: usage.outputTokens };
-}
-
 /**
  * An attempt the provider reported no usage for. One it refused with an error
  * status is not billed; any other, which it may have accepted, is charged at
@@ -748,6 +736,7 @@ async function recordAttempt(
   key: string,
   usage: AiTokenUsage,
   outcome: string,
+  promptVersion = AI_PROMPT_VERSION,
 ): Promise<boolean> {
   return boundedWrite(
     'aiTurn: attempt record failed',
@@ -760,7 +749,7 @@ async function recordAttempt(
           p_run_id: context.runId,
           p_idempotency_key: key,
           p_model_id: context.model.modelId,
-          p_prompt_version: AI_PROMPT_VERSION,
+          p_prompt_version: promptVersion,
           p_input_tokens: usage.inputTokens,
           p_output_tokens: usage.outputTokens,
           p_cache_read_tokens: usage.cacheReadTokens,
@@ -776,8 +765,17 @@ async function recordAttempt(
  * The tools of the next model step: the caller's role's tools (B6), without
  * any memory write once the turn read untrusted text (B10).
  */
-function prepareStep(context: RunContext): ToolSet {
+function prepareStep(context: RunContext, answer: Answer): ToolSet {
   const { tools } = context.modelContext;
   const offered = context.toolCalls.tainted ? tools.filter((tool) => !tool.writesMemory) : tools;
-  return toToolSet(offered, (tool, input, toolCallId) => runTool(context, tool, input, toolCallId));
+  return toToolSet(offered, (tool, input, toolCallId, signal) => {
+    const run = toolRunFor(context, tool, {
+      signal: AbortSignal.any([context.turnSignal, answer.halt.signal, ...(signal ? [signal] : [])]),
+      // A long read's progress saves the answer as a stream part does, so a stop or a lost thread aborts it.
+      progress: () => savePartial(context, answer),
+      gate: async () => (await readStepGate(context, answer, context.turnSignal)) === 'open',
+      record: (key, ...attempt) => recordAttempt(context, key, ...attempt),
+    });
+    return runTool(context, tool, input, toolCallId, run);
+  });
 }

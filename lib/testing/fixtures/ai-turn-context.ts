@@ -65,7 +65,14 @@ const streamedText = (events: Awaited<ReturnType<typeof readTurn>>) =>
 // tool it asks for never runs (B6, B21).
 const ROLE_TOOLS = {
   employee: ['auftraege_finden', 'frage_stellen', 'plan_zeigen'],
-  admin: ['artikel_finden', 'auftraege_finden', 'frage_stellen', 'kunden_finden', 'plan_zeigen'],
+  admin: [
+    'artikel_finden',
+    'auftraege_finden',
+    'frage_stellen',
+    'kunden_finden',
+    'lieferschein_lesen',
+    'plan_zeigen',
+  ],
 } as const;
 for (const role of ['employee', 'admin'] as const) {
   resetAiTables(world);
