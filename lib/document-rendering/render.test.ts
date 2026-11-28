@@ -495,6 +495,37 @@ describe('the business document renderer', () => {
     expect(markLine?.top ?? 0).toBeGreaterThan(head?.top ?? PAGE_HEIGHT);
   });
 
+  test('a Nachlass prints its number, text and amount without quantity or price, and its mark below', async () => {
+    const sample = plainSample('Muster GmbH');
+    const [first, ...rest] = sample.sections;
+    if (!first) throw new Error('The sample has no section.');
+    const document: BusinessDocument = {
+      ...sample,
+      sections: [
+        {
+          ...first,
+          positions: [
+            ...first.positions,
+            {
+              kind: 'adjustment',
+              number: '1.9',
+              text: 'Nachlass',
+              description: '',
+              amountCents: -12_840,
+              mark: '3 % auf Titel 1, davon 127,50 € zu 19 % und 0,90 € zu 7 %',
+            },
+          ],
+        },
+        ...rest,
+      ],
+    };
+    const lines = (await readPages(await renderBusinessDocument(document))).flat();
+    const head = lines.find((line) => line.text.startsWith('1.9 '));
+    expect(head?.text).toBe('1.9 Nachlass -128,40 €');
+    const markLine = lines.find((line) => line.text.startsWith('3 % auf Titel 1'));
+    expect(markLine?.top ?? 0).toBeGreaterThan(head?.top ?? PAGE_HEIGHT);
+  });
+
   test('a title wider than the page wraps onto further lines instead of running off it', async () => {
     const title = `Angebot: ${'Austausch der Gasheizung im Mehrfamilienhaus '.repeat(3)}Ende`;
     for (const document of [

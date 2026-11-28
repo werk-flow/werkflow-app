@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import { formatAlternativeMark } from '@/lib/document-rendering/format';
+import { formatAdjustmentMark, formatAlternativeMark } from '@/lib/document-rendering/format';
 import type { DocumentPosition } from '@/lib/document-rendering/model';
 import { offerDocument, type PrintedOffer } from './document';
 import type { OfferCostedSection, OfferPriceSource } from './types';
@@ -101,7 +101,12 @@ test('a Bedarfsposition prints in parentheses and an Alternativposition names it
     document.sections[0]?.positions.map((position) =>
       position.kind === 'text'
         ? 'text'
-        : [position.number, position.kind, position.amountCents, position.alternativeTo ?? null],
+        : [
+            position.number,
+            position.kind,
+            position.amountCents,
+            ('alternativeTo' in position && position.alternativeTo) || null,
+          ],
     ),
   ).toEqual([
     ['1.1', 'standard', 489_000, null],
@@ -120,6 +125,82 @@ test('a Bedarfsposition prints in parentheses and an Alternativposition names it
   expect(formatAlternativeMark({ number: '1.1', differenceCents: 0 })).toBe(
     'Alternativposition zu 1.1, gleicher Preis',
   );
+});
+
+test('a Nachlass prints its amount in the sum, what it is of and its parts by rate; a Zuschlag likewise', () => {
+  const nachlass = {
+    kind: 'adjustment' as const,
+    name: 'Nachlass',
+    description: 'Für Stammkunden',
+    adjustment: { direction: 'rabatt' as const, scope: 'titel' as const, percentHundredths: 300 },
+  };
+  const sections: OfferCostedSection[] = [
+    {
+      title: 'Heizung',
+      positions: [
+        { kind: 'free', ...values, unitPriceCents: 425_000, source: null, cost, priceSource },
+        {
+          kind: 'free',
+          ...values,
+          unitPriceCents: 2995,
+          taxRateBasisPoints: 700,
+          source: null,
+          cost,
+          priceSource,
+        },
+        nachlass,
+        {
+          kind: 'adjustment',
+          name: 'Kleinmengenzuschlag',
+          description: '',
+          adjustment: { direction: 'zuschlag', scope: 'betrag', amountCents: 1500, taxRateBasisPoints: 1900 },
+        },
+      ],
+    },
+    {
+      title: 'Bad',
+      positions: [
+        { kind: 'free', ...values, unitPriceCents: 10_000, source: null, cost, priceSource },
+        {
+          ...nachlass,
+          adjustment: { ...nachlass.adjustment, scope: 'angebot' as const, percentHundredths: 250 },
+        },
+      ],
+    },
+  ];
+  const document = offerDocument({ ...offer, sections }, letterhead, { issuedOn: '2037-11-20', revision: 1 });
+  expect(document.sections.map((section) => section.positions.slice(2))).toEqual([
+    [
+      {
+        kind: 'adjustment',
+        number: '1.3',
+        text: 'Nachlass',
+        description: 'Für Stammkunden',
+        amountCents: -12_840,
+        mark: '3 % auf Titel 1, davon 127,50 € zu 19 % und 0,90 € zu 7 %',
+      },
+      {
+        kind: 'adjustment',
+        number: '1.4',
+        text: 'Kleinmengenzuschlag',
+        description: '',
+        amountCents: 1500,
+        mark: null,
+      },
+    ],
+    [],
+  ]);
+  // 2,5 % of 4.250,00 € and 100,00 € at 19 %, and of 29,95 € at 7 %.
+  expect(document.sections[1]?.positions[1]).toMatchObject({
+    number: '2.2',
+    amountCents: -(10_875 + 75),
+    mark: '2,5 % auf das Angebot, davon 108,75 € zu 19 % und 0,75 € zu 7 %',
+  });
+  expect(document.sections.map((section) => section.subtotalCents)).toEqual([
+    425_000 + 2995 - 12_840 + 1500,
+    10_000 - 10_950,
+  ]);
+  expect(formatAdjustmentMark({ percentHundredths: 1000, of: 'Titel 2' }, [])).toBe('10 % auf Titel 2');
 });
 
 function keysOf(value: unknown): string[] {

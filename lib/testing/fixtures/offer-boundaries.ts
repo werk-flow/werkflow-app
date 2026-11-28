@@ -186,6 +186,12 @@ const content = {
           name: 'Wartung mit Brennerreinigung',
           positionType: { kind: 'alternative' as const, alternativeTo: 1 },
         },
+        {
+          kind: 'adjustment' as const,
+          name: 'Nachlass',
+          description: '',
+          adjustment: { direction: 'rabatt' as const, scope: 'titel' as const, percentHundredths: 300 },
+        },
       ],
     },
   ],
@@ -238,7 +244,7 @@ assert.deepEqual(
     call.args.p_actor_id,
     call.args.p_offer_id,
     call.args.p_totals,
-    JSON.stringify(call.args.p_sections).match(/"positionType":\{[^}]*\}/g),
+    JSON.stringify(call.args.p_sections).match(/"positionType":\{[^}]*\}|"taxSplit":\[[^\]]*\]/g),
   ]),
   [
     [
@@ -246,12 +252,13 @@ assert.deepEqual(
       ORGANIZATION_A,
       CALLER_ID,
       ownOfferId,
-      // 1,5 h at 72,50 € is 108,75 €; 19 % VAT on it is 20,6625 €.
-      { netCents: 10875, taxCents: 2066, grossCents: 12941, positionTypes: true },
+      // 1,5 h at 72,50 € is 108,75 €, less 3 % (3,2625 €, so 3,26 €): 105,49 €; 19 % VAT on it is 20,0431 €.
+      { netCents: 10549, taxCents: 2004, grossCents: 12553, positionTypes: true, adjustments: true },
       [
         '"positionType":{"kind":"normal"}',
         '"positionType":{"kind":"bedarf"}',
         '"positionType":{"kind":"alternative","alternativeTo":1}',
+        '"taxSplit":[{"taxRateBasisPoints":1900,"amountCents":-326}]',
       ],
     ],
   ],

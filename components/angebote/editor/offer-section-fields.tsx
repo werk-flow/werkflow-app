@@ -8,12 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { formatEuroCents, formatTaxRate } from '@/lib/document-rendering/format';
-import { INVENTORY_UNITS } from '@/lib/inventory/units';
-import { INVOICE_TAX_RATES } from '@/lib/invoices/types';
+import { formatEuroCents } from '@/lib/document-rendering/format';
 import type { InvoiceLineSourceKind } from '@/lib/invoices/line-sources';
 import type { OfferCalculation, PositionFigures } from '@/lib/offers/calculation';
 import {
@@ -21,12 +17,13 @@ import {
   contentFieldId,
   emptyPosition,
   withTypedPrice,
-  withUnit,
+  type PositionField,
   type PositionForm,
   type SectionForm,
 } from '@/lib/offers/content-form';
 import { positionNumbers } from '@/lib/offers/numbering';
 import type { OfferPosition } from '@/lib/offers/types';
+import { AdjustmentFields, PositionTaxField, PositionUnitField } from './offer-position-fields';
 import { OfferCatalogPicker } from './offer-article-picker';
 import { PositionCostFields } from './offer-position-cost-fields';
 import { PositionPriceSourceNote } from './offer-price-source-note';
@@ -264,6 +261,16 @@ function SectionFooter({
           <Plus className="size-4" />
           Text
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onAdd('adjustment')}
+          disabled={disabled}
+        >
+          <Plus className="size-4" />
+          Nachlass oder Zuschlag
+        </Button>
         {picker('leistung', 'Leistung')}
         {picker('article', 'Artikel')}
       </div>
@@ -276,7 +283,7 @@ function SectionFooter({
 }
 
 type PositionProps = {
-  fieldId: (field: 'name' | 'alternative' | 'quantity' | 'unit' | 'price' | 'cost' | 'markup') => string;
+  fieldId: (field: PositionField) => string;
   /** As printed, for example `1.2`; null for a text line. */
   number: string | null;
   position: PositionForm;
@@ -295,6 +302,34 @@ type PositionProps = {
   disabled: boolean;
 };
 
+/** The number, the kind's badge and the order buttons on one line at every width, then where the Position came from. */
+function PositionHead({
+  label,
+  number,
+  position,
+  order,
+  disabled,
+}: Pick<PositionProps, 'number' | 'position' | 'order' | 'disabled'> & { label: string }) {
+  const typeBadge =
+    position.kind === 'adjustment'
+      ? { rabatt: 'Nachlass', zuschlag: 'Zuschlag' }[position.adjustment]
+      : position.kind === 'free' &&
+        { normal: null, bedarf: 'Bedarf', alternative: 'Alternative' }[position.positionType];
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-sm text-muted-foreground tabular-nums">
+          {number ?? <Badge variant="secondary">Text</Badge>}
+          {typeBadge && <Badge variant="outline">{typeBadge}</Badge>}
+        </span>
+        <OrderButtons label={label} {...order} disabled={disabled} />
+      </div>
+      {position.kind === 'free' && position.source && <InvoiceLineSourceNote source={position.source} />}
+      {position.kind === 'free' && <PositionPriceSourceNote priceSource={position.priceSource} />}
+    </>
+  );
+}
+
 function PositionFields({
   fieldId,
   number,
@@ -307,19 +342,9 @@ function PositionFields({
   disabled,
 }: PositionProps) {
   const label = number ? `Position ${number}` : 'Text';
-  const typeBadge = { normal: null, bedarf: 'Bedarf', alternative: 'Alternative' }[position.positionType];
   return (
     <li aria-label={label} className="space-y-3 p-3 sm:p-4">
-      {/* The number and the order buttons share a line above the fields, at every width. */}
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm text-muted-foreground tabular-nums">
-          {number ?? <Badge variant="secondary">Text</Badge>}
-          {position.kind === 'free' && typeBadge && <Badge variant="outline">{typeBadge}</Badge>}
-        </span>
-        <OrderButtons label={label} {...order} disabled={disabled} />
-      </div>
-      {position.kind === 'free' && position.source && <InvoiceLineSourceNote source={position.source} />}
-      {position.kind === 'free' && <PositionPriceSourceNote priceSource={position.priceSource} />}
+      <PositionHead label={label} number={number} position={position} order={order} disabled={disabled} />
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Bezeichnung" htmlFor={fieldId('name')} required error={errors[fieldId('name')]}>
           <Input
@@ -340,6 +365,16 @@ function PositionFields({
           />
         </Field>
       </div>
+      {position.kind === 'adjustment' && (
+        <AdjustmentFields
+          fieldId={fieldId}
+          position={position}
+          figures={figures}
+          onChange={onChange}
+          errors={errors}
+          disabled={disabled}
+        />
+      )}
       {position.kind === 'free' && (
         <>
           <PositionTypeFields
@@ -416,27 +451,7 @@ function PositionAmountFields({
           disabled={disabled}
         />
       </Field>
-      <Field label="MwSt." htmlFor={taxId}>
-        <Select
-          value={String(position.taxRateBasisPoints)}
-          onValueChange={(value) => {
-            const rate = INVOICE_TAX_RATES.find((candidate) => String(candidate) === value);
-            if (rate !== undefined) onChange({ ...position, taxRateBasisPoints: rate });
-          }}
-          disabled={disabled}
-        >
-          <SelectTrigger id={taxId} className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {INVOICE_TAX_RATES.map((rate) => (
-              <SelectItem key={rate} value={String(rate)}>
-                {formatTaxRate(rate)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
+      <PositionTaxField id={taxId} position={position} onChange={onChange} disabled={disabled} />
       <p className="col-span-2 text-right text-sm font-medium tabular-nums sm:col-span-1 sm:min-w-28 sm:pb-2">
         <span className="sr-only">
           {position.positionType === 'normal' ? 'Betrag netto: ' : 'Betrag netto, nicht in der Summe: '}
@@ -448,45 +463,5 @@ function PositionAmountFields({
             : `(${formatEuroCents(figures.saleCents)})`}
       </p>
     </div>
-  );
-}
-
-/** Einheit, empty while an article's stored unit is outside the list: the office picks one. */
-function PositionUnitField({
-  id,
-  position,
-  onChange,
-  error,
-  disabled,
-}: {
-  id: string;
-  position: PositionForm;
-  onChange: (position: PositionForm) => void;
-  error: string | undefined;
-  disabled: boolean;
-}) {
-  return (
-    <Field
-      label="Einheit"
-      htmlFor={id}
-      required
-      error={error}
-      // An article's stored unit outside the list leaves the unit to the office.
-      description={position.unit ? undefined : 'Die Einheit des Artikels ist unbekannt. Wähle eine.'}
-    >
-      <SearchableSelect
-        id={id}
-        value={position.unit}
-        onChange={(unit) => onChange(withUnit(position, unit))}
-        placeholder="Einheit wählen…"
-        // Every unit in use, and a retired one the position already has.
-        options={INVENTORY_UNITS.flatMap((unit) =>
-          unit.retired && unit.code !== position.unit ? [] : [{ value: unit.code, label: unit.label }],
-        )}
-        searchPlaceholder="Einheit suchen…"
-        emptyMessage="Keine Einheit gefunden"
-        disabled={disabled}
-      />
-    </Field>
   );
 }

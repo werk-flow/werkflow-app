@@ -10,6 +10,7 @@ import {
   liveContentFigures,
   markupSentence,
   parseContentForm,
+  withAdjustmentDirection,
   withCostOrMarkup,
   withTypedPrice,
   withUnit,
@@ -139,6 +140,9 @@ describe('catalogPositionForm', () => {
       priceSource: { kind: 'listenpreis', proof: 'listenpreis-proof' },
       positionType: 'normal',
       alternativeTo: null,
+      adjustment: 'rabatt',
+      adjustmentScope: 'titel',
+      percent: '',
     });
     const parsed = parseContentForm([{ key: 's', title: 'Material', positions: [position] }]);
     expect(parsed.ok && parsed.sections[0]?.positions[0]).toEqual({
@@ -445,5 +449,91 @@ describe('Bedarfs- and Alternativpositionen', () => {
       positionCents: [489_000, 18_500, 452_000],
     });
     expect(figures?.amounts.totals.grossCents).toBe(581_910);
+  });
+});
+
+// A Nachlass or Zuschlag in the editor: a percentage as the office types it,
+// or a fixed net amount at its own rate; a field at fault is named and focused.
+describe('a Nachlass or Zuschlag in the editor', () => {
+  const therme = { ...emptyPosition('t', 'free'), name: 'Therme', price: '100,00' };
+  const nachlass = { ...emptyPosition('n', 'adjustment'), percent: '2,5' };
+
+  test('starts as a Nachlass of its Titel and parses with its percentage in hundredths', () => {
+    expect(nachlass).toMatchObject({ name: 'Nachlass', adjustment: 'rabatt', adjustmentScope: 'titel' });
+    const parsed = parseContentForm([{ key: 's', title: 'Heizung', positions: [therme, nachlass] }]);
+    expect(parsed.ok && parsed.sections[0]?.positions[1]).toEqual({
+      kind: 'adjustment',
+      name: 'Nachlass',
+      description: '',
+      adjustment: { direction: 'rabatt', scope: 'titel', percentHundredths: 250 },
+    });
+  });
+
+  test.each(['', '0', '100,01', '2,555', 'drei'])('refuses the percentage „%s“ on its field', (percent) => {
+    const parsed = parseContentForm([
+      { key: 's', title: 'Heizung', positions: [therme, { ...nachlass, percent }] },
+    ]);
+    expect(parsed.ok ? null : parsed.errors).toEqual({
+      [contentFieldId(0, { position: 1, field: 'percent' })]:
+        'Gib den Prozentsatz von 0,01 bis 100 an, zum Beispiel 3 oder 2,5.',
+    });
+  });
+
+  test('a fixed amount takes the price field and its own VAT rate, and must be above zero', () => {
+    const fixed = {
+      ...nachlass,
+      adjustmentScope: 'betrag' as const,
+      price: '50',
+      taxRateBasisPoints: 700 as const,
+    };
+    const parsed = parseContentForm([{ key: 's', title: 'Heizung', positions: [fixed] }]);
+    expect(parsed.ok && parsed.sections[0]?.positions[0]).toMatchObject({
+      adjustment: { direction: 'rabatt', scope: 'betrag', amountCents: 5000, taxRateBasisPoints: 700 },
+    });
+    const zero = parseContentForm([{ key: 's', title: 'Heizung', positions: [{ ...fixed, price: '0' }] }]);
+    expect(zero.ok ? null : Object.keys(zero.errors)).toEqual([
+      contentFieldId(0, { position: 0, field: 'price' }),
+    ]);
+  });
+
+  test('reads back from the stored content as typed', () => {
+    const [section] = contentFormOf([
+      {
+        title: 'Heizung',
+        positions: [
+          {
+            kind: 'adjustment',
+            name: 'Kleinmengenzuschlag',
+            description: '',
+            adjustment: { direction: 'zuschlag', scope: 'angebot', percentHundredths: 1250 },
+          },
+          {
+            kind: 'adjustment',
+            name: 'Treuenachlass',
+            description: '',
+            adjustment: { direction: 'rabatt', scope: 'betrag', amountCents: 5000, taxRateBasisPoints: 1900 },
+          },
+        ],
+      },
+    ]);
+    expect(section?.positions[0]).toMatchObject({
+      adjustment: 'zuschlag',
+      adjustmentScope: 'angebot',
+      percent: '12,5',
+    });
+    expect(section?.positions[1]).toMatchObject({ adjustmentScope: 'betrag', price: '50,00', percent: '' });
+  });
+
+  test('turning it into a Zuschlag renames a default Bezeichnung and keeps one the office typed', () => {
+    expect(withAdjustmentDirection(nachlass, 'zuschlag').name).toBe('Zuschlag');
+    expect(withAdjustmentDirection({ ...nachlass, name: 'Treuerabatt' }, 'zuschlag').name).toBe(
+      'Treuerabatt',
+    );
+  });
+
+  test('the live figures count it in its Titel and the Kalkulation', () => {
+    const figures = liveContentFigures([{ key: 's', title: 'Heizung', positions: [therme, nachlass] }]);
+    expect(figures?.amounts.sections[0]?.netCents).toBe(9750);
+    expect(figures?.calculation.offer.adjustmentCents).toBe(-250);
   });
 });

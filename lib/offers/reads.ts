@@ -196,7 +196,7 @@ function offerWithCostsOf(data: unknown, scope: { organizationId: string; offerI
     sections: offer.sections.map((section, sectionIndex) => ({
       ...section,
       positions: section.positions.map((position, positionIndex) => {
-        if (position.kind === 'text') return position;
+        if (position.kind !== 'free') return position;
         const cost = costs[sectionIndex]?.[positionIndex];
         const priceSource = priceSources[sectionIndex]?.[positionIndex];
         // The answers come from one statement: a missing entry is a broken read, never a cost of zero.

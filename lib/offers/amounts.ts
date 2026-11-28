@@ -1,61 +1,165 @@
+import { lineAmountCents } from '@/lib/inventory/line-amount';
 import { INVENTORY_UNITS } from '@/lib/inventory/units';
 import { draftAmounts, type DraftAmounts } from '@/lib/invoices/amounts';
-import type { InvoiceLineValues } from '@/lib/invoices/types';
+import { INVOICE_TAX_RATES, type InvoiceLineValues, type InvoiceTaxRate } from '@/lib/invoices/types';
 import { lineCostCents } from './calculation';
-import type { OfferFreePosition, OfferPosition, OfferPositionType, OfferSection } from './types';
+import type {
+  OfferAdjustment,
+  OfferAdjustmentPosition,
+  OfferFreePosition,
+  OfferPosition,
+  OfferPositionType,
+  OfferSection,
+} from './types';
 
 // The amounts of an offer come from the one invoice core, as an invoice's do,
 // so an invoice of the same positions later agrees with the offer: each priced
 // position by the shared line rule, VAT per rate on the sum of that rate's
-// positions. A Titel's subtotal is the sum of its normal positions; a text
-// line has no amount. A Bedarfs- or Alternativposition has its own amount by
-// the same line rule, and no sum or VAT counts it. The editor shows them while the office types; the server
-// computes them again from the parsed input and stores what it computed.
+// positions. A Titel's subtotal is the sum of its normal positions and its
+// Nachlässe and Zuschläge; a text line has no amount. A Bedarfs- or
+// Alternativposition has its own amount by the same line rule, and no sum or
+// VAT counts it. A Nachlass or Zuschlag in percent is a percentage of the
+// normal priced Positionen of its Titel or of the offer, split by VAT rate:
+// each part is the percentage of that rate's sum, rounded once by the line
+// rule, and its amount is the sum of its parts, so VAT stays per rate on the
+// sum of that rate's lines and parts. The editor shows them while the office
+// types; the server computes them again from the parsed input and stores what
+// it computed.
+
+/** A Nachlass's or Zuschlag's amount at one VAT rate; its parts add up to its amount. */
+type AdjustmentPart = { taxRateBasisPoints: InvoiceTaxRate; amountCents: number };
 
 export type OfferAmounts = DraftAmounts & {
   /** Per Titel: its subtotal and each position's amount, `null` for a text line. */
   sections: Array<{ netCents: number; positionCents: Array<number | null> }>;
+  /** Per Titel and place: a Nachlass's or Zuschlag's parts by VAT rate, `null` for every other line. */
+  adjustmentParts: Array<Array<AdjustmentPart[] | null>>;
 };
 
 type PricedPosition = { kind: 'free'; positionType: OfferPositionType } & InvoiceLineValues;
+type AdjustmentLine = Pick<OfferAdjustmentPosition, 'kind' | 'name' | 'adjustment'>;
 
 /**
  * Titel as their amounts read them: each Position's kind and line values. A
  * Position's source and cost play no part, so a document's content, which
  * carries no cost, computes by the same rule as the editor's.
  */
-type PricedSection = { positions: ReadonlyArray<{ kind: 'text' } | PricedPosition> };
+type PricedSection = { positions: ReadonlyArray<{ kind: 'text' } | PricedPosition | AdjustmentLine> };
 
-/** Whether a position counts in its Titel's subtotal, the totals and the VAT: a normal priced one. */
-export function countsInTotal(
-  position: { kind: 'text' } | Pick<PricedPosition, 'kind' | 'positionType'>,
-): boolean {
-  return position.kind === 'free' && position.positionType.kind === 'normal';
+/** Whether a priced position counts in its Titel's subtotal, the totals and the VAT: a normal one. */
+function isNormalPriced(position: { kind: string } | PricedPosition): position is PricedPosition {
+  return position.kind === 'free' && 'positionType' in position && position.positionType.kind === 'normal';
 }
 
-/** Every amount of an offer's content. Throws a RangeError on a position the line rule refuses. */
+/** Whether a position counts in its Titel's subtotal, the totals and the VAT: a normal priced one, a Nachlass or a Zuschlag. */
+export function countsInTotal(
+  position: { kind: 'text' | 'adjustment' } | Pick<PricedPosition, 'kind' | 'positionType'>,
+): boolean {
+  return (
+    position.kind === 'adjustment' || (position.kind === 'free' && position.positionType.kind === 'normal')
+  );
+}
+
+/** The largest percentage of a Nachlass or Zuschlag, in hundredths of a percent: 100 %. */
+export const MAX_ADJUSTMENT_HUNDREDTHS = 10_000;
+
+type CoveredLine = { amountCents: number; taxRateBasisPoints: InvoiceTaxRate };
+
+/**
+ * The parts of a Nachlass (negative) or Zuschlag by VAT rate. In percent:
+ * per rate, the percentage of the sum of `covered`, the normal priced lines
+ * it is a percentage of, rounded once half away from zero by the line rule; a
+ * rate whose part is zero has none. A fixed amount is one part at its rate.
+ */
+function adjustmentParts(adjustment: OfferAdjustment, covered: readonly CoveredLine[]): AdjustmentPart[] {
+  const sign = adjustment.direction === 'rabatt' ? -1 : 1;
+  if (adjustment.scope === 'betrag') {
+    return [
+      { taxRateBasisPoints: adjustment.taxRateBasisPoints, amountCents: sign * adjustment.amountCents },
+    ];
+  }
+  return INVOICE_TAX_RATES.flatMap((rate) => {
+    const base = covered
+      .filter((line) => line.taxRateBasisPoints === rate)
+      .reduce((total, line) => total + line.amountCents, 0);
+    // Hundredths of a percent are ten-thousandths: a quantity in thousandths per price quantity 10.
+    const cents = lineAmountCents({ thousandths: BigInt(adjustment.percentHundredths) }, sign * base, 10);
+    return cents === 0 ? [] : [{ taxRateBasisPoints: rate, amountCents: cents }];
+  });
+}
+
+/** A part as the invoice core takes a line: one flat rate, a credit for a negative part. */
+function partLine(part: AdjustmentPart): InvoiceLineValues {
+  return {
+    name: '',
+    description: '',
+    quantity: part.amountCents < 0 ? '-1' : '1',
+    unit: 'flat_rate',
+    unitPriceCents: Math.abs(part.amountCents),
+    priceQuantity: 1,
+    taxRateBasisPoints: part.taxRateBasisPoints,
+  };
+}
+
+const sumOf = (parts: readonly AdjustmentPart[]) =>
+  parts.reduce((total, part) => total + part.amountCents, 0);
+
+/** Every amount of an offer's content. Throws a RangeError on a position or part the line rule refuses. */
 export function offerAmounts<Section extends PricedSection>(sections: readonly Section[]): OfferAmounts {
   const priced = sections.flatMap((section) =>
     section.positions.flatMap((position) => (position.kind === 'free' ? [position] : [])),
   );
-  const amounts = draftAmounts(priced.filter(countsInTotal));
+  const normalCents = [...draftAmounts(priced.filter(isNormalPriced)).lineNetCents].reverse();
   // Outside the sums each one still takes its amount by the line rule, rounded once, and
   // within its own line bound: no VAT basis sums them.
   const outsideCents = priced
-    .filter((position) => !countsInTotal(position))
+    .filter((position) => !isNormalPriced(position))
     .map((position) => draftAmounts([position]).lineNetCents[0])
     .reverse();
-  const countedCents = [...amounts.lineNetCents].reverse();
+  const lineCents = sections.map((section) =>
+    section.positions.map((position) => {
+      if (position.kind !== 'free') return null;
+      const cents = isNormalPriced(position) ? normalCents.pop() : outsideCents.pop();
+      if (cents === undefined) throw new RangeError('A priced position has no computed amount.');
+      return cents;
+    }),
+  );
+  const covered = sections.map((section, sectionIndex) =>
+    section.positions.flatMap((position, index): CoveredLine[] => {
+      const amountCents = lineCents[sectionIndex]?.[index];
+      return isNormalPriced(position) && typeof amountCents === 'number'
+        ? [{ amountCents, taxRateBasisPoints: position.taxRateBasisPoints }]
+        : [];
+    }),
+  );
+  const parts = sections.map((section, sectionIndex) =>
+    section.positions.map((position) =>
+      position.kind === 'adjustment'
+        ? adjustmentParts(
+            position.adjustment,
+            position.adjustment.scope === 'angebot' ? covered.flat() : (covered[sectionIndex] ?? []),
+          )
+        : null,
+    ),
+  );
+  const amounts = draftAmounts([
+    ...priced.filter(isNormalPriced),
+    ...parts.flat().flatMap((lineParts) => (lineParts ?? []).map(partLine)),
+  ]);
+  // lineNetCents holds the counted lines, each part of a Nachlass or Zuschlag as one.
   return {
     ...amounts,
-    sections: sections.map((section) => {
+    adjustmentParts: parts,
+    sections: sections.map((section, sectionIndex) => {
       let netCents = 0;
-      const positionCents = section.positions.map((position) => {
+      const positionCents = section.positions.map((position, index) => {
         if (position.kind === 'text') return null;
-        const counts = countsInTotal(position);
-        const cents = counts ? countedCents.pop() : outsideCents.pop();
-        if (cents === undefined) throw new RangeError('A priced position has no computed amount.');
-        if (counts) netCents += cents;
+        const lineParts = parts[sectionIndex]?.[index];
+        const cents =
+          position.kind === 'adjustment' ? lineParts && sumOf(lineParts) : lineCents[sectionIndex]?.[index];
+        if (cents === null || cents === undefined)
+          throw new RangeError('A priced position has no computed amount.');
+        if (countsInTotal(position)) netCents += cents;
         return cents;
       });
       return { netCents, positionCents };
@@ -67,14 +171,19 @@ type OfferContentArgument = {
   sections: Array<{
     title: string;
     netCents: number;
-    positions: Array<OfferPosition | (OfferFreePosition & { unitLabel: string; amountCents: number })>;
+    positions: Array<
+      | Extract<OfferPosition, { kind: 'text' }>
+      | (OfferFreePosition & { unitLabel: string; amountCents: number })
+      | (OfferAdjustmentPosition & { amountCents: number; taxSplit: AdjustmentPart[] })
+    >;
   }>;
   totals: { netCents: number; taxCents: number; grossCents: number };
 };
 
 /**
  * The content as `save_offer_content` stores it: each priced position with its
- * unit's short label and its amount, each Titel with its subtotal, and the
+ * unit's short label and its amount, each Nachlass and Zuschlag with its
+ * amount and its parts by VAT rate, each Titel with its subtotal, and the
  * totals. Null for a position the line rule refuses, and for an amount the
  * computation did not answer: nothing stores a guessed zero.
  */
@@ -97,6 +206,11 @@ export function offerContentArgument(sections: readonly OfferSection[]): OfferCo
             const amountCents = computed.positionCents[positionIndex];
             if (amountCents === null || amountCents === undefined) {
               throw new RangeError('A priced position has no computed amount.');
+            }
+            if (position.kind === 'adjustment') {
+              const taxSplit = amounts.adjustmentParts[sectionIndex]?.[positionIndex];
+              if (!taxSplit) throw new RangeError('A Nachlass or Zuschlag has no computed parts.');
+              return { ...position, amountCents, taxSplit };
             }
             const unit = INVENTORY_UNITS.find((candidate) => candidate.code === position.unit);
             return { ...position, unitLabel: unit?.shortLabel ?? position.unit, amountCents };

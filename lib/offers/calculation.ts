@@ -11,7 +11,9 @@ import type { OfferPositionCost, OfferSection } from './types';
 // within the same ten billion euros, so every sum stays an exact integer. The
 // sale amount is the one the offer's totals count (lib/offers/amounts.ts). A
 // Bedarfs- or Alternativposition has its own figures, and no Titel or offer
-// sum counts it, as no total does.
+// sum counts it, as no total does. A Nachlass or Zuschlag changes the sale
+// amount and the margin of its Titel and the offer by its amount and has no
+// cost: costs never change with one.
 
 /** One Position: its cost and margin are null while it has no cost. */
 export type PositionFigures = {
@@ -22,13 +24,18 @@ export type PositionFigures = {
   marginPermille: number | null;
 };
 
-/** A Titel or the offer. A Position without a cost adds its sale amount and no cost; `withoutCost` counts them. */
+/**
+ * A Titel or the offer. A Position without a cost adds its sale amount and no
+ * cost; `withoutCost` counts them. `adjustmentCents` is what its Nachlässe and
+ * Zuschläge add to the sale amount and the margin, negative for a Nachlass.
+ */
 export type CalculationFigures = {
   saleCents: number;
   costCents: number;
   marginCents: number;
   marginPermille: number | null;
   withoutCost: number;
+  adjustmentCents: number;
 };
 
 export type OfferCalculation = {
@@ -55,23 +62,20 @@ function permilleOf(part: number, whole: number): number | null {
   return Number(negative ? -rounded : rounded);
 }
 
-function figures(saleCents: number, costCents: number, withoutCost: number): CalculationFigures {
-  const marginCents = saleCents - costCents;
-  return {
-    saleCents,
-    costCents,
-    marginCents,
-    marginPermille: permilleOf(marginCents, saleCents),
-    withoutCost,
-  };
+type Sums = Pick<CalculationFigures, 'saleCents' | 'costCents' | 'withoutCost' | 'adjustmentCents'>;
+
+function figures(sums: Sums): CalculationFigures {
+  const marginCents = sums.saleCents - sums.costCents;
+  return { ...sums, marginCents, marginPermille: permilleOf(marginCents, sums.saleCents) };
 }
 
-function sum(groups: ReadonlyArray<CalculationFigures>): CalculationFigures {
-  return figures(
-    groups.reduce((total, group) => total + group.saleCents, 0),
-    groups.reduce((total, group) => total + group.costCents, 0),
-    groups.reduce((total, group) => total + group.withoutCost, 0),
-  );
+function sum(groups: ReadonlyArray<Sums>): Sums {
+  return {
+    saleCents: groups.reduce((total, group) => total + group.saleCents, 0),
+    costCents: groups.reduce((total, group) => total + group.costCents, 0),
+    withoutCost: groups.reduce((total, group) => total + group.withoutCost, 0),
+    adjustmentCents: groups.reduce((total, group) => total + group.adjustmentCents, 0),
+  };
 }
 
 /**
@@ -102,28 +106,32 @@ export function offerCalculation(sections: readonly OfferSection[], amounts: Off
       if (saleCents === null || saleCents === undefined) {
         throw new RangeError('A priced position has no computed amount.');
       }
-      if (!position.cost) return { saleCents, costCents: null, marginCents: null, marginPermille: null };
+      if (position.kind === 'adjustment' || !position.cost) {
+        return { saleCents, costCents: null, marginCents: null, marginPermille: null };
+      }
       const costCents = lineCostCents(position.quantity, position.cost);
       const marginCents = saleCents - costCents;
       return { saleCents, costCents, marginCents, marginPermille: permilleOf(marginCents, saleCents) };
     });
-    const priced = positions.flatMap((figures, index) => {
-      const position = section.positions[index];
-      return figures && position && countsInTotal(position) ? [figures] : [];
+    const counted = section.positions.flatMap((position, index): Sums[] => {
+      const line = positions[index];
+      if (!line || position.kind === 'text' || !countsInTotal(position)) return [];
+      const adjustment = position.kind === 'adjustment';
+      return [
+        {
+          saleCents: line.saleCents,
+          costCents: line.costCents ?? 0,
+          withoutCost: !adjustment && line.costCents === null ? 1 : 0,
+          adjustmentCents: adjustment ? line.saleCents : 0,
+        },
+      ];
     });
-    return {
-      ...figures(
-        priced.reduce((total, position) => total + position.saleCents, 0),
-        priced.reduce((total, position) => total + (position.costCents ?? 0), 0),
-        priced.filter((position) => position.costCents === null).length,
-      ),
-      positions,
-    };
+    return { ...figures(sum(counted)), positions };
   });
   const outsideTotal = sections
     .flatMap((section) => section.positions)
     .filter((position) => position.kind === 'free' && !countsInTotal(position)).length;
-  return { sections: calculated, offer: sum(calculated), outsideTotal };
+  return { sections: calculated, offer: figures(sum(calculated)), outsideTotal };
 }
 
 /** The largest markup the editor takes, in tenths of a percent: 999,9 %. */

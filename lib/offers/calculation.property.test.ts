@@ -6,16 +6,19 @@ import {
   quantityText,
   roundHalfAwayFromZero,
 } from '@/lib/testing/invoice-arbitraries';
+import { taxRateBasisPoints } from '@/lib/invoicing/calculate';
 import { offerAmounts } from './amounts';
 import { markupPriceCents, MAX_MARKUP_TENTHS, offerCalculation } from './calculation';
-import type { OfferFreePosition, OfferPositionType, OfferSection } from './types';
+import type { OfferAdjustmentPosition, OfferFreePosition, OfferPositionType, OfferSection } from './types';
 
 // Property tests (docs/technical/testing.md, "Property tests"). The rule comes from
 // docs/features/commercial-and-finance.md, "Offers": a Position's cost is its quantity at its own
 // cost per price quantity, rounded once; its margin is its amount less its cost, in percent of its
 // amount rounded once; a Titel and the offer sum their normal Positionen, counting the ones without a
-// cost; a Bedarfs- or Alternativposition counts in no sum, total or VAT; a markup on the cost sets the
-// price, rounded once.
+// cost; a Bedarfs- or Alternativposition counts in no sum, total or VAT; a Nachlass or Zuschlag in
+// percent is, per VAT rate, that percentage of the normal Positionen of its Titel or the offer, rounded
+// once, and its parts add up to its amount, which counts in its Titel's sum and the VAT of each part's
+// rate and changes no cost; a markup on the cost sets the price, rounded once.
 
 const THOUSAND = BigInt(1000);
 
@@ -57,10 +60,69 @@ const positionArbitrary: fc.Arbitrary<OfferFreePosition> = fc
 const isNormal = (position: OfferSection['positions'][number]): position is OfferFreePosition =>
   position.kind === 'free' && position.positionType.kind === 'normal';
 
+/** A Nachlass or Zuschlag of a Titel, the offer or a fixed amount, from 0,01 % to 100 %. */
+const adjustmentArbitrary: fc.Arbitrary<OfferAdjustmentPosition> = fc
+  .record({
+    direction: fc.constantFrom('rabatt' as const, 'zuschlag' as const),
+    scope: fc.constantFrom('titel' as const, 'angebot' as const, 'betrag' as const),
+    percentHundredths: fc.integer({ min: 1, max: 10_000 }),
+    amountCents: fc.integer({ min: 1, max: 100_000_000 }),
+    taxRateBasisPoints: fc.constantFrom(1900 as const, 700 as const, 0 as const),
+  })
+  .map(({ direction, scope, percentHundredths, amountCents, taxRateBasisPoints }) => ({
+    kind: 'adjustment',
+    name: 'Nachlass',
+    description: '',
+    adjustment:
+      scope === 'betrag'
+        ? { direction, scope, amountCents, taxRateBasisPoints }
+        : { direction, scope, percentHundredths },
+  }));
+
 const offerArbitrary: fc.Arbitrary<OfferSection[]> = fc.array(
-  fc.record({ title: fc.constant('Titel'), positions: fc.array(positionArbitrary, { maxLength: 8 }) }),
+  fc.record({
+    title: fc.constant('Titel'),
+    positions: fc.array(
+      fc.oneof({ weight: 4, arbitrary: positionArbitrary }, { weight: 1, arbitrary: adjustmentArbitrary }),
+      { maxLength: 8 },
+    ),
+  }),
   { minLength: 1, maxLength: 5 },
 );
+
+/** The exact amount of a priced Position: quantity × price ÷ price quantity, rounded once. */
+function exactAmount(position: OfferFreePosition): bigint {
+  const thousandths = BigInt(Math.round(Number(position.quantity) * 1000));
+  return roundHalfAwayFromZero(
+    thousandths * BigInt(position.unitPriceCents),
+    BigInt(position.priceQuantity) * THOUSAND,
+  );
+}
+
+/** Each Nachlass's or Zuschlag's parts by rate, stated here on their own; nonzero parts only. */
+function exactParts(
+  sections: readonly OfferSection[],
+  sectionIndex: number,
+  position: OfferAdjustmentPosition,
+): Map<number, bigint> {
+  const { adjustment } = position;
+  const sign = BigInt(adjustment.direction === 'rabatt' ? -1 : 1);
+  if (adjustment.scope === 'betrag') {
+    return new Map([[adjustment.taxRateBasisPoints, sign * BigInt(adjustment.amountCents)]]);
+  }
+  const covered = (adjustment.scope === 'angebot' ? sections : [sections[sectionIndex]]).flatMap((section) =>
+    (section?.positions ?? []).filter(isNormal),
+  );
+  const parts = new Map<number, bigint>();
+  for (const rate of [1900, 700, 0]) {
+    const base = covered
+      .filter((line) => line.taxRateBasisPoints === rate)
+      .reduce((total, line) => total + exactAmount(line), BigInt(0));
+    const part = roundHalfAwayFromZero(sign * base * BigInt(adjustment.percentHundredths), BigInt(10_000));
+    if (part !== BigInt(0)) parts.set(rate, part);
+  }
+  return parts;
+}
 
 /** The exact cost of a Position: quantity × cost ÷ price quantity, rounded half away from zero once. */
 function exactCost(position: OfferFreePosition): bigint | null {
@@ -93,7 +155,7 @@ describe('An offer’s calculation', () => {
           section.positions.forEach((position, positionIndex) => {
             const figures = calculation.sections[sectionIndex]?.positions[positionIndex];
             const sale = amounts.sections[sectionIndex]?.positionCents[positionIndex];
-            if (position.kind === 'text' || !figures || sale === null || sale === undefined) return;
+            if (position.kind !== 'free' || !figures || sale === null || sale === undefined) return;
             const cost = exactCost(position);
             expect(figures.saleCents).toBe(sale);
             if (cost === null) {
@@ -127,12 +189,22 @@ describe('An offer’s calculation', () => {
           BigInt(0),
         );
         const sale = BigInt(amounts.totals.lineNetCents);
+        const adjusted = amounts.sections.reduce(
+          (total, section, sectionIndex) =>
+            section.positionCents.reduce<number>(
+              (sum, cents, index) =>
+                sections[sectionIndex]?.positions[index]?.kind === 'adjustment' ? sum + (cents ?? 0) : sum,
+              total,
+            ),
+          0,
+        );
         expect(calculation.offer).toEqual({
           saleCents: Number(sale),
           costCents: Number(cost),
           marginCents: Number(sale - cost),
           marginPermille: exactPermille(sale - cost, sale),
           withoutCost: priced.filter((position) => !position.cost).length,
+          adjustmentCents: adjusted,
         });
         expect(calculation.sections.map((section) => section.saleCents)).toEqual(
           amounts.sections.map((section) => section.netCents),
@@ -147,7 +219,7 @@ describe('An offer’s calculation', () => {
         const amounts = offerAmounts(sections);
         const counted = sections.map((section) => ({
           ...section,
-          positions: section.positions.filter(isNormal),
+          positions: section.positions.filter((p) => isNormal(p) || p.kind === 'adjustment'),
         }));
         const without = offerAmounts(counted);
         expect(amounts.totals).toEqual(without.totals);
@@ -157,17 +229,67 @@ describe('An offer’s calculation', () => {
         );
         sections.forEach((section, sectionIndex) => {
           section.positions.forEach((position, positionIndex) => {
-            if (position.kind === 'text' || position.positionType.kind === 'normal') return;
-            const thousandths = BigInt(Math.round(Number(position.quantity) * 1000));
-            const exact = roundHalfAwayFromZero(
-              thousandths * BigInt(position.unitPriceCents),
-              BigInt(position.priceQuantity) * THOUSAND,
+            if (position.kind !== 'free' || position.positionType.kind === 'normal') return;
+            expect(amounts.sections[sectionIndex]?.positionCents[positionIndex]).toBe(
+              Number(exactAmount(position)),
             );
-            expect(amounts.sections[sectionIndex]?.positionCents[positionIndex]).toBe(Number(exact));
           });
         });
         expect(offerCalculation(sections, amounts).outsideTotal).toBe(
-          sections.flatMap((section) => section.positions).filter((position) => !isNormal(position)).length,
+          sections
+            .flatMap((section) => section.positions)
+            .filter((position) => position.kind === 'free' && !isNormal(position)).length,
+        );
+      }),
+    );
+  });
+
+  test('splits each Nachlass and Zuschlag by rate, rounded once per part, the parts adding up to it', () => {
+    fc.assert(
+      fc.property(offerArbitrary, (sections) => {
+        const amounts = offerAmounts(sections);
+        const bases = new Map<number, bigint>();
+        const add = (rate: number, cents: bigint) => bases.set(rate, (bases.get(rate) ?? BigInt(0)) + cents);
+        sections.forEach((section, sectionIndex) => {
+          section.positions.forEach((position, positionIndex) => {
+            if (isNormal(position)) add(position.taxRateBasisPoints, exactAmount(position));
+            if (position.kind !== 'adjustment') return;
+            const parts = exactParts(sections, sectionIndex, position);
+            const stated = amounts.adjustmentParts[sectionIndex]?.[positionIndex] ?? [];
+            expect(
+              new Map(
+                stated.map((part): [number, bigint] => [part.taxRateBasisPoints, BigInt(part.amountCents)]),
+              ),
+            ).toEqual(parts);
+            const sum = [...parts.values()].reduce((total, part) => total + part, BigInt(0));
+            expect(amounts.sections[sectionIndex]?.positionCents[positionIndex]).toBe(Number(sum));
+            parts.forEach((part, rate) => add(rate, part));
+          });
+        });
+        // VAT per rate on the sum of that rate's normal lines and parts.
+        const stated = new Map(
+          amounts.taxSubtotals.map(({ basisCents, tax }) => [taxRateBasisPoints(tax), BigInt(basisCents)]),
+        );
+        bases.forEach((basis, rate) => {
+          if (basis !== BigInt(0) || stated.has(rate)) expect(stated.get(rate) ?? BigInt(0)).toBe(basis);
+        });
+      }),
+    );
+  });
+
+  test('a Nachlass or Zuschlag changes no cost, and the margin by its amount', () => {
+    fc.assert(
+      fc.property(offerArbitrary, (sections) => {
+        const calculation = offerCalculation(sections, offerAmounts(sections));
+        const plain = sections.map((section) => ({
+          ...section,
+          positions: section.positions.filter((position) => position.kind !== 'adjustment'),
+        }));
+        const without = offerCalculation(plain, offerAmounts(plain));
+        expect(calculation.offer.costCents).toBe(without.offer.costCents);
+        expect(calculation.offer.withoutCost).toBe(without.offer.withoutCost);
+        expect(calculation.offer.marginCents - without.offer.marginCents).toBe(
+          calculation.offer.adjustmentCents,
         );
       }),
     );

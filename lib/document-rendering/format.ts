@@ -48,3 +48,22 @@ export function formatAlternativeMark(alternative: { number: string; differenceC
       : `${differenceCents > 0 ? 'Mehrpreis' : 'Minderpreis'} ${formatEuroCents(Math.abs(differenceCents))}`;
   return `Alternativposition zu ${number}, ${difference}`;
 }
+
+/**
+ * A Nachlass's or Zuschlag's mark: the percentage and what it is of, and the
+ * parts by VAT rate when it has several, `3 % auf Titel 1, davon 127,50 € zu
+ * 19 % und 0,90 € zu 7 %`. Null for a fixed amount, which its line says.
+ */
+export function formatAdjustmentMark(
+  adjustment: { percentHundredths: number; of: string } | null,
+  parts: ReadonlyArray<{ taxRateBasisPoints: number; amountCents: number }>,
+): string | null {
+  if (!adjustment) return null;
+  // A rate in basis points is a percentage in hundredths, so both print alike.
+  const head = `${formatTaxRate(adjustment.percentHundredths)} auf ${adjustment.of}`;
+  if (parts.length < 2) return head;
+  const split = parts.map(
+    (part) => `${formatEuroCents(Math.abs(part.amountCents))} zu ${formatTaxRate(part.taxRateBasisPoints)}`,
+  );
+  return `${head}, davon ${split.slice(0, -1).join(', ')} und ${split.at(-1) ?? ''}`;
+}

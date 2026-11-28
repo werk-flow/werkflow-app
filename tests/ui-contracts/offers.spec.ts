@@ -525,6 +525,58 @@ test('an Alternativposition names its Position and difference, stays out of the 
   });
 });
 
+// A Nachlass is a percentage of the Titel's normal Positionen, counts in the
+// Titel's sum and „Kalkulation“, and a save stops at its percentage while it
+// does not read.
+test('a Nachlass of a Titel lowers its sum and the margin, and a save stops at an unreadable percentage', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'offers');
+  const editor = page.getByRole('form', { name: 'Titel und Positionen' });
+  const row = (number: string) => editor.getByRole('listitem', { name: `Position ${number}` });
+  await editor.getByRole('button', { name: 'Titel hinzufügen', exact: true }).click();
+  await editor.getByRole('textbox', { name: 'Titel 1' }).fill('Wärmeerzeuger');
+  await editor.getByRole('button', { name: 'Position', exact: true }).click();
+  await row('1.1').getByRole('textbox', { name: 'Bezeichnung' }).fill('Wandgerät 24 kW');
+  await row('1.1').getByRole('textbox', { name: 'Einzelpreis netto' }).fill('100,00');
+  await editor.getByRole('button', { name: 'Nachlass oder Zuschlag', exact: true }).click();
+  await expect(row('1.2').getByRole('textbox', { name: 'Bezeichnung' })).toHaveValue('Nachlass');
+
+  await row('1.2').getByRole('textbox', { name: 'Prozent' }).fill('drei');
+  await editor.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(
+    editor.getByText('Gib den Prozentsatz von 0,01 bis 100 an, zum Beispiel 3 oder 2,5.'),
+  ).toBeVisible();
+  await expect(row('1.2').getByRole('textbox', { name: 'Prozent' })).toBeFocused();
+  expect(await page.evaluate(() => window.uiContractWrites.calls)).toEqual([]);
+
+  await row('1.2').getByRole('textbox', { name: 'Prozent' }).fill('2,5');
+  await expect(row('1.2').getByText('-2,50 €')).toBeVisible();
+  await expect(editor.getByText('Summe Titel 1: 97,50 €')).toBeVisible();
+  const total = page.getByRole('group', { name: 'Angebot gesamt' });
+  await expect(total.getByText('Nachlass/Zuschlag')).toBeVisible();
+  // Verkauf and Marge both drop by the Nachlass; the Position has no cost.
+  await expect(total.getByText('97,50 €')).toHaveCount(2);
+  await expect(total.getByText('-2,50 €')).toBeVisible();
+
+  await editor.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expectHeldWrite(page, 'save-offer-content');
+  expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
+    sections: [
+      {
+        positions: [
+          { name: 'Wandgerät 24 kW' },
+          {
+            kind: 'adjustment',
+            name: 'Nachlass',
+            adjustment: { direction: 'rabatt', scope: 'titel', percentHundredths: 250 },
+          },
+        ],
+      },
+    ],
+  });
+});
+
 // An article without a sale price today adds nothing, so it leaves nothing to
 // save: the untouched text takes another session's content again at once and
 // offers no „Neu laden“, and the preview asks for no save (werk-flow/werkflow-planning#582, S14).

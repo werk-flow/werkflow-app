@@ -3,7 +3,7 @@ import { isInventoryUnitCode } from '@/lib/inventory/units';
 import { emptyLine, parsePricedLine, quantityInput, type DraftLineForm } from '@/lib/invoices/draft-form';
 import type { OfferCatalogLine } from '@/lib/invoices/line-sources';
 import { centsToEuroInput, MAX_PRICE_CENTS, parseEuroCents } from '@/lib/price-catalog/money';
-import { offerAmounts, type OfferAmounts } from './amounts';
+import { MAX_ADJUSTMENT_HUNDREDTHS, offerAmounts, type OfferAmounts } from './amounts';
 import {
   lineCostCents,
   markupPriceCents,
@@ -14,6 +14,7 @@ import {
 } from './calculation';
 import type { PriceSourceClaim } from '@/lib/price-catalog/customer-conditions';
 import type {
+  OfferAdjustment,
   OfferCostedSection,
   OfferPosition,
   OfferPositionCost,
@@ -34,6 +35,8 @@ import type {
 // (focusFirstInvalidField). The server parses the same limits again
 // (action-schemas.ts). An Alternativposition holds its Position by the
 // editor's key, so moving either keeps the pair; the parse names the place.
+// A Nachlass or Zuschlag keeps its percentage, or its fixed amount in the
+// price field with its own VAT rate.
 
 export type PositionForm = DraftLineForm & {
   kind: OfferPosition['kind'];
@@ -47,14 +50,33 @@ export type PositionForm = DraftLineForm & {
   positionType: OfferPositionType['kind'];
   /** The key of the Position an Alternativposition stands for; null until the office picks one. */
   alternativeTo: string | null;
+  /** A Nachlass's or Zuschlag's direction and what it is of; its percentage as typed, „3“ or „2,5“. */
+  adjustment: OfferAdjustment['direction'];
+  adjustmentScope: OfferAdjustment['scope'];
+  percent: string;
 };
 
-type PositionField = 'name' | 'alternative' | 'quantity' | 'unit' | 'price' | 'cost' | 'markup';
+export type PositionField =
+  | 'name'
+  | 'alternative'
+  | 'quantity'
+  | 'unit'
+  | 'price'
+  | 'cost'
+  | 'markup'
+  | 'percent';
 export type SectionForm = { key: string; title: string; positions: PositionForm[] };
 
 export type ParsedContent =
   | { ok: true; sections: OfferSection[] }
   | { ok: false; errors: Record<string, string> };
+
+/** A priced or text line's Nachlass fields, which a new Nachlass starts with. */
+const NO_ADJUSTMENT: Pick<PositionForm, 'adjustment' | 'adjustmentScope' | 'percent'> = {
+  adjustment: 'rabatt',
+  adjustmentScope: 'titel',
+  percent: '',
+};
 
 /** The control id of a Titel's field, or of a field of one of its positions. */
 export function contentFieldId(
@@ -77,6 +99,7 @@ export function contentFormOf(sections: readonly OfferCostedSection[], keyPrefix
       if (position.kind === 'text') {
         return { ...emptyPosition(key, 'text'), name: position.name, description: position.description };
       }
+      if (position.kind === 'adjustment') return adjustmentForm(key, position);
       return {
         ...costFields(position.cost, position.priceQuantity),
         key,
@@ -95,6 +118,7 @@ export function contentFormOf(sections: readonly OfferCostedSection[], keyPrefix
           position.positionType.kind === 'alternative'
             ? keyAt(position.positionType.alternativeTo - 1)
             : null,
+        ...NO_ADJUSTMENT,
       };
     }),
   }));
@@ -109,17 +133,92 @@ function costFields(cost: OfferPositionCost | null, priceQuantity: PriceQuantity
   };
 }
 
-/** A new position of a kind: a free one starts as one piece at the standard rate. */
+/**
+ * A new position of a kind: a free one starts as one piece at the standard
+ * rate, a Nachlass as a percentage of its Titel.
+ */
 export function emptyPosition(key: string, kind: OfferPosition['kind']): PositionForm {
   const line = emptyLine(key);
   return {
     ...line,
     kind,
+    ...(kind === 'adjustment' && { name: ADJUSTMENT_NAMES.rabatt }),
     ...costFields(null, line.priceQuantity),
     priceSource: { kind: 'manuell' },
     positionType: 'normal',
     alternativeTo: null,
+    ...NO_ADJUSTMENT,
   };
+}
+
+/** The Bezeichnung a new Nachlass or Zuschlag starts with. */
+const ADJUSTMENT_NAMES: Record<OfferAdjustment['direction'], string> = {
+  rabatt: 'Nachlass',
+  zuschlag: 'Zuschlag',
+};
+
+/** „2,5“ from 250 hundredths of a percent. */
+function percentInput(hundredths: number): string {
+  const fraction = String(hundredths % 100)
+    .padStart(2, '0')
+    .replace(/0+$/, '');
+  return `${Math.trunc(hundredths / 100)}${fraction ? `,${fraction}` : ''}`;
+}
+
+function adjustmentForm(key: string, position: Extract<OfferPosition, { kind: 'adjustment' }>): PositionForm {
+  const { adjustment } = position;
+  return {
+    ...emptyPosition(key, 'adjustment'),
+    name: position.name,
+    description: position.description,
+    adjustment: adjustment.direction,
+    adjustmentScope: adjustment.scope,
+    ...(adjustment.scope === 'betrag'
+      ? { price: centsToEuroInput(adjustment.amountCents), taxRateBasisPoints: adjustment.taxRateBasisPoints }
+      : { percent: percentInput(adjustment.percentHundredths) }),
+  };
+}
+
+/**
+ * The Nachlass turned into a Zuschlag or back: a Bezeichnung still at the
+ * other's default follows.
+ */
+export function withAdjustmentDirection(
+  position: PositionForm,
+  direction: OfferAdjustment['direction'],
+): PositionForm {
+  const other = ADJUSTMENT_NAMES[position.adjustment];
+  const name = position.name.trim() === other ? ADJUSTMENT_NAMES[direction] : position.name;
+  return { ...position, adjustment: direction, name };
+}
+
+/** „3“, „2,5“ or „2,25“ percent → hundredths of a percent, from 0,01 to 100; null for anything else. */
+function parsePercentHundredths(text: string): number | null {
+  const match = /^(\d{1,3})(?:[.,](\d{1,2}))?$/.exec(text.trim().replace(/\s*%$/, ''));
+  if (!match) return null;
+  const hundredths = Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0'));
+  return hundredths >= 1 && hundredths <= MAX_ADJUSTMENT_HUNDREDTHS ? hundredths : null;
+}
+
+/** A Nachlass or Zuschlag as typed, or null with a sentence on the field at fault. */
+function parseAdjustment(
+  position: PositionForm,
+  fieldId: (field: PositionField) => string,
+  errors: Record<string, string>,
+): OfferAdjustment | null {
+  const direction = position.adjustment;
+  if (position.adjustmentScope === 'betrag') {
+    const amountCents = parseEuroCents(position.price);
+    if (typeof amountCents === 'number' && amountCents > 0) {
+      return { direction, scope: 'betrag', amountCents, taxRateBasisPoints: position.taxRateBasisPoints };
+    }
+    errors[fieldId('price')] = 'Gib den Betrag netto an, zum Beispiel 50,00, bis 1.000.000 €.';
+    return null;
+  }
+  const percentHundredths = parsePercentHundredths(position.percent);
+  if (percentHundredths !== null) return { direction, scope: position.adjustmentScope, percentHundredths };
+  errors[fieldId('percent')] = 'Gib den Prozentsatz von 0,01 bis 100 an, zum Beispiel 3 oder 2,5.';
+  return null;
 }
 
 /**
@@ -145,6 +244,7 @@ export function catalogPositionForm(key: string, line: OfferCatalogLine): Positi
     priceSource: line.priceSource,
     positionType: 'normal',
     alternativeTo: null,
+    ...NO_ADJUSTMENT,
   };
 }
 
@@ -330,6 +430,12 @@ function parsePosition(
   }
   const name = position.name.trim();
   if (!name) errors[fieldId('name')] = 'Gib der Position eine Bezeichnung.';
+  if (position.kind === 'adjustment') {
+    const adjustment = parseAdjustment(position, fieldId, errors);
+    return name && adjustment
+      ? { kind: 'adjustment', name, description: position.description.trim(), adjustment }
+      : null;
+  }
   return name ? { kind: 'text', name, description: position.description.trim() } : null;
 }
 

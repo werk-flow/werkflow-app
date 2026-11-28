@@ -49,6 +49,8 @@ type RenderedSnapshot = {
   closingText: string;
   /** The PDF left Bedarfs- and Alternativpositionen out of its sums; send_offer refuses an older rendering of them. */
   positionTypes: true;
+  /** The PDF printed Nachlässe and Zuschläge; send_offer refuses an older rendering of an offer holding one. */
+  adjustments: true;
 };
 
 type RenderedOffer = { bytes: Uint8Array; revision: number; snapshot: RenderedSnapshot };
@@ -88,6 +90,7 @@ export async function renderOfferPdf(
       openingText: offer.openingText,
       closingText: offer.closingText,
       positionTypes: true,
+      adjustments: true,
     },
   };
 }

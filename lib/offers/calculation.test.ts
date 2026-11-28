@@ -100,6 +100,7 @@ describe('offerCalculation', () => {
       marginCents: 118_950,
       marginPermille: 280,
       withoutCost: 1,
+      adjustmentCents: 0,
     });
     expect(calculation.offer.saleCents).toBe(offerAmounts(OFFER).totals.lineNetCents);
   });
@@ -146,6 +147,7 @@ describe('offerCalculation', () => {
       marginCents: 115_000,
       marginPermille: 271,
       withoutCost: 0,
+      adjustmentCents: 0,
     });
     expect(calculation.outsideTotal).toBe(2);
   });
@@ -158,7 +160,42 @@ describe('offerCalculation', () => {
       marginCents: 0,
       marginPermille: null,
       withoutCost: 0,
+      adjustmentCents: 0,
     });
+  });
+
+  test('a Nachlass lowers the sale amount and the margin by its amount and leaves every cost', () => {
+    const section: OfferSection = {
+      title: 'Heizung',
+      positions: [
+        free('1', 425_000, { amountCents: 310_000, priceQuantity: 1 }),
+        free('1', 2995, { amountCents: 1200, priceQuantity: 1 }, { taxRateBasisPoints: 700 }),
+        {
+          kind: 'adjustment',
+          name: 'Nachlass',
+          description: '',
+          adjustment: { direction: 'rabatt', scope: 'titel', percentHundredths: 300 },
+        },
+      ],
+    };
+    const calculation = offerCalculation([section], offerAmounts([section]));
+    // 3 % of 4.250,00 € and of 29,95 € is 127,50 € and 0,90 €; it has no cost of its own.
+    expect(calculation.sections[0]?.positions[2]).toEqual({
+      saleCents: -12_840,
+      costCents: null,
+      marginCents: null,
+      marginPermille: null,
+    });
+    expect(calculation.offer).toEqual({
+      saleCents: 415_155,
+      costCents: 311_200,
+      marginCents: 103_955,
+      marginPermille: 250,
+      // Not a Position without a cost.
+      withoutCost: 0,
+      adjustmentCents: -12_840,
+    });
+    expect(calculation.sections[0]?.adjustmentCents).toBe(-12_840);
   });
 });
 
