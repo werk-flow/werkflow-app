@@ -1,0 +1,65 @@
+name: Rulesets
+
+# Daily: the live main and production rulesets still hold the protections decision 0012 rests on
+# (.github/scripts/ruleset-check.sh). A ruleset changed in GitHub's settings leaves no commit, so this
+# is how a merge queue switched off, a `Check` no longer required or a wider `production` bypass gets
+# noticed. Drift opens or updates "CI alert: rulesets" for the owner; the next clean run closes it.
+# By hand: gh workflow run rulesets.yml
+on:
+  schedule:
+    # 06:20 UTC, after the night's release; the time matters to nobody.
+    - cron: '20 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rulesets
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Watch the rulesets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write # open, update and close the alert issue
+    steps:
+      # Only the scripts are read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Compare the live rulesets with decision 0012
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RULESET_ADMIN_TOKEN: ${{ secrets.RULESET_ADMIN_TOKEN }}
+        run: |
+          set -o pipefail
+          bash .github/scripts/ruleset-check.sh | tee "$RUNNER_TEMP/drift.txt"
+
+      - name: Open or update the alert issue
+        if: ${{ failure() && steps.check.conclusion == 'failure' && github.ref == 'refs/heads/main' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: 'CI alert: rulesets'
+          # A weaker main or production ruleset puts what reaches PROD in doubt, so it assigns the owner.
+          AFFECTS_PRODUCTION: true
+        run: |
+          body="$(printf 'A live GitHub ruleset no longer holds what [decision 0012](https://github.com/%s/blob/main/docs/decisions/0012-pull-requests-ci-and-releases.md#configuration-this-decision-needs) needs:\n\n%s\n\nRestore the setting in Settings, Rules, Rulesets, or change the decision and `.github/scripts/ruleset-check.sh` together by PR.' \
+            "$GH_REPO" "$(sed 's/^/- /' "$RUNNER_TEMP/drift.txt")")"
+          bash .github/scripts/alert-issue.sh open "$TITLE" "$body"
+
+      - name: Close the alert issue
+        if: ${{ success() && github.ref == 'refs/heads/main' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: 'CI alert: rulesets'
+        run: bash .github/scripts/alert-issue.sh close "$TITLE" "The main and production rulesets hold again."
