@@ -181,6 +181,33 @@ async function readWith(
   );
 }
 
+// An answer cut at the output cap reads as too long, and its call is ledgered at what it used.
+{
+  await readWith({ body: lieferscheinPdf('abgeschnitten'), mimeType: PDF, pages: 1 });
+  assert.match(lastOutput(), /"meldung":"Die Datei ist zu lang zum Lesen/);
+  assert.deepEqual(
+    modelCallRows().map((row) => [row.p_outcome, row.p_output_tokens]),
+    [['extract_completed', AI_EXTRACT_LIMITS.maxOutputTokens]],
+  );
+}
+
+// A stop that lands while the tool reads the file, before its paid call: the turn's gate is read
+// again at the call's admission, so no extraction starts and nothing is charged for one.
+{
+  const answer = world.rpc;
+  world.rpc = (call) => {
+    const item = answerItem();
+    if (call.name === 'record_ai_tool_item' && call.args.p_status === 'streaming' && item) stopAnswer(item);
+    return answer(call);
+  };
+  const events = await readWith({ body: lieferscheinPdf('sauber'), mimeType: PDF, pages: 1 });
+  world.rpc = answer;
+  assert.equal(extractionRequests(world).length, 0, 'a stopped turn must start no paid extraction');
+  assert.deepEqual(modelCallRows(), []);
+  assert.equal(events.at(-1)?.failure, 'stopped');
+  assert.deepEqual(toolCallOutcomes(world), ['tool_call_lieferschein_lesen_failed']);
+}
+
 // Three reads in one step: the turn's model-call cap refuses the third before it calls the model.
 {
   await readWith({ body: lieferscheinPdf('sauber'), mimeType: PDF, pages: 1 }, 'drei-lieferscheine');

@@ -383,7 +383,8 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
       const modelContext = await buildAiContext({
         tools: aiToolsFor(command.role),
         thread: [...history, { role: 'user', text: command.text }],
-        inputTokenCap: limits.maxInputTokens,
+        // The thread leaves room for the turn's tool results, which share their own cap.
+        inputTokenCap: limits.maxInputTokens - limits.maxToolResultBytes,
       });
       end = await runSteps({ ...context, modelContext, turnSignal, toolCalls }, answer);
     }
@@ -789,6 +790,7 @@ function prepareStep(context: RunContext, answer: Answer): ToolSet {
       signal: AbortSignal.any([context.turnSignal, answer.halt.signal, ...(signal ? [signal] : [])]),
       // A long read's progress saves the answer as a stream part does, so a stop or a lost thread aborts it.
       progress: () => savePartial(context, answer),
+      admit: async () => (await readStepGate(context, answer, context.turnSignal)) === 'open',
       record: (key, ...attempt) => recordAttempt(context, key, ...attempt),
     });
     return runTool(context, tool, input, toolCallId, run);

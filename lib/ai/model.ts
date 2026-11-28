@@ -62,14 +62,18 @@ export type AiDocument = {
  */
 export type AiDocumentTokenCount = number | 'refused' | 'failed';
 
+/** A request to count: the document with the call's own instructions and request text. */
+export type AiDocumentRequest = { document: AiDocument; system: string; text: string };
+
 const tokenCountSchema = z.object({ input_tokens: z.number().int().nonnegative() });
 
 /** Anthropic's token count of one document: free, and the bound the extractor holds before it pays (B13). */
 async function countAnthropicTokens(
   apiKey: string,
-  document: AiDocument,
+  request: AiDocumentRequest,
   signal: AbortSignal,
 ): Promise<AiDocumentTokenCount> {
+  const { document } = request;
   const source = {
     type: 'base64',
     media_type: document.mimeType,
@@ -81,7 +85,11 @@ async function countAnthropicTokens(
     const response = await fetch(`${ANTHROPIC_API_URL}/messages/count_tokens`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: AI_MODEL_ID, messages: [{ role: 'user', content: [block] }] }),
+      body: JSON.stringify({
+        model: AI_MODEL_ID,
+        system: request.system,
+        messages: [{ role: 'user', content: [block, { type: 'text', text: request.text }] }],
+      }),
       signal,
     });
     // A request the provider refuses names a document it will not read; its body never reaches a log (B17).
@@ -100,10 +108,10 @@ async function countAnthropicTokens(
 
 /** The token counter beside the model: Anthropic's with the key, none on Vercel without it, the replay's elsewhere. */
 export function resolveAiTokenCounter():
-  | ((document: AiDocument, signal: AbortSignal) => Promise<AiDocumentTokenCount>)
+  | ((request: AiDocumentRequest, signal: AbortSignal) => Promise<AiDocumentTokenCount>)
   | 'unavailable' {
   const apiKey = process.env[AI_MODEL_KEY_VARIABLE];
-  if (apiKey) return (document, signal) => countAnthropicTokens(apiKey, document, signal);
+  if (apiKey) return (request, signal) => countAnthropicTokens(apiKey, request, signal);
   if (process.env.VERCEL) return 'unavailable';
-  return async (document) => countReplayDocumentTokens(document);
+  return async (request) => countReplayDocumentTokens(request);
 }

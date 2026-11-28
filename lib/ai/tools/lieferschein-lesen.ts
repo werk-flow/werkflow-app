@@ -4,7 +4,7 @@ import { documentText } from '@/lib/ai/context';
 import { runExtraction } from '@/lib/ai/extract/call';
 import { LIEFERSCHEIN_EXTRACTION, cappedLieferschein } from '@/lib/ai/extract/lieferschein';
 import { AI_TURN_LIMITS, AI_UPLOAD_LIMITS } from '@/lib/ai/limits';
-import { defineTool } from '@/lib/ai/tools/define-tool';
+import { type AiToolRun, defineTool } from '@/lib/ai/tools/define-tool';
 import { logError } from '@/lib/logging';
 import type { ActionContext } from '@/lib/org/action-context';
 import { readStorageObject } from '@/lib/storage/r2';
@@ -40,16 +40,17 @@ const fileSchema = z.object({ storage_path: z.string(), mime_type: mimeTypeSchem
  * file item: 1 is the latest. Another person's file is never found: the row
  * must be the caller's in the caller's organization.
  */
-async function readThreadFile(ctx: ActionContext, threadId: string, position: number) {
+async function readThreadFile(ctx: ActionContext, run: AiToolRun, position: number) {
   const admin = createSupabaseAdminClient();
   const items = await admin
     .from('ai_thread_items')
     .select('id, sequence')
     .eq('organization_id', ctx.orgId)
-    .eq('thread_id', threadId)
+    .eq('thread_id', run.threadId)
     .eq('kind', 'file')
     .order('sequence', { ascending: false })
-    .range(0, MAX_POSITION - 1);
+    .range(0, MAX_POSITION - 1)
+    .abortSignal(run.signal);
   if (items.error) {
     logError('lieferscheinLesen: file item read failed', items.error);
     return 'failed';
@@ -62,6 +63,7 @@ async function readThreadFile(ctx: ActionContext, threadId: string, position: nu
     .eq('organization_id', ctx.orgId)
     .eq('user_id', ctx.userId)
     .eq('item_id', item.id)
+    .abortSignal(run.signal)
     .maybeSingle();
   if (file.error) {
     logError('lieferscheinLesen: file read failed', file.error);
@@ -85,13 +87,19 @@ export const lieferscheinLesen = defineTool({
   dataClasses: ['document'],
   writesMemory: false,
   async execute(input, ctx, run) {
-    const file = await readThreadFile(ctx, run.threadId, input.datei);
-    if (file === 'failed') return { status: 'failed' };
+    // Nothing is read for a call the turn could not send to the extractor anyway.
+    if (!run.canCallModel()) return { status: 'refused', message: MESSAGES.overCap };
+    const file = await readThreadFile(ctx, run, input.datei);
+    if (file === 'failed' || run.signal.aborted) return { status: 'failed' };
     if (!file) return { status: 'refused', message: MESSAGES.noFile };
     // The stored size is checked at upload; the bytes read now are checked again.
     if (file.size_bytes > AI_UPLOAD_LIMITS.maxFileBytes)
       return { status: 'refused', message: MESSAGES.tooLong };
-    const bytes = await readStorageObject({ organizationId: ctx.orgId, path: file.storage_path });
+    const bytes = await readStorageObject({
+      organizationId: ctx.orgId,
+      path: file.storage_path,
+      abortSignal: run.signal,
+    });
     if (bytes.byteLength > AI_UPLOAD_LIMITS.maxFileBytes)
       return { status: 'refused', message: MESSAGES.tooLong };
 

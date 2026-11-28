@@ -58,12 +58,15 @@ export type AiToolRun = {
    * it hears a stop or a lost thread and aborts `signal`.
    */
   progress: () => void;
+  /** Whether the turn has a model call left: a tool checks it before it reads what it would send. */
+  canCallModel: () => boolean;
   /**
    * Runs one model call of the tool, such as the quarantined extractor's, under
    * the turn's cap and its reservation; `call` ledgers it through `record`, and
-   * the run settles only after `call` ended. `over_cap` when the turn has no call left.
+   * the run settles only after `call` ended. `over_cap` when the turn has no call
+   * left; `stopped` when the turn, read again just before, may take no model call.
    */
-  modelCall: <T>(call: (record: AiModelCallRecord) => Promise<T>) => Promise<T | 'over_cap'>;
+  modelCall: <T>(call: (record: AiModelCallRecord) => Promise<T>) => Promise<T | 'over_cap' | 'stopped'>;
 };
 
 type AiToolSpec<Name extends string, Input> = {

@@ -61,6 +61,13 @@ test('lines past the cap are counted, never dropped silently', () => {
   expect(capped?.weggelassen).toBe(7);
 });
 
+test('the lines the model reports as left out are counted with those past the cap', () => {
+  expect(cappedLieferschein({ ...answer, weiterePositionen: 12 })?.weggelassen).toBe(12);
+  const lines = Array.from({ length: AI_EXTRACT_LIMITS.maxLines + 2 }, () => line);
+  expect(cappedLieferschein({ ...answer, positionen: lines, weiterePositionen: 3 })?.weggelassen).toBe(5);
+  expect(cappedLieferschein({ ...answer, weiterePositionen: -1 })?.weggelassen).toBe(0);
+});
+
 test('an answer that is no Lieferschein of the schema reads as nothing', () => {
   expect(cappedLieferschein('Das ist kein Lieferschein.')).toBeNull();
   expect(cappedLieferschein({ ...answer, positionen: 'alle' })).toBeNull();

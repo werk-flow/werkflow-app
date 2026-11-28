@@ -47,6 +47,7 @@ const run = {
   threadId: '40000000-0000-4000-8000-000000000001',
   signal: new AbortController().signal,
   progress: () => undefined,
+  canCallModel: () => false,
   modelCall: async () => 'over_cap' as const,
 };
 

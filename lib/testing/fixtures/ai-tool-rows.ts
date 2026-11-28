@@ -185,6 +185,7 @@ const organizationId = () => world.memberships[0]?.orgId ?? '';
     threadId: THREAD_ID,
     signal: new AbortController().signal,
     progress: () => undefined,
+    canCallModel: () => false,
     modelCall: async () => 'over_cap' as const,
   };
   await runTool(

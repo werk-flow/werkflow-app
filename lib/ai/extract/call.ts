@@ -35,7 +35,10 @@ export type ExtractionSpec = {
 
 export type ExtractionResult =
   | { status: 'read'; answer: unknown }
-  /** Past the extractor's input cap, or a document the provider will not read: no paid call was made. */
+  /**
+   * Past the extractor's input cap, or a document the provider will not read:
+   * no paid call was made. Also an answer cut at the output cap, which was paid.
+   */
   | { status: 'too_long' | 'unreadable' }
   /** The turn's tools made all the model calls it allows. */
   | { status: 'over_cap' }
@@ -61,7 +64,20 @@ function reportedUsage(usage: StreamUsage): AiTokenUsage | null {
   };
 }
 
-type Streamed = { text: string; usage: AiTokenUsage | null; started: boolean; error: unknown };
+/**
+ * Anthropic adds a system prompt for a structured output's schema, which its
+ * token count of the document does not hold; this covers it with room to spare.
+ */
+const STRUCTURED_OUTPUT_HEADROOM_TOKENS = 2_000;
+
+type Streamed = {
+  text: string;
+  usage: AiTokenUsage | null;
+  started: boolean;
+  error: unknown;
+  /** The answer reached the output cap and is cut. */
+  cut: boolean;
+};
 
 /** The extractor's one call, streamed: its text, the usage the provider reported, whether it began. */
 async function streamExtraction(
@@ -98,7 +114,7 @@ async function streamExtraction(
     telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
     onError: () => undefined,
   });
-  const streamed: Streamed = { text: '', usage: null, started: false, error: null };
+  const streamed: Streamed = { text: '', usage: null, started: false, error: null, cut: false };
   try {
     for await (const part of result.fullStream) {
       // Every part, thinking included, lets the turn save, so a stop aborts the call in time.
@@ -107,8 +123,10 @@ async function streamExtraction(
         streamed.started = true;
         streamed.text += part.text;
       } else if (part.type === 'start-step') streamed.started = true;
-      else if (part.type === 'finish-step') streamed.usage = reportedUsage(part.usage);
-      else if (part.type === 'error') streamed.error = part.error ?? 'error';
+      else if (part.type === 'finish-step') {
+        streamed.usage = reportedUsage(part.usage);
+        streamed.cut = part.finishReason === 'length';
+      } else if (part.type === 'error') streamed.error = part.error ?? 'error';
       else if (part.type === 'abort') streamed.error = new DOMException('aborted', 'AbortError');
       if (streamed.error !== null) break;
     }
@@ -120,21 +138,20 @@ async function streamExtraction(
 
 /**
  * Runs the call and ledgers it before anything else: at the usage the
- * provider reported, or at its caps when it may have taken the call without
- * reporting (B15). Only then does its answer count.
+ * provider reported, or at the caps the run reserved when it may have taken
+ * the call without reporting (B15). Only then does its answer count.
  */
 async function ledgeredExtraction(
   model: AiModel,
   spec: ExtractionSpec,
   document: AiDocument,
-  inputTokens: number,
   run: Pick<AiToolRun, 'signal' | 'progress'>,
   record: AiModelCallRecord,
 ): Promise<ExtractionResult> {
-  const { text, usage, started, error } = await streamExtraction(model, spec, document, run);
+  const { text, usage, started, error, cut } = await streamExtraction(model, spec, document, run);
   const billed = error === null || started || acceptedByProvider(error);
   const charged = usage ?? {
-    inputTokens: billed ? inputTokens : 0,
+    inputTokens: billed ? AI_EXTRACT_LIMITS.maxInputTokens : 0,
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
     outputTokens: billed ? AI_EXTRACT_LIMITS.maxOutputTokens : 0,
@@ -148,6 +165,7 @@ async function ledgeredExtraction(
   if (!(await record(charged, outcome, spec.promptVersion))) return { status: 'failed' };
   if (stopped) return { status: 'stopped' };
   if (error !== null) return { status: 'failed' };
+  if (cut) return { status: 'too_long' };
   try {
     const answer: unknown = JSON.parse(text);
     return { status: 'read', answer };
@@ -172,16 +190,15 @@ export async function runExtraction(
   if (model === 'unavailable' || countTokens === 'unavailable' || !isAllowedModel(model)) {
     return { status: 'failed' };
   }
-  const counted = await countTokens(document, run.signal);
+  const counted = await countTokens({ document, system: spec.instructions, text: spec.request }, run.signal);
   if (run.signal.aborted) return { status: 'stopped' };
   if (counted === 'failed') return { status: 'failed' };
   if (counted === 'refused') return { status: 'unreadable' };
-  // The instructions, request and schema at their upper bound of one token per byte.
+  // The schema at one token per byte, and the provider's prompt for it.
   const schema = JSON.stringify(await asSchema(spec.schema).jsonSchema);
-  const inputTokens = counted + inputTokenCeiling(spec.instructions + spec.request + schema);
+  const inputTokens = counted + inputTokenCeiling(schema) + STRUCTURED_OUTPUT_HEADROOM_TOKENS;
   if (inputTokens > AI_EXTRACT_LIMITS.maxInputTokens) return { status: 'too_long' };
-  const called = await run.modelCall((record) =>
-    ledgeredExtraction(model, spec, document, inputTokens, run, record),
-  );
-  return called === 'over_cap' ? { status: 'over_cap' } : called;
+  const called = await run.modelCall((record) => ledgeredExtraction(model, spec, document, run, record));
+  if (called === 'over_cap' || called === 'stopped') return { status: called };
+  return called;
 }

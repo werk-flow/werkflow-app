@@ -470,17 +470,22 @@ export async function readWerkflowBillingObject(path: string): Promise<Uint8Arra
 }
 
 /**
- * The bytes of one object of the organization, read on the server: only the
+ * The bytes of one object of the organization, read on the server: the
  * organization export (lib/org-export/) packs stored originals into its
- * archive. A missing object throws `storage_object_missing`.
+ * archive, and WerkFlow KI's extractor reads an uploaded file
+ * (lib/ai/tools/lieferschein-lesen.ts). A missing object throws `storage_object_missing`.
  */
 export async function readStorageObject({
   organizationId,
   path,
-}: OrganizationScope & { path: string }): Promise<Uint8Array> {
+  abortSignal,
+}: OrganizationScope & { path: string; abortSignal?: AbortSignal }): Promise<Uint8Array> {
   assertOrganizationStorageKey(organizationId, path);
   try {
-    const result = await getR2Client().send(new GetObjectCommand({ Bucket: getR2BucketName(), Key: path }));
+    const result = await getR2Client().send(
+      new GetObjectCommand({ Bucket: getR2BucketName(), Key: path }),
+      abortSignal ? { abortSignal } : {},
+    );
     if (!result.Body) throw new Error('storage_object_missing');
     return await result.Body.transformToByteArray();
   } catch (error) {

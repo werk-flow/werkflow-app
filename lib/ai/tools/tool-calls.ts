@@ -206,17 +206,24 @@ export function toolRunFor(
   hooks: {
     signal: AbortSignal;
     progress: () => void;
+    /** Reads the turn's gate again (switch, stop, access): whether a model call may start now. */
+    admit: () => Promise<boolean>;
     record: (key: string, usage: AiTokenUsage, outcome: string, promptVersion: string) => Promise<boolean>;
   },
 ): AiToolRun {
   const { toolCalls } = context;
+  const canCallModel = () =>
+    toolCalls.modelCalls < AI_TURN_LIMITS[context.command.entryPoint].maxToolModelCalls;
   return {
     threadId: context.command.threadId,
     signal: hooks.signal,
     progress: hooks.progress,
-    async modelCall<T>(call: (record: AiModelCallRecord) => Promise<T>): Promise<T | 'over_cap'> {
-      if (toolCalls.modelCalls >= AI_TURN_LIMITS[context.command.entryPoint].maxToolModelCalls)
-        return 'over_cap';
+    canCallModel,
+    async modelCall<T>(call: (record: AiModelCallRecord) => Promise<T>): Promise<T | 'over_cap' | 'stopped'> {
+      if (!canCallModel()) return 'over_cap';
+      // A stop, a lost thread or a switch that landed while the tool read never reaches a paid call.
+      if (hooks.signal.aborted || !(await hooks.admit()) || hooks.signal.aborted) return 'stopped';
+      if (!canCallModel()) return 'over_cap';
       toolCalls.modelCalls += 1;
       const key = `${context.runKey}:model-call:${toolCalls.modelCalls}`;
       const running = call(async (usage, outcome, promptVersion) => {
@@ -234,18 +241,38 @@ export function toolRunFor(
   };
 }
 
+/** A result's bytes as the model reads it. */
+const outputBytes = (output: ToolResultPart['output']): number =>
+  Buffer.byteLength(JSON.stringify(output.type === 'json' ? output.value : null), 'utf8');
+
 /**
- * A result within the turn's cap on all tool results together, which it then
- * counts; past it, a refusal the model can read, never a cut result.
+ * A result within the turn's cap on all tool results together; past it, a
+ * refusal the model can read, never a cut result. Every output the model
+ * reads counts, refusals included; the thread leaves the cap's room free
+ * (lib/ai/turn.ts).
  */
 function withinResultCap(context: ToolCallRun, result: AiToolResult): AiToolResult {
   if (result.status !== 'ok') return result;
-  const output = untrustedToolOutput(result.value);
-  const bytes = Buffer.byteLength(JSON.stringify(output.type === 'json' ? output.value : null), 'utf8');
   const cap = AI_TURN_LIMITS[context.command.entryPoint].maxToolResultBytes;
-  if (context.toolCalls.resultBytes + bytes > cap) return { status: 'refused', message: TOOL_RESULTS_FULL };
-  context.toolCalls.resultBytes += bytes;
-  return result;
+  const bytes = outputBytes(untrustedToolOutput(result.value));
+  return context.toolCalls.resultBytes + bytes > cap
+    ? { status: 'refused', message: TOOL_RESULTS_FULL }
+    : result;
+}
+
+/** What the model reads of a call, counted against the turn's result cap. */
+function modelOutput(context: ToolCallRun, result: AiToolResult): ToolResultPart['output'] {
+  const output: ToolResultPart['output'] =
+    result.status === 'ok'
+      ? untrustedToolOutput(result.value)
+      : {
+          type: 'json',
+          value: result.message
+            ? { status: result.status, meldung: result.message }
+            : { status: result.status },
+        };
+  context.toolCalls.resultBytes += outputBytes(output);
+  return output;
 }
 
 /**
@@ -293,10 +320,7 @@ export async function runTool(
   const recorded = await recordToolCall(context, key, tool.name, result.status, limitMs, row);
   if (recorded && row.kind === 'question') context.toolCalls.asked = true;
   context.toolCalls.pending.delete(key);
-  if (!recorded) return { type: 'json', value: { status: 'failed' } };
-  if (result.status === 'ok') return untrustedToolOutput(result.value);
-  const { status, message } = result;
-  return { type: 'json', value: message ? { status, meldung: message } : { status } };
+  return modelOutput(context, recorded ? result : { status: 'failed' });
 }
 
 /**

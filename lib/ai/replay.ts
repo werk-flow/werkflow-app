@@ -2,7 +2,7 @@ import 'server-only';
 
 import { APICallError } from 'ai';
 
-import type { AiDocument, AiModel } from '@/lib/ai/model';
+import type { AiDocumentRequest, AiModel } from '@/lib/ai/model';
 import { z } from '@/lib/zod';
 
 /**
@@ -363,6 +363,9 @@ function extraction(fields: object, deltas = 4): StreamPart[] {
   return [...textParts(...pieces.filter(Boolean)), finish('stop', 2400, 300)];
 }
 
+/** The extractor's output cap, which a cut answer reports as used. */
+const AI_EXTRACT_OUTPUT_CAP = 8_192;
+
 const LIEFERSCHEIN = {
   lieferant: 'GC Großhandel Stuttgart',
   lieferscheinnummer: 'LS-2026-1187',
@@ -385,6 +388,7 @@ const LIEFERSCHEIN = {
       packungsinhalt: 10,
     },
   ],
+  weiterePositionen: 0,
 };
 
 /**
@@ -417,6 +421,14 @@ const EXTRACTIONS: Readonly<Record<string, () => StreamPart[]>> = {
     }),
   // About three seconds of writing: a stop lands while the extractor runs.
   langsam: () => extraction(LIEFERSCHEIN, 30),
+  // An answer cut at the extractor's output cap: paid for, and nothing read from it.
+  abgeschnitten: () => [
+    ...textParts('{"lieferant":"GC Großhandel","positionen":[{"artikelnummer":"GC-1'),
+    {
+      ...finish('stop', 2400, AI_EXTRACT_OUTPUT_CAP),
+      finishReason: { unified: 'length', raw: 'max_tokens' },
+    },
+  ],
   // An answer that is no Lieferschein: the extractor reads nothing from it.
   kaputt: () => [...textParts('Das ist kein Lieferschein.'), finish('stop', 2400, 10)],
   // Lines past the extractor's cap: the result keeps the first ones and says it was cut.
@@ -441,11 +453,13 @@ function replayExtraction(bytes: Uint8Array): { name: string; parts: StreamPart[
 
 /**
  * The replay's stand-in for the provider's token count: 1,800 tokens per page
- * object a PDF really holds, whatever page count it declares, and 1,600 per image.
+ * object a PDF really holds, whatever page count it declares, 1,600 per image,
+ * and one per byte of the instructions and request.
  */
-export function countReplayDocumentTokens(document: AiDocument): number {
-  if (document.mimeType !== 'application/pdf') return 1_600;
-  return (documentText(document.bytes).match(/\/Type\s*\/Page(?![A-Za-z])/g)?.length ?? 0) * 1_800;
+export function countReplayDocumentTokens({ document, system, text }: AiDocumentRequest): number {
+  const framing = Buffer.byteLength(system + text, 'utf8');
+  if (document.mimeType !== 'application/pdf') return framing + 1_600;
+  return framing + (documentText(document.bytes).match(/\/Type\s*\/Page(?![A-Za-z])/g)?.length ?? 0) * 1_800;
 }
 
 /** The bytes of the document a request sends, or null for a request without one. */
