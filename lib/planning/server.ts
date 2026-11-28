@@ -28,6 +28,7 @@ import { fingerprintSnapshot } from './capacity';
 import { addLocalDays, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 import { accessEndDatesByRecord } from './availability';
 import {
+  assessedCrew,
   assignedOccurrenceRowsSchema,
   buildQualificationAssessmentRequests,
   collectAssessedOccurrenceDates,
@@ -483,14 +484,12 @@ export async function assessPlanningOccurrences(input: {
   excludeOccurrenceId?: string;
   excludeOccurrenceIds?: string[];
 }): Promise<PlanningAssessment | null> {
-  const assignmentsFor: AssignmentsForOccurrence = (occurrence) => [
-    ...new Map(
-      (input.assignmentsByOriginalStartLocal
+  const assignmentsFor: AssignmentsForOccurrence = (occurrence) =>
+    assessedCrew(
+      input.assignmentsByOriginalStartLocal
         ? (input.assignmentsByOriginalStartLocal.get(occurrence.originalStartLocal) ?? [])
-        : input.assignments
-      ).map((assignment) => [assignment.employeeRecordId, assignment]),
-    ).values(),
-  ];
+        : input.assignments,
+    );
   const employeeRecordIds = [
     ...new Set(
       input.occurrences.flatMap((occurrence) =>

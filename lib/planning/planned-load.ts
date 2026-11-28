@@ -1,7 +1,7 @@
 import { z } from '@/lib/zod';
 import { addLocalDays, splitTimedIntervalByBerlinDate } from '@/lib/date-time/berlin';
 import { DEFAULT_DAILY_TARGET_MINUTES, type DailyTarget } from '@/lib/personnel/targets';
-import { evaluateCapacity } from './capacity';
+import { compareByCodePoint, evaluateCapacity } from './capacity';
 import type { DailyTargetsByRecord } from './server';
 import type {
   CapacityDayContext,
@@ -291,6 +291,18 @@ function buildCapacityDayContexts(input: {
     }
   }
   return { contexts, missingConfigurationConflicts };
+}
+
+/**
+ * The crew an assessment reads: each person once, ordered by employee record.
+ * The fingerprint hashes the snapshot in crew order, so the order a caller
+ * read its people in must not reach it: the confirmation of one assessment
+ * would otherwise meet a different fingerprint on the save it confirms.
+ */
+export function assessedCrew(assignments: PlanningAssignmentDraft[]): PlanningAssignmentDraft[] {
+  return [
+    ...new Map(assignments.map((assignment) => [assignment.employeeRecordId, assignment])).values(),
+  ].sort((left, right) => compareByCodePoint(left.employeeRecordId, right.employeeRecordId));
 }
 
 export function buildQualificationAssessmentRequests(

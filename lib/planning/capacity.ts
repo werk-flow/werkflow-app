@@ -162,7 +162,8 @@ export async function fingerprintSnapshot(value: unknown): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function compareByCodePoint(left: string, right: string): number {
+/** Orders strings by code point, independent of locale, as a fingerprint needs. */
+export function compareByCodePoint(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
