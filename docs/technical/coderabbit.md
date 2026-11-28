@@ -13,8 +13,8 @@ Choose the level from the diff before you open the PR, and state it in the PR's 
 | Level | The diff | Reviews before ready |
 | --- | --- | --- |
 | 0 | No behavior effect: docs, comments, copy typos, agent instructions, formatting | Your own read of the diff |
-| 1 | Changes behavior: product code, tests, CI logic, scripts. The default | `sol-loop` until Sol approves or its budget of 3 rounds (5 for a billing PR) ends |
-| 2 | Touches security, authentication, permissions and RLS, a migration, personal data, data deletion, the Zeitkonto, or time and payroll logic (for example `supabase/`, `lib/auth/`, `lib/org/`, `lib/security/`, `lib/storage/`, `lib/time-tracking/`, `lib/time-accounts/`, `lib/time-corrections/`) | `sol-loop` until Sol approves or its budget of 5 rounds ends, then the external review [the broker](#the-coderabbit-queue) assigns: CodeRabbit, Greptile, or both |
+| 1 | Changes behavior: product code, tests, CI logic, scripts. The default | `sol-loop` until Sol approves or its budget of 3 rounds ends |
+| 2 | Touches security, authentication, permissions and RLS, a migration, personal data, data deletion, the Zeitkonto, time and payroll logic, or money logic such as prices, billing, Stripe and invoices (for example `supabase/`, `lib/auth/`, `lib/org/`, `lib/security/`, `lib/storage/`, `lib/time-tracking/`, `lib/time-accounts/`, `lib/time-corrections/`) | `sol-loop` until Sol approves or its budget of 5 rounds ends, then the external review [the broker](#the-coderabbit-queue) assigns: CodeRabbit, Greptile, or both |
 
 - Every level also needs `Check` green on the latest commit.
 - Level 0 and 1 never request or wait for CodeRabbit.
@@ -63,9 +63,9 @@ Merge with `gh pr merge <n> --squash --auto`, after a fresh `git fetch` and a la
 The review broker is `ops/coderabbit-queue.py` in `werk-flow/werkflow-planning`, named after its first vendor. It runs every 10 minutes on [the netcup VM, with the PC as backup](machine-setup.md#background-jobs), so no thread has to stay alive to hand out reviews. Both vendors count per PR author, and every PR has the same author, so all leads share each vendor's budget:
 
 - **CodeRabbit** (Essentials): about one review an hour at our volume, near 22 a day ([rate limits](https://docs.coderabbit.ai/management/rate-limits)).
-- **Greptile**: 7 to 8 a day on the trial, to 2026-12-11, then free Starter's 50 credits a month, at most 2 a day. Each base review costs one credit.
+- **Greptile**: the trial ends 2026-12-11. After that, the free Starter plan gives 50 credits a month, at most 2 a day, so the broker uses it sparingly. A review takes 1 to 2 hours to arrive (werk-flow/werkflow-planning#29). Keep watching and work on something else.
 
-Every level 2 PR gets one of three outcomes, by its rank:
+Every level 2 PR is ranked one of four ways:
 
 | Rank | The PR | External review | Why |
 | --- | --- | --- | --- |
@@ -74,12 +74,7 @@ Every level 2 PR gets one of three outcomes, by its rank:
 | 3 | Changes database or access code (`supabase/migrations/`, `supabase/tests/`, `lib/auth/`, `lib/org/`, `lib/security/`, `lib/storage/`) | CodeRabbit; Greptile only, after 12 hours of waiting | It waits for the main reviewer longer before it changes vendor |
 | 4 | Anything else | CodeRabbit; Greptile only, after 4 hours of waiting | Lowest risk, so it moves to Greptile soonest |
 
-The broker reads the rank from the PR's changed files and the open `ci-alert` issues, never from what a thread says. Without Greptile budget nobody moves to Greptile: the PR keeps waiting for CodeRabbit. Each pass on the machine that holds the broker's lease:
-
-1. Lists the open PRs labelled `needs-coderabbit`. It skips a level 0 or 1 PR, and a PR that already got a CodeRabbit review or a request that is still good. A request is asked again when CodeRabbit answered it with a rate limit, "Review limit reached" or "Head commit changed", or with nothing for three hours, so a PR never waits for a review that will not come. A PR whose body states no review level, or two different ones, is refused, never guessed, and told so once in a comment.
-2. Waits for CodeRabbit's budget. It counts CodeRabbit's "Review finished" notes of the last 7 days and spaces requests to the band's rate plus 5 minutes: under 30 reviews 5 an hour, under 40 4, under 50 3, under 60 2, and from 60 one an hour, 65 minutes apart. Every pass also asks CodeRabbit `@coderabbitai rate limit` on its own issue and logs the answer, which uses no review. While that answer, at most 15 minutes old, says "available now", requests may come 20 minutes apart in any band. A rate-limit notice pauses it 65 minutes, or until the notice's "available in N minutes" ends.
-3. Asks Greptile at most once per pass, within the day's budget spread over the day: a rank 1 PR first, then a rank 3 or 4 PR past its wait, then a rank 2 PR. A PR that moves to Greptile loses `needs-coderabbit` for `coderabbit-released`. The broker comments `@greptileai`, or on a draft `@greptileai review this draft`, which Greptile requires for a draft. It counts the credit in its lease and tells the PR's thread.
-4. Requests CodeRabbit for the first PR in rank order, oldest label first inside a rank, one per pass. It comments `@coderabbitai review`, swaps the label for `coderabbit-requested`, and sends one sentence to the PR's T3 thread on that machine: the one on its head branch, else the newest that links the PR, such as an epic's lead. A thread on another machine hears of the review through its own watch.
+The broker reads the rank from the PR's changed files and the open `ci-alert` issues, never from what a thread says. Without Greptile budget nobody moves to Greptile: the PR keeps waiting for CodeRabbit. The broker's code, `ops/coderabbit-queue.py` in `werk-flow/werkflow-planning`, owns its rate bands and request steps. It requests in rank order, oldest label first, swaps `needs-coderabbit` for `coderabbit-released` when a PR moves to Greptile, and tells the PR's thread when it asks. It refuses a body with no review level or two different levels, and re-asks when CodeRabbit answers with a rate limit, "Review limit reached", "Head commit changed", or nothing for three hours.
 
 Each machine logs its passes to `~/.local/state/coderabbit-queue.log`. Automatic review is off for both vendors, so a PR without the label gets no external review. Never relabel a `coderabbit-released` PR `needs-coderabbit`.
 
