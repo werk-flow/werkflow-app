@@ -100,7 +100,8 @@ begin
 
   -- Tenant isolation: the caller's own request in the other organization never lists here, and vice versa.
   if exists(select 1 from jsonb_array_elements_text(public.list_time_correction_history_page(org_id,caller,'own')->'ids') listed(id) where id='77000000-0000-4000-8000-000000000090') then raise exception 'history tenant leaked'; end if;
-  result := public.list_time_correction_history_page('77000000-0000-4000-8000-000000000011',caller,'all');
+  -- Organization B's admin, as the caller there holds no record with access.
+  result := public.list_time_correction_history_page('77000000-0000-4000-8000-000000000011','77000000-0000-4000-8000-000000000001','all');
   if (result->>'total')::int is distinct from 1 or result->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000090'::uuid) then raise exception 'foreign organization history wrong'; end if;
   result := public.list_time_correction_history_page('77000000-0000-4000-8000-000000000012',caller,'all');
   if (result->>'total')::int is distinct from 0 or result->'ids' is distinct from '[]'::jsonb then raise exception 'empty organization reports history'; end if;

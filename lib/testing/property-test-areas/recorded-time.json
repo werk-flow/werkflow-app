@@ -45,6 +45,7 @@
     "lib/time-tracking/entry-read-actions.ts": "Server Actions that read entries.",
     "lib/time-tracking/entry-window-projections.ts": "Reads correction projections for a window; the projection rule lives in lib/time-corrections.",
     "lib/time-tracking/entry-write-actions.ts": "Server Actions that write entries; the rules live in validation.ts and the database.",
+    "lib/time-tracking/job-time-live-tables.ts": "The tables whose changes refresh the job and project time lists; no time arithmetic.",
     "lib/time-tracking/manual-entry-bridge-storage.ts": "Browser storage key for the manual-entry bridge.",
     "lib/time-tracking/manual-entry-bridge.ts": "Browser event bridge after a manual entry.",
     "lib/time-tracking/manual-entry-staging.ts": "Server staging of manual entries before validation.ts checks them.",
