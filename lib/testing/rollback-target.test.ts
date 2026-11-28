@@ -1,9 +1,10 @@
-// Rule test: a rollback goes back only to a released commit's ready production build, never to the
-// build that serves now (.github/scripts/rollback-target.sh). Without a target it picks the release
-// before the served one, so a second rollback steps back once more.
+// Rule test: a rollback goes back only to a build that served production, of a released commit that
+// no later destructive migration outran (.github/scripts/rollback-target.sh). Without a target it
+// picks the release before the served one, so a second rollback steps back once more; a named
+// target that serves already resumes.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -67,12 +68,12 @@ afterEach(() => {
 const commit = (index: number) => commits[index] ?? '';
 
 /** Production builds, newest first, as Vercel lists them, and the one the domain serves. */
-function builds(served: string, list: { uid: string; commit: number; created: number; state?: string }[]) {
+function builds(served: string, list: { uid: string; commit: number; created: number; served?: boolean }[]) {
   writeFileSync(join(stub, 'served'), served);
   const deployments = list.map((build) => ({
     uid: build.uid,
     created: build.created,
-    state: build.state ?? 'READY',
+    isRollbackCandidate: build.served ?? true,
     meta: { githubCommitSha: commit(build.commit) },
   }));
   writeFileSync(join(stub, 'list.json'), JSON.stringify({ deployments }));
@@ -105,18 +106,24 @@ function plan(target = '') {
 }
 
 const RELEASES = [
-  { uid: 'dpl_failed', commit: 3, created: 400, state: 'ERROR' },
   { uid: 'dpl_three', commit: 2, created: 300 },
   { uid: 'dpl_three_redeploy', commit: 2, created: 290 },
+  // Built from production but never served, such as a release whose promote failed.
+  { uid: 'dpl_never_served', commit: 1, created: 250, served: false },
   { uid: 'dpl_two', commit: 1, created: 200 },
   { uid: 'dpl_one', commit: 0, created: 100 },
 ];
 
-test('without a target it goes back to the newest ready build of another, older commit', () => {
+test('without a target it goes back to the newest build of another, older commit that served', () => {
   builds('dpl_three', RELEASES);
   const result = plan();
   expect(result.status, result.log).toBe(0);
-  expect(result.output).toEqual({ sha: commit(1), deployment: 'dpl_two', served: 'dpl_three' });
+  expect(result.output).toEqual({
+    sha: commit(1),
+    deployment: 'dpl_two',
+    served: 'dpl_three',
+    resume: 'false',
+  });
 });
 
 test('a second rollback steps back from the build that serves after the first', () => {
@@ -126,11 +133,18 @@ test('a second rollback steps back from the build that serves after the first', 
   expect(result.output.deployment).toBe('dpl_one');
 });
 
-test('a named target that production contains goes back to that commit’s ready build', () => {
+test('a named target that production contains goes back to that commit’s build that served', () => {
   builds('dpl_three', RELEASES);
   const result = plan(commit(0));
   expect(result.status, result.log).toBe(0);
   expect(result.output.deployment).toBe('dpl_one');
+});
+
+test('a named target whose build serves already resumes the rollback on the same build', () => {
+  builds('dpl_two', RELEASES);
+  const result = plan(commit(1));
+  expect(result.status, result.log).toBe(0);
+  expect(result.output).toEqual({ sha: commit(1), deployment: 'dpl_two', served: 'dpl_two', resume: 'true' });
 });
 
 test('a commit production never held is refused before any Vercel call', () => {
@@ -141,12 +155,26 @@ test('a commit production never held is refused before any Vercel call', () => {
   expect(result.output).toEqual({});
 });
 
-test('the commit that serves now, a short sha, or no older ready build is refused', () => {
+test('a short sha, or no older build that served, is refused', () => {
   builds('dpl_three', RELEASES);
-  expect(plan(commit(2)).log).toContain('already serves');
   expect(plan(commit(0).slice(0, 7)).log).toContain('full 40-character commit sha');
   builds('dpl_one', RELEASES);
   const oldest = plan();
   expect(oldest.status).toBe(1);
-  expect(oldest.log).toContain('No ready production build');
+  expect(oldest.log).toContain('that served before');
+});
+
+test('a target older than a destructive migration’s named release is refused, on main whether applied or not', () => {
+  mkdirSync(join(repo, 'supabase/migrations'), { recursive: true });
+  writeFileSync(
+    join(repo, 'supabase/migrations/20990101000000_drop.sql'),
+    `-- @destructive: after release ${commit(1).slice(0, 8)}: the build from then on reads the new column\ndrop table old;\n`,
+  );
+  git('add', '.');
+  git('-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '--quiet', '-m', 'drop');
+  builds('dpl_three', RELEASES);
+  expect(plan().output.deployment).toBe('dpl_two');
+  const tooOld = plan(commit(0));
+  expect(tooOld.status).toBe(1);
+  expect(tooOld.log).toContain('20990101000000_drop.sql drops what code before');
 });

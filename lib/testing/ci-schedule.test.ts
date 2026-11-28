@@ -58,7 +58,7 @@ test('no cron and no hold job: the release waits for a dispatch, and the timer f
   expect(releaseWorkflow).not.toContain('hold-until');
   expect(readWorkflow('release.yml').at('jobs', 'candidate', 'needs')).toBeUndefined();
   // The timer's dispatch (-f scheduled=true) decides as a scheduled run, every other one as asked.
-  expect(readWorkflow('release.yml').text('jobs', 'candidate', 'steps', 1, 'env', 'MODE')).toBe(
+  expect(readWorkflow('release.yml').text('jobs', 'candidate', 'steps', 2, 'env', 'MODE')).toBe(
     "${{ inputs.dry_run && 'dry-run' || inputs.scheduled && 'scheduled' || 'manual' }}",
   );
   // ops/ci-alert.py counts a run of this name as the night's release, and no other dispatch. It

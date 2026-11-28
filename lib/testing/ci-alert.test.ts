@@ -408,7 +408,11 @@ function decide(mode: string, ahead: boolean, fullRunConclusion: string, run: ob
       html_url: 'https://github.test/job',
     },
   ]);
-  const result = bash(repository, candidateScript, [mode], { COMMIT: revParse(repository, 'HEAD') });
+  const result = bash(repository, candidateScript, [mode], {
+    COMMIT: revParse(repository, 'HEAD'),
+    // The domain serves the head of production: no rollback is in place.
+    SERVED_SHA: revParse(repository, 'origin/production'),
+  });
   expect(result.status).toBe(0);
   return {
     sha: revParse(repository, 'HEAD'),

@@ -229,12 +229,13 @@ function release(
   spawnSync('git', ['init', '-qb', 'main', repository]);
   git('commit', '--allow-empty', '-qm', 'shipped');
   git('update-ref', 'refs/remotes/origin/production', 'HEAD');
+  const shipped = git('rev-parse', 'HEAD').stdout.trim();
   git('commit', '--allow-empty', '-qm', 'new');
   const commit = git('rev-parse', 'HEAD').stdout.trim();
   const result = spawnSync('bash', [join(scripts, 'release-candidate.sh'), 'scheduled'], {
     cwd: repository,
     encoding: 'utf8',
-    env: { ...gateEnv(), COMMIT: commit },
+    env: { ...gateEnv(), COMMIT: commit, SERVED_SHA: shipped },
   });
   return {
     status: result.status,

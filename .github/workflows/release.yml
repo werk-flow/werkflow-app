@@ -67,12 +67,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      # After a rollback the domain serves an older build than production's head, and a scheduled
+      # run holds (release-candidate.sh). A release by hand needs no answer. Metadata only.
+      - name: Read the commit production serves
+        id: served
+        if: ${{ inputs.dry_run || inputs.scheduled }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: bash .github/scripts/served-commit.sh
+
       # The script reads GitHub anonymously; the job token only lifts the shared runner's rate limit.
       - name: Decide the release
         id: candidate
         env:
           GH_TOKEN: ${{ github.token }}
           MODE: ${{ inputs.dry_run && 'dry-run' || inputs.scheduled && 'scheduled' || 'manual' }}
+          SERVED_SHA: ${{ steps.served.outputs.sha }}
         run: bash .github/scripts/release-candidate.sh "$MODE"
 
   full:

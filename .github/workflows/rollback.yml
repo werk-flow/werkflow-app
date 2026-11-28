@@ -3,13 +3,14 @@ name: rollback
 # The way back from a bad release (docs/technical/environments.md, "Release and rollback").
 #   gh workflow run rollback.yml                      plan only: names the build it would go back to
 #   gh workflow run rollback.yml -f dry_run=false     go back to the previous release
-#   gh workflow run rollback.yml -f dry_run=false -f target=<sha>   go back to that released commit
-# It promotes the target's ready production build (.github/scripts/release-promote.sh, which the
-# release uses too), then redeploys the target commit's edge functions, which Vercel's rollback
-# does not cover, and checks production as the release does. It never touches the database:
-# migrations are expand-only, so the older code runs against the newer schema, and a data problem
-# is fixed forward. It never moves `production`, which only moves forward; the next release from a
-# repaired main promotes its own build.
+#   gh workflow run rollback.yml -f dry_run=false -f target=<sha>
+#                                                     go back to that released commit, or resume a
+#                                                     rollback to it whose edge functions failed
+# It switches the domain to exactly the planned build with Vercel's Instant Rollback
+# (.github/scripts/rollback-switch.sh), redeploys that commit's edge functions, which Vercel's
+# rollback does not cover, and checks production as the release does. It never touches the
+# database and never moves `production`. While the domain serves an older build than production's
+# head, scheduled releases hold (release-candidate.sh); a release by hand ends the rollback.
 on:
   workflow_dispatch:
     inputs:
@@ -21,18 +22,9 @@ on:
         description: Full sha of a released commit to go back to. Empty means the previous release.
         type: string
         default: ''
-      edge_functions:
-        description: Redeploy the target commit's edge functions too
-        type: boolean
-        default: true
 
 permissions:
   contents: read
-
-# The release's group: a rollback never runs beside a release, and neither cancels the other.
-concurrency:
-  group: release
-  cancel-in-progress: false
 
 # The Vercel project that serves app.werk-flow.app.
 env:
@@ -42,19 +34,33 @@ env:
 jobs:
   plan:
     name: Find the build to go back to
+    # Only main holds the release's rules; a dispatch from a branch stops here.
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # the release runs still going
     outputs:
       sha: ${{ steps.target.outputs.sha }}
       deployment: ${{ steps.target.outputs.deployment }}
     steps:
-      # Only the scripts and the history are read; no step needs the job token in .git/config.
+      # The history and the migrations are read; no step needs the job token in .git/config.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      # Metadata only: the production builds and the build the domain serves.
+      # A release that runs on would promote its own build after the rollback.
+      - name: Refuse while a release runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          running="$(gh run list --workflow release.yml --limit 20 --json status,url --jq '[.[] | select(.status != "completed") | .url] | join(" ")')"
+          test -z "$running" || { echo "::error::A release runs (${running}); roll back after it ends."; exit 1; }
+
+      # Metadata only: the builds that served production, the one that serves now, the migrations.
       - name: Decide the target
         id: target
         env:
@@ -68,37 +74,41 @@ jobs:
     if: ${{ !inputs.dry_run }}
     # The PROD secrets live in this environment only, and only main may use it, as for the release.
     environment: production
+    # The release's group, so a rollback and a release never write at once. A dry run stays out of it.
+    concurrency:
+      group: release
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      # The code first: a promote takes seconds, and it is what users see.
-      - name: Promote the target's production build
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          SHA: ${{ needs.plan.outputs.sha }}
-        run: bash .github/scripts/release-promote.sh "$SHA"
-
       - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
-        if: ${{ inputs.edge_functions }}
         with:
           version: 2.116.0
 
-      # The target's function source with this workflow's deploy script, which an older commit may lack.
+      # Before traffic moves: the target's function source beside this workflow's deploy script,
+      # which an older commit may lack. A failure here leaves production as it was.
       - name: Put the target's edge function source in place
-        if: ${{ inputs.edge_functions }}
         env:
           SHA: ${{ needs.plan.outputs.sha }}
         run: |
           rm -rf supabase/functions
           git checkout "$SHA" -- supabase/functions
 
+      # The code first: it is what users see, and the switch takes seconds.
+      - name: Switch the domain to the planned build
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOYMENT: ${{ needs.plan.outputs.deployment }}
+        run: bash .github/scripts/rollback-switch.sh "$DEPLOYMENT"
+
+      # A failure here leaves the old code on the new functions: run again with -f target=<sha>,
+      # which keeps the domain and deploys the functions again.
       - name: Redeploy the target's edge functions to PROD
-        if: ${{ inputs.edge_functions }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: bash .github/scripts/deploy-edge-functions.sh jbgaqpdjauzoocplgdsn --present-only
@@ -106,8 +116,7 @@ jobs:
   smoke:
     name: Check production
     needs: [plan, rollback]
-    # After a rollback, the target build; in a dry run, the build that serves now.
-    if: ${{ !cancelled() && needs.plan.result == 'success' && (inputs.dry_run || needs.rollback.result == 'success') }}
+    if: ${{ !cancelled() && needs.rollback.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -121,14 +130,14 @@ jobs:
           HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
           APP_URL: https://app.werk-flow.app
           HEALTH_URL: https://jbgaqpdjauzoocplgdsn.supabase.co/functions/v1/health
-          DEPLOYMENT: ${{ !inputs.dry_run && needs.plan.outputs.deployment || '' }}
+          DEPLOYMENT: ${{ needs.plan.outputs.deployment }}
         run: bash .github/scripts/release-smoke.sh "$DEPLOYMENT"
 
   alert:
     name: Alert
     needs: [plan, rollback, smoke]
     # A failed rollback leaves production in doubt, so it assigns the owner. A dry run says nothing.
-    if: ${{ !cancelled() && !inputs.dry_run }}
+    if: ${{ !cancelled() && !inputs.dry_run && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -147,4 +156,5 @@ jobs:
           TITLE: 'CI alert: rollback'
           AFFECTS_PRODUCTION: true
           RESULTS: ${{ join(needs.*.result, ' ') }}
+          ALERT_DETAIL: 'To retry, run rollback.yml with -f dry_run=false -f target=<the sha the plan job named>; it keeps a domain that serves that build and deploys its edge functions again.'
         run: bash .github/scripts/alert-issue.sh run "$TITLE" "$RESULTS"
