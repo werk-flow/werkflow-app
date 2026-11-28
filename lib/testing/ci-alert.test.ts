@@ -410,8 +410,6 @@ function decide(mode: string, ahead: boolean, fullRunConclusion: string, run: ob
   ]);
   const result = bash(repository, candidateScript, [mode], {
     COMMIT: revParse(repository, 'HEAD'),
-    // The domain serves the head of production: no rollback is in place.
-    SERVED_SHA: revParse(repository, 'origin/production'),
   });
   expect(result.status).toBe(0);
   return {

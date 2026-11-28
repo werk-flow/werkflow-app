@@ -229,13 +229,12 @@ function release(
   spawnSync('git', ['init', '-qb', 'main', repository]);
   git('commit', '--allow-empty', '-qm', 'shipped');
   git('update-ref', 'refs/remotes/origin/production', 'HEAD');
-  const shipped = git('rev-parse', 'HEAD').stdout.trim();
   git('commit', '--allow-empty', '-qm', 'new');
   const commit = git('rev-parse', 'HEAD').stdout.trim();
   const result = spawnSync('bash', [join(scripts, 'release-candidate.sh'), 'scheduled'], {
     cwd: repository,
     encoding: 'utf8',
-    env: { ...gateEnv(), COMMIT: commit, SERVED_SHA: shipped },
+    env: { ...gateEnv(), COMMIT: commit },
   });
   return {
     status: result.status,
@@ -355,6 +354,7 @@ test('the gate jobs may read check runs, so a configured App is not refused by G
     contents: 'read',
     actions: 'read',
     checks: 'read',
+    issues: 'read',
   });
   const fullRun = readWorkflow('main-full-run.yml');
   expect(fullRun.at('jobs', 'decide', 'permissions')).toMatchObject({ checks: 'read' });

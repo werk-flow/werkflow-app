@@ -47,7 +47,7 @@ beforeEach(() => {
 
 afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
-function rollBack(state: string, served: string) {
+function rollBack(state: string, served: string, active = false) {
   writeFileSync(join(stub, 'state'), state);
   writeFileSync(join(stub, 'served'), served);
   const result = spawnSync('bash', [script, 'dpl_old'], {
@@ -59,6 +59,7 @@ function rollBack(state: string, served: string) {
       VERCEL_TOKEN: 'token',
       VERCEL_TEAM_ID: 'team_a',
       VERCEL_PROJECT_ID: 'prj_a',
+      ROLLBACK_ACTIVE: String(active),
     },
   });
   const requests = existsSync(join(stub, 'requests'))
@@ -79,10 +80,16 @@ test('a ready build is switched to with an Instant Rollback, never a promote or 
   expect(result.output).toContain('app.werk-flow.app serves dpl_old.');
 });
 
-test('a build that serves already is left alone, so a retry resumes', () => {
-  const result = rollBack('READY', 'dpl_old');
+test('after an earlier rollback to it, a build that serves already is left alone, so a retry resumes', () => {
+  const result = rollBack('READY', 'dpl_old', true);
   expect(result.status, result.output).toBe(0);
   expect(result.requests.filter((request) => request.startsWith('POST'))).toEqual([]);
+});
+
+test('without an earlier rollback, a build that serves still gets the Instant Rollback that stops newer builds', () => {
+  const result = rollBack('READY', 'dpl_old');
+  expect(result.status, result.output).toBe(0);
+  expect(result.requests).toContain('POST https://api.vercel.com/v1/projects/prj_a/rollback/dpl_old');
 });
 
 test('a build that is not ready is refused before any switch', () => {

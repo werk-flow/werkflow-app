@@ -74,7 +74,8 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
-      actions: read
+      actions: read # the release runs: one still going, and which migrations reached PROD
+      issues: write # "Rollback in place", opened before the switch
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -111,11 +112,34 @@ jobs:
           SHA: ${{ needs.plan.outputs.sha }}
         run: git restore --source="$SHA" --staged --worktree -- supabase/functions
 
+      # An open "Rollback in place" means an earlier run of this workflow switched the domain, so a
+      # domain that serves the target already is a resume, not a release that never finished.
+      - name: Find an earlier rollback
+        id: earlier
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash .github/scripts/rollback-in-place.sh
+
+      # Before the switch, so scheduled releases hold even when a later step fails. A release by hand
+      # closes it.
+      - name: Open "Rollback in place"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          AFFECTS_PRODUCTION: true
+          SHA: ${{ needs.plan.outputs.sha }}
+          DEPLOYMENT: ${{ needs.plan.outputs.deployment }}
+        run: |
+          body="$(printf 'rollback.yml switches app.werk-flow.app to %s (%s). Scheduled releases hold while this is open. Repair main by PR, then release by hand (gh workflow run release), which closes this issue.' "$SHA" "$DEPLOYMENT")"
+          bash .github/scripts/alert-issue.sh open 'Rollback in place' "$body"
+
       # The code first: it is what users see, and the switch takes seconds.
       - name: Switch the domain to the planned build
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           DEPLOYMENT: ${{ needs.plan.outputs.deployment }}
+          ROLLBACK_ACTIVE: ${{ steps.earlier.outputs.issue != '' }}
         run: bash .github/scripts/rollback-switch.sh "$DEPLOYMENT"
 
       # A failure here leaves the old code on the new functions: run again with -f target=<sha>,

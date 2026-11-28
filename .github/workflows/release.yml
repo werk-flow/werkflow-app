@@ -56,6 +56,7 @@ jobs:
       contents: read
       actions: read # the full runs of GitHub Actions
       checks: read # the CI App's full runs (.github/scripts/check-app.sh)
+      issues: read # a rollback in place
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
       verified: ${{ steps.candidate.outputs.verified }}
@@ -67,22 +68,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      # After a rollback the domain serves an older build than production's head, and a scheduled
-      # run holds (release-candidate.sh). A release by hand needs no answer. Metadata only.
-      - name: Read the commit production serves
-        id: served
+      # rollback.yml opens "Rollback in place" before it switches the domain; a scheduled run holds
+      # while it is open (release-candidate.sh). A release by hand needs no answer.
+      - name: Find a rollback in place
+        id: rollback
         if: ${{ inputs.dry_run || inputs.scheduled }}
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: bash .github/scripts/served-commit.sh
-
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash .github/scripts/rollback-in-place.sh
       # The script reads GitHub anonymously; the job token only lifts the shared runner's rate limit.
       - name: Decide the release
         id: candidate
         env:
           GH_TOKEN: ${{ github.token }}
           MODE: ${{ inputs.dry_run && 'dry-run' || inputs.scheduled && 'scheduled' || 'manual' }}
-          SERVED_SHA: ${{ steps.served.outputs.sha }}
+          ROLLBACK_ISSUE: ${{ steps.rollback.outputs.issue }}
         run: bash .github/scripts/release-candidate.sh "$MODE"
 
   full:
@@ -137,6 +138,9 @@ jobs:
     environment: production
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: read # a rollback in place
     outputs:
       deployment: ${{ steps.promote.outputs.deployment }}
     steps:
@@ -146,6 +150,18 @@ jobs:
           ref: ${{ needs.candidate.outputs.sha }}
           fetch-depth: 0
           ssh-key: ${{ secrets.PRODUCTION_DEPLOY_KEY }}
+
+      # A rerun of this job reuses the candidate's decision, which may predate a rollback: a
+      # scheduled release checks again before its first write to PROD.
+      - name: Hold while a rollback is in place
+        if: ${{ inputs.scheduled }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          GITHUB_OUTPUT="$RUNNER_TEMP/rollback.txt" bash .github/scripts/rollback-in-place.sh
+          issue="$(sed -n 's/^issue=//p' "$RUNNER_TEMP/rollback.txt")"
+          test -z "$issue" || { echo "::error::A rollback is in place (#${issue}); a scheduled release does not undo it. Release by hand once main holds the fix."; exit 1; }
 
       - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
         with:
@@ -248,3 +264,11 @@ jobs:
           SKIP: ${{ needs.candidate.outputs.skip || inputs.alert_proof }}
           SKIP_REASON: ${{ needs.candidate.outputs.skip_reason || 'Proof run.' }}
         run: bash .github/scripts/alert-issue.sh run "$TITLE" "$RESULTS" "$SKIP" "$SKIP_REASON"
+      # A shipped release serves production's head again, so a rollback is no longer in place.
+      - name: Close a rollback in place
+        if: ${{ needs.release.result == 'success' && needs.smoke.result == 'success' && !inputs.alert_proof }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ needs.candidate.outputs.sha }}
+        run: bash .github/scripts/alert-issue.sh close 'Rollback in place' "Release ${SHA} serves production again." 

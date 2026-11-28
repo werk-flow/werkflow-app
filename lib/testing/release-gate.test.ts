@@ -24,7 +24,6 @@ const T = '2026-11-21T09:00:00Z';
 
 let stub = '';
 let commit = '';
-let shipped = '';
 
 beforeEach(() => {
   stub = mkdtempSync(join(tmpdir(), 'release-gate-'));
@@ -46,7 +45,6 @@ beforeEach(() => {
   spawnSync('git', ['init', '-qb', 'main', repository]);
   git('commit', '--allow-empty', '-qm', 'shipped');
   git('update-ref', 'refs/remotes/origin/production', 'HEAD');
-  shipped = git('rev-parse', 'HEAD').stdout.trim();
   git('commit', '--allow-empty', '-qm', 'new');
   commit = git('rev-parse', 'HEAD').stdout.trim();
 });
@@ -116,8 +114,6 @@ function decide(mode = 'scheduled', env: Record<string, string> = {}) {
       COMMIT: commit,
       GITHUB_REF: 'refs/heads/main',
       GITHUB_OUTPUT: join(stub, 'output'),
-      // The domain serves the head of production: no rollback is in place.
-      SERVED_SHA: shipped,
       ...env,
     },
   });
@@ -298,16 +294,12 @@ test('a GH_TOKEN, where set, reaches only api.github.com, and only as a curl con
 
 test('a scheduled run holds while a rollback is in place, and a release by hand goes on', () => {
   appChecks([{ conclusion: 'success', completed_at: T }]);
-  const held = decide('scheduled', { SERVED_SHA: 'a0'.repeat(20) });
+  const held = decide('scheduled', { ROLLBACK_ISSUE: '812' });
   expect(held.status, held.output).toBe(0);
   expect(held.outputs).toContain('release=false');
   expect(held.outputs).toContain('skip=red-run');
-  expect(held.output).toContain('a rollback is in place');
-  expect(decide('dry-run', { SERVED_SHA: 'a0'.repeat(20) }).outputs).toContain('release=false');
-  expect(decide('manual', { SERVED_SHA: '' }).outputs).toContain('release=true');
-});
-
-test('a scheduled run that does not know what production serves stops the gate', () => {
-  appChecks([{ conclusion: 'success', completed_at: T }]);
-  expectStopped(decide('scheduled', { SERVED_SHA: '' }), 'The commit production serves is unknown');
+  expect(held.output).toContain('A rollback is in place (#812)');
+  expect(decide('dry-run', { ROLLBACK_ISSUE: '812' }).outputs).toContain('release=false');
+  expect(decide('manual', { ROLLBACK_ISSUE: '812' }).outputs).toContain('release=true');
+  expect(decide('scheduled', { ROLLBACK_ISSUE: '' }).outputs).toContain('release=true');
 });

@@ -6,7 +6,7 @@
 # Vercel's own rollback makes. Unlike a promote, a rollback stops Vercel from assigning the domain to
 # newer production builds, so a build still finishing from a failed release cannot take the traffic
 # back; the next release promotes its own build explicitly (release-promote.sh). It never rebuilds.
-# A build the domain serves already is left as it is, so a retry resumes. Then it waits until the
+# A retry after an earlier rollback to the same build resumes without a second switch. Then it waits until the
 # domain serves the build. Every call goes through vercel-api.sh.
 # Needs VERCEL_TOKEN, VERCEL_TEAM_ID and VERCEL_PROJECT_ID.
 set -euo pipefail
@@ -24,8 +24,11 @@ state="$(vercel_api "${api}/v13/deployments/${id}?${team}" | jq -r '.readyState 
   || { echo "::error::Vercel did not report the build ${id}."; exit 1; }
 test "$state" = READY || { echo "::error::The build ${id} is ${state:-unknown}, not READY; the rollback switches only to a ready build."; exit 1; }
 
-if test "$(served)" = "$id"; then
-  echo "${domain} serves ${id} already."
+# Only an earlier rollback to this build (ROLLBACK_ACTIVE=true, its issue still open) lets a domain that
+# serves it already stand: a release that timed out may still be building, and only an Instant
+# Rollback stops it taking the traffic.
+if test "${ROLLBACK_ACTIVE:-false}" = true && test "$(served)" = "$id"; then
+  echo "${domain} serves ${id} already, from an earlier rollback."
   exit 0
 fi
 vercel_api -X POST "${api}/v1/projects/${VERCEL_PROJECT_ID}/rollback/${id}?${team}&description=rollback.yml" > /dev/null \
