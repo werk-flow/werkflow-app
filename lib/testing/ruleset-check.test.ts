@@ -9,9 +9,14 @@ import { join, resolve } from 'node:path';
 const script = resolve(import.meta.dir, '../../.github/scripts/ruleset-check.sh');
 
 type Rule = { type: string; parameters?: Record<string, unknown> };
-type Ruleset = { enforcement: string; conditions: unknown; rules: Rule[]; bypass_actors?: unknown[] };
+type Ruleset = {
+  enforcement: string;
+  conditions: { ref_name: { include: string[]; exclude: string[] } };
+  rules: Rule[];
+  current_user_can_bypass?: string;
+};
 
-// The live rulesets as an admin reads them (2026-11-28); the job token gets them without bypass_actors.
+// The live rulesets as the job token reads them (2026-11-28): rules and its own bypass, no bypass list.
 function liveMain(): Ruleset {
   return {
     enforcement: 'active',
@@ -33,7 +38,7 @@ function liveMain(): Ruleset {
         parameters: { grouping_strategy: 'ALLGREEN', merge_method: 'SQUASH', max_entries_to_build: 2 },
       },
     ],
-    bypass_actors: [],
+    current_user_can_bypass: 'never',
   };
 }
 
@@ -42,15 +47,14 @@ function liveProduction(): Ruleset {
     enforcement: 'active',
     conditions: { ref_name: { exclude: [], include: ['refs/heads/production'] } },
     rules: [{ type: 'update' }, { type: 'deletion' }, { type: 'non_fast_forward' }],
-    bypass_actors: [{ actor_id: null, actor_type: 'DeployKey', bypass_mode: 'always' }],
+    current_user_can_bypass: 'never',
   };
 }
 
-// Answers `gh api repos/<repo>/rulesets/<id>` from $STUB/<id>.json, without bypass_actors unless the
-// call carries the admin token.
+// Answers `gh api repos/<repo>/rulesets/<id>` from $STUB/<id>.json, or fails while $STUB/down exists.
 const GH_STUB = `#!/usr/bin/env bash
-id="\${2##*/}"
-if test "$GH_TOKEN" = admin-token; then cat "$STUB/$id.json"; else jq 'del(.bypass_actors)' "$STUB/$id.json"; fi
+test ! -e "$STUB/down" || exit 1
+cat "$STUB/\${2##*/}.json"
 `;
 
 let stub = '';
@@ -63,7 +67,7 @@ beforeEach(() => {
 
 afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
-function check(main: Ruleset, production: Ruleset, adminToken = 'admin-token') {
+function check(main: Ruleset, production: Ruleset) {
   writeFileSync(join(stub, '25878425.json'), JSON.stringify(main));
   writeFileSync(join(stub, '25878432.json'), JSON.stringify(production));
   const result = spawnSync('bash', [script], {
@@ -74,7 +78,6 @@ function check(main: Ruleset, production: Ruleset, adminToken = 'admin-token') {
       STUB: stub,
       GH_TOKEN: 'job-token',
       GH_REPO: 'werk-flow/werkflow-app',
-      RULESET_ADMIN_TOKEN: adminToken,
     },
   });
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
@@ -85,7 +88,7 @@ const without = (ruleset: Ruleset, type: string): Ruleset => ({
   rules: ruleset.rules.filter((rule) => rule.type !== type),
 });
 
-test('today’s rulesets hold, bypass lists included', () => {
+test('today’s rulesets hold', () => {
   const result = check(liveMain(), liveProduction());
   expect(result.status, result.output).toBe(0);
   expect(result.output).toContain('The main and production rulesets hold.');
@@ -109,30 +112,39 @@ test('the merge queue off, Check no longer required, or a merge other than squas
   expect(result.output).toContain('main: requires a pull request that merges by squash only');
 });
 
-test('a production ruleset that lets another actor through, or stops refusing updates, is drift', () => {
-  const widened = liveProduction();
-  widened.bypass_actors = [
-    ...(widened.bypass_actors ?? []),
-    { actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' },
-  ];
-  expect(check(liveMain(), widened).output).toContain('production: lets only a deploy key bypass it');
-  const disabled = { ...liveProduction(), enforcement: 'evaluate' };
-  expect(check(liveMain(), disabled).output).toContain('production: is active');
+test('an exclusion that takes the branch out of its ruleset is drift, for main and production', () => {
+  const main = liveMain();
+  main.conditions = { ref_name: { include: ['refs/heads/main'], exclude: ['refs/heads/main'] } };
+  expect(check(main, liveProduction()).output).toContain(
+    'main: targets refs/heads/main and excludes nothing',
+  );
+  const production = liveProduction();
+  production.conditions = {
+    ref_name: { include: ['refs/heads/production'], exclude: ['refs/heads/production'] },
+  };
+  expect(check(liveMain(), production).output).toContain(
+    'production: targets refs/heads/production and excludes nothing',
+  );
+});
+
+test('GitHub Actions allowed to bypass, or a production ruleset that stops refusing updates, is drift', () => {
+  expect(check(liveMain(), { ...liveProduction(), current_user_can_bypass: 'always' }).output).toContain(
+    'production: lets GitHub Actions bypass nothing',
+  );
+  const unread = liveMain();
+  delete unread.current_user_can_bypass;
+  expect(check(unread, liveProduction()).output).toContain('main: lets GitHub Actions bypass nothing');
+  expect(check(liveMain(), { ...liveProduction(), enforcement: 'evaluate' }).output).toContain(
+    'production: is active',
+  );
   expect(check(liveMain(), without(liveProduction(), 'update')).output).toContain(
     'production: refuses every update',
   );
 });
 
-test('an admin token that cannot see the bypass lists fails instead of passing unseen', () => {
-  const unread = liveMain();
-  delete unread.bypass_actors;
-  const result = check(unread, liveProduction());
-  expect(result.status).toBe(1);
-  expect(result.output).toContain('main: shows its bypass list to RULESET_ADMIN_TOKEN');
-});
-
-test('without the admin token the rules are checked and the unchecked bypass lists are named', () => {
-  const result = check(liveMain(), liveProduction(), '');
-  expect(result.status, result.output).toBe(0);
-  expect(result.output).toContain('RULESET_ADMIN_TOKEN is not set');
+test('an unreadable ruleset proves nothing and says so with its own exit code', () => {
+  writeFileSync(join(stub, 'down'), '');
+  const result = check(liveMain(), liveProduction());
+  expect(result.status).toBe(2);
+  expect(result.output).toContain('GitHub did not return the main ruleset');
 });

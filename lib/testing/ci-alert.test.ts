@@ -318,7 +318,7 @@ test('only the release, its missed-run alert, the ruleset watch, the health chec
     'release.yml',
     'rulesets.yml',
   ]);
-  for (const file of ['release.yml', 'production-alert.yml', 'prod-inspect.yml', 'rulesets.yml'])
+  for (const file of ['release.yml', 'production-alert.yml', 'prod-inspect.yml'])
     expect(readFileSync(join(workflows, file), 'utf8'), file).toContain('AFFECTS_PRODUCTION: true\n');
 });
 
