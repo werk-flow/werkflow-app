@@ -155,6 +155,7 @@ mock.module('@/lib/ai/files/thread-files', () => ({ getAiFileUrl: seam('ki-file-
 mock.module('@/lib/ai/thread-reads', () => ({
   getAiThreadPage: seam('ki-thread-page'),
   getAiThreadWindow: seam('ki-thread-window'),
+  getAiToolDetail: seam('ki-tool-detail'),
 }));
 mock.module('@/lib/attention/actions', () => ({ getAttentionOverview: seam('attention-overview') }));
 mock.module('@/lib/calendar/actions', () => ({ getAbsenceAffectedVisits: seam('absence-affected-visits') }));
@@ -539,6 +540,7 @@ const inputs: Record<string, unknown> = {
   'global-search': { organizationId, query: ' 0711 / 123 45 ' },
   'ki-thread-page': { organizationId },
   'ki-thread-window': { organizationId, threadId: jobId },
+  'ki-tool-detail': { organizationId, threadId: jobId, key: 'turn:tool:1' },
   'ki-file-url': { organizationId, fileId: jobId },
 };
 // What each reader receives: some take the bare identifier, the rest the validated object.

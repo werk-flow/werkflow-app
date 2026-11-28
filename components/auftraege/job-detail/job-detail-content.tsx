@@ -14,7 +14,7 @@ import type { WorkBillingParties } from '@/lib/billing-parties/types';
 
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { JobTimeParticipant, TimeEntry } from '@/lib/time-tracking/types';
-import { JOB_TIME_LIVE_TABLES } from '@/lib/time-tracking/job-time-live-tables';
+import { isJobTimeEventRelevant, JOB_TIME_LIVE_TABLES } from '@/lib/time-tracking/job-time-live-tables';
 import { useLiveView } from '@/hooks/use-live-view';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import {
@@ -65,6 +65,11 @@ function useJobDetailTimeEntries(jobId: string) {
     participants: JobTimeParticipant[];
   }>({
     tables: JOB_TIME_LIVE_TABLES,
+    eventFilter: (event): boolean =>
+      isJobTimeEventRelevant(
+        event,
+        timeView.data?.participants.map((participant) => participant.userId) ?? [],
+      ),
     read: async ({ signal }) => {
       const result = await readInBackground('time-entries-for-job', { jobId }, signal);
       if (!result.success) return { ok: false };

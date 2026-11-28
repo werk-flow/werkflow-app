@@ -20,3 +20,12 @@ export const OFFER_SQL_FILES: readonly string[] = [
   'offer_position_types.sql',
   'offer_acceptance.sql',
 ];
+
+/** Rate limits and WerkFlow KI's threads, turn charges, tool rows and files (`sql:rate-limits`). */
+export const RATE_LIMIT_SQL_FILES: readonly string[] = [
+  'rate_limits.sql',
+  'ai_threads.sql',
+  'ai_turn_charges.sql',
+  'ai_tool_items.sql',
+  'ai_thread_files.sql',
+];
