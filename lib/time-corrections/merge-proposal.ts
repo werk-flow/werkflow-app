@@ -2,6 +2,7 @@ import type { ActionResult } from '@/lib/action-result';
 import { getLocalDayStart } from '@/lib/date-time/berlin';
 import { isSameActivitySelection } from '@/lib/time-tracking/clock-actions';
 import type { TimeActivitySelection } from '@/lib/time-tracking/types';
+import { correctionDayOwner } from './timeline-validation';
 import type { TimeCorrectionFact, TimeCorrectionSnapshot } from './types';
 import type { SubmitTimeCorrectionInput } from './validation';
 
@@ -207,9 +208,10 @@ export function mergeApplicationCorrection(input: {
   if (kind === 'edit') {
     const [patch, ...rest] = proposed.facts;
     if (!patch || rest.length) return { success: false, error: 'invalid_shape' };
-    return replace(
-      before.facts.slice(from, to).with(target - from, { ...named, timestamp: patch.timestamp }),
-    );
+    const edited = before.facts.slice(from, to).with(target - from, { ...named, timestamp: patch.timestamp });
+    // One moved boundary never carries an interval over midnight (an applied one never crosses it).
+    const days = new Set(edited.map((fact) => getLocalDayStart(correctionDayOwner(fact)).getTime()));
+    return days.size > 1 ? { success: false, error: 'correction_crosses_midnight' } : replace(edited);
   }
   const interval = before.facts.slice(from, to);
   const [start] = interval;
@@ -218,7 +220,7 @@ export function mergeApplicationCorrection(input: {
   }
   if (kind === 'split') {
     const split = splitInterval(start, proposed, input.newFactIdPrefix);
-    return split ? replace(split) : { success: false, error: 'activity_context_required' };
+    return typeof split === 'string' ? { success: false, error: split } : replace(split);
   }
   const merged = mergeCorrectionProposal(kind, { schemaVersion: 1, facts: interval }, proposed);
   if (!merged) return { success: false, error: 'activity_context_required' };
@@ -226,16 +228,22 @@ export function mergeApplicationCorrection(input: {
 }
 
 /**
- * The split pieces of one stored activity: a piece of the same activity and
- * job keeps the stored activity with its details, such as a drive's route and
- * role. Null when a piece names another activity that needs details the
- * split form cannot supply.
+ * The split pieces of one stored activity: two pairs that meet at the split
+ * time. A piece of the same activity and job keeps the stored activity with
+ * its details, such as a drive's route and role. The refusal when the pieces
+ * are not two such pairs, or a piece names another activity that needs
+ * details the split form cannot supply.
  */
 function splitInterval(
   start: TimeCorrectionFact,
   proposed: TimeCorrectionSnapshot,
   newFactIdPrefix: string,
-): TimeCorrectionFact[] | null {
+): TimeCorrectionFact[] | 'invalid_shape' | 'activity_context_required' {
+  const [, firstEnd, secondStart] = proposed.facts;
+  const twoPairs =
+    proposed.facts.map((fact) => fact.entryType).join() === 'clock_in,clock_out,clock_in,clock_out' &&
+    firstEnd?.timestamp === secondStart?.timestamp;
+  if (!twoPairs) return 'invalid_shape';
   const pieces: TimeCorrectionFact[] = [];
   for (const [index, piece] of proposed.facts.entries()) {
     const at = {
@@ -247,7 +255,7 @@ function splitInterval(
       pieces.push({ ...start, ...at });
     else if (piece.activity || ['work', 'callout', 'break'].includes(piece.activityKind ?? 'work'))
       pieces.push({ ...piece, ...at });
-    else return null;
+    else return 'activity_context_required';
   }
   return pieces;
 }

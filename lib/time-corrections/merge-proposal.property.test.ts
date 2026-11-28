@@ -274,7 +274,8 @@ const applicationArbitrary = fc
     { minLength: 2, maxLength: 4 },
   )
   .map((shapes) => {
-    let cursor = Date.parse('2026-10-14T04:00:00.000Z');
+    // 02:00 in Berlin: at most 20 hours, so no interval reaches midnight.
+    let cursor = Date.parse('2026-10-14T00:00:00.000Z');
     const facts: TimeCorrectionFact[] = [];
     const intervals = shapes.map(([gap, minutes, withBreak, activity], index) => {
       const start = cursor + gap * MINUTE_MS;

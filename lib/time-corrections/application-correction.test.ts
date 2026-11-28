@@ -1,7 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { createInMemoryAdmin } from '@/lib/testing/fixtures/in-memory-admin';
 import type { TimeActivitySelection } from '@/lib/time-tracking/types';
-import { proposeCalendarCorrection } from './calendar-proposal';
 import type { TimeCorrectionFact, TimeCorrectionSnapshot } from './types';
 import type { SubmitTimeCorrectionInput } from './validation';
 
@@ -289,6 +288,29 @@ describe('A correction of one interval of an approved correction', () => {
     expect(result.proposed.facts.map((item) => item.activity)).toEqual(Array(6).fill(drive));
   });
 
+  test('splits into two adjoining pairs only, so no other activity starts at a sibling', async () => {
+    expect(
+      await correct({
+        kind: 'split',
+        factId: 'a0',
+        proposedFacts: [
+          proposed('clock_in', '08:00'),
+          proposed('clock_out', '09:00'),
+          proposed('clock_in', '09:00'),
+          proposed('clock_out', '10:00'),
+          proposed('break_start', '13:00'),
+        ],
+      }),
+    ).toEqual({ error: 'invalid_shape' });
+  });
+
+  test('refuses an edit that moves only the end past midnight', async () => {
+    // 2026-10-14T22:00Z is midnight in Berlin.
+    expect(
+      await correct({ kind: 'edit', factId: 'a3', proposedFacts: [proposed('clock_out', '23:00')] }),
+    ).toEqual({ error: 'correction_crosses_midnight' });
+  });
+
   test('without the fact it names is refused', async () => {
     expect(await correct({ kind: 'delete', factId: 'gone', proposedFacts: [] })).toEqual({
       error: 'source_not_found',
@@ -332,28 +354,40 @@ describe("The calendar's correction of an approved correction", () => {
     timestamp: at(newTime),
     employeeRecordId: RECORD,
   });
+  /** A calendar submission: it names its sources in its boundaries and no applied fact. */
+  const adjust = (calendarAdjustment: Array<ReturnType<typeof boundary>>) =>
+    proposeSubmission({
+      submission: {
+        organizationId: ORGANIZATION,
+        subjectEmployeeRecordId: RECORD,
+        kind: 'edit',
+        reason: 'Zeit verschoben',
+        source: null,
+        proposedFacts: [],
+        operationId: OPERATION,
+        calendarAdjustment,
+      },
+      subject: { id: RECORD, userId: USER, role: 'employee' },
+      sourceInputs: [source],
+      contexts: [{ source, snapshot: twoIntervals }],
+    });
 
-  test('of one interval of several is refused, never a partial replacement', () => {
-    expect(
-      proposeCalendarCorrection({
-        contexts: [{ source, snapshot: twoIntervals }],
-        boundaries: [boundary('clock_in', '13:00', '13:30'), boundary('clock_out', '15:00')],
-      }),
-    ).toEqual({ success: false, error: 'calendar_incomplete_source' });
+  test('of one interval of several is refused, never a partial replacement', async () => {
+    expect(await adjust([boundary('clock_in', '13:00', '13:30'), boundary('clock_out', '15:00')])).toEqual({
+      success: false,
+      error: 'calendar_incomplete_source',
+    });
   });
 
-  test('moves each boundary by its own original time, not the first of its type', () => {
-    const result = proposeCalendarCorrection({
-      contexts: [{ source, snapshot: twoIntervals }],
-      boundaries: [
-        boundary('clock_in', '08:00'),
-        boundary('clock_out', '10:00'),
-        boundary('clock_in', '13:00', '13:30'),
-        boundary('clock_out', '15:00'),
-      ],
-    });
+  test('moves each boundary by its own original time, not the first of its type', async () => {
+    const result = await adjust([
+      boundary('clock_in', '08:00'),
+      boundary('clock_out', '10:00'),
+      boundary('clock_in', '13:00', '13:30'),
+      boundary('clock_out', '15:00'),
+    ]);
     if (!result.success) throw new Error(result.error);
-    expect(recorded(result.snapshot.facts)).toEqual([
+    expect(recorded(result.proposed.facts)).toEqual([
       ...firstInterval,
       ['clock_in', '13:30', null, RECORD],
       ['clock_out', '15:00', null, RECORD],
