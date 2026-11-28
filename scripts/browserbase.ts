@@ -198,13 +198,19 @@ async function fetchPage(url: string, output: string | undefined): Promise<numbe
     await api(key, '/fetch', { url, format: 'raw', allowRedirects: false }),
     fetchSchema,
   );
+  const note = redirectNote(url, page.statusCode, page.headers);
+  // A redirect's body can echo its full destination, query included, so only its note is shown.
+  if (page.statusCode >= 300 && page.statusCode < 400) {
+    console.log(`[browserbase] HTTP ${page.statusCode}${note}; the body of a redirect is not shown.`);
+    return 0;
+  }
   if (output) {
     writeFileSync(output, page.content);
     console.log(
-      `[browserbase] HTTP ${page.statusCode}${redirectNote(url, page.statusCode, page.headers)}, ${Buffer.byteLength(page.content)} bytes written to ${output}`,
+      `[browserbase] HTTP ${page.statusCode}, ${Buffer.byteLength(page.content)} bytes written to ${output}`,
     );
   } else {
-    console.error(`[browserbase] HTTP ${page.statusCode}${redirectNote(url, page.statusCode, page.headers)}`);
+    console.error(`[browserbase] HTTP ${page.statusCode}`);
     process.stdout.write(page.content);
   }
   return 0;
