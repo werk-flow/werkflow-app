@@ -37,7 +37,7 @@ export const DECISION_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   scope_mismatch: DECISION_FAILED,
 };
 
-type DecidableOffer = Pick<OfferDetail, 'id' | 'offerNumber' | 'version'>;
+type DecidableOffer = Pick<OfferDetail, 'id' | 'offerNumber' | 'version' | 'status'>;
 
 /** What each reason step records, says and confirms. */
 const STEPS = {
@@ -146,6 +146,13 @@ function OfferReasonDialog({
             <DialogDescription>{STEPS[step].description}</DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-2">
+            {offer.status === 'entwurf' && (
+              // The decision is on the sent revision: the open draft of the next one closes unsent.
+              <p className="text-sm text-muted-foreground">
+                Der Entwurf der nächsten Revision wird damit geschlossen, und seine Änderungen werden nicht
+                gesendet.
+              </p>
+            )}
             <Field label="Grund" htmlFor="offer-decision-reason" required error={reasonError}>
               <Textarea
                 id="offer-decision-reason"

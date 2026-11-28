@@ -93,7 +93,8 @@ create table public.offer_acceptance_withdrawals (
   created_at timestamptz not null default now(),
   constraint offer_acceptance_withdrawals_acceptance_fk foreign key (acceptance_id, organization_id)
     references public.offer_acceptances (id, organization_id) on delete cascade,
-  constraint offer_acceptance_withdrawals_acceptance_unique unique (acceptance_id),
+  -- One withdrawal per Annahme; the key also serves the foreign key's lookup.
+  constraint offer_acceptance_withdrawals_acceptance_unique unique (acceptance_id, organization_id),
   constraint offer_acceptance_withdrawals_reason_check check (
     btrim(reason) <> '' and char_length(reason) <= 2000
   )
@@ -101,8 +102,6 @@ create table public.offer_acceptance_withdrawals (
 
 create index offer_acceptance_withdrawals_organization_id_fk_idx
   on public.offer_acceptance_withdrawals (organization_id);
-create index offer_acceptance_withdrawals_acceptance_idx
-  on public.offer_acceptance_withdrawals (acceptance_id, organization_id);
 create index offer_acceptance_withdrawals_withdrawn_by_idx on public.offer_acceptance_withdrawals (withdrawn_by);
 
 -- The server reads and writes both, as it does the revisions; no signed-in role reads a row.

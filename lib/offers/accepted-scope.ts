@@ -105,8 +105,9 @@ export type ScopeTotals = { netCents: number; taxCents: number; grossCents: numb
 
 /**
  * The totals of the Auftragsumfang for the options `chosen` by number, or
- * null when one is not an option of the revision, is named twice, or a second
- * Alternativposition replaces the same Position.
+ * null when one is not an option of the revision, is named twice, a second
+ * Alternativposition replaces the same Position, or the sum is beyond what
+ * the offer's amount rule computes.
  */
 export function acceptedScopeTotals(content: RevisionContent, chosen: readonly string[]): ScopeTotals | null {
   const options = offerOptions(content);
@@ -124,12 +125,18 @@ export function acceptedScopeTotals(content: RevisionContent, chosen: readonly s
   const kept = pricedLines(content).filter((line) =>
     line.positionType ? chosen.includes(line.number) : !replaced.includes(line.number),
   );
-  const amounts = offerAmounts([
-    { positions: kept.map((line) => ({ ...line, positionType: { kind: 'normal' as const } })) },
-  ]);
-  return {
-    netCents: amounts.totals.lineNetCents,
-    taxCents: amounts.totals.taxCents,
-    grossCents: amounts.totals.grossCents,
-  };
+  try {
+    const amounts = offerAmounts([
+      { positions: kept.map((line) => ({ ...line, positionType: { kind: 'normal' as const } })) },
+    ]);
+    return {
+      netCents: amounts.totals.lineNetCents,
+      taxCents: amounts.totals.taxCents,
+      grossCents: amounts.totals.grossCents,
+    };
+  } catch (error) {
+    // Options beyond what one total can hold: nothing is guessed, as a content save refuses them.
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
 }

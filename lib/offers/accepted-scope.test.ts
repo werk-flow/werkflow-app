@@ -113,6 +113,22 @@ describe('acceptedScopeTotals', () => {
     ];
     expect(acceptedScopeTotals(twoAlternatives, ['1.2', '1.3'])).toBeNull();
   });
+  test('answers null, never a throw, for options whose sum the amount rule refuses', () => {
+    const line = { unitPriceCents: 1_000_000_000_000, amountCents: 1_000_000_000_000 };
+    const huge: RevisionContent = [
+      {
+        number: '1',
+        title: 'Großprojekt',
+        netCents: 0,
+        positions: [
+          priced('1.1', { ...line, positionType: 'bedarf' }),
+          priced('1.2', { ...line, positionType: 'bedarf' }),
+          priced('1.3', { ...line, positionType: 'bedarf' }),
+        ],
+      },
+    ];
+    expect(acceptedScopeTotals(huge, ['1.1', '1.2', '1.3'])).toBeNull();
+  });
 });
 
 describe('offerOptions', () => {
