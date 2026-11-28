@@ -440,6 +440,28 @@ const EXTRACTIONS: Readonly<Record<string, () => StreamPart[]>> = {
         },
       ],
     }),
+  // Lines that do not fit the inventory as they stand: a pack of 10 against a piece article, a
+  // number no own article carries, a unit outside the list, an article with an old free-text unit, and a
+  // number with a quote, which a PostgREST `in` list cannot carry.
+  abweichend: () =>
+    extraction({
+      ...LIEFERSCHEIN,
+      positionen: [
+        LIEFERSCHEIN.positionen[0],
+        LIEFERSCHEIN.positionen[1],
+        {
+          ...LIEFERSCHEIN.positionen[0],
+          artikelnummer: 'GC-99999',
+          ean: null,
+          beschreibung: 'Flexschlauch 3/8"',
+          menge: 3,
+          einheit: 'Stk',
+        },
+        { ...LIEFERSCHEIN.positionen[0], ean: null, menge: 2, einheit: 'Bündel' },
+        { ...LIEFERSCHEIN.positionen[0], artikelnummer: 'GC-30030', ean: null, menge: 1, einheit: 'Stk' },
+        { ...LIEFERSCHEIN.positionen[0], artikelnummer: 'GC-"40", (B)', ean: null, menge: 6, einheit: 'Stk' },
+      ],
+    }),
   // About three seconds of writing: a stop lands while the extractor runs.
   langsam: () => extraction(LIEFERSCHEIN, 30),
   // An answer cut at the extractor's output cap: paid for, and nothing read from it.
@@ -452,6 +474,19 @@ const EXTRACTIONS: Readonly<Record<string, () => StreamPart[]>> = {
   ],
   // An answer that is no Lieferschein: the extractor reads nothing from it.
   kaputt: () => [...textParts('Das ist kein Lieferschein.'), finish('stop', 2400, 10)],
+  // Fifty lines with long descriptions: within the extractor's cap, but past the tool's result budget.
+  ausfuehrlich: () =>
+    extraction({
+      ...LIEFERSCHEIN,
+      positionen: Array.from({ length: 50 }, (_, index) => ({
+        ...LIEFERSCHEIN.positionen[0],
+        artikelnummer: `GC-MVR-16X2-ROLLE-50M-TRINKWASSER-${10 + index}`,
+        beschreibung:
+          `Übergangsstück für Fußbodenheizung, Überwurfmutter ¾ Zoll, äußerst flexibel, Größe ${index} `.repeat(
+            2,
+          ),
+      })),
+    }),
   // Lines past the extractor's cap: the result keeps the first ones and says it was cut.
   lang: () =>
     extraction({

@@ -74,6 +74,13 @@ describe('normalizeInventoryUnitInput', () => {
     for (const unit of INVENTORY_UNITS) expect(normalizeInventoryUnitInput(unit.code)).toBe(unit.code);
   });
 
+  test('maps each unit’s own long and short label to it, as WerkFlow and a Lieferschein print them', () => {
+    for (const unit of INVENTORY_UNITS) {
+      expect(normalizeInventoryUnitInput(unit.label), unit.label).toBe(unit.code);
+      expect(normalizeInventoryUnitInput(unit.shortLabel), unit.shortLabel).toBe(unit.code);
+    }
+  });
+
   test('returns unknown for text it cannot map and for no text, never Stück', () => {
     for (const input of [
       'Bogen',

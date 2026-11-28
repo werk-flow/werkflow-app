@@ -21,7 +21,9 @@ import { TextLink } from '@/components/ui/text-link';
 import { useClientRead } from '@/hooks/use-client-read';
 import type { AiQuestionRow, AiTodoRow, AiToolOutcome, AiToolRow } from '@/lib/ai/thread-types';
 import { readInBackground } from '@/lib/data/background-read-client';
+import { lieferscheinCard } from '@/lib/ui/ki-lieferschein';
 import { toolDetailLines } from '@/lib/ui/ki-rows';
+import { KiLieferscheinCard } from './ki-lieferschein-card';
 import { cn } from '@/lib/utils';
 
 // The rows of the agent's work in a WerkFlow KI thread (werk-flow/werkflow-planning#533):
@@ -61,6 +63,13 @@ function KiToolDetail({
       </div>
     );
   const { detail } = read.data;
+  const card = lieferscheinCard(detail.result);
+  if (card)
+    return (
+      <div className="ml-2 border-l py-1 pl-4">
+        <KiLieferscheinCard card={card} />
+      </div>
+    );
   const lines = toolDetailLines(detail);
   return (
     <div className="ml-2 space-y-2 border-l py-1 pl-4 text-muted-foreground">

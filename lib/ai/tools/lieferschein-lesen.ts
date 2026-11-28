@@ -1,10 +1,11 @@
 import 'server-only';
 
-import { documentText } from '@/lib/ai/context';
+import { documentText, toolResultBytes } from '@/lib/ai/context';
 import { runExtraction } from '@/lib/ai/extract/call';
 import { LIEFERSCHEIN_EXTRACTION, cappedLieferschein } from '@/lib/ai/extract/lieferschein';
-import { AI_TURN_LIMITS, AI_UPLOAD_LIMITS } from '@/lib/ai/limits';
+import { AI_EXTRACT_LIMITS, AI_TURN_LIMITS, AI_UPLOAD_LIMITS } from '@/lib/ai/limits';
 import { type AiToolRun, defineTool } from '@/lib/ai/tools/define-tool';
+import { matchedLines } from '@/lib/ai/tools/lieferschein-abgleich';
 import { logError } from '@/lib/logging';
 import type { ActionContext } from '@/lib/org/action-context';
 import { readStorageObject } from '@/lib/storage/r2';
@@ -78,7 +79,7 @@ export const lieferscheinLesen = defineTool({
   name: 'lieferschein_lesen',
   label: 'Lieferschein lesen',
   description:
-    'Liest einen Lieferschein (PDF oder Foto), den die Person im Gespräch angehängt hat: Lieferant, Nummer, Datum und Positionen als KI-Entwurf. Bucht nichts.',
+    'Liest einen Lieferschein (PDF oder Foto), den die Person im Gespräch angehängt hat: Lieferant, Nummer, Datum und Positionen, je mit eigenem Artikel, Menge in dessen Einheit und Hinweisen, als KI-Entwurf. Bucht nichts.',
   input: z.strictObject({
     datei: z.number().int().min(1).max(MAX_POSITION).describe('1 = zuletzt angehängte Datei, 2 = die davor'),
   }),
@@ -111,25 +112,38 @@ export const lieferscheinLesen = defineTool({
     if (read.status === 'stopped' || read.status === 'failed') return { status: 'failed' };
     const lieferschein = read.status === 'read' ? cappedLieferschein(read.answer) : null;
     if (!lieferschein) return { status: 'refused', message: MESSAGES.unreadable };
-    return {
-      status: 'ok',
-      value: {
-        hinweis: 'KI-Entwurf: aus dem Dokument gelesen, von niemandem geprüft und nicht gebucht.',
-        lieferant: documentText(lieferschein.lieferant),
-        lieferscheinnummer: documentText(lieferschein.lieferscheinnummer),
-        datum: lieferschein.datum,
-        positionen: lieferschein.positionen.map((line, index) => ({
-          nr: index + 1,
-          artikelnummer: documentText(line.artikelnummer),
-          ean: line.ean,
-          beschreibung: documentText(line.beschreibung),
-          menge: line.menge,
-          einheit: documentText(line.einheit),
-          packungsinhalt: line.packungsinhalt,
-        })),
-        // Null when the count of left-out lines is unknown.
-        weggelassenePositionen: lieferschein.weggelassen,
-      },
-    };
+    // The caller's access and role are read again before the inventory is: a stop or a lost
+    // membership during the extraction ends the read here.
+    if (!(await run.admit())) return { status: 'failed' };
+    const matches = await matchedLines(ctx, lieferschein.positionen, run.signal);
+    if (run.signal.aborted) return { status: 'failed' };
+    const lines = lieferschein.positionen.map((line, index) => ({
+      nr: index + 1,
+      artikelnummer: documentText(line.artikelnummer),
+      ean: line.ean,
+      beschreibung: documentText(line.beschreibung),
+      menge: line.menge,
+      einheit: documentText(line.einheit),
+      packungsinhalt: line.packungsinhalt,
+      abgleich: matches?.lines[index] ?? null,
+    }));
+    const value = (kept: number) => ({
+      hinweis: 'KI-Entwurf: aus dem Dokument gelesen, von niemandem geprüft und nicht gebucht.',
+      lieferant: documentText(lieferschein.lieferant),
+      lieferscheinnummer: documentText(lieferschein.lieferscheinnummer),
+      datum: lieferschein.datum,
+      positionen: lines.slice(0, kept),
+      // The lines stand unmatched when the articles could not be read.
+      abgleichGelesen: matches !== null,
+      // Counted over every line, also those the result budget leaves off.
+      katalogGelesen: matches?.catalogRead ?? true,
+      // Null when the count of left-out lines is unknown.
+      weggelassenePositionen:
+        lieferschein.weggelassen === null ? null : lieferschein.weggelassen + lines.length - kept,
+    });
+    // Lines past the result budget are left off from the end and counted, never cut silently.
+    let kept = lines.length;
+    while (kept > 0 && toolResultBytes(value(kept)) > AI_EXTRACT_LIMITS.maxResultBytes) kept -= 1;
+    return { status: 'ok', value: value(kept) };
   },
 });

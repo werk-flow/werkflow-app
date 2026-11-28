@@ -102,6 +102,11 @@ export function untrustedToolOutput(value: ToolValue): ToolResultPart['output'] 
   return { type: 'json', value: serializedToolValue(value) };
 }
 
+/** A tool result's bytes as the model reads it: what the turn counts against `maxToolResultBytes`. */
+export function toolResultBytes(value: ToolValue): number {
+  return Buffer.byteLength(JSON.stringify(serializedToolValue(value)), 'utf8');
+}
+
 /** One saved message of the thread: the person's own words or an earlier answer. */
 export type AiThreadMessage = { role: 'user' | 'assistant'; text: string };
 

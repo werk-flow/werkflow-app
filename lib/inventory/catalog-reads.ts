@@ -27,6 +27,7 @@ import {
   toInventorySupplier,
   toNumber,
 } from './types';
+import { toSupplierReference } from './delivery-articles';
 import { inventoryStockFacts } from './stock-facts';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import type { Database } from '@/lib/supabase/database.types';
@@ -697,17 +698,8 @@ function toArticleTermsByItem(
   );
   const byItem: Record<string, ArticleTerms> = {};
   const termsOf = (itemId: string): ArticleTerms => (byItem[itemId] ??= { suppliers: [], prices: [] });
-  for (const reference of references) {
-    termsOf(reference.item_id).suppliers.push({
-      id: reference.id,
-      supplierId: reference.supplier_id,
-      supplierArticleNumber: reference.supplier_article_number,
-      purchaseUnit: reference.purchase_unit,
-      packQuantity: toNumber(reference.pack_quantity),
-      baseQuantity: toNumber(reference.base_quantity),
-      isPreferred: reference.is_preferred,
-    });
-  }
+  for (const reference of references)
+    termsOf(reference.item_id).suppliers.push(toSupplierReference(reference));
   for (const price of prices) {
     termsOf(price.item_id).prices.push({
       id: price.id,

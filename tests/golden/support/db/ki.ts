@@ -319,3 +319,184 @@ export async function kiThreadWithRows(world: TestWorld): Promise<{ route: strin
   const threadId = await seedKiTurnWithRows(ki, 'admin', 'Welche Kunden heißen Müller?');
   return { route: `/ki?chat=${threadId}` };
 }
+
+const doc = (text: string) => ({ source: 'document', text });
+const record = (text: string) => ({ source: 'record_text', text });
+const pipe = { name: record('Kupferrohr 15 mm'), nummer: record('CU-15'), einheit: 'meter' };
+
+/** A read line as „Lieferschein lesen“ stores it with its row (lib/ai/tools/lieferschein-lesen.ts). */
+function readLine(
+  nr: number,
+  delivered: {
+    artikelnummer: string;
+    beschreibung: string;
+    menge: number;
+    einheit: string;
+    packungsinhalt?: number;
+  },
+  abgleich: { artikel: typeof pipe | null; menge: number | null; katalog?: string; hinweise?: string[] },
+) {
+  return {
+    nr,
+    artikelnummer: doc(delivered.artikelnummer),
+    ean: null,
+    beschreibung: doc(delivered.beschreibung),
+    menge: delivered.menge,
+    einheit: doc(delivered.einheit),
+    packungsinhalt: delivered.packungsinhalt ?? null,
+    abgleich: {
+      artikel: abgleich.artikel,
+      gefundenUeber: abgleich.artikel ? 'artikelnummer' : null,
+      mengeInBasiseinheit: abgleich.menge,
+      katalog: abgleich.katalog
+        ? { lieferant: record('GC Großhandel'), name: record(abgleich.katalog), einheit: 'piece' }
+        : null,
+      hinweise: abgleich.hinweise ?? [],
+    },
+  };
+}
+
+/** The two synthetic Lieferscheine of the card's captures: one that fits the inventory, one that does not. */
+const LIEFERSCHEINE = {
+  sauber: [
+    readLine(
+      1,
+      {
+        artikelnummer: 'GC-15015',
+        beschreibung: 'Kupferrohr 15 x 1 mm, Stange 5 m',
+        menge: 4,
+        einheit: 'Stange',
+      },
+      { artikel: pipe, menge: 20 },
+    ),
+    readLine(
+      2,
+      { artikelnummer: 'GC-22090', beschreibung: 'Pressbogen 90° 22 mm', menge: 20, einheit: 'Stk' },
+      {
+        artikel: { name: record('Pressbogen 90° 22 mm'), nummer: record('PB-22'), einheit: 'piece' },
+        menge: 20,
+      },
+    ),
+  ],
+  abweichend: [
+    readLine(
+      1,
+      {
+        artikelnummer: 'GC-15015',
+        beschreibung: 'Kupferrohr 15 x 1 mm, Stange 5 m',
+        menge: 4,
+        einheit: 'Stange',
+      },
+      { artikel: pipe, menge: 20 },
+    ),
+    readLine(
+      2,
+      {
+        artikelnummer: 'GC-22090',
+        beschreibung: 'Pressbogen 90° 22 mm',
+        menge: 2,
+        einheit: 'VE',
+        packungsinhalt: 10,
+      },
+      {
+        artikel: { name: record('Pressbogen 90° 22 mm'), nummer: record('PB-22'), einheit: 'piece' },
+        menge: 20,
+        hinweise: ['packung_umgerechnet'],
+      },
+    ),
+    readLine(
+      3,
+      { artikelnummer: 'GC-99999', beschreibung: 'Flexschlauch 3/8"', menge: 3, einheit: 'Stk' },
+      { artikel: null, menge: null, katalog: 'Flexschlauch 3/8 Zoll', hinweise: ['nur_im_katalog'] },
+    ),
+    readLine(
+      4,
+      { artikelnummer: 'GC-15015', beschreibung: 'Kupferrohr 15 x 1 mm', menge: 2, einheit: 'Bündel' },
+      {
+        artikel: pipe,
+        menge: null,
+        hinweise: ['einheit_unbekannt'],
+      },
+    ),
+  ],
+};
+
+/**
+ * A finished turn of `role` that read a synthetic Lieferschein
+ * (werk-flow/werkflow-planning#535): its tool row holds the validated fields
+ * and the matches, written through the database calls a live turn makes.
+ */
+export async function kiThreadWithLieferschein(
+  world: TestWorld,
+  role: KiRole,
+  kind: keyof typeof LIEFERSCHEINE,
+): Promise<{ route: string }> {
+  const ki = await kiOrganizationFor(world);
+  const admin = createAdminClient();
+  const text = `Lies bitte den Lieferschein (${kind}).`;
+  const threadId = seededUuid(`${ki.users[role].id}:lieferschein:${kind}`);
+  const command = seededUuid(`${threadId}:command`);
+  const author = { p_organization_id: ki.organizationId, p_user_id: ki.users[role].id };
+  const { data } = await admin
+    .rpc('start_ai_turn', {
+      ...author,
+      p_thread_id: threadId,
+      p_title: text,
+      p_command_id: command,
+      p_text: text,
+      p_reserve_micro_usd: 1000,
+    })
+    .single()
+    .throwOnError();
+  // A repeat of the seed finds its turn already written.
+  if (data.verdict !== 'started' || !data.run_id || !data.answer_item_id)
+    return { route: `/ki?chat=${threadId}` };
+  await admin
+    .rpc('record_ai_tool_item', {
+      ...author,
+      p_run_id: data.run_id,
+      p_kind: 'tool_call',
+      p_status: 'complete',
+      p_item_key: `${command}:tool:1`,
+      p_body: { revision: 2, label: 'Lieferschein lesen', control: 'read', outcome: 'ok', detail: true },
+      p_detail: {
+        input: { datei: 1 },
+        result: {
+          hinweis: 'KI-Entwurf: aus dem Dokument gelesen, von niemandem geprüft und nicht gebucht.',
+          lieferant: doc('GC Großhandel Stuttgart'),
+          lieferscheinnummer: doc('LS-2026-1187'),
+          datum: '2026-11-20',
+          positionen: LIEFERSCHEINE[kind],
+          weggelassenePositionen: 0,
+          abgleichGelesen: true,
+          katalogGelesen: true,
+        },
+      },
+      p_ledger_key: `${command}:tool:1`,
+      p_model_id: 'seed',
+      p_prompt_version: 'seed',
+      p_outcome: 'tool_call_lieferschein_lesen_ok',
+    })
+    .throwOnError();
+  await admin
+    .rpc('update_ai_thread_item', {
+      ...author,
+      p_item_id: data.answer_item_id,
+      p_status: 'complete',
+      p_body: {
+        text:
+          kind === 'sauber'
+            ? 'Ich habe den Lieferschein LS-2026-1187 gelesen. Beide Positionen passen zu deinen Artikeln.'
+            : 'Ich habe den Lieferschein LS-2026-1187 gelesen. Drei von vier Positionen musst du prüfen.',
+      },
+    })
+    .throwOnError();
+  await admin
+    .rpc('settle_ai_run', {
+      p_organization_id: ki.organizationId,
+      p_run_id: data.run_id,
+      p_status: 'succeeded',
+    })
+    .throwOnError();
+  return { route: `/ki?chat=${threadId}` };
+}

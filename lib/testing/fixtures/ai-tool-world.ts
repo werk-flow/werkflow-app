@@ -133,6 +133,7 @@ export function seedToolTables(world: AiTurnWorld, jobTitle = 'Heizung Müller w
       },
     ],
     inventory_item_prices: [],
+    inventory_item_barcodes: [],
   });
 }
 
@@ -236,6 +237,8 @@ function readerAnswer(world: AiTurnWorld, name: string, args: Row): { data: unkn
   if (name === 'list_customer_page') return { data: customerPage(world, args), error: null };
   if (name === 'list_inventory_page') return { data: inventoryPage(world, args), error: null };
   if (name === 'read_inventory_item_prices_on_day') return { data: [], error: null };
+  // The wholesaler catalog holds nothing unless a case answers the search itself.
+  if (name === 'search_supplier_catalog_articles') return { data: [], error: null };
   return null;
 }
 

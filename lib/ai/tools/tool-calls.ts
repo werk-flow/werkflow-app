@@ -3,7 +3,7 @@ import 'server-only';
 import type { ModelMessage, ToolResultPart } from 'ai';
 
 import { boundedWrite } from '@/lib/ai/bounded-write';
-import { carriesUntrustedText, untrustedToolOutput } from '@/lib/ai/context';
+import { carriesUntrustedText, toolResultBytes, untrustedToolOutput } from '@/lib/ai/context';
 import { AI_TURN_LIMITS } from '@/lib/ai/limits';
 import { AI_PROMPT_VERSION } from '@/lib/ai/prompt/system-prompt';
 import { type QuestionBody, type TodoBody, type ToolCallBody, rowFromItem } from '@/lib/ai/thread-rows';
@@ -275,7 +275,7 @@ function withinResultCap(context: ToolCallRun, result: AiToolResult): AiToolResu
   const { toolCalls } = context;
   if (result.status !== 'ok') return result;
   const cap = AI_TURN_LIMITS[context.command.entryPoint].maxToolResultBytes;
-  const bytes = outputBytes(untrustedToolOutput(result.value));
+  const bytes = toolResultBytes(result.value);
   // The last bytes under the cap stay free for the refusals that may follow (`RESULTS_FULL_ROOM_BYTES`).
   if (!toolCalls.resultsFull && toolCalls.resultBytes + bytes <= cap - RESULTS_FULL_ROOM_BYTES) return result;
   // The sentence goes once; every later call past the cap reads the bare status (`toolFramingBytes`).
