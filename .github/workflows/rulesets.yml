@@ -1,0 +1,59 @@
+name: Rulesets
+
+# Daily: the live main and production rulesets still hold the protections decision 0012 rests on
+# (.github/scripts/ruleset-check.sh). A ruleset changed in GitHub's settings leaves no commit, so this
+# is how a merge queue switched off, a `Check` no longer required or GitHub Actions allowed to bypass
+# `production` gets noticed. Drift opens or updates "CI alert: rulesets" for the owner; the next
+# complete clean run closes it.
+# By hand: gh workflow run rulesets.yml
+on:
+  schedule:
+    # 06:20 UTC, after the night's release; the time matters to nobody.
+    - cron: '20 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rulesets
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Watch the rulesets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write # open, update and close the alert issue
+    steps:
+      # Only the scripts are read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      # Drift opens or updates the alert for the owner. An unreadable ruleset proves nothing: it keeps
+      # what the last complete check found and assigns nobody. Only a complete clean check closes it.
+      - name: Compare the live rulesets with decision 0012
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: 'CI alert: rulesets'
+          ON_MAIN: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          result=0
+          bash .github/scripts/ruleset-check.sh > "$RUNNER_TEMP/check.txt" || result=$?
+          cat "$RUNNER_TEMP/check.txt"
+          test "$ON_MAIN" = true || exit "$result"
+          link="https://github.com/${GH_REPO}/blob/main/docs/decisions/0012-pull-requests-ci-and-releases.md#configuration-this-decision-needs"
+          case "$result" in
+            0) bash .github/scripts/alert-issue.sh close "$TITLE" "The main and production rulesets hold again." ;;
+            1)
+              body="$(printf 'A live GitHub ruleset no longer holds what [decision 0012](%s) needs:\n\n%s\n\nRestore the setting in Settings, Rules, Rulesets, or change the decision and `.github/scripts/ruleset-check.sh` together by PR.' \
+                "$link" "$(sed 's/^/- /' "$RUNNER_TEMP/check.txt")")"
+              AFFECTS_PRODUCTION=true bash .github/scripts/alert-issue.sh open "$TITLE" "$body" ;;
+            *) bash .github/scripts/alert-issue.sh keep "$TITLE" "The rulesets could not be read, so this run proves nothing; the next one checks again." ;;
+          esac
+          exit "$result"

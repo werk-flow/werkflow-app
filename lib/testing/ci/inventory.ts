@@ -238,6 +238,7 @@ export const OUTSIDE_INVENTORY: Readonly<Record<string, string>> = {
   'release.yml#smoke': 'Checks PROD after the release.',
   'release.yml#proof': "Proves the release's alert path.",
   'release.yml#alert': "Reports the release's failure.",
+  'rulesets.yml#watch': 'Reads the live GitHub rulesets, a setting outside the code: no check of a commit.',
   'nightly.yml#proof': "Proves the nightly's alert path.",
   'mustang-cache.yml#seed': "Keeps Mustang's pinned jar in main's Actions cache: no check.",
   'staging.yml#migrate': 'Migrates DEV after a merge.',
