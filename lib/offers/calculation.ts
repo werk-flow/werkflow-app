@@ -1,6 +1,6 @@
 import { lineAmountCents, type PriceQuantity } from '@/lib/inventory/line-amount';
 import { MAX_LINE_NET_CENTS } from '@/lib/invoices/amounts';
-import { countsInTotal, type OfferAmounts } from './amounts';
+import { countsInTotal, exactCentsSum, type OfferAmounts } from './amounts';
 import type { OfferPositionCost, OfferSection } from './types';
 
 // The office's calculation of an offer: what each Position costs, what it
@@ -69,12 +69,13 @@ function figures(sums: Sums): CalculationFigures {
   return { ...sums, marginCents, marginPermille: permilleOf(marginCents, sums.saleCents) };
 }
 
+/** The exact sums of `groups`, as the offer's totals add (exactCentsSum). */
 function sum(groups: ReadonlyArray<Sums>): Sums {
   return {
-    saleCents: groups.reduce((total, group) => total + group.saleCents, 0),
-    costCents: groups.reduce((total, group) => total + group.costCents, 0),
+    saleCents: exactCentsSum(groups.map((group) => group.saleCents)),
+    costCents: exactCentsSum(groups.map((group) => group.costCents)),
     withoutCost: groups.reduce((total, group) => total + group.withoutCost, 0),
-    adjustmentCents: groups.reduce((total, group) => total + group.adjustmentCents, 0),
+    adjustmentCents: exactCentsSum(groups.map((group) => group.adjustmentCents)),
   };
 }
 

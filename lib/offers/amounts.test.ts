@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { offerAmounts, offerContentArgument } from './amounts';
+import { offerCalculation } from './calculation';
 import type { OfferAdjustment, OfferAdjustmentPosition, OfferFreePosition, OfferSection } from './types';
 
 function free(
@@ -288,23 +289,39 @@ describe('a Nachlass or Zuschlag', () => {
   });
 
   test('the order of Nachlässe and Zuschläge never changes a total, near the safe range too', () => {
-    // 500 lines at the line bound at 0 %, then 18 Zuschläge of 100 % of the offer and 18 Nachlässe:
-    // added one by one, the Zuschläge alone would pass the safe integer range.
+    // An odd total just below 5 · 10^14 cents at 0 %, then 19 Zuschläge of 100 % of the offer and 19
+    // Nachlässe: added one by one, the Zuschläge alone would pass the safe integer range.
     const atBound = free('Fernwärmestation', '100000', 10_000_000, { taxRateBasisPoints: 0 });
     const of = (direction: 'rabatt' | 'zuschlag') =>
       adjustment('Anpassung', { direction, scope: 'angebot', percentHundredths: 10_000 });
     type Direction = 'rabatt' | 'zuschlag';
     const offer = (order: ReadonlyArray<Direction>): OfferSection[] => [
-      { title: 'Material', positions: Array.from({ length: 500 }, () => atBound) },
+      {
+        title: 'Material',
+        positions: [
+          ...Array.from({ length: 499 }, () => atBound),
+          free('Restposten', '1', 999_999_999_999, { taxRateBasisPoints: 0 }),
+        ],
+      },
       { title: 'Nachlässe', positions: order.map(of) },
     ];
-    const grouped = Array.from({ length: 36 }, (_, index): Direction => (index < 18 ? 'zuschlag' : 'rabatt'));
+    const grouped = Array.from({ length: 38 }, (_, index): Direction => (index < 19 ? 'zuschlag' : 'rabatt'));
     const alternating = Array.from(
-      { length: 36 },
+      { length: 38 },
       (_, index): Direction => (index % 2 === 0 ? 'zuschlag' : 'rabatt'),
     );
     expect(offerAmounts(offer(grouped)).totals).toEqual(offerAmounts(offer(alternating)).totals);
-    expect(offerAmounts(offer(grouped)).totals.lineNetCents).toBe(500_000_000_000_000);
+    expect(offerAmounts(offer(grouped)).totals.lineNetCents).toBe(499_999_999_999_999);
+    // The Titel's subtotal the save stores and „Kalkulation“'s sums add up exactly too.
+    for (const order of [grouped, alternating]) {
+      const sections = offer(order);
+      const amounts = offerAmounts(sections);
+      expect(amounts.sections.map((section) => section.netCents)).toEqual([499_999_999_999_999, 0]);
+      expect(offerContentArgument(sections)?.sections[1]?.netCents).toBe(0);
+      const calculation = offerCalculation(sections, amounts);
+      expect(calculation.sections[1]).toMatchObject({ saleCents: 0, adjustmentCents: 0 });
+      expect(calculation.offer).toMatchObject({ saleCents: 499_999_999_999_999, adjustmentCents: 0 });
+    }
   });
 
   test('a percentage of nothing is zero and has no part', () => {

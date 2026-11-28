@@ -131,8 +131,18 @@ function adjustmentLines(parts: ReadonlyArray<AdjustmentPart[] | null>): Invoice
   });
 }
 
-const sumOf = (parts: readonly AdjustmentPart[]) =>
-  parts.reduce((total, part) => total + part.amountCents, 0);
+/**
+ * The exact sum of amounts in cents, added in integers of any size, so no
+ * order of them loses a cent on the way to a sum that fits. Throws a
+ * RangeError when the sum itself leaves the safe range.
+ */
+export function exactCentsSum(values: readonly number[]): number {
+  const cents = Number(values.reduce((total, value) => total + BigInt(value), BigInt(0)));
+  if (!Number.isSafeInteger(cents)) throw new RangeError('A sum of an offer exceeds the safe range.');
+  return cents;
+}
+
+const sumOf = (parts: readonly AdjustmentPart[]) => exactCentsSum(parts.map((part) => part.amountCents));
 
 /** Every amount of an offer's content. Throws a RangeError on a position or part the line rule refuses. */
 export function offerAmounts<Section extends PricedSection>(sections: readonly Section[]): OfferAmounts {
@@ -178,7 +188,7 @@ export function offerAmounts<Section extends PricedSection>(sections: readonly S
     ...amounts,
     adjustmentParts: parts,
     sections: sections.map((section, sectionIndex) => {
-      let netCents = 0;
+      const counted: number[] = [];
       const positionCents = section.positions.map((position, index) => {
         if (position.kind === 'text') return null;
         const lineParts = parts[sectionIndex]?.[index];
@@ -186,10 +196,10 @@ export function offerAmounts<Section extends PricedSection>(sections: readonly S
           position.kind === 'adjustment' ? lineParts && sumOf(lineParts) : lineCents[sectionIndex]?.[index];
         if (cents === null || cents === undefined)
           throw new RangeError('A priced position has no computed amount.');
-        if (countsInTotal(position)) netCents += cents;
+        if (countsInTotal(position)) counted.push(cents);
         return cents;
       });
-      return { netCents, positionCents };
+      return { netCents: exactCentsSum(counted), positionCents };
     }),
   };
 }
