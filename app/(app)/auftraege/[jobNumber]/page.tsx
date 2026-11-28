@@ -144,6 +144,22 @@ function memberOptions(rows: Extract<JobDetailReads[1], { success: true }>['memb
   }));
 }
 
+/** A missing or forbidden job leaves the page; a failed read must not look like one. */
+function jobReadRefusal(error: string) {
+  if (error === 'fetch_failed' || error === 'unexpected_error') {
+    return (
+      <RegionLoadError title="Der Auftrag konnte nicht geladen werden">
+        Der Auftrag ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
+  return (
+    <RouteRedirect href="/auftraege">
+      <JobDetailLoading />
+    </RouteRedirect>
+  );
+}
+
 async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   const { user, membership } = await resolvePageMembership();
   if (!membership) redirect('/auftraege');
@@ -171,22 +187,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     ordersResult,
   ] = await loadJobDetailReads(supabase, { jobNumber, activeOrgId, userId: user.id });
 
-  // A missing or forbidden job leaves the page; a failed read must not look like one.
-  if (!result.success && (result.error === 'fetch_failed' || result.error === 'unexpected_error')) {
-    return (
-      <RegionLoadError title="Der Auftrag konnte nicht geladen werden">
-        Der Auftrag ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
-      </RegionLoadError>
-    );
-  }
-
-  if (!result.success) {
-    return (
-      <RouteRedirect href="/auftraege">
-        <JobDetailLoading />
-      </RouteRedirect>
-    );
-  }
+  if (!result.success) return jobReadRefusal(result.error);
 
   if (!membersResult.success) {
     return (

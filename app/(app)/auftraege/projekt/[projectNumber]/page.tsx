@@ -59,6 +59,31 @@ async function readWorkLeads(
   };
 }
 
+/**
+ * The leads as readWorkLeads reads them, and the project's orders: with prices
+ * for Admin and Büro, as scope without prices for its „Projektleitung“.
+ */
+async function readLeadsAndOrders(
+  projectResultPromise: ReturnType<typeof getProjectByNumber>,
+  projectNumber: string,
+  isAdminOrManager: boolean,
+) {
+  const [project, workLeadReads] = await Promise.all([
+    projectResultPromise,
+    readWorkLeads(projectResultPromise, projectNumber, isAdminOrManager),
+  ]);
+  const { ledOverviewResult } = workLeadReads;
+  const [ordersResult, leadScopeResult] = await Promise.all([
+    isAdminOrManager && project.success
+      ? readWorkOrders({ targetType: 'project', targetId: project.details.project.id })
+      : null,
+    ledOverviewResult?.success
+      ? readWorkScope({ targetType: 'project', targetId: ledOverviewResult.overview.projectId })
+      : null,
+  ]);
+  return { ...workLeadReads, ordersResult, leadScopeResult };
+}
+
 async function loadProjectDetailReads({
   projectNumber,
   activeOrgId,
@@ -98,19 +123,6 @@ async function loadProjectDetailReads({
       ? getWorkHandoverWorkspace({ targetType: 'project', targetId: result.details.project.id })
       : null,
   );
-  const workLeadReadsPromise = readWorkLeads(projectResultPromise, projectNumber, isAdminOrManager);
-  // Admin and Büro read the project's orders with prices; its „Projektleitung“ reads their scope.
-  const ordersPromise = isAdminOrManager
-    ? projectResultPromise.then((result) =>
-        result.success ? readWorkOrders({ targetType: 'project', targetId: result.details.project.id }) : null,
-      )
-    : Promise.resolve(null);
-  const leadScopePromise = workLeadReadsPromise.then(({ ledOverviewResult }) =>
-    ledOverviewResult?.success
-      ? readWorkScope({ targetType: 'project', targetId: ledOverviewResult.overview.projectId })
-      : null,
-  );
-
   const [
     result,
     membersResult,
@@ -122,9 +134,7 @@ async function loadProjectDetailReads({
     instructionItemsResult,
     approvalHolder,
     handoverWorkspaceResult,
-    workLeadReads,
-    ordersResult,
-    leadScopeResult,
+    workLeadAndOrderReads,
   ] = await Promise.all([
     projectResultPromise,
     // The create-job dialog assigns employees; only managers open it.
@@ -137,9 +147,7 @@ async function loadProjectDetailReads({
     instructionItemsResultPromise,
     approvalHolderPromise,
     handoverWorkspacePromise,
-    workLeadReadsPromise,
-    ordersPromise,
-    leadScopePromise,
+    readLeadsAndOrders(projectResultPromise, projectNumber, isAdminOrManager),
   ]);
   return {
     result,
@@ -152,9 +160,7 @@ async function loadProjectDetailReads({
     instructionItemsResult,
     approvalHolder,
     handoverWorkspaceResult,
-    ...workLeadReads,
-    ordersResult,
-    leadScopeResult,
+    ...workLeadAndOrderReads,
   };
 }
 
@@ -168,13 +174,17 @@ function ledOverviewFrom(
 }
 
 /** The office's orders of the project: null for everyone else, `failed` when the read failed. */
-function ordersFrom(result: Awaited<ReturnType<typeof readWorkOrders>> | null): WorkOrder[] | 'failed' | null {
+function ordersFrom(
+  result: Awaited<ReturnType<typeof readWorkOrders>> | null,
+): WorkOrder[] | 'failed' | null {
   if (!result) return null;
   return result.success ? result.orders : 'failed';
 }
 
 /** The lead's scope of the project: null when the viewer leads it not, `failed` when the read failed. */
-function leadScopeFrom(result: Awaited<ReturnType<typeof readWorkScope>> | null): FieldScopeOrder[] | 'failed' | null {
+function leadScopeFrom(
+  result: Awaited<ReturnType<typeof readWorkScope>> | null,
+): FieldScopeOrder[] | 'failed' | null {
   if (!result) return null;
   return result.success ? result.scope : 'failed';
 }

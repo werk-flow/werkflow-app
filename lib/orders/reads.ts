@@ -101,7 +101,12 @@ async function mayReadScope(
       ? await readOrganizationJob(context.orgId, target.targetId)
       : await loggedRead(
           'readWorkScope: projects read failed',
-          admin.from('projects').select('id').eq('organization_id', context.orgId).eq('id', target.targetId).maybeSingle(),
+          admin
+            .from('projects')
+            .select('id')
+            .eq('organization_id', context.orgId)
+            .eq('id', target.targetId)
+            .maybeSingle(),
         );
   if (work.error) return 'load_failed';
   if (!work.data) return false;
@@ -119,7 +124,9 @@ async function mayReadScope(
  * orders bound to it and, for a job, to its project, as text, quantity and
  * unit. The answer's type holds no price.
  */
-export async function readWorkScope(rawTarget: WorkTarget): Promise<ActionResult<{ scope: FieldScopeOrder[] }>> {
+export async function readWorkScope(
+  rawTarget: WorkTarget,
+): Promise<ActionResult<{ scope: FieldScopeOrder[] }>> {
   const target = workLeadTargetSchema.safeParse(rawTarget);
   if (!target.success) return { success: false, error: 'invalid_input' };
   const caller = await resolveActionContext();

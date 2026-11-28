@@ -326,9 +326,6 @@ export function ProjectDetailContent(content: ProjectDetailContentProps) {
           <div className="min-w-0 space-y-6">
             <MetadataSection title="Details" fields={metadataFields} isEditable={isAdminOrManager} />
 
-            {content.orders && <WorkOrdersSection orders={content.orders} />}
-            {content.leadScope && <FieldScopeSection scope={content.leadScope} />}
-
             <ProjectDetailClientCard
               liveClient={liveClient}
               onAssignClient={isAdminOrManager ? () => dialogState.setShowClientDialog(true) : undefined}
@@ -361,6 +358,15 @@ export function ProjectDetailContent(content: ProjectDetailContentProps) {
   );
 }
 
+/** The office's priced „Auftragsumfang“, or the lead's scope without prices. */
+function ProjectScopeSections({
+  orders,
+  leadScope,
+}: Pick<ProjectDetailContentProps, 'orders' | 'leadScope'>) {
+  if (orders) return <WorkOrdersSection orders={orders} />;
+  return leadScope ? <FieldScopeSection scope={leadScope} /> : null;
+}
+
 function ProjectDetailWorkColumn({ content, state }: ProjectDetailSectionProps) {
   const { isAdminOrManager, members, instructionItems, materialSummary, inventoryItems, inventoryLocations } =
     content;
@@ -377,6 +383,8 @@ function ProjectDetailWorkColumn({ content, state }: ProjectDetailSectionProps) 
         onAssignJobs={() => dialogState.setShowAssignJobsDialog(true)}
         membersFailed={members === null}
       />
+
+      <ProjectScopeSections orders={content.orders} leadScope={content.leadScope} />
 
       {content.ledOverview && (
         <LedJobsSection

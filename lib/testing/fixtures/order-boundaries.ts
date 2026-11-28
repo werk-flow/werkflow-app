@@ -7,7 +7,13 @@
 // supabase/tests/offer_conversion.sql proves the functions' refusals, grants and history.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
-import { CALLER_ID, ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
+import {
+  CALLER_ID,
+  ORGANIZATION_A,
+  ORGANIZATION_B,
+  installActionWorld,
+  signInAs,
+} from './action-boundary-world';
 import { assertRefused, refuseForeignIds } from './operations-boundary-refusals';
 
 const ownOfferId = '95100000-0000-4000-8000-000000000101';
@@ -45,10 +51,18 @@ const scopeAnswer = [
 ];
 
 const world = installActionWorld({
-  projects: [{ id: project, organization_id: ORGANIZATION_A, name: 'Neubau Lindenstraße', project_number: 'PRJ-1' }],
+  projects: [
+    { id: project, organization_id: ORGANIZATION_A, name: 'Neubau Lindenstraße', project_number: 'PRJ-1' },
+  ],
   jobs: [
     { id: ownJob, organization_id: ORGANIZATION_A, project_id: null, job_number: 'AUF-1', title: 'Heizung' },
-    { id: foreignJob, organization_id: ORGANIZATION_B, project_id: null, job_number: 'AUF-9', title: 'Fremd' },
+    {
+      id: foreignJob,
+      organization_id: ORGANIZATION_B,
+      project_id: null,
+      job_number: 'AUF-9',
+      title: 'Fremd',
+    },
   ],
   job_assignments: [],
 });
@@ -94,7 +108,12 @@ for (const role of ['admin', 'buero'] as const) {
   world.rpcCalls.length = 0;
   assert.deepEqual(await convert(ownOfferId), { success: true, offerId: ownOfferId, ...converted });
   assert.deepEqual(
-    world.rpcCalls.map((call) => [call.name, call.args.p_organization_id, call.args.p_actor_id, call.args.p_target]),
+    world.rpcCalls.map((call) => [
+      call.name,
+      call.args.p_organization_id,
+      call.args.p_actor_id,
+      call.args.p_target,
+    ]),
     [['convert_offer_to_work', ORGANIZATION_A, CALLER_ID, 'job']],
   );
 }
@@ -177,10 +196,16 @@ const expectedScope = {
     },
   ],
 };
-world.tables.job_assignments = [{ id: crypto.randomUUID(), organization_id: ORGANIZATION_A, job_id: ownJob, user_id: CALLER_ID }];
+world.tables.job_assignments = [
+  { id: crypto.randomUUID(), organization_id: ORGANIZATION_A, job_id: ownJob, user_id: CALLER_ID },
+];
 world.rpcCalls.length = 0;
 assert.deepEqual(await readWorkScope(jobTarget), expectedScope);
-assert.deepEqual(scopeReads()[0]?.args, { p_organization_id: ORGANIZATION_A, p_kind: 'job', p_work_id: ownJob });
+assert.deepEqual(scopeReads()[0]?.args, {
+  p_organization_id: ORGANIZATION_A,
+  p_kind: 'job',
+  p_work_id: ownJob,
+});
 world.tables.job_assignments = [];
 leadScope = { projectIds: [project], jobIds: [ownJob] };
 assert.deepEqual(await readWorkScope(jobTarget), expectedScope);

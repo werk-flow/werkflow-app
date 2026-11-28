@@ -7,7 +7,7 @@ import { z } from '@/lib/zod';
 // (supabase/migrations/20270701160000_convert_an_accepted_offer_into_work_once.sql).
 
 /** What a conversion creates: a new job, a new project, or the job or project the offer was written for. */
-export const ORDER_TARGETS = ['job', 'project', 'offer_work'] as const;
+const ORDER_TARGETS = ['job', 'project', 'offer_work'] as const;
 export type OrderTarget = (typeof ORDER_TARGETS)[number];
 
 export const convertOfferSchema = z.object({
@@ -50,9 +50,16 @@ export type WorkOrder = {
 /** A line of the scope the field and the project lead read: text, quantity and unit. */
 export type FieldScopeLine =
   | { kind: 'text'; name: string; description: string }
-  | { kind: 'position'; number: string; name: string; description: string; quantity: string; unitLabel: string };
+  | {
+      kind: 'position';
+      number: string;
+      name: string;
+      description: string;
+      quantity: string;
+      unitLabel: string;
+    };
 
-export type FieldScopeSection = { number: string; title: string; lines: FieldScopeLine[] };
+type FieldScopeSection = { number: string; title: string; lines: FieldScopeLine[] };
 
 /**
  * One order's scope for the field and the project lead. The type holds no

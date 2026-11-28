@@ -21,8 +21,13 @@ export function FieldScopeSection({ scope }: { scope: FieldScopeOrder[] | 'faile
     <section aria-labelledby="field-scope-title" className="space-y-3">
       <SectionTitle id="field-scope-title">Auftragsumfang</SectionTitle>
       {scope.map((order) => (
-        <div key={`${order.workKind}-${order.offerNumber}`} className="space-y-3 rounded-lg border bg-card p-4 text-sm shadow-xs">
-          {order.workKind === 'project' && <p className="text-muted-foreground">Umfang des ganzen Projekts</p>}
+        <div
+          key={`${order.workKind}-${order.offerNumber}`}
+          className="space-y-3 rounded-lg border bg-card p-4 text-sm shadow-xs"
+        >
+          {order.workKind === 'project' && (
+            <p className="text-muted-foreground">Umfang des ganzen Projekts</p>
+          )}
           {order.sections.map((section) => (
             <div key={section.number} className="space-y-1">
               <p className="font-medium wrap-anywhere">{`${section.number}. ${section.title}`}</p>
@@ -35,7 +40,9 @@ export function FieldScopeSection({ scope }: { scope: FieldScopeOrder[] | 'faile
                     <span className="min-w-0 wrap-anywhere">
                       {line.kind === 'position' ? `${line.number} ${line.name}` : line.name}
                       {line.description && (
-                        <span className="block whitespace-pre-line text-muted-foreground">{line.description}</span>
+                        <span className="block whitespace-pre-line text-muted-foreground">
+                          {line.description}
+                        </span>
                       )}
                     </span>
                     {line.kind === 'position' && (

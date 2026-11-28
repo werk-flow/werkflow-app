@@ -24,7 +24,8 @@ const scopeSchema = z.array(
 );
 
 /** Words and signs of a text line about money, which the field never reads. */
-const PRICE_TEXT = /€|\beur\b|preis|rabatt|nachlass|skonto|zahlung|zahlbar|netto|brutto|mwst|umsatzsteuer|kosten|betrag|zuschlag/i;
+const PRICE_TEXT =
+  /€|\beur\b|preis|rabatt|nachlass|skonto|zahlung|zahlbar|netto|brutto|mwst|umsatzsteuer|kosten|betrag|zuschlag/i;
 
 /** Whether a text line names a price, a discount, a payment or a tax. */
 export function isPriceText(line: { name: string; description: string }): boolean {
@@ -56,7 +57,11 @@ export function fieldScopeFrom(data: unknown): FieldScopeOrder[] {
     offerNumber: order.offerNumber,
     workKind: order.workKind,
     sections: order.sections
-      .map((section) => ({ number: section.number, title: section.title, lines: section.lines.flatMap(fieldLine) }))
+      .map((section) => ({
+        number: section.number,
+        title: section.title,
+        lines: section.lines.flatMap(fieldLine),
+      }))
       .filter((section) => section.lines.length > 0),
   }));
 }

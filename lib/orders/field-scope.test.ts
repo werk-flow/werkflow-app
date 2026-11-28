@@ -8,7 +8,17 @@ type DeepKeys<T> = T extends readonly (infer Item)[]
   : T extends object
     ? { [Key in keyof T]-?: Key | DeepKeys<T[Key]> }[keyof T]
     : never;
-type MoneyWord = 'cent' | 'price' | 'cost' | 'discount' | 'total' | 'amount' | 'margin' | 'tax' | 'gross' | 'net';
+type MoneyWord =
+  | 'cent'
+  | 'price'
+  | 'cost'
+  | 'discount'
+  | 'total'
+  | 'amount'
+  | 'margin'
+  | 'tax'
+  | 'gross'
+  | 'net';
 type MoneyKey = `${string}${MoneyWord | Capitalize<MoneyWord>}${string}` | MoneyWord;
 
 describe('the field scope of an order', () => {
@@ -42,7 +52,11 @@ describe('the field scope of an order', () => {
               title: 'Wärmeerzeuger',
               lines: [
                 { ...position, number: '1.1', name: 'Kupferrohr 15 mm' },
-                { ...text, name: 'Bestandsanlage vorher entleeren', description: 'Mit Hausmeister abstimmen.' },
+                {
+                  ...text,
+                  name: 'Bestandsanlage vorher entleeren',
+                  description: 'Mit Hausmeister abstimmen.',
+                },
                 { ...text, name: 'Hinweis', description: 'Alle Preise gelten vier Wochen.' },
               ],
             },
@@ -67,7 +81,11 @@ describe('the field scope of an order', () => {
                 quantity: '12.500',
                 unitLabel: 'm',
               },
-              { kind: 'text', name: 'Bestandsanlage vorher entleeren', description: 'Mit Hausmeister abstimmen.' },
+              {
+                kind: 'text',
+                name: 'Bestandsanlage vorher entleeren',
+                description: 'Mit Hausmeister abstimmen.',
+              },
             ],
           },
         ],

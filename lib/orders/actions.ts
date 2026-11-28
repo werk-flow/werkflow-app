@@ -74,7 +74,8 @@ export async function convertOfferToWork(rawInput: ConvertOfferInput): Promise<C
       p_title: input.title,
     });
     const answer = convertedSchema.safeParse(data);
-    if (error || !answer.success) return refusal(error, 'save_failed', 'convertOfferToWork: convert_offer_to_work failed');
+    if (error || !answer.success)
+      return refusal(error, 'save_failed', 'convertOfferToWork: convert_offer_to_work failed');
     // The offer's page renders the link to the work into this answer; the work's pages hear it through Realtime.
     revalidatePath(`/angebote/${input.offerId}`);
     revalidatePath('/auftraege', 'layout');

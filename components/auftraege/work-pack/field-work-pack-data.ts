@@ -19,7 +19,6 @@ import { getAssignedServiceContextForJob } from '@/lib/service-cases/actions';
 import { getAssignedMaintenanceContextForJob } from '@/lib/maintenance/actions';
 import { readJobSiteAccessProposal } from '@/lib/site-access-proposals/field-read';
 import { formatBerlinDateTime } from '@/lib/utils';
-import { readWorkScope } from '@/lib/orders/reads';
 
 type FieldWorkPackAssignment = JobWithDetails['assignments'][number];
 
@@ -78,7 +77,6 @@ export async function loadFieldWorkPackData(
     serviceContextResult,
     maintenanceContextResult,
     siteAccessProposalRead,
-    scopeResult,
   ] = await Promise.all([
     getJobInstructionItems(job.id),
     getJobDocuments(job.id),
@@ -92,7 +90,6 @@ export async function loadFieldWorkPackData(
     getAssignedServiceContextForJob(job.id),
     getAssignedMaintenanceContextForJob(job.id),
     readJobSiteAccessProposal(job, currentUserId),
-    readWorkScope({ targetType: 'job', targetId: job.id }),
   ]);
 
   const fieldJob = projectFieldWorkPackJob(job);
@@ -130,7 +127,6 @@ export async function loadFieldWorkPackData(
     serviceContextResult,
     maintenanceContextResult,
     siteAccessProposalRead,
-    scopeResult,
     fieldJob,
     instructionItems,
     documents,

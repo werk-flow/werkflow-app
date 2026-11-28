@@ -212,7 +212,7 @@ begin
   if v_answer ->> 'replay' is distinct from 'true'
     or (select count(*) from public.orders where offer_id = pg_temp.id('job')) <> 1
     or (select count(*) from public.jobs where organization_id = '38800000-0000-4000-8000-000000000010') <> 2
-    or (select version from public.offers where id = pg_temp.id('job')) <> 4 then
+    or (select version from public.offers where id = pg_temp.id('job')) is distinct from 4 then
     raise exception 'a repeated conversion answered % and wrote again', v_answer;
   end if;
   select * into v_event from public.offer_events
@@ -316,7 +316,7 @@ declare
   v_orders jsonb := public.get_work_orders('38800000-0000-4000-8000-000000000010', 'job',
     '38800000-0000-4000-8000-000000000050');
 begin
-  if jsonb_array_length(v_orders) <> 1 or v_orders #>> '{0,grossCents}' is distinct from '690944'
+  if jsonb_array_length(v_orders) is distinct from 1 or v_orders #>> '{0,grossCents}' is distinct from '690944'
     or v_orders #>> '{0,scope,0,positions,0,amountCents}' is distinct from '489000' then
     raise exception 'the office reads the orders %', v_orders;
   end if;
@@ -325,7 +325,7 @@ begin
     '38800000-0000-4000-8000-000000000020', 'nicht_bearbeitet', '38800000-0000-4000-8000-000000000001')
   returning id into v_project_job;
   v_scope := public.get_work_scope('38800000-0000-4000-8000-000000000010', 'job', v_project_job);
-  if jsonb_array_length(v_scope) <> 1 or v_scope #>> '{0,workKind}' is distinct from 'project'
+  if jsonb_array_length(v_scope) is distinct from 1 or v_scope #>> '{0,workKind}' is distinct from 'project'
     or (select jsonb_agg(coalesce(line ->> 'number', line ->> 'name'))
         from jsonb_array_elements(v_scope #> '{0,sections}') section, jsonb_array_elements(section -> 'lines') line)
       is distinct from '["1.1", "Preise gelten vier Wochen", "1.2", "1.3", "2.1"]'::jsonb
@@ -391,7 +391,7 @@ begin
     exception when insufficient_privilege then
       continue;
     end;
-    if v_values <> 0 then
+    if v_values is distinct from 0 then
       raise exception 'the assigned employee reads % values of %.%', v_values, v_column.table_name, v_column.column_name;
     end if;
   end loop;

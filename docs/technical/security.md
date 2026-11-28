@@ -73,6 +73,7 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 - RLS restricts every client read, by role and assignment where the server readers restrict them. `supabase/tests/client_read_boundaries.sql` proves an employee reads only their own jobs, assignments and projects, and a suspended member nothing. Extend it for a new role-limited table.
 - RLS checks effective personnel access wherever a policy or its helper reads `organization_members`, `job_assignments` or `employee_records`.
 - **Project lead.** `app_private.work_lead_scope` alone decides who leads which work. A lead reads Arbeitsnachweise (`authorizeWorkArtifactRead`), writes none.
+- **Order scope.** A field worker and a project lead read an order only through `readWorkScope` (`lib/orders/reads.ts`), whose result type `FieldScopeOrder` holds no price, cost, discount or total (`lib/orders/field-scope.test.ts`); `get_work_scope` leaves out every price column and every Nachlass. The order tables and every cost column of an offer table carry no grant for `authenticated` (`supabase/tests/offer_conversion.sql`).
 - Client roles write no table directly, except a user's own name and avatar.
 - Grant the sequence privileges an intended insert needs. The service role bypasses RLS, not SQL privileges.
 - A ledger table refuses direct UPDATE and DELETE, also for privileged roles, with a real denial and a permitted-cleanup assertion. Cascade or reference-nulling follows the domain's retention rule.

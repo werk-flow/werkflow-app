@@ -39,7 +39,8 @@ const CONVERSION_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   client_archived: 'Der Kunde oder der Rechnungsempfänger ist archiviert. Hole ihn zuerst zurück.',
   client_not_found: 'Den Kunden des Angebots gibt es nicht mehr.',
   recipient_not_found: 'Den Rechnungsempfänger des Angebots gibt es nicht mehr.',
-  client_required: 'Die Arbeit, für die das Angebot geschrieben ist, hat keinen Kunden. Trage ihn dort zuerst ein.',
+  client_required:
+    'Die Arbeit, für die das Angebot geschrieben ist, hat keinen Kunden. Trage ihn dort zuerst ein.',
   site_not_found: 'Den Einsatzort des Angebots gibt es nicht mehr.',
   contact_not_found: 'Den Ansprechpartner des Angebots gibt es nicht mehr.',
 };
@@ -52,7 +53,14 @@ type ConvertibleOffer = Pick<OfferDetail, 'id' | 'offerNumber' | 'title' | 'vers
 function targetOptions(offer: ConvertibleOffer): Array<{ value: OrderTarget; label: string }> {
   const own = offer.work && offer.work.kind !== 'request' ? offer.work : null;
   return [
-    ...(own ? [{ value: 'offer_work' as const, label: `${own.kind === 'job' ? 'Auftrag' : 'Projekt'} ${own.label}` }] : []),
+    ...(own
+      ? [
+          {
+            value: 'offer_work' as const,
+            label: `${own.kind === 'job' ? 'Auftrag' : 'Projekt'} ${own.label}`,
+          },
+        ]
+      : []),
     { value: 'job', label: 'Neuer Auftrag' },
     { value: 'project', label: 'Neues Projekt' },
   ];
@@ -93,13 +101,20 @@ function useConversion(offer: ConvertibleOffer, onClose: () => void) {
     void run(async () => {
       setError(null);
       const since = settle.markChange();
-      const values = { offerId: offer.id, expectedVersion, target, title: target === 'offer_work' ? '' : title };
+      const values = {
+        offerId: offer.id,
+        expectedVersion,
+        target,
+        title: target === 'offer_work' ? '' : title,
+      };
       const result = await ownWrites
         .track(convertOfferToWork({ ...values, attemptKey: attempt.keyFor(JSON.stringify(values)) }))
         .catch(() => null);
       if (!result?.success) {
         setError(
-          result ? describeFailure(result.error, CONVERSION_FAILURE_MESSAGES, CONVERSION_FAILED) : CONVERSION_FAILED,
+          result
+            ? describeFailure(result.error, CONVERSION_FAILURE_MESSAGES, CONVERSION_FAILED)
+            : CONVERSION_FAILED,
         );
         return;
       }
@@ -151,7 +166,9 @@ function OfferConversionDialog({ offer, onClose }: { offer: ConvertibleOffer; on
               <Select
                 value={target}
                 disabled={isPending}
-                onValueChange={(value) => setTarget(options.find((option) => option.value === value)?.value ?? target)}
+                onValueChange={(value) =>
+                  setTarget(options.find((option) => option.value === value)?.value ?? target)
+                }
               >
                 <SelectTrigger id={FIELD.target} className="w-full">
                   <SelectValue />
