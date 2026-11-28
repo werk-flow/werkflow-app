@@ -12,7 +12,7 @@ const UPLOAD_MESSAGES: Readonly<Record<string, string>> = {
   file_too_large: `Die Datei ist größer als ${AI_UPLOAD_LIMITS.maxFileBytes / MEGABYTE} MB.`,
   file_empty: 'Die Datei ist leer.',
   file_too_many_pages: `Die PDF hat mehr als ${AI_UPLOAD_LIMITS.maxPdfPages} Seiten.`,
-  file_unreadable: 'Die PDF lässt sich nicht lesen.',
+  file_unreadable: 'Die Datei lässt sich nicht als PDF, JPG, PNG oder WebP lesen.',
   too_many_files: `Eine Nachricht nimmt höchstens ${AI_UPLOAD_LIMITS.maxFilesPerMessage} Dateien mit.`,
   message_too_large: `Die Dateien einer Nachricht dürfen zusammen höchstens ${AI_UPLOAD_LIMITS.maxMessageBytes / MEGABYTE} MB groß sein.`,
   too_many_unsent_files: `Du hast ${AI_UPLOAD_LIMITS.maxUnsentFiles} Dateien hochgeladen und noch nicht gesendet. Schick sie zuerst ab oder entferne sie.`,

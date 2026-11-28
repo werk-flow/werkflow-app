@@ -42,19 +42,26 @@ const WAIT_FOR_UPLOADS = 'Warte, bis alle Dateien hochgeladen sind, und schick d
 
 type Uploading = { id: string; draft: string; name: string; mimeType: string; sizeBytes: number };
 
+/** A removed upload whose discard the server has not answered: it keeps its slot, since a refused one comes back. */
+type Removing = { fileId: string; draft: string; sizeBytes: number };
+
 type Refusal = { draft: string; message: string };
 
-/** Removes an upload from its draft; a removal the server refused, or never answered, brings it back with why. */
+/**
+ * Removes an upload from its draft; a removal the server refused, or never
+ * answered, brings it back with why. `settled` runs once the server answered,
+ * before the file comes back.
+ */
 function removeUpload(
   organizationId: string,
   draft: string,
-  fileId: string,
+  file: AiUploadedFile,
   refuse: (refusal: Refusal | null) => void,
+  settled: () => void,
 ): void {
-  const file = readAttachments(draft).find((held) => held.fileId === fileId);
   writeAttachments(
     draft,
-    readAttachments(draft).filter((held) => held.fileId !== fileId),
+    readAttachments(draft).filter((held) => held.fileId !== file.fileId),
   );
   refuse(null);
   const session = draftClears();
@@ -65,18 +72,55 @@ function removeUpload(
   });
   const settle = (refused: boolean): void => {
     stopFollowing();
+    settled();
     // A sign-out cleared the drafts meanwhile: the file's name stays out of this tab.
-    if (!refused || !file || draftClears() !== session) return;
+    if (!refused || draftClears() !== session) return;
     restoreAttachments(target, [file]);
     refuse({
       draft: target,
       message: `„${file.name}“ konnte nicht entfernt werden. Versuch es noch einmal.`,
     });
   };
-  void discardAiFile({ organizationId, fileId }).then(
+  void discardAiFile({ organizationId, fileId: file.fileId }).then(
     (result) => settle(!result.success),
     () => settle(true),
   );
+}
+
+/**
+ * The uploads still on their way, each with its transfer so it can be
+ * cancelled, and the removals the server has not answered, which keep their
+ * places. Both follow a new chat's draft to its saved thread.
+ */
+function usePending() {
+  const [uploading, setUploading] = useState<readonly Uploading[]>([]);
+  const uploadingRef = useRef<readonly Uploading[]>([]);
+  const removingRef = useRef<readonly Removing[]>([]);
+  const transfers = useRef(new Map<string, AbortController>());
+  const track = useCallback((change: (current: readonly Uploading[]) => readonly Uploading[]) => {
+    uploadingRef.current = change(uploadingRef.current);
+    setUploading(uploadingRef.current);
+  }, []);
+  useEffect(
+    () =>
+      onAttachmentsMoved((from, to) => {
+        const follow = <T extends { draft: string }>(item: T): T =>
+          item.draft === from ? { ...item, draft: to } : item;
+        track((current) => current.map(follow));
+        removingRef.current = removingRef.current.map(follow);
+      }),
+    [track],
+  );
+  /** Stops an upload still on its way, a stalled one too; the draft's text and other files stay. */
+  const cancel = useCallback(
+    (id: string) => {
+      transfers.current.get(id)?.abort();
+      transfers.current.delete(id);
+      track((current) => current.filter((entry) => entry.id !== id));
+    },
+    [track],
+  );
+  return { uploading, uploadingRef, removingRef, transfers, track, cancel };
 }
 
 /** The draft's uploads, the ones still on their way, and the last refusal. */
@@ -87,23 +131,10 @@ export function useKiUploads(organizationId: string, draft: string) {
     () => '',
   );
   const uploads = useMemo(() => parseAttachments(raw), [raw]);
-  const [uploading, setUploading] = useState<readonly Uploading[]>([]);
-  const uploadingRef = useRef<readonly Uploading[]>([]);
+  const { uploading, uploadingRef, removingRef, transfers, track, cancel } = usePending();
   const [error, setError] = useState<Refusal | null>(null);
   // The draft whose message waits for its uploads: it says so until they are stored.
   const [waiting, setWaiting] = useState<string | null>(null);
-  const track = useCallback((change: (current: readonly Uploading[]) => readonly Uploading[]) => {
-    uploadingRef.current = change(uploadingRef.current);
-    setUploading(uploadingRef.current);
-  }, []);
-  // A new chat's draft that moved to its saved thread takes its uploads still on their way along.
-  useEffect(
-    () =>
-      onAttachmentsMoved((from, to) =>
-        track((current) => current.map((item) => (item.draft === from ? { ...item, draft: to } : item))),
-      ),
-    [track],
-  );
 
   const add = useCallback(
     (files: readonly File[]) => {
@@ -111,7 +142,7 @@ export function useKiUploads(organizationId: string, draft: string) {
       for (const file of files) {
         const held = [
           ...readAttachments(draft),
-          ...uploadingRef.current.filter((item) => item.draft === draft),
+          ...[...uploadingRef.current, ...removingRef.current].filter((item) => item.draft === draft),
         ];
         const refused = uploadPrecheck(file, held);
         if (refused) {
@@ -127,7 +158,15 @@ export function useKiUploads(organizationId: string, draft: string) {
         };
         track((current) => [...current, item]);
         const session = draftClears();
-        void uploadAiFile(organizationId, file).then((result) => {
+        const transfer = new AbortController();
+        transfers.current.set(item.id, transfer);
+        void uploadAiFile(organizationId, file, transfer.signal).then((result) => {
+          transfers.current.delete(item.id);
+          // Cancelled: the entry is gone, and a file the server registered meanwhile is discarded.
+          if (transfer.signal.aborted) {
+            if (result.success) void discardAiFile({ organizationId, fileId: result.file.fileId });
+            return;
+          }
           // The draft the upload belongs to now: it moved along with a new chat's first message.
           const target = uploadingRef.current.find((entry) => entry.id === item.id)?.draft ?? item.draft;
           track((current) => current.filter((entry) => entry.id !== item.id));
@@ -138,12 +177,19 @@ export function useKiUploads(organizationId: string, draft: string) {
         });
       }
     },
-    [organizationId, draft, track],
+    [organizationId, draft, track, uploadingRef, removingRef, transfers],
   );
 
   const remove = useCallback(
-    (fileId: string) => removeUpload(organizationId, draft, fileId, setError),
-    [organizationId, draft],
+    (fileId: string) => {
+      const file = readAttachments(draft).find((held) => held.fileId === fileId);
+      if (!file) return;
+      removingRef.current = [...removingRef.current, { fileId, draft, sizeBytes: file.sizeBytes }];
+      removeUpload(organizationId, draft, file, setError, () => {
+        removingRef.current = removingRef.current.filter((item) => item.fileId !== fileId);
+      });
+    },
+    [organizationId, draft, removingRef],
   );
 
   const shown = uploading.filter((item) => item.draft === draft);
@@ -161,6 +207,7 @@ export function useKiUploads(organizationId: string, draft: string) {
     error: wait ? WAIT_FOR_UPLOADS : error?.draft === draft ? error.message : null,
     add,
     remove,
+    cancel,
     take,
   };
 }
@@ -235,10 +282,12 @@ export function KiAttachmentList({
   uploads,
   uploading,
   onRemove,
+  onCancel,
 }: {
   uploads: readonly AiUploadedFile[];
   uploading: readonly Uploading[];
   onRemove: (fileId: string) => void;
+  onCancel: (id: string) => void;
 }): React.JSX.Element | null {
   if (uploads.length === 0 && uploading.length === 0) return null;
   return (
@@ -265,7 +314,7 @@ export function KiAttachmentList({
       {uploading.map((item) => (
         <li
           key={item.id}
-          className="flex max-w-full items-center gap-2 rounded-md border px-2 py-1"
+          className="flex max-w-full items-center gap-2 rounded-md border py-1 pr-1 pl-2"
           aria-busy
         >
           <FileTypeIcon mimeType={item.mimeType} />
@@ -275,6 +324,16 @@ export function KiAttachmentList({
               wird hochgeladen …
             </span>
           </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-11 sm:size-8"
+            aria-label={`Hochladen von ${item.name} abbrechen`}
+            onClick={() => onCancel(item.id)}
+          >
+            <X />
+          </Button>
         </li>
       ))}
     </ul>

@@ -550,8 +550,9 @@ function restoreDraft(key: string, text: string): void {
 /** Messages whose page went before their turns started go back into their drafts, each as the same command. */
 function restoreUnsent(host: TurnHost): void {
   for (const { draft, threadId, commandId, text } of takeSending(host.userId, host.organizationId)) {
-    holdRetry(draft, { threadId, commandId, text });
-    restoreMessage(draft, text, takeSendingAttachments(draft));
+    const uploads = takeSendingAttachments(draft);
+    holdRetry(draft, { threadId, commandId, text, fileIds: uploads.map((upload) => upload.fileId) });
+    restoreMessage(draft, text, uploads);
   }
 }
 
@@ -589,7 +590,12 @@ function newTurn(
  */
 function settleRefused(turn: LiveTurn, outcome: TurnOutcome, host: TurnHost): void {
   const commandId = outcome.kind === 'refused' && outcome.spent ? crypto.randomUUID() : turn.commandId;
-  holdRetry(turn.draft, { threadId: turn.threadId, commandId, text: turn.user.text });
+  holdRetry(turn.draft, {
+    threadId: turn.threadId,
+    commandId,
+    text: turn.user.text,
+    fileIds: turn.uploads.map((upload) => upload.fileId),
+  });
   restoreMessage(turn.draft, turn.user.text, turn.uploads);
   if (turn.provisional && host.shownRef.current === turn.threadId) host.showOnly(null);
   void host.readWindow(turn.threadId).then((read) => {
@@ -599,22 +605,32 @@ function settleRefused(turn: LiveTurn, outcome: TurnOutcome, host: TurnHost): vo
 
 /**
  * The thread and command of a message. Only a message sent again unchanged
- * after its refusal is the same command in the same thread; other text from
- * the new chat starts a new thread.
+ * after its refusal, the same text with the same files in the same order, is
+ * the same command in the same thread; other text or files from the new chat
+ * start a new thread.
  */
 function commandFor(
   text: string,
+  uploads: readonly AiUploadedFile[],
   host: TurnHost,
   refused: RetryCommand | undefined,
 ): { target: string; commandId: string } {
   const retry =
-    refused?.text === text && (host.threadId === null || host.threadId === refused.threadId)
+    refused?.text === text &&
+    sameFiles(refused.fileIds, uploads) &&
+    (host.threadId === null || host.threadId === refused.threadId)
       ? refused
       : undefined;
   return {
     target: host.threadId ?? retry?.threadId ?? crypto.randomUUID(),
     commandId: retry?.commandId ?? crypto.randomUUID(),
   };
+}
+
+function sameFiles(fileIds: readonly string[], uploads: readonly AiUploadedFile[]): boolean {
+  return (
+    fileIds.length === uploads.length && uploads.every((upload, index) => upload.fileId === fileIds[index])
+  );
 }
 
 /** Sends the turn's message with its files; its events go to `onEvent`, its outcome to `finish`. */
@@ -652,6 +668,7 @@ function useLiveTurn(host: TurnHost) {
   // comes back into its draft when the chat opens again, as the same command.
   const leftRef = useRef(false);
   // A sign-out in the tab cleared the drafts: no answer of a turn begun before writes them again.
+  // Each send takes the count anew, so a sign-out that failed and left the page blocks no next turn.
   const clears = useRef(draftClears());
   useEffect(() => {
     leftRef.current = false;
@@ -685,16 +702,14 @@ function useLiveTurn(host: TurnHost) {
 
   const finish = useCallback(
     (turn: LiveTurn, outcome: TurnOutcome) => {
-      if (
-        leftRef.current ||
-        draftClears() !== clears.current ||
-        liveRef.current?.commandId !== turn.commandId
-      )
-        return;
+      if (leftRef.current || liveRef.current?.commandId !== turn.commandId) return;
       const current = liveRef.current;
       abortRef.current = null;
-      releaseMessage(current.draft);
       update(() => null);
+      // The turn ends either way, so the composer takes the next message; after a sign-out's clear
+      // nothing of it goes back into the drafts.
+      if (draftClears() !== clears.current) return;
+      releaseMessage(current.draft);
       if (current.started || outcome.kind === 'already_done')
         return settleSaved(current, outcome, hostRef.current);
       settleRefused(current, outcome, hostRef.current);
@@ -711,7 +726,8 @@ function useLiveTurn(host: TurnHost) {
         restoreMessage(draft, text, uploads);
         return setError({ draft, message: describeTurnRefusal('run_active') });
       }
-      const { target, commandId } = commandFor(text, host, takeRetry(draft));
+      clears.current = draftClears();
+      const { target, commandId } = commandFor(text, uploads, host, takeRetry(draft));
       invalidateStop();
       holdMessage({ draft, threadId: target, commandId, text }, uploads);
       host.supersedeReads(target);

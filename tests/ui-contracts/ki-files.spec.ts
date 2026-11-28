@@ -220,6 +220,60 @@ test('a refused message keeps its command and its files with its draft through a
   await expect(attached(page).getByText('Lieferschein 4711.pdf')).toBeVisible();
   await page.getByRole('button', { name: 'Senden', exact: true }).click();
   expect(await page.evaluate(() => window.uiContractKiTurn.calls)).toEqual([sent]);
+
+  // Sent again with other files, it is another command: the server binds a saved command to its files.
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'refused', message: 'Gerade nicht.' }));
+  await attached(page).getByRole('button', { name: 'Lieferschein 4711.pdf entfernen' }).click();
+  await expect(attached(page)).toHaveCount(0);
+  await expect(composer(page)).toHaveValue('Lies bitte den Lieferschein.');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  const [, changed] = await page.evaluate(() => window.uiContractKiTurn.calls);
+  expect(changed?.fileIds).toEqual([]);
+  expect(changed?.commandId).not.toBe(sent?.commandId);
+});
+
+test('a removed file keeps its place until the server removed it, and an upload on its way can be cancelled', async ({
+  page,
+}) => {
+  const ids = [1, 2, 3, 4, 5].map((n) => `00000000-0000-4000-8000-00000000010${n}`);
+  await openContractFixture(page, 'ki-chat');
+  await composer(page).fill('Fünf Lieferscheine');
+  for (const [index, id] of ids.entries()) {
+    await choose(page, [pdf(`Lieferschein ${index + 1}.pdf`)]);
+    await finishUpload(page, id, 1);
+  }
+  await expect(attached(page).getByRole('listitem')).toHaveCount(5);
+
+  // A removal the server has not answered keeps its file's place, since a refused one comes back.
+  await page.evaluate(() => {
+    window.uiContractKiHeldDiscards = [];
+  });
+  await attached(page).getByRole('button', { name: 'Lieferschein 5.pdf entfernen' }).click();
+  await expect(attached(page).getByRole('listitem')).toHaveCount(4);
+  await choose(page, [pdf('Rechnung.pdf')]);
+  await expect(
+    page.getByRole('main').getByText('„Rechnung.pdf“: Eine Nachricht nimmt höchstens 5 Dateien mit.'),
+  ).toBeVisible();
+  expect(await page.evaluate(() => window.uiContractKiUploads.length)).toBe(0);
+  await page.evaluate(() => window.uiContractKiHeldDiscards?.shift()?.(true));
+  await choose(page, [pdf('Rechnung.pdf')]);
+  await expect(attached(page).getByRole('status')).toHaveText('wird hochgeladen …');
+
+  // An upload on its way, a stalled one too, can be cancelled: the text and the other files stay.
+  await attached(page).getByRole('button', { name: 'Hochladen von Rechnung.pdf abbrechen' }).click();
+  await expect(attached(page).getByRole('status')).toHaveCount(0);
+  await expect(attached(page).getByRole('listitem')).toHaveCount(4);
+  await expect(composer(page)).toHaveValue('Fünf Lieferscheine');
+  expect(await page.evaluate(() => window.uiContractKiUploads[0]?.cancelled())).toBe(true);
+
+  // A registration that lands after the cancel is discarded and never joins the draft.
+  const late = '00000000-0000-4000-8000-0000000000f7';
+  await finishUpload(page, late, 1);
+  await expect.poll(() => page.evaluate(() => window.uiContractKiDiscards)).toContain(late);
+  await expect(attached(page).getByRole('listitem')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  const [call] = await page.evaluate(() => window.uiContractKiTurn.calls);
+  expect(call?.fileIds).toEqual(ids.slice(0, 4));
 });
 
 test('a new chat takes its files along once saved, and a refusal after sign-out writes nothing back', async ({
@@ -279,4 +333,11 @@ test('a new chat takes its files along once saved, and a refusal after sign-out 
   const stored = await page.evaluate(() => JSON.stringify(sessionStorage));
   expect(stored).not.toContain('Rechnung.pdf');
   expect(stored).not.toContain('Und die Rechnung?');
+
+  // The sign-out failed and the page stayed: the next message goes as a new turn.
+  const before = await page.evaluate(() => window.uiContractKiTurn.calls.length);
+  await composer(page).fill('Noch einmal');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.uiContractKiTurn.calls.length)).toBe(before + 1);
+  await expect(composer(page)).toHaveValue('');
 });

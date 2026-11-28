@@ -67,13 +67,20 @@ export function draftKey(userId: string, organizationId: string, threadId: strin
   return `${draftScope(userId, organizationId)}${threadId ?? 'neu'}`;
 }
 
-/** A message's thread and command: sent again unchanged, it is the same command. */
-export type RetryCommand = { threadId: string; commandId: string; text: string };
+/** A message's thread and command. */
+type MessageCommand = { threadId: string; commandId: string; text: string };
+
+/**
+ * The command of a message that went back into its draft, with the files it
+ * named in their order: sent again with the same text and files, it is the
+ * same command; the server binds a saved command to its files.
+ */
+export type RetryCommand = MessageCommand & { fileIds: readonly string[] };
 
 /** A message on its way to the turn route, from the draft under `draft`. */
-type SendingMessage = RetryCommand & { draft: string };
+type SendingMessage = MessageCommand & { draft: string };
 
-function isRetryCommand(value: unknown): value is RetryCommand {
+function isMessageCommand(value: unknown): value is MessageCommand {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -86,8 +93,15 @@ function isRetryCommand(value: unknown): value is RetryCommand {
   );
 }
 
+/** The file ids a stored retry names; a retry kept before files existed names none. */
+function storedFileIds(value: object): string[] | null {
+  if (!('fileIds' in value)) return [];
+  const ids: unknown = value.fileIds;
+  return Array.isArray(ids) && ids.every((id) => typeof id === 'string') ? ids : null;
+}
+
 function isSendingMessage(value: unknown): value is SendingMessage {
-  return isRetryCommand(value) && 'draft' in value && typeof value.draft === 'string';
+  return isMessageCommand(value) && 'draft' in value && typeof value.draft === 'string';
 }
 
 /** A stored copy as written by this module, or null. */
@@ -115,7 +129,11 @@ export function takeRetry(draft: string): RetryCommand | undefined {
   const key = `${draft}${RETRY_SUFFIX}`;
   const value = parseStored(readDraft(key));
   writeDraft(key, '');
-  return isRetryCommand(value) ? value : undefined;
+  if (!isMessageCommand(value)) return undefined;
+  const fileIds = storedFileIds(value);
+  return fileIds
+    ? { threadId: value.threadId, commandId: value.commandId, text: value.text, fileIds }
+    : undefined;
 }
 
 /**

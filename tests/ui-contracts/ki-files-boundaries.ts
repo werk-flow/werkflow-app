@@ -7,6 +7,8 @@ import type { AiUploadedFile } from '@/lib/ai/files/types';
 
 type HeldUpload = {
   name: string;
+  /** Whether the composer cancelled the transfer. */
+  cancelled: () => boolean;
   answer: (result: { success: true; file: AiUploadedFile } | { success: false; error: string }) => void;
 };
 
@@ -34,8 +36,11 @@ window.uiContractKiClearDrafts = clearKiDrafts;
 export function uploadAiFile(
   _organizationId: string,
   file: File,
+  signal: AbortSignal,
 ): Promise<{ success: true; file: AiUploadedFile } | { success: false; error: string }> {
-  return new Promise((answer) => window.uiContractKiUploads.push({ name: file.name, answer }));
+  return new Promise((answer) =>
+    window.uiContractKiUploads.push({ name: file.name, cancelled: () => signal.aborted, answer }),
+  );
 }
 
 type DiscardResult = { success: true } | { success: false; error: string };

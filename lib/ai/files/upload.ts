@@ -17,15 +17,17 @@ import { type UploadRule, uploadRuleFailure } from '@/lib/storage/upload-rules';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { isConfirmedWriteRefusal, writeRefusalFor } from '@/lib/supabase/write-refusal';
+import { hasSignatureOf } from './file-signature';
 import { countPdfPages } from './pdf-pages';
 import type { AiFileFinalizeResult, AiFileUploadTicketResult, AiUploadedFile } from './types';
 
 // A file or phone photo a person adds to their next WerkFlow KI message
 // (docs/technical/document-storage-and-access.md, "KI files"). The ticket signs
 // a PUT for a staging key, the browser moves the bytes, and the finalize copies
-// them to a key of its own, checks type, size and a PDF's pages on the copy,
-// and registers it unattached. The key holds the uploader, so only their own
-// session finds the staged bytes; it holds no file name.
+// them to a key of its own, checks type, size, leading bytes and a PDF's
+// declared pages on the copy, and registers it unattached. The key holds the
+// uploader, so only their own session finds the staged bytes; it holds no file
+// name.
 
 type Caller = Pick<ActionContext, 'orgId' | 'userId'>;
 
@@ -65,16 +67,22 @@ export async function issueAiFileUploadTicket(
   }
 }
 
-/** Why the stored copy breaks the PDF page cap, or its page count (null for an image). */
-async function checkPages(
+/**
+ * Why the stored copy is refused, or its page count: null for an image and for
+ * a PDF whose page tree the counter cannot follow. The cap is advisory
+ * (lib/ai/files/pdf-pages.ts); a file whose bytes are not of its type is refused.
+ */
+async function checkContent(
   caller: Caller,
   path: string,
   mimeType: string,
 ): Promise<{ pages: number | null } | { error: string }> {
-  if (mimeType !== 'application/pdf') return { pages: null };
-  const pages = countPdfPages(await readStorageObject({ organizationId: caller.orgId, path }));
-  if (pages === null) return { error: 'file_unreadable' };
-  return pages > AI_UPLOAD_LIMITS.maxPdfPages ? { error: 'file_too_many_pages' } : { pages };
+  const bytes = await readStorageObject({ organizationId: caller.orgId, path });
+  if (!hasSignatureOf(bytes, mimeType)) return { error: 'file_unreadable' };
+  const pages = mimeType === 'application/pdf' ? countPdfPages(bytes) : null;
+  return pages !== null && pages > AI_UPLOAD_LIMITS.maxPdfPages
+    ? { error: 'file_too_many_pages' }
+    : { pages };
 }
 
 /** The caller's registered file under the id, when a finalize already registered it. */
@@ -131,10 +139,10 @@ export async function registerUploadedAiFile(
   }
   let pages;
   try {
-    pages = await checkPages(caller, copy.path, copy.contentType);
+    pages = await checkContent(caller, copy.path, copy.contentType);
   } catch (error) {
     // No row references the copy yet, so it goes; the person uploads the file again.
-    logError('registerUploadedAiFile: page count failed', error);
+    logError('registerUploadedAiFile: content check failed', error);
     await discard();
     return { success: false, error: 'upload_failed' };
   }

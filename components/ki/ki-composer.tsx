@@ -121,7 +121,12 @@ export const KiComposer = memo(function KiComposer({
 
   return (
     <form onSubmit={submit} className="shrink-0 space-y-2 border-t bg-background p-4">
-      <KiAttachmentList uploads={files.uploads} uploading={files.uploading} onRemove={files.remove} />
+      <KiAttachmentList
+        uploads={files.uploads}
+        uploading={files.uploading}
+        onRemove={files.remove}
+        onCancel={files.cancel}
+      />
       <div className="flex items-end gap-2">
         <KiAttachButtons onSelect={files.add} />
         <Field

@@ -7,8 +7,16 @@ import type { AiFileFinalizeResult } from './types';
 // finalize checks and registers the stored copy. No byte passes through a
 // Server Action.
 
-/** Sends one file to storage and registers it: the file, or a refusal code. */
-export async function uploadAiFile(organizationId: string, file: File): Promise<AiFileFinalizeResult> {
+/**
+ * Sends one file to storage and registers it: the file, or a refusal code.
+ * `signal` cancels it: the transfer stops, and a file not yet finalized is
+ * never registered.
+ */
+export async function uploadAiFile(
+  organizationId: string,
+  file: File,
+  signal: AbortSignal,
+): Promise<AiFileFinalizeResult> {
   try {
     const ticket = await createAiFileUploadTicket({
       organizationId,
@@ -21,12 +29,14 @@ export async function uploadAiFile(organizationId: string, file: File): Promise<
       method: 'PUT',
       body: file,
       headers: { 'Content-Type': file.type },
+      signal,
     });
-    if (!put.ok) return { success: false, error: 'upload_failed' };
+    if (!put.ok || signal.aborted) return { success: false, error: 'upload_failed' };
     // A name over the stored cap keeps its first 200 characters, counted by code point.
     const fileName = Array.from(file.name.trim()).slice(0, 200).join('') || 'Datei';
     return await finalizeAiFileUpload({ organizationId, fileId: ticket.fileId, fileName });
   } catch (error) {
+    if (signal.aborted) return { success: false, error: 'upload_failed' };
     logError('uploadAiFile: transfer failed', error);
     return { success: false, error: 'upload_failed' };
   }

@@ -26,9 +26,8 @@ create table public.ai_thread_files (
   file_name text not null check (char_length(file_name) between 1 and 200),
   mime_type text not null check (mime_type in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')),
   size_bytes bigint not null check (size_bytes > 0),
-  page_count integer check (
-    (mime_type = 'application/pdf') = (page_count is not null) and (page_count is null or page_count > 0)
-  ),
+  -- A PDF's declared pages, null when the counter cannot follow its page tree; an image has none.
+  page_count integer check (page_count is null or (page_count > 0 and mime_type = 'application/pdf')),
   created_at timestamptz not null default now(),
   -- The uploader's membership: a removed member's files go with it.
   foreign key (user_id, organization_id)

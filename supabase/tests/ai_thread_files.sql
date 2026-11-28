@@ -70,9 +70,15 @@ begin
   foreach v_file in array array[
     'af000000-0000-4000-8000-000000000101', 'af000000-0000-4000-8000-000000000102'
   ]::uuid[] loop
+    -- The second PDF's pages are unknown: its counter could not follow the page tree.
     perform public.register_ai_thread_file(v_org, v_user, v_file,
-      v_org || '/ki/' || v_user || '/' || v_file || '/a-datei', 'lieferschein.pdf', 'application/pdf', 1000, 2, 3);
+      v_org || '/ki/' || v_user || '/' || v_file || '/a-datei', 'lieferschein.pdf', 'application/pdf', 1000,
+      case when v_file = 'af000000-0000-4000-8000-000000000101' then 2 end, 3);
   end loop;
+  if (select file.page_count from public.ai_thread_files file
+      where file.id = 'af000000-0000-4000-8000-000000000102') is not null then
+    raise exception 'A PDF of unknown pages must register with no page count';
+  end if;
   begin
     perform public.register_ai_thread_file(v_org, v_user, 'af000000-0000-4000-8000-000000000101',
       v_org || '/ki/' || v_user || '/af000000-0000-4000-8000-000000000101/b-datei', 'x.pdf', 'application/pdf',
@@ -183,6 +189,10 @@ begin
       where item.idempotency_key = 'cmd-1:file:af000000-0000-4000-8000-000000000101') is distinct from
       '{"fileId":"af000000-0000-4000-8000-000000000101","name":"lieferschein.pdf","mimeType":"application/pdf","sizeBytes":1000,"pages":2,"origin":"upload"}'::jsonb then
     raise exception 'A file item does not carry the file''s registered values';
+  end if;
+  if (select item.body ->> 'pages' from public.ai_thread_items item
+      where item.idempotency_key = 'cmd-1:file:af000000-0000-4000-8000-000000000102') is not null then
+    raise exception 'A file item of unknown pages names a page count';
   end if;
   if (select started.files from public.start_ai_turn_with_files(v_org, v_user, v_thread, 'Lieferschein', 'cmd-1',
       'Lies den Lieferschein.', 1000, v_files, 5, 100000) started) is distinct from

@@ -1,9 +1,9 @@
 // WerkFlow KI files over their real actions, reader and turn route
 // (werk-flow/werkflow-planning#534). The upload signs only the caller's own
 // staging key; the finalize registers only what the caller's own session
-// staged, refuses a PDF over the page cap or one that does not parse and
-// discards its copy; another person's and another organization's file is
-// never opened; and a message attaches files only as the session's own
+// staged, refuses a PDF over its declared page cap or a file whose bytes are
+// not of its type and discards its copy; another person's and another
+// organization's file is never opened; and a message attaches files only as the session's own
 // person, in the session's organization, into their own thread. The database
 // functions answer as their SQL does (supabase/tests/ai_thread_files.sql
 // proves the SQL). Each block states one invariant; a failing assert names it.
@@ -118,6 +118,9 @@ async function pdfBody(pages: number): Promise<string> {
   return ascii;
 }
 
+/** The leading bytes of a WebP image, ASCII so the in-memory bucket stores them byte for byte. */
+const WEBP_BODY = 'RIFF\0\0\0\0WEBPVP8 ';
+
 /** Signs, stages the body as the browser's PUT would, and finalizes it. */
 async function upload(body: string, mimeType: string, fileName: string, organizationId = ORGANIZATION_A) {
   const ticket = await createAiFileUploadTicket({
@@ -181,16 +184,29 @@ assert.ok(!bucket.has(twoPages.key), 'the finalize removes the staging object');
   assert.equal(writes.length, before, 'a repeated finalize must not touch storage');
 }
 
-// A PDF over the page cap and one that does not parse are refused, and their copies discarded.
-for (const [body, error] of [
-  [await pdfBody(21), 'file_too_many_pages'],
-  ['%PDF-1.7 kein PDF', 'file_unreadable'],
+// A PDF over the page cap, a "PDF" without the PDF header and an image whose bytes are no image
+// are refused, and their copies discarded.
+for (const [body, mimeType, error] of [
+  [await pdfBody(21), 'application/pdf', 'file_too_many_pages'],
+  ['kein PDF', 'application/pdf', 'file_unreadable'],
+  ['<html><img src=x></html>', 'image/png', 'file_unreadable'],
 ] as const) {
   const objects = bucket.size;
-  const refused = await upload(body, 'application/pdf', 'zu lang.pdf');
+  const refused = await upload(body, mimeType, 'abgelehnt');
   assert.deepEqual(refused.result, { success: false, error }, `the finalize must refuse with ${error}`);
   assert.equal(bucket.size, objects, `a ${error} copy must not stay in storage`);
   assert.ok(!files().some((file) => file.id === refused.fileId), `a ${error} file must not register`);
+}
+
+// A PDF whose page tree the counter cannot follow is stored with its pages unknown: the page cap is
+// advisory, and the size cap bounds what is stored.
+{
+  const unknown = await upload('%PDF-1.7 ohne Seitenbaum', 'application/pdf', 'Scan.pdf');
+  assert.ok(
+    unknown.result.success && unknown.result.file.pages === null,
+    'a PDF whose pages cannot be counted must register with its pages unknown',
+  );
+  assert.equal(files().find((file) => file.id === unknown.fileId)?.page_count, null);
 }
 
 // The ticket refuses a type or a size outside the caps before it signs anything.
@@ -326,7 +342,7 @@ for (const [mimeType, size, error] of [
     user_id: OTHER_USER_ID,
     title: 'Fremder Chat',
   });
-  const own = await upload('jpeg-bytes', 'image/jpeg', 'Foto.jpg');
+  const own = await upload(WEBP_BODY, 'image/webp', 'Foto.webp');
   assert.ok(own.result.success);
   const refusedThread = await postTurn('Hier rein', { threadId: otherThread, fileIds: [own.fileId] });
   assert.equal(refusedThread.status, 404, "another person's thread must be refused");
