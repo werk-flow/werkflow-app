@@ -5,9 +5,9 @@ import { dirname, join } from 'node:path';
 import { parseEnvironmentFile } from '../env-file';
 import { z } from '../zod';
 
-// The one owner of the keys agents hold for DEV, staging and the Stripe sandbox
-// (docs/technical/machine-setup.md, "Agent keys"). Each machine keeps its own
-// copy of each key in one file. Only the processes that use the keys read it,
+// The one owner of the keys agents hold for DEV, staging, the Stripe sandbox and
+// Browserbase (docs/technical/machine-setup.md, "Agent keys"). Each machine keeps
+// its copy of each key in one file. Only the processes that use the keys read it,
 // through `readStagingAgentKeys`; the hook .claude/hooks/refuse-boat-key-reads.ts
 // refuses an agent's read of it. Nothing here prints, logs or returns a value in
 // a message.
@@ -21,6 +21,7 @@ const KEY_SHAPES = {
   SUPABASE_DEV_SECRET_KEY: /^sb_secret_[A-Za-z0-9_-]{20,}$/,
   STRIPE_SANDBOX_KEY: /^rk_test_[A-Za-z0-9]{20,}$/,
   VERCEL_STAGING_BYPASS_SECRET: /^[A-Za-z0-9]{32}$/,
+  BROWSERBASE_API_KEY: /^bb_live_[A-Za-z0-9_-]{20,}$/,
 } as const;
 
 export type StagingAgentKeyName = keyof typeof KEY_SHAPES;
@@ -30,6 +31,7 @@ export const STAGING_AGENT_KEY_NAMES: readonly StagingAgentKeyName[] = [
   'SUPABASE_DEV_SECRET_KEY',
   'STRIPE_SANDBOX_KEY',
   'VERCEL_STAGING_BYPASS_SECRET',
+  'BROWSERBASE_API_KEY',
 ];
 
 /** What a check found: never a value. */
@@ -83,6 +85,7 @@ function stagingAgentKeysFrom(text: string): StagingAgentKeys {
       SUPABASE_DEV_SECRET_KEY: verdict('SUPABASE_DEV_SECRET_KEY'),
       STRIPE_SANDBOX_KEY: verdict('STRIPE_SANDBOX_KEY'),
       VERCEL_STAGING_BYPASS_SECRET: verdict('VERCEL_STAGING_BYPASS_SECRET'),
+      BROWSERBASE_API_KEY: verdict('BROWSERBASE_API_KEY'),
     },
     values,
   };

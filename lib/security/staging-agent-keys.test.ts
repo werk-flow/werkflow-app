@@ -27,6 +27,7 @@ const MADE_UP = {
   SUPABASE_DEV_SECRET_KEY: 'sb_secret_MadeUpValue_0123456789abcdef',
   STRIPE_SANDBOX_KEY: `rk_test_${'Ab1'.repeat(10)}`,
   VERCEL_STAGING_BYPASS_SECRET: 'MadeUpBypassSecret0123456789abcd',
+  BROWSERBASE_API_KEY: 'bb_live_MadeUp-Value_0123456789',
 };
 const fileText = (values: Record<string, string>) =>
   Object.entries(values)
@@ -51,6 +52,9 @@ test('each key has its shape, and a live or account-wide key does not', () => {
   expect(keyShapeVerdict('VERCEL_STAGING_BYPASS_SECRET', `${MADE_UP.VERCEL_STAGING_BYPASS_SECRET}x`)).toBe(
     'failed',
   );
+  expect(keyShapeVerdict('BROWSERBASE_API_KEY', MADE_UP.BROWSERBASE_API_KEY)).toBe('ok');
+  expect(keyShapeVerdict('BROWSERBASE_API_KEY', MADE_UP.SUPABASE_DEV_SECRET_KEY)).toBe('failed');
+  expect(keyShapeVerdict('BROWSERBASE_API_KEY', 'bb_live_short')).toBe('failed');
   expect(keyShapeVerdict('STRIPE_SANDBOX_KEY', '')).toBe('missing');
   expect(keyShapeVerdict('STRIPE_SANDBOX_KEY', undefined)).toBe('missing');
 });
@@ -78,8 +82,10 @@ test('the reader returns only keys in shape, so a malformed or live key is never
       SUPABASE_DEV_SECRET_KEY: 'ok',
       STRIPE_SANDBOX_KEY: 'failed',
       VERCEL_STAGING_BYPASS_SECRET: 'ok',
+      BROWSERBASE_API_KEY: 'ok',
     });
     expect([...keys.values.keys()].sort()).toEqual([
+      'BROWSERBASE_API_KEY',
       'SUPABASE_DEV_ACCESS_TOKEN',
       'SUPABASE_DEV_SECRET_KEY',
       'VERCEL_STAGING_BYPASS_SECRET',

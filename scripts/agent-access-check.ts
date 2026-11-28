@@ -22,12 +22,13 @@ import {
   sandboxVerdict,
   writeRefusedOutcome,
 } from '../lib/security/staging-agent-keys';
+import { BROWSERBASE_API } from '../lib/security/browserbase';
 import { supabaseProjectRefs } from '../lib/security/production-access';
 import { STAGING_ORIGIN } from '../lib/testing/staging/boundary';
 
 /**
- * `bun run agent-access:check` proves that this machine's agent keys reach DEV, staging and the
- * Stripe sandbox, and nothing more (docs/technical/machine-setup.md, "Agent keys"). It prints each
+ * `bun run agent-access:check` proves that this machine's agent keys reach DEV, staging, the
+ * Stripe sandbox and Browserbase, and nothing more (docs/technical/machine-setup.md, "Agent keys"). It prints each
  * check's name and `ok`, `failed` or `missing`, never a value or a response body, and exits 1 on
  * anything but `ok`. A failed write probe adds a line that names the condition that failed. A request that fails or times out fails its check. It sends a key only when the
  * key has its shape, so a live Stripe key never leaves the machine.
@@ -154,6 +155,16 @@ async function staging(bypass: string | undefined): Promise<Verdict> {
   });
 }
 
+/** Browserbase accepts the key: listing its project spends no browser time and no Search or Fetch call. */
+async function browserbaseAccepted(key: string): Promise<Verdict> {
+  return probe(async () =>
+    statusVerdict(
+      await request(`${BROWSERBASE_API}/projects`, { headers: { 'X-BB-API-Key': key } }),
+      (status) => (status === 200 ? 'ok' : 'failed'),
+    ),
+  );
+}
+
 /** A path's mode verdict; a path through a file or one the user cannot reach fails, never crashes. */
 function modeVerdict(path: string, kind: 'file' | 'folder'): Verdict {
   try {
@@ -214,6 +225,7 @@ async function check(): Promise<boolean> {
     'VERCEL_STAGING_BYPASS_SECRET passes staging protection',
     withKey('VERCEL_STAGING_BYPASS_SECRET', (bypass) => staging(bypass)),
   ]);
+  lines.push(['BROWSERBASE_API_KEY is accepted', withKey('BROWSERBASE_API_KEY', browserbaseAccepted)]);
 
   // Every Supabase token this checkout's env files hold reaches DEV and not PROD. A value without a token's
   // shape fails unsent, so another provider's key never reaches Supabase.

@@ -241,12 +241,12 @@ test('the helper and the dispatcher, which read the hand-out secret themselves, 
     expect(refused(command), command).toBeUndefined();
 });
 
-// The agents' staging keys, the Supabase CLI's login and the old sandbox folder: the same shapes
+// The agents' keys, the Supabase CLI's login and the old sandbox folder: the same shapes
 // are refused, and each refusal names who reads the file instead.
 const HOME_SECRETS = [
   {
     file: '~/.config/werkflow/staging-agents.env',
-    holds: "the agents' staging keys",
+    holds: "the agents' keys",
     instead: 'bun run agent-access:check',
   },
   { file: '~/.supabase/access-token', holds: "the Supabase CLI's login token", instead: 'bunx supabase' },
@@ -282,15 +282,15 @@ test('a read, print, copy or search of an agent-machine secret is refused and na
 
 test('a glob or a recursive read that reaches an agent-machine secret is refused', () => {
   for (const { command, holds } of [
-    { command: 'cat ~/.config/werkflow/*.env', holds: "the agents' staging keys" },
-    { command: 'cat ~/.config/werkflow/s*', holds: "the agents' staging keys" },
+    { command: 'cat ~/.config/werkflow/*.env', holds: "the agents' keys" },
+    { command: 'cat ~/.config/werkflow/s*', holds: "the agents' keys" },
     { command: 'cat ~/.supabase/*', holds: "the Supabase CLI's login token" },
     { command: 'cat ~/.werkflow-stripe-sandbox/*', holds: 'a Stripe sandbox key' },
     { command: 'cat ~/.werkflow-*/key.env', holds: 'a Stripe sandbox key' },
     { command: 'grep -r sk_test ~/.werkflow-stripe-sandbox', holds: 'a Stripe sandbox key' },
     { command: 'cd ~/.werkflow-stripe-sandbox && grep -r sk_ .', holds: 'a Stripe sandbox key' },
     { command: 'grep -r token ~/.supabase', holds: "the Supabase CLI's login token" },
-    { command: 'rg --hidden KEY ~/.config/werkflow', holds: "the agents' staging keys" },
+    { command: 'rg --hidden KEY ~/.config/werkflow', holds: "the agents' keys" },
   ])
     expect(refused(command), command).toContain(holds);
   expect(
@@ -523,7 +523,7 @@ test('a search for a secret file name in the repository passes, a read of the fi
     // An option that may take a value leaves no word a pattern: rg reads this file as ignore rules.
     'rg --ignore-file ~/.config/werkflow/staging-agents.env KEY',
   ])
-    expect(refusedInCheckout(command), command).toMatch(/staging keys|PROD keys/);
+    expect(refusedInCheckout(command), command).toMatch(/agents' keys|PROD keys/);
 });
 
 // The hook itself, as the agent runs it: exit 2 with the reason refuses the call.
