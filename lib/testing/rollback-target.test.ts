@@ -79,7 +79,7 @@ function builds(served: string, list: { uid: string; commit: number; created: nu
   writeFileSync(join(stub, 'list.json'), JSON.stringify({ deployments }));
 }
 
-function plan(target = '') {
+function plan(target = '', applied = git('rev-parse', 'HEAD')) {
   const outputFile = join(stub, 'output');
   writeFileSync(outputFile, '');
   const result = spawnSync('bash', [script, target], {
@@ -90,6 +90,7 @@ function plan(target = '') {
       PATH: `${stub}:${process.env.PATH}`,
       STUB: stub,
       GITHUB_OUTPUT: outputFile,
+      APPLIED_SHA: applied,
       VERCEL_TOKEN: 'token',
       VERCEL_TEAM_ID: 'team_a',
       VERCEL_PROJECT_ID: 'prj_a',
@@ -114,7 +115,7 @@ const RELEASES = [
   { uid: 'dpl_one', commit: 0, created: 100 },
 ];
 
-test('without a target it goes back to the newest build of another, older commit that served', () => {
+test('without a target it goes back to the nearest released ancestor with a build that served', () => {
   builds('dpl_three', RELEASES);
   const result = plan();
   expect(result.status, result.log).toBe(0);
@@ -122,7 +123,6 @@ test('without a target it goes back to the newest build of another, older commit
     sha: commit(1),
     deployment: 'dpl_two',
     served: 'dpl_three',
-    resume: 'false',
   });
 });
 
@@ -144,7 +144,8 @@ test('a named target whose build serves already resumes the rollback on the same
   builds('dpl_two', RELEASES);
   const result = plan(commit(1));
   expect(result.status, result.log).toBe(0);
-  expect(result.output).toEqual({ sha: commit(1), deployment: 'dpl_two', served: 'dpl_two', resume: 'true' });
+  expect(result.output).toEqual({ sha: commit(1), deployment: 'dpl_two', served: 'dpl_two' });
+  expect(result.log).toContain('resumes');
 });
 
 test('a commit production never held is refused before any Vercel call', () => {
@@ -161,7 +162,7 @@ test('a short sha, or no older build that served, is refused', () => {
   builds('dpl_one', RELEASES);
   const oldest = plan();
   expect(oldest.status).toBe(1);
-  expect(oldest.log).toContain('that served before');
+  expect(oldest.log).toContain('No released commit');
 });
 
 test('a target older than a destructive migration’s named release is refused, on main whether applied or not', () => {
@@ -176,5 +177,41 @@ test('a target older than a destructive migration’s named release is refused, 
   expect(plan().output.deployment).toBe('dpl_two');
   const tooOld = plan(commit(0));
   expect(tooOld.status).toBe(1);
-  expect(tooOld.log).toContain('20990101000000_drop.sql drops what code before');
+  expect(tooOld.log).toContain('A migration in PROD drops what code before');
+});
+
+test('a rebuild of an older release that serves steps back from its own commit, never forward', () => {
+  builds('dpl_two_rebuilt', [{ uid: 'dpl_two_rebuilt', commit: 1, created: 500 }, ...RELEASES]);
+  const result = plan();
+  expect(result.status, result.log).toBe(0);
+  expect(result.output.deployment).toBe('dpl_one');
+});
+
+test('a named commit with two builds that served resumes on the one that serves', () => {
+  builds('dpl_three_redeploy', RELEASES);
+  const result = plan(commit(2));
+  expect(result.status, result.log).toBe(0);
+  expect(result.output.deployment).toBe('dpl_three_redeploy');
+});
+
+test('without the commit whose migrations reached PROD no target is chosen', () => {
+  builds('dpl_three', RELEASES);
+  const result = plan('', '');
+  expect(result.status).toBe(1);
+  expect(result.log).toContain('reached PROD is unknown');
+});
+
+test('a marker spaced as the migration lint allows still guards, and one only on a later main does not', () => {
+  mkdirSync(join(repo, 'supabase/migrations'), { recursive: true });
+  const before = git('rev-parse', 'HEAD');
+  writeFileSync(
+    join(repo, 'supabase/migrations/20990101000001_spaced.sql'),
+    `--   @destructive:  after release ${commit(1).slice(0, 8)}: spaced as the lint accepts it\ndrop table old;\n`,
+  );
+  git('add', '.');
+  git('-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '--quiet', '-m', 'spaced');
+  builds('dpl_three', RELEASES);
+  expect(plan(commit(0)).log).toContain('lacks');
+  // The marker's migration is only on main, past what reached PROD: it guards nothing yet.
+  expect(plan(commit(0), before).status).toBe(0);
 });

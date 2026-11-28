@@ -37,13 +37,14 @@ jobs:
     # Only main holds the release's rules; a dispatch from a branch stops here.
     if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
-      actions: read # the release runs still going
+      actions: read # the release runs: one still going, and which migrations reached PROD
     outputs:
       sha: ${{ steps.target.outputs.sha }}
       deployment: ${{ steps.target.outputs.deployment }}
+      served: ${{ steps.target.outputs.served }}
     steps:
       # The history and the migrations are read; no step needs the job token in .git/config.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -51,22 +52,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # A release that runs on would promote its own build after the rollback.
-      - name: Refuse while a release runs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          running="$(gh run list --workflow release.yml --limit 20 --json status,url --jq '[.[] | select(.status != "completed") | .url] | join(" ")')"
-          test -z "$running" || { echo "::error::A release runs (${running}); roll back after it ends."; exit 1; }
-
-      # Metadata only: the builds that served production, the one that serves now, the migrations.
-      - name: Decide the target
+      - name: Plan the rollback
         id: target
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          TARGET: ${{ inputs.target }}
-        run: bash .github/scripts/rollback-target.sh "$TARGET"
+        uses: ./.github/actions/rollback-plan
+        with:
+          target: ${{ inputs.target }}
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
 
   rollback:
     name: Roll back production
@@ -74,17 +65,40 @@ jobs:
     if: ${{ !inputs.dry_run }}
     # The PROD secrets live in this environment only, and only main may use it, as for the release.
     environment: production
-    # The release's group, so a rollback and a release never write at once. A dry run stays out of it.
+    # The release's group, held from the second plan through the smoke check, so a rollback and a
+    # release never write or check at once. A dry run stays out of it.
     concurrency:
       group: release
       cancel-in-progress: false
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      # Production may have moved while this job waited for the group: plan again under it.
+      - name: Plan again under the release group
+        id: again
+        uses: ./.github/actions/rollback-plan
+        with:
+          target: ${{ needs.plan.outputs.sha }}
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Refuse when production moved since the plan
+        env:
+          PLANNED: ${{ needs.plan.outputs.deployment }}
+          PLANNED_SERVED: ${{ needs.plan.outputs.served }}
+          NOW: ${{ steps.again.outputs.deployment }}
+          NOW_SERVED: ${{ steps.again.outputs.served }}
+        run: |
+          test "$NOW" = "$PLANNED" || { echo "::error::The plan named ${PLANNED}, the second plan ${NOW}; run the rollback again."; exit 1; }
+          test "$NOW_SERVED" = "$PLANNED_SERVED" || test "$NOW_SERVED" = "$PLANNED" \
+            || { echo "::error::Production serves ${NOW_SERVED} now, not ${PLANNED_SERVED} as planned; run the rollback again."; exit 1; }
 
       - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
         with:
@@ -95,9 +109,7 @@ jobs:
       - name: Put the target's edge function source in place
         env:
           SHA: ${{ needs.plan.outputs.sha }}
-        run: |
-          rm -rf supabase/functions
-          git checkout "$SHA" -- supabase/functions
+        run: git restore --source="$SHA" --staged --worktree -- supabase/functions
 
       # The code first: it is what users see, and the switch takes seconds.
       - name: Switch the domain to the planned build
@@ -113,17 +125,6 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: bash .github/scripts/deploy-edge-functions.sh jbgaqpdjauzoocplgdsn --present-only
 
-  smoke:
-    name: Check production
-    needs: [plan, rollback]
-    if: ${{ !cancelled() && needs.rollback.result == 'success' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-
       - name: Smoke-check production without reading its data
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -135,7 +136,7 @@ jobs:
 
   alert:
     name: Alert
-    needs: [plan, rollback, smoke]
+    needs: [plan, rollback]
     # A failed rollback leaves production in doubt, so it assigns the owner. A dry run says nothing.
     if: ${{ !cancelled() && !inputs.dry_run && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04

@@ -1,0 +1,53 @@
+name: Plan a rollback
+description: >-
+  The rollback's plan (.github/workflows/rollback.yml), run once before the release group and once
+  under it: refuse while a release runs, find the newest commit whose migrations reached PROD, then
+  pick the target (.github/scripts/rollback-target.sh). Metadata only. Needs a full-depth checkout of main.
+inputs:
+  target:
+    description: The released commit to go back to; empty for the previous release
+    required: false
+    default: ''
+  vercel-token:
+    description: VERCEL_TOKEN, which reads the production builds
+    required: true
+outputs:
+  sha:
+    description: The target commit
+    value: ${{ steps.target.outputs.sha }}
+  deployment:
+    description: The target build
+    value: ${{ steps.target.outputs.deployment }}
+  served:
+    description: The build the domain served when planned
+    value: ${{ steps.target.outputs.served }}
+runs:
+  using: composite
+  steps:
+    # A release that runs on would promote its own build after the rollback. One that waits for the
+    # release group runs after the rollback, and the second plan sees what it changed.
+    - name: Refuse while a release runs
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        running="$(gh run list --workflow release.yml --status in_progress --limit 20 --json url --jq 'map(.url) | join(" ")')"
+        test -z "$running" || { echo "::error::A release runs (${running}); roll back after it ends."; exit 1; }
+
+    - name: Find the newest commit whose migrations reached PROD
+      id: applied
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: bash .github/scripts/prod-migrations-commit.sh
+
+    - name: Decide the target
+      id: target
+      shell: bash
+      env:
+        VERCEL_TOKEN: ${{ inputs.vercel-token }}
+        TARGET: ${{ inputs.target }}
+        APPLIED_SHA: ${{ steps.applied.outputs.applied }}
+      run: bash .github/scripts/rollback-target.sh "$TARGET"
