@@ -2,6 +2,8 @@
 // may remove, and what the kit may print (.claude/skills/staging-journey/SKILL.md). DEV also serves the
 // partner preview, so a cleanup selects only rows that carry a run's marks (Tier 1).
 
+import type { OrganizationRetentionRefusal } from '../../org/types';
+
 /** `20261126-1530-a1b2c3`: UTC start minute and six random hex digits. */
 const RUN_ID = /^20\d{6}-\d{4}-[0-9a-f]{6}$/;
 const ORGANIZATION_PREFIX = 'Agenten-Test ';
@@ -73,7 +75,7 @@ export const RUN_ORGANIZATION_PATTERN = `${ORGANIZATION_PREFIX}%`;
 export function runActorsQuery(): { query: string; parameters: string[] } {
   const addresses = RUN_ADDRESSES.map((_, index) => `replace($${index + 1}, '${RUN_SLOT}', run.marker)`);
   return {
-    query: `select id, email, created_at, run.marker as run_marker from auth.users cross join lateral (select raw_app_meta_data->>'werkflow_agent_run' as marker) run where run.marker ~ '^20[0-9]{6}-[0-9]{4}-[0-9a-f]{6}$' and email in (${addresses.join(', ')})`,
+    query: `select id, email, created_at, run.marker as run_marker, run.retired as retired_marker from auth.users cross join lateral (select raw_app_meta_data->>'werkflow_agent_run' as marker, raw_app_meta_data->>'${RETIRED_MARKER}' as retired) run where run.marker ~ '^20[0-9]{6}-[0-9]{4}-[0-9a-f]{6}$' and email in (${addresses.join(', ')})`,
     parameters: [...RUN_ADDRESSES],
   };
 }
@@ -89,12 +91,77 @@ export function actorRunId(email: string): string | null {
   return null;
 }
 
-/** `runMarker`: the run id in the user's app metadata, which only the secret key writes. */
-export type ActorRow = { id: string; email: string; createdAt: string; runMarker: string | null };
+/**
+ * `runMarker`: the run id in the user's app metadata, which only the secret key writes.
+ * `retiredMarker`: the reason a cleanup retired the run, in the same metadata, or null.
+ */
+export type ActorRow = {
+  id: string;
+  email: string;
+  createdAt: string;
+  runMarker: string | null;
+  retiredMarker: string | null;
+};
 export type OrganizationRow = { id: string; name: string; adminId: string };
 
-/** One run's rows a cleanup removes: its actor, and the organizations that actor administers. */
-export type RunRows = { runId: string; actorId: string; organizationIds: string[] };
+/**
+ * One run's rows a cleanup removes: its actor, and the organizations that actor administers. A retired
+ * run (`retired`, its reason) stays on DEV, and no cleanup touches it again.
+ */
+export type RunRows = {
+  runId: string;
+  actorId: string;
+  organizationIds: string[];
+  retired: RetireReason | 'unknown' | null;
+};
+
+// --- Retirement: a run the app keeps ---
+
+/** The app metadata key that marks a retired run's actor; nothing removes it. */
+export const RETIRED_MARKER = 'werkflow_agent_retired';
+
+/**
+ * The one refusal that retires a run instead of failing its cleanup: the app keeps an organization that
+ * holds recorded working time (`lib/org/deletion-scope.ts`), and recorded time is never erased.
+ */
+const RETIRE_REASON = 'has_time_records' satisfies OrganizationRetentionRefusal;
+export type RetireReason = typeof RETIRE_REASON;
+
+/** The refusal codes the organization's deletion dialog names in `data-retention-refusals`. */
+export function retentionRefusals(attribute: string | null): string[] {
+  return (attribute ?? '').split(' ').filter(Boolean);
+}
+
+/**
+ * The reason to retire a run, when the app's refusals are exactly the one for recorded working time.
+ * Any other refusal, alone or beside it, is none: that cleanup fails.
+ */
+export function retireReason(refusals: readonly string[]): RetireReason | null {
+  return refusals.length === 1 && refusals[0] === RETIRE_REASON ? RETIRE_REASON : null;
+}
+
+/**
+ * The reason a retired marker names, `unknown` for any other value it holds, or null when the actor
+ * carries none: any marker keeps the run retired.
+ */
+export function retiredAs(marker: unknown): RetireReason | 'unknown' | null {
+  if (marker === null || marker === undefined) return null;
+  return marker === RETIRE_REASON ? RETIRE_REASON : 'unknown';
+}
+
+/**
+ * What a cleanup does with its selected runs: it skips each retired one and cleans the rest, an Admin's
+ * run first, since its organization's deletion ends its members' memberships, which their account
+ * deletion waits for.
+ */
+export function sweepPlan(runs: readonly RunRows[]): { clean: RunRows[]; retired: RunRows[] } {
+  return {
+    clean: runs
+      .filter((run) => run.retired === null)
+      .sort((first, second) => second.organizationIds.length - first.organizationIds.length),
+    retired: runs.filter((run) => run.retired !== null),
+  };
+}
 
 /**
  * The runs a cleanup removes: `runId`'s own, or with `null` every run whose actor was created more than
@@ -120,7 +187,7 @@ export function selectRuns(
     const organizationIds = organizations
       .filter((row) => row.adminId === actor.id && row.name === runOrganizationName(actorRun))
       .map((row) => row.id);
-    return [{ runId: actorRun, actorId: actor.id, organizationIds }];
+    return [{ runId: actorRun, actorId: actor.id, organizationIds, retired: retiredAs(actor.retiredMarker) }];
   });
 }
 
