@@ -18,6 +18,7 @@ import {
 } from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry, TimeSegmentKind } from '@/lib/time-tracking/types';
 import { formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { correctionSource } from '@/lib/time-corrections/entry-source';
 import { buildTimelineFacts } from '@/lib/time-corrections/timeline';
 import type { CorrectionOperation } from '@/components/correction-operation';
 import { buildTimeCorrectionProposedFacts } from './time-correction-dialog-facts';
@@ -271,21 +272,6 @@ export type TimeCorrectionDialogForm = {
   /** „Speichern“ was pressed: the timeline's rows show their errors. */
   showTimelineErrors: boolean;
 };
-
-// The source a correction changes: the canonical segment, the applied
-// correction, or the entry itself.
-function correctionSource(
-  entry: TimeEntry | undefined,
-): { kind: NonNullable<TimeEntry['sourceKind']>; id: string } | null {
-  if (!entry?.sourceKind) return null;
-  const id =
-    entry.sourceKind === 'canonical_segment'
-      ? entry.canonicalSegmentId
-      : entry.sourceKind === 'correction_application'
-        ? entry.correctionApplicationId
-        : entry.id;
-  return id ? { kind: entry.sourceKind, id } : null;
-}
 
 // Every field error of a submit: a missing person or reason, an incomplete or
 // unordered time, then a time in a closed period.

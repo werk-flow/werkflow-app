@@ -1,4 +1,5 @@
 import type { TimeEntry } from '@/lib/time-tracking/types';
+import { correctionSource } from './entry-source';
 import type { CalendarCorrectionBoundary } from './validation';
 
 export type CalendarTimeCorrectionDraft = {
@@ -16,12 +17,11 @@ export function calendarCorrectionBoundaries(
       return null;
     const update = draft.updates.find((candidate) => candidate.entryId === entry.id);
     const person = people.find((candidate) => candidate.userId === (update?.newUserId ?? entry.userId));
-    const kind = entry.correctionApplicationId ? 'correction_application' : entry.sourceKind;
-    const id = entry.correctionApplicationId ?? entry.canonicalSegmentId ?? entry.id;
+    const source = correctionSource(entry);
     const version = entry.correctionSourceFingerprint ?? entry.sourceVersion;
-    if (!person || !kind || !version) return null;
+    if (!person || !source || !version) return null;
     boundaries.push({
-      source: { kind, id, version },
+      source: { ...source, version },
       entryType: entry.entryType,
       originalTimestamp: entry.timestamp,
       timestamp: update?.newTimestamp ?? entry.timestamp,
