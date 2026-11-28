@@ -10,6 +10,7 @@ import { getInventoryPickerPage, getJobMaterialLines } from '@/lib/inventory/act
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { JobDetailContent } from '@/components/auftraege/job-detail/job-detail-content';
+import { WorkOrdersSection } from '@/components/auftraege/job-detail/work-orders-section';
 import { FieldWorkPackPage } from '@/components/auftraege/work-pack/field-work-pack-page';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -21,7 +22,7 @@ import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 import { getWorkRequestEntries } from '@/lib/requests/work-attach-server';
 import { jobDetailHref } from '@/lib/jobs/routes';
 import { workLeadPanelFrom } from '@/lib/projects/work-lead-reads';
-import { readWorkOrders } from '@/lib/orders/reads';
+import { readJobOrders } from '@/lib/orders/reads';
 import JobDetailLoading from './loading';
 
 interface JobDetailPageProps {
@@ -103,10 +104,8 @@ function loadJobDetailReads(
     originRequestPromise,
     requestEntriesPromise,
     workLeadPromise,
-    // The accepted offers the job was converted from, with their prices.
-    jobResultPromise.then((result) =>
-      result.success ? readWorkOrders({ targetType: 'job', targetId: result.job.id }) : null,
-    ),
+    // The accepted offers the job was converted from, with their prices; a job without one reads none.
+    jobResultPromise.then((result) => (result.success ? readJobOrders(result.job.id, result.orders) : null)),
   ]);
 }
 
@@ -231,7 +230,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       billingParties={result.billingParties}
       lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
       handoverWorkspace={handoverWorkspace}
-      orders={ordersResult?.success ? ordersResult.orders : 'failed'}
+      ordersSection={<WorkOrdersSection orders={ordersResult?.success ? ordersResult.orders : 'failed'} />}
       {...(workLeadResult ? { workLeadPanel: workLeadResult.success ? workLeadResult.panel : 'failed' } : {})}
     />
   );

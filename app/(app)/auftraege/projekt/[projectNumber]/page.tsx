@@ -1,4 +1,4 @@
-import { Suspense, type ComponentProps } from 'react';
+import { Suspense, type ComponentProps, type ReactNode } from 'react';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import type { OriginRequestLink } from '@/components/auftraege/shared/origin-request-line';
@@ -25,7 +25,8 @@ import { getLedProjectOverview, getWorkLead } from '@/lib/projects/work-lead-rea
 import { LedProjectPage } from '@/components/auftraege/project-detail/led-project-overview';
 import type { LedProjectOverview } from '@/lib/projects/work-lead-types';
 import { readWorkOrders, readWorkScope } from '@/lib/orders/reads';
-import type { FieldScopeOrder, WorkOrder } from '@/lib/orders/types';
+import { WorkOrdersSection } from '@/components/auftraege/job-detail/work-orders-section';
+import { FieldScopeSection } from '@/components/auftraege/work-pack/field-scope-section';
 
 interface ProjectDetailPageProps {
   params: Promise<{ projectNumber: string }>;
@@ -173,20 +174,18 @@ function ledOverviewFrom(
   return result.error === 'not_authorized' ? null : 'failed';
 }
 
-/** The office's orders of the project: null for everyone else, `failed` when the read failed. */
-function ordersFrom(
-  result: Awaited<ReturnType<typeof readWorkOrders>> | null,
-): WorkOrder[] | 'failed' | null {
-  if (!result) return null;
-  return result.success ? result.orders : 'failed';
-}
-
-/** The lead's scope of the project: null when the viewer leads it not, `failed` when the read failed. */
-function leadScopeFrom(
-  result: Awaited<ReturnType<typeof readWorkScope>> | null,
-): FieldScopeOrder[] | 'failed' | null {
-  if (!result) return null;
-  return result.success ? result.scope : 'failed';
+/**
+ * The project's „Auftragsumfang“, rendered here: with prices for the office,
+ * as scope without prices for its „Projektleitung“; null for everyone else.
+ */
+function projectScopeSection(
+  ordersResult: Awaited<ReturnType<typeof readWorkOrders>> | null,
+  leadScopeResult: Awaited<ReturnType<typeof readWorkScope>> | null,
+): ReactNode {
+  if (ordersResult)
+    return <WorkOrdersSection orders={ordersResult.success ? ordersResult.orders : 'failed'} />;
+  if (!leadScopeResult) return null;
+  return <FieldScopeSection scope={leadScopeResult.success ? leadScopeResult.scope : 'failed'} />;
 }
 
 type ProjectDetailReads = Awaited<ReturnType<typeof loadProjectDetailReads>>;
@@ -258,8 +257,7 @@ function projectDetailRegions(
     handoverWorkspace,
     workLeadPanel: workLeadResult ? (workLeadResult.success ? workLeadResult.panel : 'failed') : null,
     ledOverview: ledOverviewFrom(ledOverviewResult),
-    orders: ordersFrom(ordersResult),
-    leadScope: leadScopeFrom(leadScopeResult),
+    scopeSection: projectScopeSection(ordersResult, leadScopeResult),
   } satisfies Partial<ProjectDetailContentProps>;
 }
 
@@ -334,7 +332,7 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
     ) : (
       <LedProjectPage
         overview={ledOverview}
-        scope={leadScopeFrom(reads.leadScopeResult) ?? []}
+        scopeSection={projectScopeSection(null, reads.leadScopeResult)}
         currentUserId={user.id}
         canApprove={Boolean(reads.approvalHolder)}
       />

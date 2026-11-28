@@ -1,7 +1,7 @@
 'use client';
 
 import type { OriginRequestLink } from '../shared/origin-request-line';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { DetailColumns } from '@/components/shared/detail-columns';
@@ -33,9 +33,7 @@ import type { LedProjectOverview, WorkLeadPanel } from '@/lib/projects/work-lead
 import { ProjectDetailChildJobsCard } from './project-detail-child-jobs-card';
 import { ProjectDetailClientCard } from './project-detail-client-card';
 import { WorkBillingPartiesSection } from '../shared/work-billing-parties-loaders';
-import { WorkOrdersSection } from '../job-detail/work-orders-section';
-import { FieldScopeSection } from '../work-pack/field-scope-section';
-import type { FieldScopeOrder, WorkOrder } from '@/lib/orders/types';
+
 import { ProjectDetailDialogs } from './project-detail-dialogs';
 import { ProjectDetailHeader } from './project-detail-header';
 import { ProjectDetailManagerSections } from './project-detail-manager-sections';
@@ -75,10 +73,11 @@ interface ProjectDetailContentProps {
   workLeadPanel: WorkLeadPanel | 'failed' | null;
   /** The jobs the viewer leads as the project's „Projektleitung“; null when they lead none. */
   ledOverview: LedProjectOverview | 'failed' | null;
-  /** Admin and Büro: the accepted offers the project was converted from, with prices; null for everyone else. */
-  orders: WorkOrder[] | 'failed' | null;
-  /** The project's „Projektleitung“: the scope of those orders without prices; null for everyone else. */
-  leadScope: FieldScopeOrder[] | 'failed' | null;
+  /**
+   * The server-rendered „Auftragsumfang“: with prices for Admin and Büro,
+   * without for the project's „Projektleitung“; null for everyone else.
+   */
+  scopeSection: ReactNode;
 }
 
 type ProjectDetailStateOptions = Pick<
@@ -358,15 +357,6 @@ export function ProjectDetailContent(content: ProjectDetailContentProps) {
   );
 }
 
-/** The office's priced „Auftragsumfang“, or the lead's scope without prices. */
-function ProjectScopeSections({
-  orders,
-  leadScope,
-}: Pick<ProjectDetailContentProps, 'orders' | 'leadScope'>) {
-  if (orders) return <WorkOrdersSection orders={orders} />;
-  return leadScope ? <FieldScopeSection scope={leadScope} /> : null;
-}
-
 function ProjectDetailWorkColumn({ content, state }: ProjectDetailSectionProps) {
   const { isAdminOrManager, members, instructionItems, materialSummary, inventoryItems, inventoryLocations } =
     content;
@@ -384,7 +374,7 @@ function ProjectDetailWorkColumn({ content, state }: ProjectDetailSectionProps) 
         membersFailed={members === null}
       />
 
-      <ProjectScopeSections orders={content.orders} leadScope={content.leadScope} />
+      {content.scopeSection}
 
       {content.ledOverview && (
         <LedJobsSection

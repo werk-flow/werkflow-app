@@ -12,7 +12,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { fieldScopeFrom } from './field-scope';
-import type { FieldScopeOrder, OfferWork, WorkOrder } from './types';
+import type { FieldScopeOrder, JobOrderPresence, OfferWork, WorkOrder } from './types';
 
 // The reads of orders (get_work_orders, get_work_scope and get_offer_order in
 // supabase/migrations/20270701160000_convert_an_accepted_offer_into_work_once.sql).
@@ -162,4 +162,22 @@ export async function readOfferWork(organizationId: string, offerId: string): Pr
   if (!work.data) return null;
   const { workId, ...rest } = work.data;
   return { ...rest, id: workId };
+}
+
+/** A job's orders with prices; a job the job read found without an order reads none. */
+export async function readJobOrders(
+  jobId: string,
+  presence: JobOrderPresence | undefined,
+): Promise<ActionResult<{ orders: WorkOrder[] }>> {
+  return presence?.job
+    ? readWorkOrders({ targetType: 'job', targetId: jobId })
+    : { success: true, orders: [] };
+}
+
+/** A job's scope for the field; a job whose work the job read found without an order reads none. */
+export async function readJobScope(
+  jobId: string,
+  presence: JobOrderPresence | undefined,
+): Promise<ActionResult<{ scope: FieldScopeOrder[] }>> {
+  return presence ? readWorkScope({ targetType: 'job', targetId: jobId }) : { success: true, scope: [] };
 }

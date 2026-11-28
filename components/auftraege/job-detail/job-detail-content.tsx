@@ -1,7 +1,7 @@
 'use client';
 
 import type { OriginRequestLink } from '../shared/origin-request-line';
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
 
 import { DetailColumns } from '@/components/shared/detail-columns';
@@ -28,7 +28,6 @@ import type { OrgMemberOption } from '../shared/employee-multi-select';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import type { InventoryLocation, InventoryPickerOption, JobMaterialLine } from '@/lib/inventory/types';
 import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
-import type { WorkOrder } from '@/lib/orders/types';
 import { JobDetailMainColumn, JobDetailSideColumn } from './job-detail-columns';
 import { WorkLeadSection } from '../project-detail/work-lead-section';
 import type { WorkLeadPanel } from '@/lib/projects/work-lead-types';
@@ -147,8 +146,8 @@ interface JobDetailContentProps {
   billingParties?: WorkBillingParties | undefined;
   /** Admin and Büro on a standalone job: its „Projektleitung“; absent where the screen names none. */
   workLeadPanel?: WorkLeadPanel | 'failed';
-  /** The accepted offers the job was converted from, with prices; `failed` when the read failed. */
-  orders?: WorkOrder[] | 'failed';
+  /** Admin and Büro: the server-rendered „Auftragsumfang“ of the offers the job was converted from. */
+  ordersSection?: ReactNode;
 }
 
 /** Every hook of the job page, in render order: the live job, dialogs, assignments, fields, time and refresh. */
@@ -237,7 +236,7 @@ function JobDetailContentColumns({
         timeEntries={view.timeEntries}
         setShowClientDialog={view.dialogs.setShowClientDialog}
         billingParties={content.billingParties}
-        orders={content.orders ?? []}
+        ordersSection={content.ordersSection}
         openAssignDialog={view.assignment.openAssignDialog}
         isUnassigning={view.assignment.isUnassigning}
         handleUnassign={view.assignment.handleUnassign}

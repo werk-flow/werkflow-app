@@ -10,7 +10,7 @@ import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { FieldWorkPackExecutionSection } from '@/components/auftraege/work-pack/field-work-pack-execution-section';
 import { FieldWorkPackOverview } from '@/components/auftraege/work-pack/field-work-pack-overview';
 import { FieldScopeSection } from '@/components/auftraege/work-pack/field-scope-section';
-import { readWorkScope } from '@/lib/orders/reads';
+import { readJobScope } from '@/lib/orders/reads';
 import { dispatchErrorMessage } from '@/lib/dispatch/types';
 import { getJobByNumber } from '@/lib/jobs/actions';
 import { WORK_EXECUTION_LABELS } from '@/lib/work-lifecycle/types';
@@ -57,7 +57,7 @@ export async function FieldWorkPackPage({
 
   const [data, scopeResult] = await Promise.all([
     loadFieldWorkPackData(job, currentUserId, currentUserAssignment),
-    readWorkScope({ targetType: 'job', targetId: job.id }),
+    readJobScope(job.id, jobResult.orders),
   ]);
   const { fieldJob, lifecycleResult, dispatchResult, dispatchCards, readOnly } = data;
 

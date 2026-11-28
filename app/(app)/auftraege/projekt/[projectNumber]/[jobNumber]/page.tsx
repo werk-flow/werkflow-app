@@ -11,6 +11,7 @@ import { getProjectByNumber } from '@/lib/projects/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import type { OrgMemberInfo } from '@/lib/members/actions';
 import { JobDetailContent } from '@/components/auftraege/job-detail/job-detail-content';
+import { WorkOrdersSection } from '@/components/auftraege/job-detail/work-orders-section';
 import { FieldWorkPackPage } from '@/components/auftraege/work-pack/field-work-pack-page';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -20,7 +21,7 @@ import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getWorkRequestEntries } from '@/lib/requests/work-attach-server';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
-import { readWorkOrders } from '@/lib/orders/reads';
+import { readJobOrders } from '@/lib/orders/reads';
 import NestedJobDetailLoading from './loading';
 
 interface NestedJobDetailPageProps {
@@ -99,7 +100,8 @@ async function loadNestedJobDetailReads({
     approvalHolderPromise,
     handoverWorkspacePromise,
     requestEntriesPromise,
-    afterJob(jobResultPromise, (id) => readWorkOrders({ targetType: 'job', targetId: id })),
+    // A job without an order reads none.
+    jobResultPromise.then((result) => (result.success ? readJobOrders(result.job.id, result.orders) : null)),
   ]);
   return {
     projectResult,
@@ -165,7 +167,7 @@ function nestedJobDetailRegions(
     lifecycleSnapshot: lifecycleResult?.success ? lifecycleResult.snapshot : null,
     handoverWorkspace,
     requestEntries: requestEntriesResult?.success ? requestEntriesResult.entries : undefined,
-    orders: ordersResult?.success ? ordersResult.orders : ('failed' as const),
+    ordersSection: <WorkOrdersSection orders={ordersResult?.success ? ordersResult.orders : 'failed'} />,
   } satisfies Partial<ComponentProps<typeof JobDetailContent>>;
 }
 

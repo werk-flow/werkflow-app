@@ -71,3 +71,13 @@ export type FieldScopeOrder = {
   workKind: 'job' | 'project';
   sections: FieldScopeSection[];
 };
+
+/**
+ * The ids of the orders of a job and of its project, embedded in the job's
+ * own read, so a page reads an order only for work that has one.
+ */
+export const JOB_ORDERS_EMBED =
+  'job_orders:orders!orders_job_fk(id), job_project:projects!jobs_project_id_fkey(project_orders:orders!orders_project_fk(id))';
+
+/** Which of a job's work holds an order: the job itself, its project, or both. */
+export type JobOrderPresence = { job: boolean; project: boolean };
