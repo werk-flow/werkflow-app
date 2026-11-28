@@ -76,6 +76,9 @@ export const DIALOG_INVENTORY = {
       { route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-acceptance-withdrawal' },
     ],
   },
+  'components/angebote/offer-conversion-dialog.tsx#OfferConversionDialog|In Arbeit übernehmen': {
+    audits: [{ route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-conversion' }],
+  },
   'components/rechnungen/create-invoice-dialog.tsx#CreateInvoiceDialog|Rechnung erstellen': {
     audits: [{ route: '/rechnungen', role: 'admin', opener: 'commercial.invoice' }],
   },

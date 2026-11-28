@@ -1,7 +1,7 @@
 'use client';
 
 import type { OriginRequestLink } from '../shared/origin-request-line';
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
 
 import { DetailColumns } from '@/components/shared/detail-columns';
@@ -146,6 +146,8 @@ interface JobDetailContentProps {
   billingParties?: WorkBillingParties | undefined;
   /** Admin and Büro on a standalone job: its „Projektleitung“; absent where the screen names none. */
   workLeadPanel?: WorkLeadPanel | 'failed';
+  /** Admin and Büro: the server-rendered „Auftragsumfang“ of the offers the job was converted from. */
+  ordersSection?: ReactNode;
 }
 
 /** Every hook of the job page, in render order: the live job, dialogs, assignments, fields, time and refresh. */
@@ -234,6 +236,7 @@ function JobDetailContentColumns({
         timeEntries={view.timeEntries}
         setShowClientDialog={view.dialogs.setShowClientDialog}
         billingParties={content.billingParties}
+        ordersSection={content.ordersSection}
         openAssignDialog={view.assignment.openAssignDialog}
         isUnassigning={view.assignment.isUnassigning}
         handleUnassign={view.assignment.handleUnassign}

@@ -142,6 +142,33 @@ export async function acceptOffer(
     : { success: true, offerId: 'contract-offer', version: 2, updatedAt: '2026-11-28T08:00:00.000000+00:00' };
 }
 
+/** „In Arbeit übernehmen“: a new job, with one article Position planned as no material. */
+export async function convertOfferToWork(input: unknown): Promise<
+  | {
+      success: true;
+      offerId: string;
+      version: number;
+      updatedAt: string;
+      kind: 'job';
+      workId: string;
+      unplannedPositions: string[];
+    }
+  | { success: false; error: string }
+> {
+  const refusal = await holdWrite('convert-offer', input);
+  return refusal
+    ? { success: false, error: refusal }
+    : {
+        success: true,
+        offerId: 'contract-offer',
+        version: 2,
+        updatedAt: '2026-11-28T09:00:00.000000+00:00',
+        kind: 'job',
+        workId: 'contract-job',
+        unplannedPositions: ['1.3'],
+      };
+}
+
 /** A rejection, a withdrawal or the withdrawal of an Annahme are not part of these contracts. */
 export const closeOffer = unexpectedWrite;
 export const withdrawOfferAcceptance = unexpectedWrite;

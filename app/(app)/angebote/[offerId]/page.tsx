@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import { OfferContentEditor } from '@/components/angebote/editor/offer-content-editor';
 import { AcceptOfferButton } from '@/components/angebote/offer-acceptance-dialog';
+import { ConvertOfferButton } from '@/components/angebote/offer-conversion-dialog';
 import { OfferDecision } from '@/components/angebote/offer-decision';
 import { OfferReasonButton } from '@/components/angebote/offer-decision-reason';
 import { EditOfferHeaderButton } from '@/components/angebote/offer-header-dialog';
@@ -23,6 +24,8 @@ import type { RevisionContent } from '@/lib/offers/accepted-scope';
 import { readRevisionContent } from '@/lib/offers/decision-reads';
 import { readOfferWithRevisions } from '@/lib/offers/reads';
 import type { OfferRevision, OfferWithCosts } from '@/lib/offers/types';
+import { readOfferWork } from '@/lib/orders/reads';
+import type { OfferWork } from '@/lib/orders/types';
 import { resolvePageMembership } from '@/lib/org/page-context';
 import { isManagerRole } from '@/lib/roles';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -64,13 +67,21 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
   // A sent offer, or the draft of its next revision, awaits the customer's decision on the newest
   // sent revision, whose frozen content the Annahme offers options from.
   const [newest] = revisions;
-  const awaited =
+  const [awaited, work] = await Promise.all([
     newest && (offer.status === 'gesendet' || offer.status === 'entwurf')
-      ? await readRevisionContent(membership.orgId, offer.id, newest.revision).catch((error: unknown) => {
+      ? readRevisionContent(membership.orgId, offer.id, newest.revision).catch((error: unknown) => {
           logError('angebot.revision_read_failed', error);
           return 'failed' as const;
         })
-      : null;
+      : null,
+    // An accepted offer either became work or offers „In Arbeit übernehmen“.
+    offer.status === 'angenommen'
+      ? readOfferWork(membership.orgId, offer.id).catch((error: unknown) => {
+          logError('angebot.order_read_failed', error);
+          return 'failed' as const;
+        })
+      : null,
+  ]);
 
   return (
     <OfferUnsavedProvider>
@@ -80,10 +91,17 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
           owners={owners}
           revisions={revisions}
           content={awaited === 'failed' ? null : awaited}
+          work={work}
         />
         {awaited === 'failed' && (
           <RegionLoadError title="Annahme erfassen ist gerade nicht möglich">
             Die gesendete Revision konnte nicht geladen werden. Versuche es in einem Moment erneut.
+          </RegionLoadError>
+        )}
+        {work === 'failed' && (
+          <RegionLoadError title="In Arbeit übernehmen ist gerade nicht möglich">
+            Ob aus dem Angebot schon Arbeit entstanden ist, konnte nicht geladen werden. Versuche es in einem
+            Moment erneut.
           </RegionLoadError>
         )}
         {owners && !owners.success && (
@@ -93,7 +111,7 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
           </RegionLoadError>
         )}
         <OfferHeaderFacts offer={offer} />
-        <OfferDecision decisions={decisions} />
+        <OfferDecision decisions={decisions} work={work === 'failed' ? null : work} />
         <OfferRevisions offerId={offer.id} revisions={revisions} editing={offer.status === 'entwurf'} />
         {/* Only a draft's content changes; a sent offer is edited as the draft of its next revision. */}
         {offer.status === 'entwurf' && <OfferContentEditor key={offer.id} offer={offer} />}
@@ -108,12 +126,15 @@ function OfferPageHeader({
   owners,
   revisions,
   content,
+  work,
 }: {
   offer: OfferWithCosts;
   owners: Awaited<ReturnType<typeof getManagerAssigneeOptions>> | null;
   revisions: OfferRevision[];
   /** The newest sent revision's content while the customer's decision is open; null while it cannot be read. */
   content: RevisionContent | null;
+  /** The work an accepted offer became; `failed` while that cannot be read, so neither step is offered. */
+  work: OfferWork | 'failed' | null;
 }) {
   // The newest sent revision; a draft is the one after it.
   const sentRevision = revisions[0]?.revision ?? 0;
@@ -152,7 +173,13 @@ function OfferPageHeader({
                 <OfferReasonButton offer={offer} step="zurueckgezogen" />
               </>
             )}
-            {offer.status === 'angenommen' && <OfferReasonButton offer={offer} step="annahme" />}
+            {/* Once work exists from the Annahme it stands; until then it can become work or be withdrawn. */}
+            {offer.status === 'angenommen' && work !== 'failed' && (
+              <ConvertOfferButton offer={offer} converted={work !== null} />
+            )}
+            {offer.status === 'angenommen' && work === null && (
+              <OfferReasonButton offer={offer} step="annahme" />
+            )}
           </div>
         }
       />

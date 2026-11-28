@@ -10,6 +10,7 @@ import { getInventoryPickerPage, getJobMaterialLines } from '@/lib/inventory/act
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { JobDetailContent } from '@/components/auftraege/job-detail/job-detail-content';
+import { WorkOrdersSection } from '@/components/auftraege/job-detail/work-orders-section';
 import { FieldWorkPackPage } from '@/components/auftraege/work-pack/field-work-pack-page';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -21,6 +22,7 @@ import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 import { getWorkRequestEntries } from '@/lib/requests/work-attach-server';
 import { jobDetailHref } from '@/lib/jobs/routes';
 import { workLeadPanelFrom } from '@/lib/projects/work-lead-reads';
+import { readJobOrders } from '@/lib/orders/reads';
 import JobDetailLoading from './loading';
 
 interface JobDetailPageProps {
@@ -102,6 +104,8 @@ function loadJobDetailReads(
     originRequestPromise,
     requestEntriesPromise,
     workLeadPromise,
+    // The accepted offers the job was converted from, with their prices; a job without one reads none.
+    jobResultPromise.then((result) => (result.success ? readJobOrders(result.job.id, result.orders) : null)),
   ]);
 }
 
@@ -139,6 +143,22 @@ function memberOptions(rows: Extract<JobDetailReads[1], { success: true }>['memb
   }));
 }
 
+/** A missing or forbidden job leaves the page; a failed read must not look like one. */
+function jobReadRefusal(error: string) {
+  if (error === 'fetch_failed' || error === 'unexpected_error') {
+    return (
+      <RegionLoadError title="Der Auftrag konnte nicht geladen werden">
+        Der Auftrag ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
+  return (
+    <RouteRedirect href="/auftraege">
+      <JobDetailLoading />
+    </RouteRedirect>
+  );
+}
+
 async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   const { user, membership } = await resolvePageMembership();
   if (!membership) redirect('/auftraege');
@@ -163,24 +183,10 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     originRequest,
     requestEntriesResult,
     workLeadResult,
+    ordersResult,
   ] = await loadJobDetailReads(supabase, { jobNumber, activeOrgId, userId: user.id });
 
-  // A missing or forbidden job leaves the page; a failed read must not look like one.
-  if (!result.success && (result.error === 'fetch_failed' || result.error === 'unexpected_error')) {
-    return (
-      <RegionLoadError title="Der Auftrag konnte nicht geladen werden">
-        Der Auftrag ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
-      </RegionLoadError>
-    );
-  }
-
-  if (!result.success) {
-    return (
-      <RouteRedirect href="/auftraege">
-        <JobDetailLoading />
-      </RouteRedirect>
-    );
-  }
+  if (!result.success) return jobReadRefusal(result.error);
 
   if (!membersResult.success) {
     return (
@@ -224,6 +230,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       billingParties={result.billingParties}
       lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
       handoverWorkspace={handoverWorkspace}
+      ordersSection={<WorkOrdersSection orders={ordersResult?.success ? ordersResult.orders : 'failed'} />}
       {...(workLeadResult ? { workLeadPanel: workLeadResult.success ? workLeadResult.panel : 'failed' } : {})}
     />
   );

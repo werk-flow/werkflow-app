@@ -730,3 +730,43 @@ test('an Annahme keeps the version it opened on and locks its fields; a retry ke
   expect(unchanged).toBe(first);
   expect(corrected).not.toBe(first);
 });
+
+// „In Arbeit übernehmen“: a new job without a title marks the field, focuses it and sends nothing.
+// The conversion is sent against the version the dialog opened on. When the page then shows the
+// work, the trigger goes, but the dialog stays until the conversion has settled, and its banner
+// names the article Position it planned as no material.
+test('a conversion keeps its dialog until the page shows the work, then names the material it did not plan', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.uiContractOfferAccepted = true;
+  });
+  await openContractFixture(page, 'offers');
+  const trigger = page.getByRole('button', { name: 'In Arbeit übernehmen', exact: true });
+  await trigger.click();
+  const dialog = page.getByRole('dialog', { name: 'In Arbeit übernehmen' });
+  const title = dialog.getByRole('textbox', { name: 'Titel' });
+  await title.fill('');
+  const submit = dialog.getByRole('button', { name: 'Übernehmen', exact: true });
+  await submit.click();
+  await expect(title).toBeFocused();
+  expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
+
+  await title.fill('Heizung Hofweg 1');
+  await submit.click();
+  await expectHeldWrite(page, 'convert-offer');
+  expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
+    expectedVersion: 1,
+    target: 'job',
+    title: 'Heizung Hofweg 1',
+  });
+  // The revalidated page arrives with the work before the answer: the trigger goes, the dialog stays.
+  await page.evaluate(() => window.uiContractOfferConvertedRender?.(2));
+  await expect(trigger).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await answerHeldWrite(page, null);
+  await expect(
+    visibleText(page, 'ANG-2026-001 ist jetzt in Arbeit. Nicht als Material geplant: 1.3.', true),
+  ).toBeVisible();
+  await expect(dialog).toBeHidden();
+});

@@ -12,13 +12,15 @@ export const MAINTENANCE_VISIT_SQL_FILES: readonly string[] = [
 /** The areas whose changes select the group. */
 export const MAINTENANCE_VISIT_SQL_SCOPES: readonly string[] = ['service', 'work', 'attention', 'documents'];
 
-/** An offer's header, content, Positionsarten, sending and Annahme (`sql:offers`). */
+/** An offer's header, content, Positionsarten, sending, Annahme and conversion into work (`sql:offers`). */
 export const OFFER_SQL_FILES: readonly string[] = [
   'offers.sql',
   'offers_concurrency.sql',
   'offer_sending.sql',
   'offer_position_types.sql',
   'offer_acceptance.sql',
+  'offer_conversion.sql',
+  'offer_conversion_concurrency.sql',
 ];
 
 /** Rate limits and WerkFlow KI's threads, turn charges, tool rows and files (`sql:rate-limits`). */

@@ -46,6 +46,7 @@ import {
 } from './types';
 import type { AssignmentApproval } from '@/lib/qualifications/types';
 import { JOB_BILLING_PARTIES_EMBED, jobBillingPartiesFrom } from '@/lib/billing-parties/server';
+import { JOB_ORDERS_EMBED, type JobOrderPresence } from '@/lib/orders/types';
 import type { WorkBillingParties } from '@/lib/billing-parties/types';
 import { JOB_WORK_LEADS_EMBED, type WorkLeadHoldingRow } from '@/lib/projects/work-lead-types';
 import {
@@ -602,6 +603,8 @@ export async function getJobByNumber(rawJobNumber: string): Promise<
     billingParties?: WorkBillingParties | undefined;
     /** The office's alone: the job's own lead holdings, newest first. */
     workLeads?: WorkLeadHoldingRow[];
+    /** Present only when the job or its project holds an order (lib/orders/). */
+    orders?: JobOrderPresence;
   }>
 > {
   const parsedJobNumber = jobNumberLookupSchema.safeParse(rawJobNumber);
@@ -616,7 +619,7 @@ export async function getJobByNumber(rawJobNumber: string): Promise<
 
     const { data: jobRow, error: jobError } = await admin
       .from('jobs')
-      .select(`*, ${JOB_BILLING_PARTIES_EMBED}, ${JOB_WORK_LEADS_EMBED}`)
+      .select(`*, ${JOB_BILLING_PARTIES_EMBED}, ${JOB_WORK_LEADS_EMBED}, ${JOB_ORDERS_EMBED}`)
       .eq('organization_id', orgId)
       .eq('job_number', decodeURIComponent(jobNumber))
       // Newest first, so the current version leads whatever cuts the list.
@@ -629,7 +632,17 @@ export async function getJobByNumber(rawJobNumber: string): Promise<
       logReadErrors('getJobByNumber: read failed', jobError);
       return { success: false, error: 'job_not_found' };
     }
-    const { work_billing_parties: billingParties, work_leads: workLeads, ...jobData } = jobRow;
+    const {
+      work_billing_parties: billingParties,
+      work_leads: workLeads,
+      job_orders: jobOrders,
+      job_project: jobProject,
+      ...jobData
+    } = jobRow;
+    const orders = {
+      job: (jobOrders?.length ?? 0) > 0,
+      project: (jobProject?.project_orders.length ?? 0) > 0,
+    };
 
     const details = await readJobDetails({
       admin,
@@ -638,8 +651,11 @@ export async function getJobByNumber(rawJobNumber: string): Promise<
       billingParties,
       operation: 'getJobByNumber',
     });
+    if (!details.success) return details;
+    // Whether an order exists rides on the job read, so a job without one reads none.
+    const withOrders = orders.job || orders.project ? { ...details, orders } : details;
     // The lead holdings ride on the job read for the office's page; a field worker never receives them.
-    return details.success && auth.context.isManagerOrAbove ? { ...details, workLeads } : details;
+    return auth.context.isManagerOrAbove ? { ...withOrders, workLeads } : withOrders;
   } catch (error) {
     logError('Unexpected error in getJobByNumber:', error);
     return { success: false, error: 'unexpected_error' };

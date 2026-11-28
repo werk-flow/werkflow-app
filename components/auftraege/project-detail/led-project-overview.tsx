@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactElement } from 'react';
+import { useState, type ReactElement, type ReactNode } from 'react';
 import { CheckCircle2, Circle, UserRoundCheck } from 'lucide-react';
 
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
@@ -29,8 +29,13 @@ type LeadViewer = {
  */
 export function LedProjectPage({
   overview,
+  scopeSection,
   ...viewer
-}: LeadViewer & { overview: LedProjectOverview }): ReactElement {
+}: LeadViewer & {
+  overview: LedProjectOverview;
+  /** The server-rendered „Auftragsumfang“ without prices. */
+  scopeSection: ReactNode;
+}): ReactElement {
   return (
     <PageShell>
       <DetailPageHeader
@@ -42,6 +47,7 @@ export function LedProjectPage({
         subtitle="Du bist die Projektleitung."
       />
       <PageBody className="space-y-6">
+        {scopeSection}
         <WorkArtifactsSection
           refreshOnLeadSignal
           targetType="project"

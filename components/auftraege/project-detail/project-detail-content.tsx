@@ -1,7 +1,7 @@
 'use client';
 
 import type { OriginRequestLink } from '../shared/origin-request-line';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { DetailColumns } from '@/components/shared/detail-columns';
@@ -33,6 +33,7 @@ import type { LedProjectOverview, WorkLeadPanel } from '@/lib/projects/work-lead
 import { ProjectDetailChildJobsCard } from './project-detail-child-jobs-card';
 import { ProjectDetailClientCard } from './project-detail-client-card';
 import { WorkBillingPartiesSection } from '../shared/work-billing-parties-loaders';
+
 import { ProjectDetailDialogs } from './project-detail-dialogs';
 import { ProjectDetailHeader } from './project-detail-header';
 import { ProjectDetailManagerSections } from './project-detail-manager-sections';
@@ -72,6 +73,11 @@ interface ProjectDetailContentProps {
   workLeadPanel: WorkLeadPanel | 'failed' | null;
   /** The jobs the viewer leads as the project's „Projektleitung“; null when they lead none. */
   ledOverview: LedProjectOverview | 'failed' | null;
+  /**
+   * The server-rendered „Auftragsumfang“: with prices for Admin and Büro,
+   * without for the project's „Projektleitung“; null for everyone else.
+   */
+  scopeSection: ReactNode;
 }
 
 type ProjectDetailStateOptions = Pick<
@@ -367,6 +373,8 @@ function ProjectDetailWorkColumn({ content, state }: ProjectDetailSectionProps) 
         onAssignJobs={() => dialogState.setShowAssignJobsDialog(true)}
         membersFailed={members === null}
       />
+
+      {content.scopeSection}
 
       {content.ledOverview && (
         <LedJobsSection

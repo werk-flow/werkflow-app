@@ -184,6 +184,8 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   on_call_shift_events: 'Bereitschaften_Ereignisse',
   on_call_shift_members: 'Bereitschaften_Personen',
   on_call_shifts: 'Bereitschaften',
+  order_lines: 'Auftragsumfänge_Zeilen',
+  orders: 'Auftragsumfänge',
   organization_capabilities: 'Organisation_Qualifikationen',
   organization_closure_days: 'Organisation_Schließtage',
   organization_export_events: 'Datenexporte_Protokoll',

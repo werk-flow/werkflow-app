@@ -9,6 +9,8 @@ import { UrlFlashBanner } from '@/components/ui/banner';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { FieldWorkPackExecutionSection } from '@/components/auftraege/work-pack/field-work-pack-execution-section';
 import { FieldWorkPackOverview } from '@/components/auftraege/work-pack/field-work-pack-overview';
+import { FieldScopeSection } from '@/components/auftraege/work-pack/field-scope-section';
+import { readJobScope } from '@/lib/orders/reads';
 import { dispatchErrorMessage } from '@/lib/dispatch/types';
 import { getJobByNumber } from '@/lib/jobs/actions';
 import { WORK_EXECUTION_LABELS } from '@/lib/work-lifecycle/types';
@@ -53,7 +55,10 @@ export async function FieldWorkPackPage({
     redirect(jobDetailHref(job, job.project));
   }
 
-  const data = await loadFieldWorkPackData(job, currentUserId, currentUserAssignment);
+  const [data, scopeResult] = await Promise.all([
+    loadFieldWorkPackData(job, currentUserId, currentUserAssignment),
+    readJobScope(job.id, jobResult.orders),
+  ]);
   const { fieldJob, lifecycleResult, dispatchResult, dispatchCards, readOnly } = data;
 
   return (
@@ -86,6 +91,9 @@ export async function FieldWorkPackPage({
             lifecycleSnapshot={lifecycleResult.success ? lifecycleResult.snapshot : null}
             readOnly={readOnly}
           />
+
+          {/* What the customer ordered, without a price; a job without an order renders nothing. Below the next action. */}
+          <FieldScopeSection scope={scopeResult.success ? scopeResult.scope : 'failed'} />
 
           <FieldWorkPackRecordSources job={job} currentUserId={currentUserId} data={data} />
 

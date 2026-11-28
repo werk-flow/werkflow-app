@@ -64,12 +64,14 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^(?:@\/lib\/offers\/(?:send-|decision-)?actions|@\/lib\/invoices\/line-source-actions|next\/navigation)$/,
+                  /^(?:@\/lib\/offers\/(?:send-|decision-)?actions|@\/lib\/orders\/actions|@\/lib\/invoices\/line-source-actions|next\/navigation)$/,
               },
               (args) => {
                 if (
                   args.path === '@/lib/offers/actions' ||
                   args.path === '@/lib/offers/decision-actions' ||
+                  (args.path === '@/lib/orders/actions' &&
+                    args.importer.endsWith('offer-conversion-dialog.tsx')) ||
                   args.importer.endsWith('create-offer-dialog.tsx') ||
                   args.importer.endsWith('offer-article-picker.tsx') ||
                   args.importer.endsWith('offer-sending.tsx')

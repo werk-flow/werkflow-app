@@ -38,6 +38,7 @@ const refusal = writeRefusalFor(
     'offer_decided',
     'offer_changed',
     'offer_not_accepted',
+    'offer_converted',
     'revision_superseded',
     'scope_mismatch',
   ]),

@@ -48,6 +48,7 @@ type JobDetailMainColumnProps = {
   timeEntries: TimeEntry[];
   setShowClientDialog: (open: boolean) => void;
   billingParties: WorkBillingParties | undefined;
+  ordersSection: ReactNode;
   openAssignDialog: () => void;
   isUnassigning: (userId: string) => boolean;
   handleUnassign: (userId: string) => Promise<void>;
@@ -186,6 +187,7 @@ export function JobDetailMainColumn({
   timeEntries,
   setShowClientDialog,
   billingParties,
+  ordersSection,
   openAssignDialog,
   isUnassigning,
   handleUnassign,
@@ -201,6 +203,8 @@ export function JobDetailMainColumn({
   return (
     <div className="space-y-6">
       <MetadataSection title="Details" fields={metadataFields} isEditable={isAdminOrManager} />
+
+      {isAdminOrManager && ordersSection}
 
       {instructionItems ? (
         <JobInstructionItemsCard

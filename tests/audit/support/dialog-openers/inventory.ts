@@ -419,6 +419,10 @@ export const COMMERCIAL_OPENERS = {
     trigger: (context) => offerDecisionButton(context, 'angenommen', 'Annahme zurücknehmen'),
     layer: (page) => page.getByRole('dialog', { name: 'Annahme zurücknehmen', exact: true }),
   },
+  'commercial.offer-conversion': {
+    trigger: (context) => offerDecisionButton(context, 'angenommen', 'In Arbeit übernehmen'),
+    layer: (page) => page.getByRole('dialog', { name: 'In Arbeit übernehmen', exact: true }),
+  },
   'commercial.invoice': {
     trigger: async ({ page }) =>
       page.getByRole('main').getByRole('button', { name: 'Rechnung erstellen', exact: true }),
