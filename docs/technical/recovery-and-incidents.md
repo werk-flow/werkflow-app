@@ -12,16 +12,16 @@ What a backup can restore, what loss the owner accepted, and who acts in an inci
 | Configuration and secrets | Manual: provider dashboards, the owner's password manager, the gitignored env backups | No automated export. Update the env backups after every provider change. |
 | Edge function source | `supabase/functions/` in git | Function secrets exist only in each project's secret store. |
 
-Until the point-in-time upgrade below, the owner accepts at most one day of data lost and one working day down. A daily PROD backup restored into a new project in under 5 minutes, every file matching its row (werk-flow/werkflow-planning#289); plan with 10, since the database grows.
+Until the point-in-time upgrade below, the owner accepts at most one day of data lost and one working day down. A daily PROD backup restored into a new project in under 5 minutes with every file matching its row (werk-flow/werkflow-planning#289); plan with 10.
 
 ## Planned provider upgrades
 
-The Vercel Pro checklist is open in werk-flow/werkflow-planning#216. The owner deferred point-in-time recovery until a larger customer after Willert ([decision 0008](../decisions/0008-development-workflow.md#amendment-2026-11-07-point-in-time-recovery-waits-for-a-larger-customer)). Whoever completes a checklist updates this page.
+The Vercel Pro checklist is werk-flow/werkflow-planning#216. Point-in-time recovery starts with the first customer paying about $1000 a month, after Willert. Supabase gets no further spend before Willert pays. Update this page when completing a checklist.
 
 | Upgrade | Why | Checklist after enabling |
 | --- | --- | --- |
 | Vercel Pro for the team | It brings Firewall rate limits. | Rate-limit `/login`, `/auth/*`, `/api/*` and Server Action POSTs (`Next-Action` header), sized for shared office IPs. Add runtime-log alerts or a drain. Confirm deployment protection. Record the settings in [environments](environments.md). |
-| Supabase point-in-time recovery on PROD | Too expensive before that customer. | Enable it on PROD only and record the recovery objectives here. Within a month, rehearse the provider restore in a disposable target, never shared DEV. Then repeat that drill quarterly, automated where the provider allows. No schedule runs it before then. |
+| Supabase point-in-time recovery on PROD | Too expensive before that customer. | Enable it on PROD only and record the recovery objectives here. Within a month, rehearse the provider restore in a disposable target, never shared DEV. Then repeat it quarterly, automated where the provider allows. |
 
 ## Recovery rehearsal
 
@@ -48,12 +48,13 @@ The journal names missing documents and orphan objects by id, never a path, file
 3. Follow the provider's current restore procedure. Run only the authorized operation and keep its result; a partial load or nonzero exit fails the restore. Restore in place (Backups, Scheduled backups), with PROD offline. Moving production onto a restored new project is a cutover outside this runbook: pause releases and plan it with the owner. It needs at least its Edge Functions, every PROD reference retargeted (`release.yml` too) and every open tab reloaded. A drill copy gets its own password, never PROD's; from IPv4, connect through its session pooler with `sslmode=verify-full` and the project's CA certificate (Database settings, SSL).
 4. Compare `supabase_migrations.schema_migrations` on the target with the intended revision, and check that `cron.job` holds the scheduled jobs. `bun run migrations:check` checks DEV only. For a missing migration, follow [the migration rule](environments.md#the-migration-rule) without relinking the CLI to production.
 5. Reconcile current and historical document and version paths against the correct bucket, with the rehearsal's path query and comparison (`lib/testing/runs/recovery-rehearsal.ts`). Metadata without an object means missing bytes. An object uploaded after the backup, or one whose deletion was queued after it, can survive without metadata or queue entry. Keep orphan objects for review; never purge them automatically. Before the purge restarts, `scripts/recovery/invoice-original-queue-entries.sql` lists the queue entries that may name an invoice original filed after the backup. Keep each listed object for review and delete its entry, so no unclear object is purged; at worst an abandoned PDF awaits review. Every other entry keeps its purge.
-6. Check tenant and role access, protected documents and session revocation.
-7. Run the provider canary on cloud DEV; it does not prove production recovery. On production, use metadata and configuration checks and the customer verification the owner agreed before you resume writes. Record unresolved evidence and every loss.
+6. Reconcile money before writes reopen. Stripe is the source of truth for what WerkFlow charged and was paid. Compare its subscriptions, invoices and payments since the restore point with the restored rows, and re-create what is missing through webhook replay or an audited correction, never by editing totals. Invoice numbers stay gapless and are never reused: from sent mails and retained originals, find each organization's highest number issued since the restore point, and continue after it through an owner-authorized audited recovery that records the gap. Recorded working time changes only through an audited correction.
+7. Check tenant and role access, protected documents and session revocation.
+8. Run the provider canary on cloud DEV; it does not prove production recovery. On production, use metadata and configuration checks and the customer verification the owner agreed before you resume writes. Record unresolved evidence and every loss.
 
 ## Restore procedure (files)
 
-Restore a trashed document in the app (`/dokumente`, Papierkorb). A permanently deleted document's bytes stay in storage for eight days, so a database restore within that window finds them. If a whole bucket is lost, the database still holds every path and size, so the owner can ask customers to upload again.
+Restore a trashed document in the app (`/dokumente`, Papierkorb). If a whole bucket is lost, the database still holds every path and size, so the owner can ask customers to upload again.
 
 ## Monitoring
 
@@ -63,7 +64,7 @@ A red nightly, release or daytime full run, a scheduled release that stopped at 
 
 Assignment is the owner's one notification, so only a failure that affects production assigns `tamaycbn`: a failed or held release, a release that never started, a production watcher alert, a failed health check of a credential production depends on, and a Boat key about to expire. A caller of `alert-issue.sh` says so with `AFFECTS_PRODUCTION=true`. Every other alert reaches its thread only. An open issue that turns into a production failure gains the owner; no update removes an assignee. No issue text or comment mentions the owner. GitHub never notifies a user of their own actions, and `ops/ci-alert.py` runs `gh` as the owner, so it reports a release that never started and `Owner action: Boat key` by dispatching `.github/workflows/production-alert.yml`, which writes as `github-actions`.
 
-The production watcher, `.github/workflows/prod-watch.yml`, runs `bun scripts/prod-watch.ts` on GitHub every 10 minutes; `lib/production-watch/watch.ts` owns the rules and thresholds. When GitHub's schedule runs late, the `ci-alert` lease holder dispatches a run once none is queued or running and the newest is 9 minutes old (werk-flow/werkflow-planning#581). No machine holds its token. It reads metadata only, with `PROD_WATCH_VERCEL_TOKEN` ([credentials](environments.md#credentials)): Vercel's production deployments, the deployment `app.werk-flow.app` serves, the head of `production`, and counts of `vercel.request.count` with a 5xx status per route pattern, status, error code and deployment, and of `werkflow.failure` (below) per label, code and deployment. It writes as `github-actions`, assigns the owner, and opens one issue per incident:
+The production watcher, `.github/workflows/prod-watch.yml`, runs `bun scripts/prod-watch.ts` on GitHub every 10 minutes; `lib/production-watch/watch.ts` owns the rules and thresholds. When GitHub's schedule runs late, the `ci-alert` lease holder dispatches a run once none is queued or running and the newest is 9 minutes old (werk-flow/werkflow-planning#581). No machine holds its token. It reads metadata only, with `PROD_WATCH_VERCEL_TOKEN` ([credentials](environments.md#credentials)): deployment state, the head of `production`, and the 5xx and `werkflow.failure` (below) counts that `lib/production-watch/watch.ts` queries. It writes as `github-actions`, assigns the owner, and opens one issue per incident:
 
 - `Production alert: deploy`: a production build failed or stuck past its deadline, or production not serving the `production` head for an hour, which is a rollback or a failed promotion. It closes once production serves its head and no build is failed or stuck.
 - `Production alert: server errors`: a burst of server errors against the week before, or a route that starts to fail. It adds a comment at most every few hours and closes a day after the newest error.
@@ -76,8 +77,7 @@ Its thread reads no PROD data: no runtime log, build log, request record or row,
 
 A handled failure answers below 500, so the 5xx count misses it. Server-side `logError` (`lib/logging.ts`) therefore also records the Vercel custom metric `werkflow.failure` with the value 1 and two tags:
 
-- `label`: the log label in Vercel's tag characters (letters, digits, `-`, `_`, `.`, `/`), each other run of characters as `_`, at most 63 bytes.
-- `code`: the failure's stable code, written the same way, or `none`.
+- `label` and `code`: the log label and the failure's stable code, or `none`, in Vercel's tag characters (`lib/logging.ts`).
 
 A label or code that holds an email address, a link, six digits in a row, or twenty hex characters and dashes in a row (a UUID, a token) becomes `withheld`. The metric carries no message, id, user, organization or request value; Vercel adds the deployment and region but no route or environment. Staging shares the project, so the watcher filters by production deployment. Browser failures are not counted: a browser has no Vercel runtime. Recording needs Observability Plus on the Vercel team, at $1.20 per million recorded failures, and only the owner turns it on. Outside Vercel or when recording fails, `logError` logs as before and never throws.
 
@@ -89,14 +89,14 @@ Check the path without an outage:
 2. Open `/auth/callback?code=check` once on [the staging URL](environments.md#vercel). The made-up code fails its exchange, which `logError` handles. Under Observability, Custom Metrics, the staging deployment then shows `werkflow.failure` with a label that starts with `auth.callback_code_exchange`.
 3. `bun test lib/production-watch` proves the rule's thresholds and that staging raises nothing; a green run of `prod-watch.yml` proves the query's shape, not the metric name.
 
-`.github/workflows/date-lookahead.yml` checks future dates nightly, reporting failures by date on `CI alert: date look-ahead`. Each job steps its runner's kernel clock (`.github/scripts/shift-clock.sh`). Containers share that clock, so Bun, Chromium, the app, Postgres and the Supabase services all show the date, and SQL tests read it too. A job fails if the shell, Bun or Postgres shows another date or the clock leaves the shift.
+`.github/workflows/date-lookahead.yml` checks future dates nightly, reporting failures by date on `CI alert: date look-ahead`. Each job steps its runner's kernel clock (`.github/scripts/shift-clock.sh`). Containers share that clock, so every process and SQL test sees the date. A job fails if the shell, Bun or Postgres shows another date or the clock leaves the shift.
 
 | Dates | Groups |
 | --- | --- |
 | Days 1, 2, 3, 7 and 14 ahead, retained failed suite dates, the first month end and year end past day 14, and the year turn (00:30 in Berlin, still December 31 in UTC) | Unit, SQL and component |
 | Day 14, on Sundays also that month end and year end, and every date the open issue names for a browser job, each only if it is at least a day before the runner's certificate expires | Every browser group |
 
-The runner's agent reaches GitHub over TLS. On a clock past that certificate's expiry it loses GitHub, which shuts the runner down 13 to 20 minutes later: after a suite job ends, but before a browser job does. So the plan, from the agent's hosts in the runner's journal, gives browser jobs only to dates whose midday is a day or more before the earliest certificate expiry. Its log names each held date. GitHub renews the certificate, so a held date gets its browser jobs back. A runner shut down mid-job ("The runner has received a shutdown signal") went past that horizon.
+The runner's agent reaches GitHub over TLS. On a clock past that certificate's expiry it loses GitHub and shuts the runner down 13 to 20 minutes later, after a suite job ends but before a browser job does. So the plan, from the agent's hosts in the runner's journal, gives browser jobs only to dates whose midday is a day or more before the earliest expiry, and logs each held date. GitHub's renewal gives a held date its browser jobs back. A runner shut down mid-job ("The runner has received a shutdown signal") went past that horizon.
 
 Failed midday suite dates stay until passing or arrival. A date keeps its browser jobs while the issue names it, so a green run cannot close the issue on a date it skipped, except a date past the horizon, whose browser jobs could not have run. Started by hand, `gh workflow run date-lookahead.yml -f date=<YYYY-MM-DD>` reruns one date and reports nothing.
 
@@ -104,7 +104,6 @@ The look-ahead does not cover:
 
 - A spec merged after its date was day 14: only the suite groups and the real nightly reach that date.
 - Any hour but midday, apart from the year turn.
-- Browser groups on a date past the runner's certificate horizon, until GitHub renews the certificate.
 - Data that aged into the date: the stack migrates on the real clock, and each browser group seeds a fresh world on the shifted one.
 - The cloud providers: every job uses the local stack.
 
@@ -117,7 +116,7 @@ The look-ahead does not cover:
 | Revoke access | Owner | Suspend the user's operational access, then revoke Auth sessions and reset the credential. An issued access token or file URL stays valid until it expires. For a leaving admin, transfer the organization first. |
 | Preserve evidence | Agent or owner | Export the relevant log excerpts, identifiers redacted, into `.agent-logs/incidents/<date>/`. |
 | Restore | Owner with agent | Follow the restore procedures above. |
-| Verify | Agent | Follow step 7 of the database restore before writes reopen. |
+| Verify | Agent | Follow step 8 of the database restore before writes reopen. |
 | Communicate | Owner | Inform the beta customer. If personal data was exposed, assess the GDPR notification duty with an advisor. |
 
 ## Recover an uncertain email change

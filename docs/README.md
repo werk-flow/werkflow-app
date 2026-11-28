@@ -101,7 +101,7 @@ Run `bun run docs:check` after each docs edit. After a checker change, add `bun 
 - `.claude/skills` and `.agents/skills` are identical, except `coderabbit-review`, which Codex ships itself;
 - word budgets hold.
 
-No check sees a row of the [enforcement-ladder backlog](technical/enforcement-ladder-backlog.md) close. A release, and a change that lands a mechanism, checks every row against the code.
+No check sees a row of the [enforcement-ladder backlog](technical/enforcement-ladder-backlog.md) close. Closing an epic, or landing a mechanism, checks the rows it touches against the code.
 
 ### Sibling repositories
 
