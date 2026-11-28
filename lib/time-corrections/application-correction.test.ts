@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { createInMemoryAdmin } from '@/lib/testing/fixtures/in-memory-admin';
+import type { TimeActivitySelection } from '@/lib/time-tracking/types';
 import { proposeCalendarCorrection } from './calendar-proposal';
 import type { TimeCorrectionFact, TimeCorrectionSnapshot } from './types';
 import type { SubmitTimeCorrectionInput } from './validation';
@@ -219,6 +220,73 @@ describe('A correction of one interval of an approved correction', () => {
       '12:30',
       '15:00',
     ]);
+  });
+
+  test('edits with one proposed time only, so no other boundary moves', async () => {
+    expect(
+      await correct({
+        kind: 'edit',
+        factId: 'a2',
+        proposedFacts: [proposed('clock_in', '13:30'), proposed('clock_out', '15:30')],
+      }),
+    ).toEqual({ error: 'invalid_shape' });
+  });
+
+  test('deletes the evening activity and keeps the one that starts at the next midnight', async () => {
+    // 2026-10-14T22:00Z is midnight in Berlin: two activities of one context meet there.
+    const meetAtMidnight: TimeCorrectionSnapshot = {
+      schemaVersion: 1,
+      facts: [
+        fact('e0', 'clock_in', '20:00'),
+        fact('e1', 'clock_out', '22:00'),
+        fact('e2', 'clock_in', '22:00'),
+        fact('e3', 'clock_out', '23:00'),
+      ],
+    };
+    const result = await correct({
+      kind: 'delete',
+      factId: 'e0',
+      proposedFacts: [],
+      snapshot: meetAtMidnight,
+    });
+    if (!('proposed' in result)) throw new Error(`refused: ${result.error}`);
+    expect(recorded(result.proposed.facts)).toEqual([
+      ['clock_in', '22:00', null, RECORD],
+      ['clock_out', '23:00', null, RECORD],
+    ]);
+  });
+
+  test('splits a drive and keeps its route and role in both pieces', async () => {
+    const drive: TimeActivitySelection = {
+      kind: 'travel',
+      allocationKind: 'unallocated',
+      jobId: null,
+      travelRoute: 'home_to_site',
+      travelRole: 'driver',
+    };
+    const travel: TimeCorrectionSnapshot = {
+      schemaVersion: 1,
+      facts: twoIntervals.facts.map((item) => ({
+        ...item,
+        activityKind: 'travel',
+        activity: drive,
+      })),
+    };
+    const piece = (entryType: ProposedFact['entryType'], time: string) =>
+      proposed(entryType, time, { activityKind: 'travel' });
+    const result = await correct({
+      kind: 'split',
+      factId: 'a0',
+      snapshot: travel,
+      proposedFacts: [
+        piece('clock_in', '08:00'),
+        piece('clock_out', '09:00'),
+        piece('clock_in', '09:00'),
+        piece('clock_out', '10:00'),
+      ],
+    });
+    if (!('proposed' in result)) throw new Error(`refused: ${result.error}`);
+    expect(result.proposed.facts.map((item) => item.activity)).toEqual(Array(6).fill(drive));
   });
 
   test('without the fact it names is refused', async () => {
