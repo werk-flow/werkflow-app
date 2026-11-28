@@ -34,6 +34,7 @@ import {
   offerOptions,
   type OfferOption,
   type RevisionContent,
+  type ScopeTotals,
 } from '@/lib/offers/accepted-scope';
 import { acceptOffer } from '@/lib/offers/decision-actions';
 import {
@@ -46,7 +47,7 @@ import {
 import { ownWrites } from '@/lib/realtime/own-writes';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { formatGermanDate, toLocalDateString } from '@/lib/utils';
-import { DECISION_FAILED, DECISION_FAILURE_MESSAGES } from './offer-decision-reason';
+import { DECISION_FAILED, DECISION_FAILURE_MESSAGES, OfferDraftClosingNote } from './offer-decision-reason';
 
 const FIELD = {
   name: 'offer-accept-name',
@@ -217,11 +218,11 @@ function AcceptOfferDialog({
           </DialogHeader>
           <DialogBody className="space-y-4">
             {offer.status === 'entwurf' && (
-              <p className="text-sm text-muted-foreground">
+              <OfferDraftClosingNote>
                 {`Revision ${revision.revision + 1} ist noch ein Entwurf. Mit der Annahme von Revision ${revision.revision} wird er geschlossen, und seine Änderungen werden nicht gesendet.`}
-              </p>
+              </OfferDraftClosingNote>
             )}
-            <AcceptanceFacts form={form} update={update} errors={errors} />
+            <AcceptanceFacts form={form} update={update} errors={errors} disabled={isPending} />
             {form.acceptedOn > revision.validUntil && (
               <p className="text-sm text-muted-foreground">
                 {`Revision ${revision.revision} war nur bis ${formatGermanDate(revision.validUntil)} gültig. Die Annahme wird trotzdem erfasst und als verspätet vermerkt.`}
@@ -231,21 +232,17 @@ function AcceptOfferDialog({
               <AcceptanceOptions
                 options={options}
                 chosen={form.chosen}
+                disabled={isPending}
                 onChange={(chosen) => update({ chosen })}
               />
             )}
-            {totals && (
-              <p className="text-sm">
-                Auftragsumfang: <span className="tabular-nums">{formatEuroCents(totals.netCents)}</span>{' '}
-                netto, <span className="font-medium tabular-nums">{formatEuroCents(totals.grossCents)}</span>{' '}
-                brutto
-              </p>
-            )}
+            {totals && <ScopeTotalsLine totals={totals} />}
             <Field label="Notiz" htmlFor={FIELD.note}>
               <Textarea
                 id={FIELD.note}
                 value={form.note}
                 maxLength={2000}
+                disabled={isPending}
                 onChange={(event) => update({ note: event.target.value })}
               />
             </Field>
@@ -270,10 +267,13 @@ function AcceptanceFacts({
   form,
   update,
   errors,
+  disabled,
 }: {
   form: AcceptanceForm;
   update: (patch: Partial<AcceptanceForm>) => void;
   errors: FieldErrors;
+  /** While the Annahme is sent, so what the server records stays what the office sees. */
+  disabled: boolean;
 }) {
   return (
     <>
@@ -282,6 +282,7 @@ function AcceptanceFacts({
           id={FIELD.name}
           value={form.name}
           maxLength={200}
+          disabled={disabled}
           onChange={(event) => update({ name: event.target.value })}
         />
       </Field>
@@ -291,12 +292,14 @@ function AcceptanceFacts({
             id={FIELD.date}
             ariaLabel="Angenommen am"
             value={form.acceptedOn ? new Date(`${form.acceptedOn}T00:00:00`) : undefined}
+            disabled={disabled}
             onChange={(date) => update({ acceptedOn: date ? toLocalDateString(date) : '' })}
           />
         </Field>
         <Field label="Angenommen per" htmlFor={FIELD.channel} required error={errors[FIELD.channel]}>
           <Select
             value={form.channel ?? ''}
+            disabled={disabled}
             onValueChange={(value) =>
               update({ channel: ACCEPTANCE_CHANNELS.find((option) => option === value) ?? null })
             }
@@ -322,10 +325,12 @@ function AcceptanceFacts({
 function AcceptanceOptions({
   options,
   chosen,
+  disabled,
   onChange,
 }: {
   options: readonly OfferOption[];
   chosen: readonly string[];
+  disabled: boolean;
   onChange: (chosen: string[]) => void;
 }) {
   return (
@@ -336,6 +341,7 @@ function AcceptanceOptions({
           <Checkbox
             id={`offer-accept-option-${option.number}`}
             checked={chosen.includes(option.number)}
+            disabled={disabled}
             onCheckedChange={(checked) => onChange(toggled(options, chosen, option, checked === true))}
           />
           <Label
@@ -347,5 +353,15 @@ function AcceptanceOptions({
         </div>
       ))}
     </fieldset>
+  );
+}
+
+/** The Auftragsumfang's net and gross for the chosen options, as the server will compute them. */
+function ScopeTotalsLine({ totals }: { totals: ScopeTotals }) {
+  return (
+    <p className="text-sm">
+      Auftragsumfang: <span className="tabular-nums">{formatEuroCents(totals.netCents)}</span> netto,{' '}
+      <span className="font-medium tabular-nums">{formatEuroCents(totals.grossCents)}</span> brutto
+    </p>
   );
 }

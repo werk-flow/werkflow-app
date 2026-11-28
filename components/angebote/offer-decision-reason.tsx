@@ -25,6 +25,7 @@ import { closeOffer, withdrawOfferAcceptance } from '@/lib/offers/decision-actio
 import type { OfferDetail } from '@/lib/offers/types';
 import { ownWrites } from '@/lib/realtime/own-writes';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { useOfferUnsaved } from './offer-unsaved';
 
 export const DECISION_FAILED = 'Das konnte nicht festgehalten werden. Versuche es erneut.';
 export const DECISION_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
@@ -37,6 +38,20 @@ export const DECISION_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   revision_superseded: 'Inzwischen ist eine neuere Revision gesendet. Lade die Seite neu.',
   scope_mismatch: DECISION_FAILED,
 };
+
+/**
+ * On the draft of the next revision: the decision is on the sent revision, so the draft closes
+ * unsent, and what its editor holds unsaved is lost with it.
+ */
+export function OfferDraftClosingNote({ children }: { children: React.ReactNode }) {
+  const unsaved = useOfferUnsaved();
+  return (
+    <p className="text-sm text-muted-foreground">
+      {children}
+      {unsaved && ' Was du an den Positionen noch nicht gespeichert hast, geht dabei verloren.'}
+    </p>
+  );
+}
 
 type DecidableOffer = Pick<OfferDetail, 'id' | 'offerNumber' | 'version' | 'status'>;
 
@@ -150,17 +165,17 @@ function OfferReasonDialog({
           </DialogHeader>
           <DialogBody className="space-y-2">
             {offer.status === 'entwurf' && (
-              // The decision is on the sent revision: the open draft of the next one closes unsent.
-              <p className="text-sm text-muted-foreground">
+              <OfferDraftClosingNote>
                 Der Entwurf der nächsten Revision wird damit geschlossen, und seine Änderungen werden nicht
                 gesendet.
-              </p>
+              </OfferDraftClosingNote>
             )}
             <Field label="Grund" htmlFor="offer-decision-reason" required error={reasonError}>
               <Textarea
                 id="offer-decision-reason"
                 value={reason}
                 maxLength={2000}
+                disabled={isPending}
                 onChange={(event) => setReason(event.target.value)}
               />
             </Field>
