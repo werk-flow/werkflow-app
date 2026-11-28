@@ -19,14 +19,14 @@ The private `werk-flow/werkflow-planning` clone sits beside the main checkout. N
 6. Open one issue per child: "Part of <epic>. Stage <s>, level <l>, <merge mode>." Then **Do** (the scope, with file paths) and **Done when** (the commands that must pass, what the PR body reports, the product caller, and under about 1,500 changed lines).
 7. Write one shared child brief in werkflow-planning: how to work, the style, the hand-back line, known flaky checks.
 
-Done when each child has its stage, level, merge mode and checkable done-when, and the epic names code ownership and foreseeable owner decisions.
+Done when every child issue has a stage, a level, a merge mode and a checkable done-when, and the epic names where the code lives and lists every scope question and owner decision you can foresee.
 
 ## 2. Approve once
 
 1. Ask the owner through the question tool, in one batch: the epic link, the children in order, and every listed decision with your recommendation first. End your turn.
 2. Comment the approval and every answer on the epic, and put each answer into the child issue it changes.
 
-After approval, use [Decide or ask](../../../AGENTS.md#decide-or-ask). Never reopen approved scope.
+Never ask about the breakdown or scope again. From here, [Decide or ask](../../../AGENTS.md#decide-or-ask) applies: decide, record, keep working.
 
 ## 3. Start children
 
