@@ -64,10 +64,11 @@ const streamedText = (events: Awaited<ReturnType<typeof readTurn>>) =>
 // A role-play request the model falls for changes neither its instructions nor its tools, and the
 // tool it asks for never runs (B6, B21).
 const ROLE_TOOLS = {
-  employee: ['auftraege_finden', 'frage_stellen', 'plan_zeigen'],
+  employee: ['auftraege_finden', 'auftrag_lesen', 'frage_stellen', 'plan_zeigen'],
   admin: [
     'artikel_finden',
     'auftraege_finden',
+    'auftrag_lesen',
     'frage_stellen',
     'kunden_finden',
     'lieferschein_lesen',

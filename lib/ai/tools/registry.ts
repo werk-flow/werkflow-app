@@ -2,6 +2,7 @@ import 'server-only';
 
 import { artikelFinden } from '@/lib/ai/tools/artikel-finden';
 import { auftraegeFinden } from '@/lib/ai/tools/auftraege-finden';
+import { auftragLesen } from '@/lib/ai/tools/auftrag-lesen';
 import type { AiTool } from '@/lib/ai/tools/define-tool';
 import { frageStellen } from '@/lib/ai/tools/frage-stellen';
 import { kundenFinden } from '@/lib/ai/tools/kunden-finden';
@@ -12,6 +13,7 @@ import type { OrgRole } from '@/lib/roles';
 /** Every tool WerkFlow KI has. A tool ships here only with its boundary cases (B5). */
 export const AI_TOOLS = [
   auftraegeFinden,
+  auftragLesen,
   kundenFinden,
   artikelFinden,
   lieferscheinLesen,

@@ -19,6 +19,14 @@ export const IDS = {
   item: '36000000-0000-4000-8000-000000000001',
   foreignItem: '36000000-0000-4000-8000-000000000002',
   supplier: '37000000-0000-4000-8000-000000000001',
+  site: '34100000-0000-4000-8000-000000000001',
+  contact: '34200000-0000-4000-8000-000000000001',
+  workLead: '35200000-0000-4000-8000-000000000001',
+} as const;
+/** What only the office's job page shows: `auftrag_lesen` must leave both out. */
+export const OFFICE_ONLY = {
+  billingRecipient: 'Hausverwaltung Lindenhof GmbH',
+  workLead: IDS.workLead,
 } as const;
 /** A sale price only the item row holds: it must never reach the model (B19). */
 export const SALE_PRICE_CENTS = 4711;
@@ -43,13 +51,65 @@ const job = (id: string, organizationId: string, clientId: string, title: string
   organization_id: organizationId,
   project_id: null,
   client_id: clientId,
+  site_id: null,
+  contact_id: null,
   job_number: `A-${id.slice(-1)}`,
+  source_number: null,
   title,
   description: null,
   status: 'nicht_bearbeitet',
+  execution_state: null,
+  execution_version: 0,
+  priority: 'mittel',
   planned_date: null,
+  planned_time: null,
+  estimated_duration_minutes: null,
+  planned_working_minutes: null,
+  actual_completion_date: null,
+  location: null,
+  created_by: CALLER_ID,
   created_at: createdAt,
   updated_at: createdAt,
+});
+
+/** The assigned job as its page reads it: site, contact, a visit, billing parties and a work lead. */
+const assignedJob = (title: string): Row => ({
+  ...job(IDS.assignedJob, ORGANIZATION_A, IDS.client, title),
+  site_id: IDS.site,
+  contact_id: IDS.contact,
+  description: 'Jährliche Wartung der Gastherme',
+  planned_date: '2026-11-03',
+  work_billing_parties: [
+    {
+      version: 1,
+      source: 'objekt',
+      client_id: IDS.client,
+      recipient_client_id: IDS.client,
+      recipient_name: OFFICE_ONLY.billingRecipient,
+      recipient_address: 'Hofweg 1, 10117 Berlin',
+      created_at: createdAt,
+      auftraggeber: { name: 'Müller Haustechnik' },
+    },
+  ],
+  work_leads: [
+    {
+      id: IDS.workLead,
+      employee_record_id: '35300000-0000-4000-8000-000000000001',
+      started_at: createdAt,
+      started_by: COWORKER_ID,
+      ended_at: null,
+      ended_by: null,
+    },
+  ],
+});
+
+const assignment = (index: number, organizationId: string, jobId: string, userId: string): Row => ({
+  id: `35100000-0000-4000-8000-00000000000${index}`,
+  organization_id: organizationId,
+  job_id: jobId,
+  user_id: userId,
+  assigned_by: COWORKER_ID,
+  assigned_at: createdAt,
 });
 
 const item = (id: string, organizationId: string, name: string): Row => ({
@@ -79,6 +139,62 @@ const item = (id: string, organizationId: string, name: string): Row => ({
   updated_at: createdAt,
 });
 
+/** The rows the job page reads beside the job: the team's names, the site and the contact. */
+const jobDetailTables = (): Record<string, Row[]> => ({
+  profiles: [
+    {
+      id: CALLER_ID,
+      first_name: 'Erika',
+      last_name: 'Muster',
+      email: 'erika@example.test',
+      avatar_path: null,
+    },
+    {
+      id: COWORKER_ID,
+      first_name: 'Max',
+      last_name: 'Kollege',
+      email: 'max@example.test',
+      avatar_path: null,
+    },
+  ],
+  client_sites: [
+    {
+      id: IDS.site,
+      organization_id: ORGANIZATION_A,
+      client_id: IDS.client,
+      name: 'Wohnhaus Lindenstraße',
+      street: 'Gartenweg 2',
+      postal_code: '70173',
+      city: 'Stuttgart',
+      access_notes: 'Schlüssel beim Hausmeister',
+      notes: 'Interne Standortnotiz',
+      primary_contact_id: IDS.contact,
+      is_primary: true,
+      is_active: true,
+      created_by: CALLER_ID,
+      created_at: createdAt,
+      updated_at: createdAt,
+    },
+  ],
+  client_contacts: [
+    {
+      id: IDS.contact,
+      organization_id: ORGANIZATION_A,
+      client_id: IDS.client,
+      name: 'Anna Müller',
+      role: 'Eigentümerin',
+      email: 'anna@example.test',
+      phone: '0170 5678',
+      notes: 'Interne Kontaktnotiz',
+      is_primary: true,
+      is_active: true,
+      created_by: CALLER_ID,
+      created_at: createdAt,
+      updated_at: createdAt,
+    },
+  ],
+});
+
 /** Seeds both organizations: a job title of A carries `jobTitle`, so an injection case can poison it. */
 export function seedToolTables(world: AiTurnWorld, jobTitle = 'Heizung Müller warten'): void {
   Object.assign(world.tables, {
@@ -87,28 +203,23 @@ export function seedToolTables(world: AiTurnWorld, jobTitle = 'Heizung Müller w
       client(IDS.foreignClient, ORGANIZATION_B, 'Müller Bau'),
     ],
     jobs: [
-      job(IDS.assignedJob, ORGANIZATION_A, IDS.client, jobTitle),
+      assignedJob(jobTitle),
       job(IDS.coworkerJob, ORGANIZATION_A, IDS.client, 'Heizung Keller tauschen'),
       job(IDS.foreignJob, ORGANIZATION_B, IDS.foreignClient, 'Heizung Fremdfirma'),
     ],
     job_assignments: [
+      assignment(1, ORGANIZATION_A, IDS.assignedJob, CALLER_ID),
+      assignment(2, ORGANIZATION_A, IDS.coworkerJob, COWORKER_ID),
+      assignment(3, ORGANIZATION_B, IDS.foreignJob, CALLER_ID),
+      assignment(4, ORGANIZATION_A, IDS.assignedJob, COWORKER_ID),
+    ],
+    ...jobDetailTables(),
+    planning_occurrences: [
       {
-        id: '35100000-0000-4000-8000-000000000001',
+        id: '35400000-0000-4000-8000-000000000001',
         organization_id: ORGANIZATION_A,
         job_id: IDS.assignedJob,
-        user_id: CALLER_ID,
-      },
-      {
-        id: '35100000-0000-4000-8000-000000000002',
-        organization_id: ORGANIZATION_A,
-        job_id: IDS.coworkerJob,
-        user_id: COWORKER_ID,
-      },
-      {
-        id: '35100000-0000-4000-8000-000000000003',
-        organization_id: ORGANIZATION_B,
-        job_id: IDS.foreignJob,
-        user_id: CALLER_ID,
+        status: 'scheduled',
       },
     ],
     projects: [],

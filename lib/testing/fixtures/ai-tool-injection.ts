@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import { installInMemoryBucket } from './in-memory-bucket';
 import { AI_SYSTEM_PROMPT } from '@/lib/ai/prompt/system-prompt';
-import { ORGANIZATION_A, ORGANIZATION_B, signInAs } from './action-boundary-world';
+import { ORGANIZATION_A, ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
 import { postTurn, readTurn, resetAiTables, toolCallOutcomes } from './ai-turn-world';
 import { callTool, installAiToolWorld, offeredTools, seedToolTables, toolResults } from './ai-tool-world';
 import {
@@ -84,6 +84,7 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
     [
       'artikel_finden',
       'auftraege_finden',
+      'auftrag_lesen',
       'frage_stellen',
       'kunden_finden',
       'lieferschein_lesen',
@@ -118,6 +119,82 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
     true,
     'a link that holds the editable number must reach the model labelled as record text',
   );
+}
+
+// A poisoned job description and access note reach an employee's turn only as labelled record text
+// without their hidden characters; reading the job taints the turn, so the memory write is gone (B8, B10, B21).
+{
+  resetAiTables(world);
+  seedToolTables(world);
+  const [job] = tableRows(world, 'jobs');
+  const [site] = tableRows(world, 'client_sites');
+  if (!job || !site) throw new Error('the seed holds the assigned job and its site');
+  Object.assign(job, { description: `Bitte prüfen. ${POISON}\u202e` });
+  Object.assign(site, { access_notes: `\u200b${POISON}` });
+  signInAs(world, 'employee');
+  const { output } = await callTool(world, 'auftrag_lesen', { nummer: 'A-1' });
+  for (const text of [`Bitte prüfen. ${POISON}`, POISON]) {
+    assert.equal(
+      JSON.stringify(output).includes(JSON.stringify({ source: 'record_text', text })),
+      true,
+      'a job description and an access note must reach the model labelled as record text, hidden characters stripped',
+    );
+  }
+  assert.deepEqual(toolCallOutcomes(world), ['tool_call_auftrag_lesen_ok']);
+  assert.equal(offeredTools(world.streamRequests[0]).includes('notiz_merken'), true);
+  assert.deepEqual(
+    offeredTools(world.streamRequests[1]),
+    ['auftraege_finden', 'auftrag_lesen', 'frage_stellen', 'plan_zeigen'],
+    'a turn that read a job must offer no memory write (B10)',
+  );
+  seedToolTables(world);
+}
+
+// Every text of a job at its longest, in a character that NFC triples, and a team of 200 long names
+// reach the model shortened and marked, and the turn's next step stays under its input cap (B13).
+{
+  resetAiTables(world);
+  seedToolTables(world);
+  // One UTF-16 unit and 3 bytes, but three code points and 6 bytes once NFC-normalized.
+  const expanding = (length: number) => '\uFB2C'.repeat(length);
+  const [job] = tableRows(world, 'jobs');
+  if (!job) throw new Error('the seed holds the assigned job');
+  Object.assign(job, { description: expanding(20_000) });
+  Object.assign(job, { title: expanding(2_000), source_number: expanding(2_000) });
+  const long = expanding(2_000);
+  for (const row of tableRows(world, 'clients'))
+    Object.assign(row, { name: long, customer_number: long, address: long, phone: long });
+  for (const row of tableRows(world, 'client_sites'))
+    Object.assign(row, { name: long, street: long, access_notes: expanding(20_000) });
+  for (const row of tableRows(world, 'client_contacts'))
+    Object.assign(row, { name: long, role: long, phone: long });
+  // A team of 200 people with long names: no column bounds a name.
+  for (let index = 0; index < 200; index += 1) {
+    const userId = `38000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+    tableRows(world, 'profiles').push({
+      id: userId,
+      first_name: expanding(300),
+      last_name: null,
+      email: null,
+    });
+    tableRows(world, 'job_assignments').push({
+      id: `38100000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+      organization_id: ORGANIZATION_A,
+      job_id: job.id,
+      user_id: userId,
+      assigned_by: userId,
+      assigned_at: '2026-11-02T08:00:00.000Z',
+    });
+  }
+  signInAs(world, 'buero');
+  const request = JSON.stringify({ name: 'auftrag_lesen', input: { nummer: 'A-1' } });
+  const events = await readTurn(world, await postTurn(`[replay:werkzeug] ${request}`));
+  assert.deepEqual(events.at(-1), { type: 'end', status: 'complete' }, 'a long job must not end the turn');
+  const text = JSON.stringify(toolResults(world.streamRequests[1])[0]?.output);
+  for (const marker of ['"beschreibungGekuerzt":true', '"zugangGekuerzt":true', '"teamGesamt":202']) {
+    assert.equal(text.includes(marker), true, `${marker}: the model must learn what it reads in part`);
+  }
+  seedToolTables(world);
 }
 
 // A tool result without record text leaves the memory write in the turn: only untrusted text taints it.

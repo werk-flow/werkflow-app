@@ -99,7 +99,6 @@ const REVIEWED_UNPAGED_READS: Readonly<Record<string, string>> = {
     'the active dispatches of one job',
   'lib/documents/actions.ts::getDocumentDetails::document_versions': 'the versions of one document',
   'lib/jobs/actions.ts::replaceJobAssignmentsAfterAssessment::job_assignments': ONE_JOB,
-  'lib/jobs/actions.ts::readJobDetails::job_assignments': ONE_JOB,
   'lib/jobs/update-preparation.ts::prepareJobUpdate::job_assignments': ONE_JOB,
   'lib/maintenance/actions.ts::createMaintenanceVisit::maintenance_due_work_events':
     'the replay events of one idempotency key',

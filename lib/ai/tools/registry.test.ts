@@ -109,11 +109,12 @@ test('a tool refuses a role it does not serve and an input with an extra key bef
   expect(await tool.execute({ suche: 'Rohr' }, caller('admin'), run)).toEqual({ status: 'ok', value: null });
 });
 
-test('an employee gets the job search and the harness tools; customers, articles and Lieferscheine stay with Admin and Büro (B6)', () => {
+test('an employee gets the job and harness tools; customers, articles and Lieferscheine stay with Admin and Büro (B6)', () => {
   const names = (role: ActionContext['role']) => aiToolsFor(role).map((tool) => tool.name);
-  expect(names('employee')).toEqual(['auftraege_finden', 'frage_stellen', 'plan_zeigen']);
+  expect(names('employee')).toEqual(['auftraege_finden', 'auftrag_lesen', 'frage_stellen', 'plan_zeigen']);
   expect(names('buero')).toEqual([
     'auftraege_finden',
+    'auftrag_lesen',
     'kunden_finden',
     'artikel_finden',
     'lieferschein_lesen',
