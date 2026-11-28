@@ -8,7 +8,11 @@ import type { OrgRole } from '@/lib/roles';
  * Which requests of the correction history a caller sees, as the database
  * page reader `list_time_correction_history_page` applies it.
  */
-export type CorrectionHistoryVisibility = 'all' | 'own' | 'own_and_employee_subjects';
+export type CorrectionHistoryVisibility =
+  | 'all'
+  | 'own'
+  | 'own_and_employee_subjects'
+  | 'own_and_member_subjects';
 
 // Never a member's id, so the probe asks only about the target's role.
 const OTHER_MEMBER = '';
@@ -17,7 +21,10 @@ const OTHER_MEMBER = '';
  * Admin and Büro see every request. An employee sees what they filed or
  * are the subject of, plus the requests whose subject their time approval
  * reaches: every role through a direct assignment or an admin source, the
- * employee role through a Büro source (`canHolderApproveTarget`).
+ * employee role through a Büro source (`canHolderApproveTarget`). Their
+ * approval reaches only a subject with a membership role, so a former
+ * member's request never counts for them: the hydration would hide it
+ * (`holderCovers` in `request-list.ts`) and leave the page short.
  */
 export function correctionHistoryVisibility(
   callerRole: OrgRole,
@@ -25,6 +32,6 @@ export function correctionHistoryVisibility(
 ): CorrectionHistoryVisibility {
   if (callerRole !== 'employee') return 'all';
   if (!holder) return 'own';
-  if (canHolderApproveTarget(holder, OTHER_MEMBER, 'buero')) return 'all';
+  if (canHolderApproveTarget(holder, OTHER_MEMBER, 'buero')) return 'own_and_member_subjects';
   return canHolderApproveTarget(holder, OTHER_MEMBER, 'employee') ? 'own_and_employee_subjects' : 'own';
 }
