@@ -17,6 +17,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { useHydrated } from '@/hooks/use-hydrated';
+import { usePayloadAttemptKey } from '@/hooks/use-payload-attempt-key';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { describeFailure } from '@/lib/action-messages';
@@ -84,8 +85,9 @@ export function OfferReasonButton({ offer, step }: { offer: DecidableOffer; step
 /** The reason, its field error once submitted, and the submit that records the step. */
 function useReasonStep(offer: DecidableOffer, step: keyof typeof STEPS, onClose: () => void) {
   const { showBanner } = useBanner();
-  // One key per opening: a press repeated after a lost answer gets the first record.
-  const [attemptKey] = useState(() => crypto.randomUUID());
+  // One key per pressed reason: an unchanged press after a lost answer gets the first record, and a
+  // corrected reason is a new attempt, which a recorded decision refuses instead of answering.
+  const attempt = usePayloadAttemptKey();
   const [reason, setReason] = useState('');
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +102,8 @@ function useReasonStep(offer: DecidableOffer, step: keyof typeof STEPS, onClose:
     void run(async () => {
       setError(null);
       const since = settle.markChange();
-      const input = { offerId: offer.id, expectedVersion: offer.version, attemptKey, reason };
+      const values = { offerId: offer.id, expectedVersion: offer.version, reason };
+      const input = { ...values, attemptKey: attempt.keyFor(JSON.stringify(values)) };
       // Recorded, so this tab skips the Realtime echo of its own write (lib/realtime/own-writes.ts).
       const result = await ownWrites
         .track(step === 'annahme' ? withdrawOfferAcceptance(input) : closeOffer({ ...input, outcome: step }))

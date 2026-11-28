@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useHydrated } from '@/hooks/use-hydrated';
+import { usePayloadAttemptKey } from '@/hooks/use-payload-attempt-key';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { describeFailure } from '@/lib/action-messages';
@@ -119,8 +120,9 @@ type FieldErrors = {
 function useAcceptOffer(offer: AcceptableOffer, revision: Revision, onClose: () => void) {
   const { showBanner } = useBanner();
   const today = getBusinessTodayIso();
-  // One key per opening: a press repeated after a lost answer gets the first Annahme.
-  const [attemptKey] = useState(() => crypto.randomUUID());
+  // One key per pressed values: an unchanged press after a lost answer gets the first Annahme, and
+  // corrected values are a new attempt, which a recorded Annahme refuses instead of answering.
+  const attempt = usePayloadAttemptKey();
   const [form, setForm] = useState<AcceptanceForm>({
     name: '',
     acceptedOn: today,
@@ -152,10 +154,9 @@ function useAcceptOffer(offer: AcceptableOffer, revision: Revision, onClose: () 
     void run(async () => {
       setError(null);
       const since = settle.markChange();
-      const input = {
+      const values = {
         offerId: offer.id,
         expectedVersion: offer.version,
-        attemptKey,
         revision: revision.revision,
         acceptedByName: form.name,
         acceptedOn,
@@ -163,6 +164,7 @@ function useAcceptOffer(offer: AcceptableOffer, revision: Revision, onClose: () 
         note: form.note,
         chosenOptions: form.chosen,
       };
+      const input = { ...values, attemptKey: attempt.keyFor(JSON.stringify(values)) };
       // Recorded, so this tab skips the Realtime echo of its own write (lib/realtime/own-writes.ts).
       const result = await ownWrites.track(acceptOffer(input)).catch(() => null);
       if (!result?.success) {

@@ -672,3 +672,49 @@ test('starting revision 2 of a sent offer confirms first and keeps the dialog on
   await expect(dialog.getByText('Jemand hat das Angebot gerade geändert. Lade die Seite neu.')).toBeVisible();
   await expect(confirm).toBeEnabled();
 });
+
+// „Annahme erfassen“: a press repeated after a failure keeps its retry key, so an Annahme recorded
+// before a lost answer answers again; corrected values take a new key, which a recorded Annahme
+// refuses instead of answering with the first values.
+test('a retried Annahme keeps its key, and corrected values take a new one', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.uiContractOfferSent = true;
+  });
+  await openContractFixture(page, 'offers');
+  await page.getByRole('button', { name: 'Annahme erfassen', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Annahme von Revision 1 erfassen' });
+  await dialog.getByRole('textbox', { name: 'Angenommen von' }).fill('Erika Musterfrau');
+  await dialog.getByRole('combobox', { name: 'Angenommen per' }).click();
+  await page.getByRole('option', { name: 'Telefon', exact: true }).click();
+  await dialog.getByRole('checkbox', { name: /^1\.2 Neutralisationsbox/ }).check();
+  const record = dialog.getByRole('button', { name: 'Annahme erfassen', exact: true });
+  await record.click();
+  await expectHeldWrite(page, 'accept-offer');
+  expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
+    revision: 1,
+    acceptedByName: 'Erika Musterfrau',
+    channel: 'telefon',
+    chosenOptions: ['1.2'],
+  });
+  await answerHeldWrite(page, 'save_failed');
+  await expect(dialog.getByText('Das konnte nicht festgehalten werden. Versuche es erneut.')).toBeVisible();
+
+  const keys = () =>
+    page.evaluate(() =>
+      window.uiContractWrites.calls.map((call) =>
+        typeof call.input === 'object' && call.input !== null && 'attemptKey' in call.input
+          ? call.input.attemptKey
+          : null,
+      ),
+    );
+  await record.click();
+  await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
+  await answerHeldWrite(page, 'save_failed');
+  await expect(record).toBeEnabled();
+  await dialog.getByRole('textbox', { name: 'Angenommen von' }).fill('Max Mustermann');
+  await record.click();
+  await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
+  const [first, unchanged, corrected] = await keys();
+  expect(unchanged).toBe(first);
+  expect(corrected).not.toBe(first);
+});
