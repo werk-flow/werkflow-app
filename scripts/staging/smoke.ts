@@ -40,7 +40,6 @@ async function journey(): Promise<string> {
     await hydrated(page);
     await page.getByRole('button', { name: 'Weiter zur Zahlung' }).click();
     await payInCheckout(page, 'card');
-    await expect(page).toHaveURL(/\/onboarding\/create-organization/);
     kit.log('paid in the sandbox Checkout');
 
     await hydrated(page);

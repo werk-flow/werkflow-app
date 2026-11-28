@@ -38,7 +38,40 @@ export const AI_TURN_LIMITS = {
     settleTimeoutMs: 5_000,
     /** One send on the thread's live channel; a missed one costs only freshness. */
     liveSendTimeoutMs: 1_500,
+    /** Model calls the tools of one turn make together: the quarantined extractor's (`AI_EXTRACT_LIMITS`). */
+    maxToolModelCalls: 2,
+    /**
+     * Bytes of all tool results of one turn together, as the model reads them. A call past it
+     * gets a short refusal the model can read, so the results never outgrow the next step's input cap.
+     */
+    maxToolResultBytes: 32_000,
+    /**
+     * Bytes the thread leaves free besides the tool results: the steps' own tool
+     * calls and the short refusals past the result cap. The thread drops its
+     * oldest messages until both fit; the input cap still ends a turn past it.
+     */
+    toolFramingBytes: 4_000,
   },
+} as const;
+
+/**
+ * The caps of one call of the quarantined extractor (lib/ai/extract/, B9 and B13):
+ * a model call with no tools that reads one uploaded document into capped fields.
+ */
+export const AI_EXTRACT_LIMITS = {
+  /**
+   * Input tokens of one call: the document as the provider counts it before the
+   * call, plus the instructions and the answer's schema at one token per byte.
+   * About fifteen PDF pages; a stored page count is never trusted.
+   */
+  maxInputTokens: 40_000,
+  /** Output tokens, thinking included. */
+  maxOutputTokens: 8_192,
+  effort: 'low',
+  stepTimeoutMs: 60_000,
+  chunkTimeoutMs: 20_000,
+  /** Lines of one Lieferschein the extractor keeps; a longer one is marked as cut, never cut silently. */
+  maxLines: 50,
 } as const;
 
 export type AiEntryPoint = keyof typeof AI_TURN_LIMITS;
@@ -46,8 +79,8 @@ export type AiEntryPoint = keyof typeof AI_TURN_LIMITS;
 /**
  * The most a turn can cost: every step and every retry at its input cap,
  * all of it written to the prompt cache (the dearest input), plus its output
- * cap. The run reserves this before its first step, so the hold covers each
- * charge.
+ * cap, and every model call its tools may make at the extractor's caps. The
+ * run reserves this before its first step, so the hold covers each charge.
  */
 export function maxTurnCostMicroUsd(entryPoint: AiEntryPoint): number {
   const limits = AI_TURN_LIMITS[entryPoint];
@@ -57,7 +90,21 @@ export function maxTurnCostMicroUsd(entryPoint: AiEntryPoint): number {
     cacheWriteTokens: limits.maxInputTokens,
     outputTokens: limits.maxOutputTokens,
   };
-  return (limits.maxSteps + limits.maxRetries) * costMicroUsd(attempt, AI_MODEL_PRICE);
+  const steps = (limits.maxSteps + limits.maxRetries) * costMicroUsd(attempt, AI_MODEL_PRICE);
+  return steps + limits.maxToolModelCalls * maxExtractionCostMicroUsd();
+}
+
+/** The most one extraction can cost: its input and output caps, uncached. */
+function maxExtractionCostMicroUsd(): number {
+  return costMicroUsd(
+    {
+      inputTokens: AI_EXTRACT_LIMITS.maxInputTokens,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: AI_EXTRACT_LIMITS.maxOutputTokens,
+    },
+    AI_MODEL_PRICE,
+  );
 }
 
 /**
