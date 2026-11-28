@@ -13,8 +13,6 @@ WerkFlow runs on two cloud backends ([decision 0003](../decisions/0003-dev-prod-
 | Serves | The deployed app and real customers | Local development, the cloud canary, the partner preview, scoped provider checks |
 | Auth site URL | `https://app.werk-flow.app` | `http://localhost:3000` |
 
-Both projects deploy the edge functions from `supabase/functions/`.
-
 Both run Micro compute, whose latency rises steeply with concurrency, accepted while one beta business is the traffic. Cloud canary timings are no capacity proof.
 
 ### Vercel
@@ -23,7 +21,7 @@ Both run Micro compute, whose latency rises steeply with concurrency, accepted w
 - The staging URL is the branch alias of `main`, `https://werkflow-app-git-main-werkflows-projects.vercel.app`, behind Vercel Authentication. DEV's auth redirect list must allow it, or invite and password links break on staging.
 - The project builds production and staging only: the Git integration builds the `production` push of [release](#release-and-rollback); `.github/workflows/staging.yml` deploys `main` through the REST API after DEV's migrations.
 - The project's Ignored Build Step skips every other build, even on a branch without `vercel.json`, the second layer (`git.deploymentEnabled`). A skipped push ends Canceled, without failure mail. Change the setting and `.github/vercel/ignored-build-step.sh` together; the weekly `health` run fails while they differ.
-- `SUPABASE_ACCESS_TOKEN` is never on Vercel. Recheck scopes when deployment settings change.
+- `SUPABASE_ACCESS_TOKEN` is never on Vercel.
 
 ### Provider configuration
 
@@ -44,11 +42,11 @@ This table is the one home of every deployment and workflow credential. No check
 
 | Credential | Lives in | Used by | Expires | Rotate |
 | --- | --- | --- | --- | --- |
-| `SUPABASE_ACCESS_TOKEN` | GitHub repository secret | Staging, release: deploy edge functions; never database read | 2027-10-26 | Supabase account settings, Access Tokens; `gh secret set`; revoke the old one. |
+| `SUPABASE_ACCESS_TOKEN` | GitHub repository secret | Staging, release, rollback: deploy edge functions; never database read | 2027-10-26 | Supabase account settings, Access Tokens; `gh secret set`; revoke the old one. |
 | `SUPABASE_DEV_READ_TOKEN` | GitHub repository secret | Release: read-only SQL on DEV | 2027-11-16; at most a year | Supabase Account preferences, Access Tokens: `werkflow-dev-ledger-read`, organization WerkFlow, project DEV, Database read only. `gh secret set SUPABASE_DEV_READ_TOKEN` (stdin), run `health.yml`, revoke its predecessor. |
 | `PROD_INSPECT_SUPABASE_TOKEN`, `DEV_INSPECT_SUPABASE_TOKEN`, `DEV_AUTH_SYNC_SUPABASE_TOKEN` | Environment `production` | The [PROD inspection](#which-tool-reaches-what) | One year | Scoped, read only: PROD Database, Advisors, Auth config; DEV Database, Auth config. The third: DEV Auth config and Project settings write. `gh secret set --env production`. |
 | [Agent keys](machine-setup.md#agent-keys) | Agent machines | Agents | Per key | [There](machine-setup.md#agent-keys) |
-| `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release promotes | 2027-10-26 | Vercel account settings, Tokens, team-scoped; `gh secret set`. |
+| `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release and rollback promote | 2027-10-26 | Vercel account settings, Tokens, team-scoped; `gh secret set`. |
 | `PROD_WATCH_VERCEL_TOKEN` | Environment `production` | The [production watcher](recovery-and-incidents.md#monitoring), which checks it | 2027-11-26 | Vercel Tokens: `werkflow-PROD-watch-github`, team-scoped; `gh secret set --env production`, run `prod-watch.yml`, revoke the old one. |
 | Boat API key | `~/.config/werkflow/boat-api-key`, [mode 600](boat-verification.md#the-key-contract) | [Boat](boat-verification.md) | `boat-api-key.expires` | [Renew](boat-verification.md#renew-the-key) |
 | `WERKFLOW_DATANORM_TOKEN` | Vercel, Production and Preview, Sensitive | `bun install` on Vercel fetches the private wholesaler-file reader pinned in `lib/inventory/wholesaler-reader-pin.json`; a production or preview build without it fails. Other machines install a stand-in without `--github-login` | 2027-02-12 | The owner's fine-grained GitHub token, resource owner `werk-flow`, only `werkflow-datanorm`, Contents read-only, longest expiry; set it Sensitive for Production and Preview, redeploy, delete the old token. Delete it once this repository turns private and holds the reader. |
@@ -85,7 +83,6 @@ The test groups run against the Supabase CLI's Docker composition: Docker Engine
 - PostgREST truncates at its row limit without an error, locally and hosted. Read in pages ([add a list](realtime-and-caching.md#add-a-list)). Never raise the limit to hide the bound.
 - The stack answers on `http://127.0.0.1:54321`. `bun run env:local` writes that origin and this checkout's test-server origin into `.env.local`. Rebuild after a switch: `NEXT_PUBLIC_*` values are baked into the build.
 - A reset or crash stops the edge runtime; the test server and CI wait start it.
-- An edge function imports only relative modules: a remote one (`jsr:`, `npm:`, `https:`) is fetched on its first request, and a stalled registry hangs a fresh stack.
 - After a change to `[edge_runtime.secrets]`, reload the edge runtime, which keeps its old configuration, and verify the capture endpoint before an email browser group.
 
 ## Env-file ownership
@@ -107,7 +104,7 @@ Agents never read PROD data through any tool: every tool result goes to the mode
 | claude.ai Supabase connector | no | no | Organization-wide: the MCP hook refuses it here, `deniedMcpServers` in `~/.claude/settings.json` elsewhere. |
 | MCP server `supabase` | never | read only | `scripts/mcp/supabase-dev.ts` on the [agent token](machine-setup.md#agent-keys) ([step 4](machine-setup.md#set-up-a-new-machine)). |
 | Supabase CLI (`bunx supabase`) | never link or push | read only | The repository links to the DEV ref only. Migrations and edge functions reach DEV through `staging.yml`. |
-| PROD inspection (`prod-inspect.yml`) | structure only | compared | Paused while GitHub Actions is off. |
+| PROD inspection (`prod-inspect.yml`) | structure only | compared | |
 | Management API | through the PROD inspection only | read only | The `*:check` scripts, through `lib/security/dev-management-api.ts`. |
 | R2 tokens | prod bucket only | dev bucket only | Runtime tokens cannot manage bucket settings. `scripts/setup-r2-cors.ts` needs a bucket-admin token. |
 | Local stack | n/a | n/a | The Supabase CLI and psql through `docker exec`. MCP cannot reach it. |
@@ -149,7 +146,8 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 
 [Decision 0009](../decisions/0009-pull-requests-and-ci.md) owns why. `main` is staging. Vercel serves the `production` branch on `app.werk-flow.app`.
 
-1. `.github/workflows/release.yml` ships a `main` commit to PROD only after a green full run ([release gate](testing.md#ci)). PROD is live weekdays by 05:00 Berlin: `ops/ci-alert.py` in `werk-flow/werkflow-planning` dispatches the release at 03:30 (`-f scheduled=true`), once a night. It has no cron: GitHub starts one hours late. A scheduled run ships its starting commit only when `main` moved since `production` and its newest full run, or its own, passed. By hand, when a green `main` should not wait ("release main"): `gh workflow run release`, then `gh run watch`; `-f dry_run=true` prints a scheduled run's decision and checks a candidate's serving build (step 3). `production` has no approval step (owner's decision). On failure, repair `main` by PR and release again; a rerun is safe.
-2. Rollback: Vercel Instant Rollback switches the domain to the previous build within seconds. It changes code only; rule 6 of the migration rule names the limit for data.
-3. The last job checks production without reading data (`.github/scripts/release-smoke.sh`). If it fails, the coordinator thread, else the owner, rolls back (step 2) and reports.
-4. Never roll back the database. Fix forward with a new migration. Point-in-time restore is a last resort that loses every write since the restore point ([recovery](recovery-and-incidents.md)).
+1. `.github/workflows/release.yml` ships a `main` commit to PROD only after a green full run ([release gate](testing.md#ci)). PROD is live weekdays by 05:00 Berlin: `ops/ci-alert.py` in `werk-flow/werkflow-planning` dispatches the release at 03:30 (`-f scheduled=true`). A scheduled run ships its starting commit only when `main` moved since `production` and its newest full run, or its own, passed. By hand, when a green `main` should not wait ("release main"): `gh workflow run release`, then `gh run watch`; `-f dry_run=true` prints a scheduled run's decision and checks a candidate's serving build (step 3). On failure, repair `main` by PR and release again; a rerun is safe.
+2. Rollback: `gh workflow run rollback.yml -f dry_run=false` promotes the previous release's build in seconds, then redeploys that commit's edge functions, which Vercel's rollback skips. `-f target=<sha>` names an older released commit; without `dry_run=false` the run only names the build it would pick. It shares the release's environment and concurrency group, never moves `production` and never touches the database (migration rule 6). Until a release serves the `production` head again, the watcher reports `Production alert: deploy`.
+3. The last job checks production without reading data (`.github/scripts/release-smoke.sh`). If it fails, the coordinator thread, else the owner, runs the rollback (step 2) and reports. A failed rollback opens `CI alert: rollback` for the owner.
+4. After a rollback, release only a `main` with the fix: releasing the same `main` promotes the bad build again.
+5. Never roll back the database. Fix forward with a new migration. Point-in-time restore is a last resort that loses every write since the restore point ([recovery](recovery-and-incidents.md)).
