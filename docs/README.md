@@ -27,7 +27,7 @@ Start with `AGENTS.md`; read only entries that apply. A task adds the **Current 
 
 ### Feature specifications (`docs/features/`)
 
-Read the spec you change and those it touches. Planned scope lives in `werk-flow/werkflow-planning`.
+Read the spec you change and those it touches. Planned scope: `werk-flow/werkflow-planning`.
 
 - [customers-and-crm.md](features/customers-and-crm.md): Kunden, contacts, sites, Anfragen.
 - [jobs-and-projects.md](features/jobs-and-projects.md): Aufträge, Projekte, lifecycle, Arbeitsvorlagen, handovers.
@@ -57,9 +57,10 @@ Read the spec you change and those it touches. Planned scope lives in `werk-flow
 - [0006](decisions/0006-testing-architecture.md): local test backend, cloud canary.
 - [0007](decisions/0007-independent-test-groups.md): independent test groups.
 - [0008](decisions/0008-development-workflow.md): release by push, superseded.
-- [0009](decisions/0009-pull-requests-and-ci.md): a PR per task, `Check` as the gate.
+- [0009](decisions/0009-pull-requests-and-ci.md): PRs and CI, superseded.
 - [0010](decisions/0010-offline-field-sync-contract.md): offline sync, iOS limits.
 - [0011](decisions/0011-ci-profiles.md): CI profiles.
+- [0012](decisions/0012-pull-requests-ci-and-releases.md): PRs, CI, review, releases.
 
 ## How to work
 
@@ -88,7 +89,7 @@ It holds no schema, no list of files, handlers, functions or tests, no count or 
 
 ### Verify your work
 
-Run `bun run docs:check` after each docs edit. After a checker change, also run `bun run test:unit lib/docs`.
+Run `bun run docs:check` after each docs edit. After a checker change, add `bun run test:unit lib/docs`.
 
 ## Maintenance rules
 
@@ -100,7 +101,7 @@ Run `bun run docs:check` after each docs edit. After a checker change, also run 
 - `.claude/skills` and `.agents/skills` are identical, except `coderabbit-review`, which Codex ships itself;
 - word budgets hold.
 
-No check sees a row of the [enforcement-ladder backlog](technical/enforcement-ladder-backlog.md) close. A release, and a change that lands a mechanism, checks every row against the code.
+No check sees a row of the [enforcement-ladder backlog](technical/enforcement-ladder-backlog.md) close. Closing an epic, or landing a mechanism, checks the rows it touches against the code.
 
 ### Sibling repositories
 

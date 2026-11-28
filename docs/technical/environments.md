@@ -147,7 +147,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 
 ## Release and rollback
 
-[Decision 0009](../decisions/0009-pull-requests-and-ci.md) owns why. `main` is staging. Vercel serves the `production` branch on `app.werk-flow.app`.
+[Decision 0012](../decisions/0012-pull-requests-ci-and-releases.md#releases) owns why. `main` is staging. Vercel serves the `production` branch on `app.werk-flow.app`.
 
 1. `.github/workflows/release.yml` ships a `main` commit to PROD only after a green full run ([release gate](testing.md#ci)). PROD is live weekdays by 05:00 Berlin: `ops/ci-alert.py` in `werk-flow/werkflow-planning` dispatches the release at 03:30 (`-f scheduled=true`), once a night. It has no cron: GitHub starts one hours late. A scheduled run ships its starting commit only when `main` moved since `production` and its newest full run, or its own, passed. By hand, when a green `main` should not wait ("release main"): `gh workflow run release`, then `gh run watch`; `-f dry_run=true` prints a scheduled run's decision and checks a candidate's serving build (step 3). `production` has no approval step (owner's decision). On failure, repair `main` by PR and release again; a rerun is safe.
 2. Rollback: Vercel Instant Rollback switches the domain to the previous build within seconds. It changes code only; rule 6 of the migration rule names the limit for data.
