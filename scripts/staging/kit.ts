@@ -62,16 +62,24 @@ const checkout = resolve(import.meta.dir, '../..');
 const MANAGEMENT_API = 'https://api.supabase.com/v1';
 const TIMEOUT_MS = 30_000;
 
+/** The agent keys a journey uses; the others in the key file, such as Browserbase's, are no journey's concern. */
+const STAGING_JOURNEY_KEYS = [
+  'SUPABASE_DEV_ACCESS_TOKEN',
+  'SUPABASE_DEV_SECRET_KEY',
+  'STRIPE_SANDBOX_KEY',
+  'VERCEL_STAGING_BYPASS_SECRET',
+] as const satisfies readonly StagingAgentKeyName[];
+
 export type Kit = {
   devRef: string;
-  keys: Readonly<Record<StagingAgentKeyName, string>>;
+  keys: Readonly<Record<(typeof STAGING_JOURNEY_KEYS)[number], string>>;
   /** Values no printed line may hold; the actor's password joins once it exists. */
   secrets: string[];
   log(step: string, facts?: Readonly<Record<string, Fact>>): void;
 };
 
 /**
- * The kit with every agent key in its shape, or a throw that names the missing ones. An error that
+ * The kit with every journey key in its shape, or a throw that names the missing ones. An error that
  * escapes a journey prints only its redacted first line: Playwright's messages can list request headers.
  */
 export function loadKit(): Kit {
@@ -84,7 +92,9 @@ export function loadKit(): Kit {
   const refs = supabaseProjectRefs(checkout);
   if (read.file === 'missing' || !refs)
     throw new StagingFailure('No agent key file or no DEV ref: run bun run agent-access:check.');
-  const missing = Object.entries(read.verdicts).filter(([, verdict]) => verdict !== 'ok');
+  const missing = STAGING_JOURNEY_KEYS.map((name) => [name, read.verdicts[name]] as const).filter(
+    ([, verdict]) => verdict !== 'ok',
+  );
   if (missing.length)
     throw new StagingFailure(
       `Keys not in shape: ${missing.map(([name]) => name).join(', ')}. Run bun run agent-access:check.`,

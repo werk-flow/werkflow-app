@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "dependencyDigest": "2102cfb15a3b9a3a285e9a4f192bdd6768147c0989f162cb9a1bc08ebeb3fd4d",
+  "dependencyDigest": "f13d09f5b69ab71052d151bbdddb030d40bcb328ee63c4d0859767cfcb58bfbf",
   "exceptions": [
     {
       "package": "minimatch",
@@ -25,7 +25,23 @@
         "Re-reviewed on 2026-11-16 for next 16.4.5, which closes GHSA-mfr8-8qww-v76h (werk-flow/werkflow-planning#29): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency.",
         "Re-reviewed on 2026-11-23 for the dev dependency fast-check 4.10.2 with pure-rand 8.4.2 (werk-flow/werkflow-app#592, the owner's property-test decision of 2026-11-22): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency; pure-rand comes only through fast-check.",
         "Re-reviewed on 2026-11-26 for ai 7.0.171 and @ai-sdk/anthropic 4.0.103 with @ai-sdk/gateway, @ai-sdk/provider, @ai-sdk/provider-utils, @vercel/oidc, @standard-schema/spec, @workflow/serde, eventsource-parser and json-schema (werk-flow/werkflow-planning#528): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency; none of the added packages depends on minimatch.",
-        "bun audit on 2026-11-26, after @supabase/mcp-server-supabase 0.18.0 joined the dev dependencies: minimatch 9.0.9 still has the one path through @typescript-eslint/typescript-estree, and the new packages add no finding. The two picomatch exceptions matched no finding and were removed."
+        "bun audit on 2026-11-26, after @supabase/mcp-server-supabase 0.18.0 joined the dev dependencies: minimatch 9.0.9 still has the one path through @typescript-eslint/typescript-estree, and the new packages add no finding. The two picomatch exceptions matched no finding and were removed.",
+        "Re-reviewed on 2026-11-28 for the dev dependency browse 0.12.0, the pinned Browserbase CLI: bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency. browse brings minimatch 10.2.6, which has its own exception."
+      ]
+    },
+    {
+      "package": "minimatch",
+      "version": "10.2.6",
+      "advisory": "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+      "severity": "moderate",
+      "paths": ["@oclif/core/minimatch", "readdir-glob/minimatch"],
+      "reviewedOn": "2026-11-28",
+      "expiresOn": "2026-12-28",
+      "rationale": "Potential denial of service through glob pattern amplification (globparts). The affected minimatch 10.2.6 is installed only through the dev dependency browse 0.12.0, the Browserbase CLI that agents run through `bun run browserbase` on their own machines: @oclif/core matches the CLI's own command files, and archiver's readdir-glob zips a folder for `browse functions publish`, which the wrapper refuses. No pattern comes from a user or a page, and neither package reaches the deployed application. Only minimatch 11.0.1 and later fix it, a major version neither @oclif/core (^10.2.5) nor readdir-glob (^10.2.2) accepts, and Bun has no nested override. Decided by the agent on 2026-11-28 under the Browserbase task: a dev-only path with no user input and no customer data; an agent may renew it for 30 days after a re-review while every path stays inside browse. Remove it as soon as browse accepts a fixed minimatch.",
+      "evidence": [
+        "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+        "bun pm why minimatch@10.2.6 on 2026-11-28: @oclif/core 4.14.0 (browse 0.12.0) and readdir-glob 3.0.0 (archiver 8.0.0, browse 0.12.0), every path ending in the dev dependency browse.",
+        "npm registry on 2026-11-28: minimatch 11.0.9 is the latest; @oclif/core 4.14.0 requires ^10.2.5 and readdir-glob 3.0.0 requires ^10.2.2."
       ]
     }
   ]
