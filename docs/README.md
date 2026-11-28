@@ -82,7 +82,7 @@ It holds no schema, no list of files, handlers, functions or tests, no count or 
 
 ### Never
 
-- Add a status line or a review date. Git dates every change.
+- Add a status line or a review date.
 - Describe what you built file by file.
 - Stack a new paragraph under the old one instead of rewriting.
 - Rewrite an accepted decision record.
@@ -96,9 +96,9 @@ Run `bun run docs:check` after each docs edit. After a checker change, add `bun 
 `docs:check` checks that:
 
 - every Markdown file under `docs/` has an index entry;
-- relative links between docs, links from `AGENTS.md` and the skills, and `docs/` paths cited in code resolve, heading anchors included;
+- relative links between docs, links from `AGENTS.md` and the skills, `docs/` paths cited in code, and repository paths `AGENTS.md` names in backticks resolve, heading anchors included;
 - an accepted decision record keeps its metadata block and grows only by sections under `## Amendment YYYY-MM-DD: <title>`;
-- `.claude/skills` and `.agents/skills` are identical, except `coderabbit-review`, which Codex ships itself;
+- `.claude/skills` and `.agents/skills` are identical, except `coderabbit-review`, Codex's own;
 - word budgets hold.
 
 No check sees a row of the [enforcement-ladder backlog](technical/enforcement-ladder-backlog.md) close. Closing an epic, or landing a mechanism, checks the rows it touches against the code.
