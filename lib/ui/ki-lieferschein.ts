@@ -71,10 +71,12 @@ export type LieferscheinCard = {
   /** Lines not read, or null when that count is unknown. */
   left: number | null;
   matched: boolean;
+  /** Whether a read behind the card failed, so the person may have the Lieferschein read again. */
+  retry: boolean;
 };
 
 const formatDate = (iso: string): string => iso.split('-').toReversed().join('.');
-const joined = (parts: Array<string | null | undefined>): string => parts.filter(Boolean).join(' · ');
+const dotted = (parts: Array<string | null | undefined>): string => parts.filter(Boolean).join(' · ');
 
 /** The card of a stored „Lieferschein lesen“ result, or null for a detail of another tool. */
 export function lieferscheinCard(result: unknown): LieferscheinCard | null {
@@ -83,9 +85,12 @@ export function lieferscheinCard(result: unknown): LieferscheinCard | null {
   const read = parsed.data;
   return {
     title: read.lieferscheinnummer ? `Lieferschein ${read.lieferscheinnummer.text}` : 'Lieferschein',
-    facts: joined([read.lieferant?.text, read.datum && formatDate(read.datum)]),
+    facts: dotted([read.lieferant?.text, read.datum && formatDate(read.datum)]),
     left: read.weggelassenePositionen,
     matched: read.abgleichGelesen,
+    retry:
+      !read.abgleichGelesen ||
+      read.positionen.some((line) => line.abgleich?.hinweise.includes('katalog_nicht_gelesen')),
     lines: read.positionen.map((line) => {
       // Quantity, unit and pack content each show when read, also without the others.
       const quantity = [
@@ -99,7 +104,7 @@ export function lieferscheinCard(result: unknown): LieferscheinCard | null {
       const article = match?.artikel;
       return {
         nr: line.nr,
-        delivered: joined([
+        delivered: dotted([
           quantity,
           line.artikelnummer?.text,
           // The EAN shows when it is the line's only number, or when it names another article.
@@ -109,7 +114,7 @@ export function lieferscheinCard(result: unknown): LieferscheinCard | null {
           line.beschreibung?.text,
         ]),
         match: article
-          ? joined([
+          ? dotted([
               article.name?.text,
               article.nummer?.text,
               match.mengeInBasiseinheit === null || article.einheit === null
@@ -117,7 +122,7 @@ export function lieferscheinCard(result: unknown): LieferscheinCard | null {
                 : formatInventoryQuantity(match.mengeInBasiseinheit, article.einheit, 3),
             ])
           : match?.katalog
-            ? joined([match.katalog.name?.text, match.katalog.lieferant?.text])
+            ? dotted([match.katalog.name?.text, match.katalog.lieferant?.text])
             : null,
         problems: (match?.hinweise ?? []).map((code) => PROBLEMS[code] ?? code),
         fits: Boolean(article) && match?.hinweise.length === 0,

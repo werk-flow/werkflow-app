@@ -51,21 +51,40 @@ async function readNamedRows(
   // postgrest-js does not escape a quote or backslash inside an `in` list, so such a number is looked up alone.
   const listable = named.articleNumbers.filter((number) => !/["\\]/.test(number));
   const alone = named.articleNumbers.filter((number) => /["\\]/.test(number));
-  /** One page of the references a number, or a list of numbers, names. */
-  const numberRows = (numbers: string | readonly string[]) => (from: number, to: number) => {
-    const query = admin.from('inventory_item_suppliers').select('item_id').eq('organization_id', orgId);
-    return (
-      typeof numbers === 'string'
-        ? query.eq('supplier_article_number', numbers)
-        : query.in('supplier_article_number', [...numbers])
-    )
-      .order('id')
-      .range(from, to)
-      .abortSignal(signal);
-  };
   const [byListedNumber, byLoneNumber, byBarcode] = await Promise.all([
-    readInBatches(listable, (batch) => readCompleteRows(numberRows(batch), LIST_ROW_CAP)),
-    readInBatches(alone, ([number = '']) => readCompleteRows(numberRows(number), LIST_ROW_CAP), 1),
+    readInBatches(listable, (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('inventory_item_suppliers')
+            .select('item_id')
+            .eq('organization_id', orgId)
+            .in('supplier_article_number', [...batch])
+            .order('id')
+            .range(from, to)
+            .abortSignal(signal),
+        LIST_ROW_CAP,
+      ),
+    ),
+    Promise.all(
+      alone.map((number) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('inventory_item_suppliers')
+              .select('item_id')
+              .eq('organization_id', orgId)
+              .eq('supplier_article_number', number)
+              .order('id')
+              .range(from, to)
+              .abortSignal(signal),
+          LIST_ROW_CAP,
+        ),
+      ),
+    ).then((reads) => ({
+      data: reads.flatMap((read) => read.data),
+      error: reads.find((read) => read.error)?.error ?? null,
+    })),
     readInBatches(named.eans, (batch) =>
       readCompleteRows(
         (from, to) =>

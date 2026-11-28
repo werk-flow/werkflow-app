@@ -58,6 +58,7 @@ test('a read Lieferschein shows as delivered, its own article with the converted
     facts: 'GC Großhandel Stuttgart · 20.11.2026',
     left: 3,
     matched: true,
+    retry: false,
     lines: [
       {
         nr: 1,
@@ -123,4 +124,16 @@ test('a line whose EAN names another article shows both its number and its EAN',
     '4 Stange · GC-15015 · EAN 4012345000158 · Kupferrohr 15 x 1 mm',
     ['EAN gehört zu einem anderen eigenen Artikel'],
   ]);
+});
+
+test('a failed read behind the card, of the articles or of the catalog, offers to read it again', () => {
+  const [first, second] = RESULT.positionen;
+  const catalogFailed = {
+    ...second?.abgleich,
+    katalog: null,
+    hinweise: ['artikel_unbekannt', 'katalog_nicht_gelesen'],
+  };
+  const positionen = [first, { ...second, abgleich: catalogFailed }];
+  expect(lieferscheinCard({ ...RESULT, positionen })?.retry).toBe(true);
+  expect(lieferscheinCard({ ...RESULT, abgleichGelesen: false })?.retry).toBe(true);
 });
