@@ -288,3 +288,7 @@ The owner chose to reduce full-run cost on `main` in werk-flow/werkflow-planning
 ## Amendment 2026-11-27: component contracts run in the queue
 
 The owner decided that PR runs, draft or ready, skip Component contracts to keep Actions under about 9,000 job-minutes a day (werk-flow/werkflow-planning#503). The integration run keeps the same component selection and runs it before merge, alongside the browser groups. A contract failure therefore surfaces in the queue run. Main and full runs, including the nightly run and release gate, keep their existing component selection. No test is removed. [testing.md](../technical/testing.md#ci) owns the run tiers.
+
+## Amendment 2026-11-28: superseded by decision 0012
+
+[Decision 0012](0012-pull-requests-ci-and-releases.md) supersedes this decision and states the rules for pull requests, CI, review, the merge queue and releases that hold today. This record and its amendments keep the history and the reasons behind each change.
