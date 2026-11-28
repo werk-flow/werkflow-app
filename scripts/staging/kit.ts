@@ -627,14 +627,12 @@ async function retireRun(
   const organization = await runOrganization(kit, admin);
   if (organization.id !== organizationId)
     throw new StagingFailure(`Organization ${organizationId} is not the run's own.`);
-  const subscriptions = z
-    .array(z.object({ stripe_subscription_id: z.string().nullable() }))
-    .parse(
-      await readDev(kit, organization, {
-        table: 'werkflow_subscriptions',
-        columns: ['stripe_subscription_id'],
-      }),
-    );
+  const subscriptions = z.array(z.object({ stripe_subscription_id: z.string().nullable() })).parse(
+    await readDev(kit, organization, {
+      table: 'werkflow_subscriptions',
+      columns: ['stripe_subscription_id'],
+    }),
+  );
   for (const { stripe_subscription_id: subscriptionId } of subscriptions)
     if (subscriptionId !== null) await cancelSandboxSubscription(kit, subscriptionId);
   const memberIds = new Set(

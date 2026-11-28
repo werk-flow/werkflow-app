@@ -124,7 +124,7 @@ export const RETIRED_MARKER = 'werkflow_agent_retired';
  * The one refusal that retires a run instead of failing its cleanup: the app keeps an organization that
  * holds recorded working time (`lib/org/deletion-scope.ts`), and recorded time is never erased.
  */
-export const RETIRE_REASON = 'has_time_records' satisfies OrganizationRetentionRefusal;
+const RETIRE_REASON = 'has_time_records' satisfies OrganizationRetentionRefusal;
 export type RetireReason = typeof RETIRE_REASON;
 
 /** The refusal codes the organization's deletion dialog names in `data-retention-refusals`. */
