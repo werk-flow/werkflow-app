@@ -12,11 +12,11 @@ What a backup can restore, what loss the owner accepted, and who acts in an inci
 | Configuration and secrets | Manual: provider dashboards, the owner's password manager, the gitignored env backups | No automated export. Update the env backups after every provider change. |
 | Edge function source | `supabase/functions/` in git | Function secrets exist only in each project's secret store. |
 
-Until the point-in-time upgrade below, the owner accepts at most one day of data lost and one working day down. A daily PROD backup restored into a new project in under 5 minutes, every file matching its row (werk-flow/werkflow-planning#289); plan with 10, since the database grows.
+Until the point-in-time upgrade, the owner accepts at most one day of data lost and one working day down. Plan 10 minutes for the database restore.
 
 ## Planned provider upgrades
 
-The Vercel Pro checklist is open in werk-flow/werkflow-planning#216. The owner deferred point-in-time recovery until a larger customer after Willert ([decision 0008](../decisions/0008-development-workflow.md#amendment-2026-11-07-point-in-time-recovery-waits-for-a-larger-customer)). Whoever completes a checklist updates this page.
+The Vercel Pro checklist is werk-flow/werkflow-planning#216. Point-in-time recovery starts with the first customer paying about $1000 a month, after Willert. Supabase gets no further spend before Willert pays. Update this page when completing a checklist.
 
 | Upgrade | Why | Checklist after enabling |
 | --- | --- | --- |
@@ -25,7 +25,7 @@ The Vercel Pro checklist is open in werk-flow/werkflow-planning#216. The owner d
 
 ## Recovery rehearsal
 
-`bun scripts/rehearse-recovery.ts` restores a representative organization with every file link in disposable local databases and buckets. It needs healthy local containers, Docker on the machine's own socket (Linux, or Colima's default profile on a Mac) and `.env.local-stack-backup`. It takes the workspace test lock and journals each operation and stage duration, the `restore` stage's being the restore time, to `.agent-logs/recovery/<run-id>/journal.json`. Its stages:
+`bun scripts/rehearse-recovery.ts` restores a representative organization with every file link in disposable local databases and buckets. It needs healthy local containers, the machine's Docker socket and `.env.local-stack-backup`. It takes the workspace test lock and records operations and durations in `.agent-logs/recovery/<run-id>/journal.json`. The `restore` duration is the restore time. Stages:
 
 1. `seed` copies the stack's migrated schema, never a row, into a new database. It fails when the stack lacks a migration of the revision. It writes a made-up SHK company through the app's database functions: every role, assigned jobs, document versions, filed, trashed and personnel documents, and a second organization.
 2. `backup` takes a full `pg_dump` as the superuser, as the provider's daily backup does, and copies the bytes to a backup bucket, with one upload made after the dump.
@@ -47,9 +47,10 @@ The journal names missing documents and orphan objects by id, never a path, file
 2. Stop writes through enforced maintenance or provider controls, and notify the customer; staff work on paper and by phone until writes reopen. A notice alone stops no direct client, job or session. Pause the storage purge until step 5 is done: remove `CRON_SECRET` from Vercel Production and redeploy production, since a variable change reaches only a new deployment. Before the restore, confirm that `/api/storage-purge` answers 503 and no purge request still runs; a run not yet started never will. The paused route deletes nothing and alerts the production watcher. After step 5, set a new value and redeploy again.
 3. Follow the provider's current restore procedure. Run only the authorized operation and keep its result; a partial load or nonzero exit fails the restore. Restore in place (Backups, Scheduled backups), with PROD offline. Moving production onto a restored new project is a cutover outside this runbook: pause releases and plan it with the owner. It needs at least its Edge Functions, every PROD reference retargeted (`release.yml` too) and every open tab reloaded. A drill copy gets its own password, never PROD's; from IPv4, connect through its session pooler with `sslmode=verify-full` and the project's CA certificate (Database settings, SSL).
 4. Compare `supabase_migrations.schema_migrations` on the target with the intended revision, and check that `cron.job` holds the scheduled jobs. `bun run migrations:check` checks DEV only. For a missing migration, follow [the migration rule](environments.md#the-migration-rule) without relinking the CLI to production.
-5. Reconcile current and historical document and version paths against the correct bucket, with the rehearsal's path query and comparison (`lib/testing/runs/recovery-rehearsal.ts`). Metadata without an object means missing bytes. An object uploaded after the backup, or one whose deletion was queued after it, can survive without metadata or queue entry. Keep orphan objects for review; never purge them automatically. Before the purge restarts, `scripts/recovery/invoice-original-queue-entries.sql` lists the queue entries that may name an invoice original filed after the backup. Keep each listed object for review and delete its entry, so no unclear object is purged; at worst an abandoned PDF awaits review. Every other entry keeps its purge.
-6. Check tenant and role access, protected documents and session revocation.
-7. Run the provider canary on cloud DEV; it does not prove production recovery. On production, use metadata and configuration checks and the customer verification the owner agreed before you resume writes. Record unresolved evidence and every loss.
+5. Reconcile current and historical document and version paths against the correct bucket, with the rehearsal's path query and comparison (`lib/testing/runs/recovery-rehearsal.ts`). Missing objects mean lost bytes. Later uploads or queued deletions can leave objects without metadata or queue entries. Keep orphan objects for review; never purge them automatically. Before the purge restarts, `scripts/recovery/invoice-original-queue-entries.sql` lists the queue entries that may name an invoice original filed after the backup. Keep each listed object for review and delete its entry, so no unclear object is purged; at worst an abandoned PDF awaits review. Every other entry keeps its purge.
+6. Before reopening writes after any database restore, reconcile money records since the restore point, up to 24 hours. Stripe is the source of truth for charges and payments. Compare its subscriptions, invoices and payments since that point with the restored rows. Re-create missing records from Stripe through webhook replay or an audited correction, never by hand-editing totals. Issued invoice numbers are gapless and never reused. Find the highest number issued since the restore point in each series, using Stripe, sent mails and retained originals. Continue after it and record the gap's cause. SHK invoice series cannot be advanced in Settings after first issue. Reconcile them through an owner-authorized audited recovery before writes reopen. Change recorded working time only through an audited correction.
+7. Check tenant and role access, protected documents and session revocation.
+8. Run the provider canary on cloud DEV; it does not prove production recovery. On production, use metadata and configuration checks and the customer verification the owner agreed before you resume writes. Record unresolved evidence and every loss.
 
 ## Restore procedure (files)
 
@@ -59,7 +60,7 @@ Restore a trashed document in the app (`/dokumente`, Papierkorb). A permanently 
 
 Signals: the production watcher below, the failure count `werkflow.failure`, Vercel's dashboards (runtime logs there are PROD data, for the owner only), Supabase logs, advisors and usage pages, and provider e-mail notifications. A notification setting does not prove an outage raises an alert; never provoke an outage to test it. Redact provider details and personal data before you export a log.
 
-A red nightly, release or daytime full run, a scheduled release that stopped at a red full run, and a scheduled run that never started each open or update one issue with the label `ci-alert`: `CI alert: nightly`, `CI alert: release` or `CI alert: full run on main` (`.github/scripts/alert-issue.sh`). The next green run closes it; a release that stops because `main` equals `production` proves nothing and leaves it. `ops/ci-alert.py` in `werk-flow/werkflow-planning` runs every 10 minutes on [the netcup VM](machine-setup.md#background-jobs) and dispatches the full run on `main` (`main-full-run.yml`), which `bun scripts/ci/full-run.ts due` decides.
+A failed nightly, release or daytime full run, a release held by failures, or a missing scheduled run opens or updates its `ci-alert` issue (`.github/scripts/alert-issue.sh`). The next green run closes it; a release that stops because `main` equals `production` proves nothing and leaves it. `ops/ci-alert.py` in `werk-flow/werkflow-planning` runs every 10 minutes on [the netcup VM](machine-setup.md#background-jobs) and dispatches the full run on `main` (`main-full-run.yml`), which `bun scripts/ci/full-run.ts due` decides.
 
 Assignment is the owner's one notification, so only a failure that affects production assigns `tamaycbn`: a failed or held release, a release that never started, a production watcher alert, a failed health check of a credential production depends on, and a Boat key about to expire. A caller of `alert-issue.sh` says so with `AFFECTS_PRODUCTION=true`. Every other alert reaches its thread only. An open issue that turns into a production failure gains the owner; no update removes an assignee. No issue text or comment mentions the owner. GitHub never notifies a user of their own actions, and `ops/ci-alert.py` runs `gh` as the owner, so it reports a release that never started and `Owner action: Boat key` by dispatching `.github/workflows/production-alert.yml`, which writes as `github-actions`.
 
@@ -96,7 +97,7 @@ Check the path without an outage:
 | Days 1, 2, 3, 7 and 14 ahead, retained failed suite dates, the first month end and year end past day 14, and the year turn (00:30 in Berlin, still December 31 in UTC) | Unit, SQL and component |
 | Day 14, on Sundays also that month end and year end, and every date the open issue names for a browser job, each only if it is at least a day before the runner's certificate expires | Every browser group |
 
-The runner's agent reaches GitHub over TLS. On a clock past that certificate's expiry it loses GitHub, which shuts the runner down 13 to 20 minutes later: after a suite job ends, but before a browser job does. So the plan, from the agent's hosts in the runner's journal, gives browser jobs only to dates whose midday is a day or more before the earliest certificate expiry. Its log names each held date. GitHub renews the certificate, so a held date gets its browser jobs back. A runner shut down mid-job ("The runner has received a shutdown signal") went past that horizon.
+Beyond its TLS certificate expiry the runner loses GitHub and shuts down mid-job. The plan reads the agent hosts from the runner journal and allows browser jobs at least a day before the earliest expiry. It logs held dates. Certificate renewal lets those dates run again.
 
 Failed midday suite dates stay until passing or arrival. A date keeps its browser jobs while the issue names it, so a green run cannot close the issue on a date it skipped, except a date past the horizon, whose browser jobs could not have run. Started by hand, `gh workflow run date-lookahead.yml -f date=<YYYY-MM-DD>` reruns one date and reports nothing.
 
@@ -117,7 +118,7 @@ The look-ahead does not cover:
 | Revoke access | Owner | Suspend the user's operational access, then revoke Auth sessions and reset the credential. An issued access token or file URL stays valid until it expires. For a leaving admin, transfer the organization first. |
 | Preserve evidence | Agent or owner | Export the relevant log excerpts, identifiers redacted, into `.agent-logs/incidents/<date>/`. |
 | Restore | Owner with agent | Follow the restore procedures above. |
-| Verify | Agent | Follow step 7 of the database restore before writes reopen. |
+| Verify | Agent | Follow step 8 of the database restore before writes reopen. |
 | Communicate | Owner | Inform the beta customer. If personal data was exposed, assess the GDPR notification duty with an advisor. |
 
 ## Recover an uncertain email change
