@@ -14,8 +14,7 @@ export const BROWSERBASE_API = 'https://api.browserbase.com/v1';
  * window at least as long as a billing month; three shares stay below the plan's allocation.
  */
 export const MACHINE_CALL_SHARE = 300;
-/** @internal The ledger's window, exported for its test. */
-export const LEDGER_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
+const LEDGER_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
 
 export type CallKind = 'search' | 'fetch';
 
@@ -63,9 +62,8 @@ const PRIVATE_SUFFIXES = ['localhost', 'local', 'internal', 'lan', 'home.arpa'];
  * Why a URL is no public research target, or undefined when it is one. Refused: any scheme but http
  * and https, credentials in the URL, IP literals, local names, WerkFlow's app and its staging and
  * preview deployments, Supabase projects, and R2 buckets. WerkFlow's public website stays allowed.
- * @internal Exported for its test.
  */
-export function urlRefusal(raw: string): string | undefined {
+function urlRefusal(raw: string): string | undefined {
   const url = URL.parse(raw);
   if (!url) return 'it is no URL';
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'it is no web address';
@@ -93,11 +91,8 @@ const PERSONAL_DETAIL: readonly [RegExp, string][] = [
   [/werk-flow\.app|werkflow-app-git|supabase\.co\b/i, 'a WerkFlow system address'],
 ];
 
-/**
- * Why a search text may not leave the machine, or undefined. A backstop: the skill's rule is wider.
- * @internal Exported for its test.
- */
-export function searchTextRefusal(text: string): string | undefined {
+/** Why a search text may not leave the machine, or undefined. A backstop: the skill's rule is wider. */
+function searchTextRefusal(text: string): string | undefined {
   const found = PERSONAL_DETAIL.find(([pattern]) => pattern.test(text));
   return found ? `it contains ${found[1]}` : undefined;
 }
@@ -194,7 +189,7 @@ export type Plan =
   /** A driver command on the local browser, without the key. */
   | { kind: 'drive'; args: readonly string[] };
 
-const refused = (reason: string): Plan => ({ kind: 'refused', reason });
+const refusedPlan = (reason: string): Plan => ({ kind: 'refused', reason });
 
 /** A flag's name without its dashes and `=value`, or undefined for a positional argument. */
 function flagName(arg: string): string | undefined {
@@ -247,17 +242,17 @@ function domainFilter(flag: string, value: string | undefined): string[] | { ref
 
 function planSearch(args: readonly string[]): Plan {
   const parsed = parseFlags(args, SEARCH_FLAGS);
-  if ('refusal' in parsed) return refused(parsed.refusal);
+  if ('refusal' in parsed) return refusedPlan(parsed.refusal);
   const [query, ...extra] = parsed.positionals;
-  if (!query || extra.length) return refused('name exactly one query, in quotes');
+  if (!query || extra.length) return refusedPlan('name exactly one query, in quotes');
   const reason = searchTextRefusal(query);
-  if (reason) return refused(`the query goes to a third party, and ${reason}`);
+  if (reason) return refusedPlan(`the query goes to a third party, and ${reason}`);
   const request: SearchRequest = { query };
   const count = parsed.values.get('num-results');
   if (count !== undefined) {
     const numResults = Number(count);
     if (!Number.isInteger(numResults) || numResults < 1 || numResults > 25)
-      return refused('--num-results takes 1 to 25');
+      return refusedPlan('--num-results takes 1 to 25');
     request.numResults = numResults;
   }
   for (const [flag, key] of [
@@ -265,12 +260,12 @@ function planSearch(args: readonly string[]): Plan {
     ['exclude-domains', 'excludeDomains'],
   ] as const) {
     const entries = domainFilter(flag, parsed.values.get(flag));
-    if (entries !== undefined && 'refusal' in entries) return refused(entries.refusal);
+    if (entries !== undefined && 'refusal' in entries) return refusedPlan(entries.refusal);
     if (entries) request[key] = entries;
   }
   const since = parsed.values.get('start-published-date');
   if (since !== undefined) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) return refused('--start-published-date takes YYYY-MM-DD');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) return refusedPlan('--start-published-date takes YYYY-MM-DD');
     request.startPublishedDate = `${since}T00:00:00Z`;
   }
   return { kind: 'search', request, output: parsed.values.get('output') };
@@ -278,25 +273,25 @@ function planSearch(args: readonly string[]): Plan {
 
 function planFetch(args: readonly string[]): Plan {
   const parsed = parseFlags(args, FETCH_FLAGS);
-  if ('refusal' in parsed) return refused(parsed.refusal);
+  if ('refusal' in parsed) return refusedPlan(parsed.refusal);
   const [url, ...extra] = parsed.positionals;
-  if (!url || extra.length) return refused('name exactly one URL');
+  if (!url || extra.length) return refusedPlan('name exactly one URL');
   const reason = urlRefusal(url);
-  if (reason) return refused(`the URL is no public research page: ${reason}`);
+  if (reason) return refusedPlan(`the URL is no public research page: ${reason}`);
   return { kind: 'fetch', url, output: parsed.values.get('output') };
 }
 
 /** A command that names a page: exactly one URL among its positionals, checked as the driver reads it. */
 function planOpen(args: readonly string[], spec: FlagSpec, skip: number): Plan {
   if (args.some((arg) => arg.startsWith('--no-')))
-    return refused('an argument is no flag this command takes');
+    return refusedPlan('an argument is no flag this command takes');
   const parsed = parseFlags(args.slice(skip), spec);
-  if ('refusal' in parsed) return refused(parsed.refusal);
+  if ('refusal' in parsed) return refusedPlan(parsed.refusal);
   const [target, ...extra] = parsed.positionals;
-  if (target === undefined || extra.length) return refused('name exactly one URL');
+  if (target === undefined || extra.length) return refusedPlan('name exactly one URL');
   // The driver opens only a full URL, so the URL checked is the URL opened.
   const reason = urlRefusal(target);
-  if (reason) return refused(`the URL is no public research page: ${reason}`);
+  if (reason) return refusedPlan(`the URL is no public research page: ${reason}`);
   // `open` always starts or joins a managed local browser, never another kind of session.
   const local = args[0] === 'open' && !args.includes('--local') ? ['--local'] : [];
   return { kind: 'drive', args: [...args, ...local] };
@@ -305,11 +300,11 @@ function planOpen(args: readonly string[], spec: FlagSpec, skip: number): Plan {
 function planDrive(args: readonly string[]): Plan {
   const [command, ...rest] = args;
   if (!command || !DRIVER_COMMANDS.has(command))
-    return refused(`drive takes a driver command: ${[...DRIVER_COMMANDS].join(', ')}`);
+    return refusedPlan(`drive takes a driver command: ${[...DRIVER_COMMANDS].join(', ')}`);
   for (const arg of rest) {
     const name = flagName(arg);
     if (name !== undefined && REFUSED_DRIVER_FLAGS.has(name))
-      return refused(`--${name} leaves the local browser or its profile`);
+      return refusedPlan(`--${name} leaves the local browser or its profile`);
   }
   if (command === 'open') return planOpen(args, OPEN_FLAGS, 1);
   if (command === 'tab' && rest[0] === 'new') return planOpen(args, TAB_NEW_FLAGS, 2);
@@ -319,11 +314,11 @@ function planDrive(args: readonly string[]): Plan {
 /** What `bun run browserbase -- <args>` may do. */
 export function planBrowserbase(argv: readonly string[]): Plan {
   const flag = argv.map(flagName).find((name) => name !== undefined && REFUSED_EVERYWHERE.has(name));
-  if (flag) return refused(`--${flag} is refused: the wrapper sends the key, and only to Browserbase`);
+  if (flag) return refusedPlan(`--${flag} is refused: the wrapper sends the key, and only to Browserbase`);
   const [command = '', ...args] = argv;
   switch (command) {
     case 'quota':
-      return args.length ? refused('quota takes no arguments') : { kind: 'quota' };
+      return args.length ? refusedPlan('quota takes no arguments') : { kind: 'quota' };
     case 'search':
       return planSearch(args);
     case 'fetch':
@@ -331,7 +326,7 @@ export function planBrowserbase(argv: readonly string[]): Plan {
     case 'drive':
       return planDrive(args);
     default:
-      return refused('commands: quota, search, fetch, drive');
+      return refusedPlan('commands: quota, search, fetch, drive');
   }
 }
 

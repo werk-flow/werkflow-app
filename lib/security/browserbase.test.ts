@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test';
 
 import {
   type Ledger,
-  LEDGER_WINDOW_MS,
   MACHINE_CALL_SHARE,
   apiFailure,
   redirectNote,
@@ -10,8 +9,6 @@ import {
   callsLeft,
   parseLedger,
   planBrowserbase,
-  searchTextRefusal,
-  urlRefusal,
   withCall,
 } from './browserbase';
 
@@ -90,7 +87,7 @@ test('public research pages pass; WerkFlow systems, local hosts and other scheme
     'https://some-docs.vercel.app/',
     'https://supabase.com/docs',
   ])
-    expect(urlRefusal(url), url).toBeUndefined();
+    expect(refusalOf('fetch', url), url).toBeUndefined();
   for (const url of [
     'https://app.werk-flow.app/login',
     'https://werkflow-app-git-main-werkflows-projects.vercel.app/login',
@@ -105,17 +102,17 @@ test('public research pages pass; WerkFlow systems, local hosts and other scheme
     'https://user:pass@example.com/',
     'not a url',
   ])
-    expect(urlRefusal(url), url).toBeDefined();
+    expect(refusalOf('fetch', url), url).toBeDefined();
 });
 
 test('a search text with personal or system detail is refused before it leaves the machine', () => {
-  expect(searchTextRefusal('Heizungsbauer Betriebssoftware Vergleich 2026')).toBeUndefined();
-  expect(searchTextRefusal('VDE 0100-410 Schutzmaßnahmen')).toBeUndefined();
-  expect(searchTextRefusal('max.mustermann@example.de Auftrag')).toContain('e-mail');
-  expect(searchTextRefusal('Kunde +49 171 2345678')).toContain('phone');
-  expect(searchTextRefusal('Rückruf 0711 1234567')).toContain('phone');
-  expect(searchTextRefusal('DE89 3704 0044 0532 0130 00')).toContain('IBAN');
-  expect(searchTextRefusal('app.werk-flow.app login')).toContain('WerkFlow');
+  expect(refusalOf('search', 'Heizungsbauer Betriebssoftware Vergleich 2026')).toBeUndefined();
+  expect(refusalOf('search', 'VDE 0100-410 Schutzmaßnahmen')).toBeUndefined();
+  expect(refusalOf('search', 'max.mustermann@example.de Auftrag')).toContain('e-mail');
+  expect(refusalOf('search', 'Kunde +49 171 2345678')).toContain('phone');
+  expect(refusalOf('search', 'Rückruf 0711 1234567')).toContain('phone');
+  expect(refusalOf('search', 'DE89 3704 0044 0532 0130 00')).toContain('IBAN');
+  expect(refusalOf('search', 'app.werk-flow.app login')).toContain('WerkFlow');
 });
 
 test('search becomes one request body; every filter is checked and unreviewed flags refuse', () => {
@@ -232,11 +229,13 @@ test('a cloud browser is off: its connect URL would sit in a process argument', 
 });
 
 test('the ledger counts calls over a rolling window and stops at the machine share', () => {
-  const now = 10 * LEDGER_WINDOW_MS;
+  // The window is 31 days, at least one billing month.
+  const window = 31 * 24 * 60 * 60 * 1000;
+  const now = 10 * window;
   expect(parseLedger(undefined)).toEqual({ search: [], fetch: [] });
   expect(parseLedger('{"search":[1]}')).toBeUndefined();
   expect(parseLedger('not json')).toBeUndefined();
-  let ledger: Ledger = { search: [now - LEDGER_WINDOW_MS], fetch: [] };
+  let ledger: Ledger = { search: [now - window], fetch: [] };
   expect(callsLeft(ledger, 'search', now)).toBe(MACHINE_CALL_SHARE);
   ledger = withCall(ledger, 'search', now);
   expect(ledger.search).toEqual([now]);
