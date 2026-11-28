@@ -507,10 +507,15 @@ test('a removed file keeps its place through a navigation away and back, so a fa
   ).toBeVisible();
   expect(await page.evaluate(() => window.uiContractKiUploads.length)).toBe(0);
 
-  // The removal fails: the file comes back into its place, and the draft holds five.
+  // The removal fails: the file comes back into its place with why, and the draft holds five.
   await page.evaluate(() => window.uiContractKiHeldDiscards?.shift()?.(false));
   await expect(attached(page).getByText('Lieferschein 5.pdf')).toBeVisible();
   await expect(attached(page).getByRole('listitem')).toHaveCount(5);
+  await expect(
+    page
+      .getByRole('main')
+      .getByText('„Lieferschein 5.pdf“ konnte nicht entfernt werden. Versuch es noch einmal.'),
+  ).toBeVisible();
 });
 
 test('a removal still pending when a sign-out clears the drafts keeps no place in the next draft', async ({

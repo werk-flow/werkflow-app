@@ -68,6 +68,24 @@ export function pendingRemovals(draft: string): readonly Removal[] {
   return removals.filter((removal) => removal.draft === draft && removal.clears === draftClears());
 }
 
+/** Why a removal of the draft's file failed, for whichever composer shows the draft when the file comes back. */
+let refusedRemovals: readonly { draft: string; message: string; clears: number }[] = [];
+
+/** Keeps or, with null, drops the draft's refused removal; a sign-out's clear ends it with the file's name. */
+export function holdRemovalRefusal(draft: string, message: string | null): void {
+  refusedRemovals = [
+    ...refusedRemovals.filter((refusal) => refusal.draft !== draft),
+    ...(message ? [{ draft, message, clears: draftClears() }] : []),
+  ];
+}
+
+export function removalRefusal(draft: string): string | null {
+  return (
+    refusedRemovals.find((refusal) => refusal.draft === draft && refusal.clears === draftClears())?.message ??
+    null
+  );
+}
+
 const moveListeners = new Set<(from: string, to: string) => void>();
 
 /** Hears each move of a draft's uploads, so an upload still on its way follows its draft. */

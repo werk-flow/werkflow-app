@@ -8,11 +8,13 @@ import { draftClears, readDraft, subscribeDrafts } from '@/lib/ai/chat-drafts';
 import {
   attachmentsKey,
   holdRemoval,
+  holdRemovalRefusal,
   onAttachmentsMoved,
   parseAttachments,
   pendingRemovals,
   readAttachments,
   releaseRemoval,
+  removalRefusal,
   restoreAttachments,
   writeAttachments,
 } from './attachment-drafts';
@@ -50,21 +52,16 @@ type Refusal = { draft: string; message: string };
 /**
  * Removes an upload from its draft; a removal the server refused, or never
  * answered, brings it back with why. Until the server answered, the file
- * keeps its place in the draft's caps (attachment-drafts.ts), also while the
- * chat is off the page.
+ * keeps its place in the draft's caps, and the reason waits beside the draft
+ * (attachment-drafts.ts), also while the chat is off the page.
  */
-function removeUpload(
-  organizationId: string,
-  draft: string,
-  file: AiUploadedFile,
-  refuse: (refusal: Refusal | null) => void,
-): void {
+function removeUpload(organizationId: string, draft: string, file: AiUploadedFile): void {
   holdRemoval({ fileId: file.fileId, draft, sizeBytes: file.sizeBytes });
+  holdRemovalRefusal(draft, null);
   writeAttachments(
     draft,
     readAttachments(draft).filter((held) => held.fileId !== file.fileId),
   );
-  refuse(null);
   const session = draftClears();
   // A new chat's draft that moves to its saved thread meanwhile takes the file back there.
   let target = draft;
@@ -76,11 +73,9 @@ function removeUpload(
     releaseRemoval(file.fileId);
     // A sign-out cleared the drafts meanwhile: the file's name stays out of this tab.
     if (!refused || draftClears() !== session) return;
+    // The reason first: the file's return renders the composer that shows the draft now.
+    holdRemovalRefusal(target, `„${file.name}“ konnte nicht entfernt werden. Versuch es noch einmal.`);
     restoreAttachments(target, [file]);
-    refuse({
-      draft: target,
-      message: `„${file.name}“ konnte nicht entfernt werden. Versuch es noch einmal.`,
-    });
   };
   void discardAiFile({ organizationId, fileId: file.fileId }).then(
     (result) => settle(!result.success),
@@ -119,6 +114,15 @@ function usePending() {
   return { uploading, uploadingRef, transfers, track, cancel };
 }
 
+/** Why a removal of the draft's file failed, though another composer started it. */
+function useRemovalRefusal(draft: string): string | null {
+  return useSyncExternalStore(
+    subscribeDrafts,
+    () => removalRefusal(draft),
+    () => null,
+  );
+}
+
 /** The draft's uploads, the ones still on their way, and the last refusal. */
 export function useKiUploads(organizationId: string, draft: string) {
   const raw = useSyncExternalStore(
@@ -127,6 +131,7 @@ export function useKiUploads(organizationId: string, draft: string) {
     () => '',
   );
   const uploads = useMemo(() => parseAttachments(raw), [raw]);
+  const refusedRemoval = useRemovalRefusal(draft);
   const { uploading, uploadingRef, transfers, track, cancel } = usePending();
   const [error, setError] = useState<Refusal | null>(null);
   // The draft whose message waits for its uploads: it says so until they are stored.
@@ -135,6 +140,7 @@ export function useKiUploads(organizationId: string, draft: string) {
   const add = useCallback(
     (files: readonly File[]) => {
       setError(null);
+      holdRemovalRefusal(draft, null);
       for (const file of files) {
         const held = [
           ...readAttachments(draft),
@@ -180,7 +186,8 @@ export function useKiUploads(organizationId: string, draft: string) {
   const remove = useCallback(
     (fileId: string) => {
       const file = readAttachments(draft).find((held) => held.fileId === fileId);
-      if (file) removeUpload(organizationId, draft, file, setError);
+      setError(null);
+      if (file) removeUpload(organizationId, draft, file);
     },
     [organizationId, draft],
   );
@@ -197,7 +204,7 @@ export function useKiUploads(organizationId: string, draft: string) {
   return {
     uploads,
     uploading: shown,
-    error: wait ? WAIT_FOR_UPLOADS : error?.draft === draft ? error.message : null,
+    error: wait ? WAIT_FOR_UPLOADS : (refusedRemoval ?? (error?.draft === draft ? error.message : null)),
     add,
     remove,
     cancel,
