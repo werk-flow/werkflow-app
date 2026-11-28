@@ -29,6 +29,9 @@ import { z } from '@/lib/zod';
 /** A row's detail above this size keeps the input and drops the result, under the item's 64 KB cap. */
 const DETAIL_BYTES = 48_000;
 
+/** Bytes under the result cap that only refusals may take: the sentence below and a few bare statuses. */
+const RESULTS_FULL_ROOM_BYTES = 1_000;
+
 /** What the model reads when a result would take the turn's tool results past their cap (`maxToolResultBytes`). */
 export const TOOL_RESULTS_FULL =
   'Die Ergebnisse dieser Antwort haben ihre Höchstgröße erreicht; dieses Ergebnis passt nicht mehr hinein. Antworte mit dem, was du schon hast, und schlag vor, in einer neuen Nachricht weiterzumachen.';
@@ -89,6 +92,8 @@ function nextKey(context: ToolCallRun): string {
 type ToolCallRun = {
   admin: ReturnType<typeof createSupabaseAdminClient>;
   command: AiTurnCommand;
+  /** The person's message that started the turn. */
+  userItem: { sequence: number };
   runId: string;
   runKey: string;
   model: { modelId: string };
@@ -226,6 +231,7 @@ export function toolRunFor(
   };
   return {
     threadId: context.command.threadId,
+    beforeSequence: context.userItem.sequence,
     signal: hooks.signal,
     progress: hooks.progress,
     canCallModel,
@@ -267,7 +273,8 @@ function withinResultCap(context: ToolCallRun, result: AiToolResult): AiToolResu
   if (result.status !== 'ok') return result;
   const cap = AI_TURN_LIMITS[context.command.entryPoint].maxToolResultBytes;
   const bytes = outputBytes(untrustedToolOutput(result.value));
-  if (!toolCalls.resultsFull && toolCalls.resultBytes + bytes <= cap) return result;
+  // The last bytes under the cap stay free for the refusals that may follow (`RESULTS_FULL_ROOM_BYTES`).
+  if (!toolCalls.resultsFull && toolCalls.resultBytes + bytes <= cap - RESULTS_FULL_ROOM_BYTES) return result;
   // The sentence goes once; every later call past the cap reads the bare status (`toolFramingBytes`).
   const first = !toolCalls.resultsFull;
   toolCalls.resultsFull = true;

@@ -169,6 +169,7 @@ const organizationId = () => world.memberships[0]?.orgId ?? '';
       text: 'Hallo',
     },
     runId,
+    userItem: { sequence: 1 },
     runKey: crypto.randomUUID(),
     model: { modelId: 'replay' },
     toolCalls: newToolCalls(),
@@ -183,6 +184,7 @@ const organizationId = () => world.memberships[0]?.orgId ?? '';
   // Harness tools read nothing and call no model.
   const toolRun = {
     threadId: THREAD_ID,
+    beforeSequence: 1,
     signal: new AbortController().signal,
     progress: () => undefined,
     canCallModel: () => false,

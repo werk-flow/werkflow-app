@@ -85,6 +85,20 @@ test('an answer of empty fields reads as nothing: no draft without content', () 
   ).toBeNull();
 });
 
+test('a line of empty fields is no content either, but a quantity of 0 is', () => {
+  const empty = {
+    artikelnummer: null,
+    ean: null,
+    beschreibung: '',
+    menge: null,
+    einheit: null,
+    packungsinhalt: null,
+  };
+  const header = { lieferant: null, lieferscheinnummer: null, datum: null, weiterePositionen: 0 };
+  expect(cappedLieferschein({ ...header, positionen: [empty] })).toBeNull();
+  expect(cappedLieferschein({ ...header, positionen: [{ ...empty, menge: 0 }] })?.positionen).toHaveLength(1);
+});
+
 test('an answer that is no Lieferschein of the schema reads as nothing', () => {
   expect(cappedLieferschein('Das ist kein Lieferschein.')).toBeNull();
   expect(cappedLieferschein({ ...answer, positionen: 'alle' })).toBeNull();

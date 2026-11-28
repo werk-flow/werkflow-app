@@ -45,6 +45,7 @@ function planted(input: z.ZodType, ran: string[] = []): Defined {
 /** A planted tool reads no thread and calls no model. */
 const run = {
   threadId: '40000000-0000-4000-8000-000000000001',
+  beforeSequence: 1,
   signal: new AbortController().signal,
   progress: () => undefined,
   canCallModel: () => false,

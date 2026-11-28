@@ -245,6 +245,25 @@ async function readWith(
   assert.deepEqual(modelCallRows(), []);
 }
 
+// A file another tab attached after this turn's message, such as with a message refused while this
+// turn ran, is never this turn's: the tool reads the latest file before the turn's message.
+{
+  const answer = world.rpc;
+  world.rpc = (call) => {
+    if (call.name === 'record_ai_tool_item' && call.args.p_status === 'streaming')
+      attachFile(world, bucket, { body: lieferscheinPdf('kaputt'), mimeType: PDF, pages: 1 });
+    return answer(call);
+  };
+  await readWith({ body: lieferscheinPdf('sauber'), mimeType: PDF, pages: 1 });
+  world.rpc = answer;
+  assert.equal(
+    tableRows(world, 'ai_thread_files').length,
+    2,
+    'the later file was attached while the turn ran',
+  );
+  assert.match(lastOutput(), /LS-2026-1187/, 'the turn must read the file of its own message');
+}
+
 // Three reads in one step: the turn's model-call cap refuses the third before it calls the model.
 {
   await readWith({ body: lieferscheinPdf('sauber'), mimeType: PDF, pages: 1 }, 'drei-lieferscheine');

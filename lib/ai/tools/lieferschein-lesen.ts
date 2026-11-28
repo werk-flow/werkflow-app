@@ -36,8 +36,8 @@ const mimeTypeSchema = z.enum(AI_UPLOAD_LIMITS.mimeTypes);
 const fileSchema = z.object({ storage_path: z.string(), mime_type: mimeTypeSchema, size_bytes: z.number() });
 
 /**
- * The caller's own upload in the turn's thread, counted back from the newest
- * file item: 1 is the latest. Another person's file is never found: the row
+ * The caller's own upload in the turn's thread before the turn's message,
+ * counted back from the newest file item: 1 is the latest. Another person's file is never found: the row
  * must be the caller's in the caller's organization.
  */
 async function readThreadFile(ctx: ActionContext, run: AiToolRun, position: number) {
@@ -48,6 +48,8 @@ async function readThreadFile(ctx: ActionContext, run: AiToolRun, position: numb
     .eq('organization_id', ctx.orgId)
     .eq('thread_id', run.threadId)
     .eq('kind', 'file')
+    // A later message's file, such as one another tab sent while this turn ran, is never this turn's.
+    .lt('sequence', run.beforeSequence)
     .order('sequence', { ascending: false })
     .range(0, MAX_POSITION - 1)
     .abortSignal(run.signal);

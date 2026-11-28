@@ -50,6 +50,11 @@ export type AiModelCallRecord = (
 export type AiToolRun = {
   /** The turn's thread, whose author is the caller. */
   threadId: string;
+  /**
+   * The sequence of the person's message that started the turn: the tool reads
+   * only what the thread held before it, never a later message's file.
+   */
+  beforeSequence: number;
   /** Aborts when the person stops the answer, loses the thread, or the turn's time is up. */
   signal: AbortSignal;
   /**
