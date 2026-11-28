@@ -16,7 +16,12 @@ export const JOB_TIME_LIVE_TABLES = [
   'employment_target_signals',
 ] as const satisfies readonly RealtimeTable[];
 
-/** Unknown participants cannot rule out a correction; known ones use the clock's person filter. */
+/** Approvals can introduce participants; other request edits use the clock's person filter. */
 export function isJobTimeEventRelevant(event: ClockStateEvent, participantIds: readonly string[]): boolean {
-  return participantIds.length === 0 || isCorrectionEventFor(event, participantIds);
+  if (event.table !== 'time_correction_requests' || participantIds.length === 0) return true;
+  const status = event.new?.status;
+  // Requests name no jobs, so an approval may add a first participant's time.
+  // A missing new status cannot rule out that approval, even if old has one.
+  if (status === undefined || status === 'approved') return true;
+  return isCorrectionEventFor(event, participantIds);
 }

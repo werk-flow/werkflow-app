@@ -14,21 +14,35 @@ describe('job and project time correction invalidation', () => {
 
   test('a participant as subject or requester triggers a read', () => {
     expect(
-      isJobTimeEventRelevant(request({ subject_user_id: 'worker', requested_by: 'boss' }), ['worker']),
+      isJobTimeEventRelevant(
+        request({ status: 'submitted', subject_user_id: 'worker', requested_by: 'boss' }),
+        ['worker'],
+      ),
     ).toBe(true);
     expect(
-      isJobTimeEventRelevant(request({ subject_user_id: 'other', requested_by: 'worker' }), ['worker']),
+      isJobTimeEventRelevant(
+        request({ status: 'submitted', subject_user_id: 'other', requested_by: 'worker' }),
+        ['worker'],
+      ),
     ).toBe(true);
   });
 
-  test('a correction for non-participants skips the read', () => {
+  test('a non-approved edit for non-participants skips the read', () => {
     expect(
-      isJobTimeEventRelevant(request({ subject_user_id: 'other', requested_by: 'boss' }), ['worker']),
+      isJobTimeEventRelevant(
+        request({ status: 'submitted', subject_user_id: 'other', requested_by: 'boss' }),
+        ['worker'],
+      ),
     ).toBe(false);
   });
 
   test('missing either person or the whole row triggers a read', () => {
-    for (const row of [null, { id: 'request' }, { subject_user_id: 'other' }, { requested_by: 'boss' }]) {
+    for (const row of [
+      null,
+      { id: 'request' },
+      { status: 'submitted', subject_user_id: 'other' },
+      { status: 'submitted', requested_by: 'boss' },
+    ]) {
       expect(isJobTimeEventRelevant(request(row), ['worker'])).toBe(true);
     }
     expect(
@@ -44,9 +58,37 @@ describe('job and project time correction invalidation', () => {
   });
 
   test('loading or empty participants cannot rule out a correction', () => {
-    expect(isJobTimeEventRelevant(request({ subject_user_id: 'other', requested_by: 'boss' }), [])).toBe(
-      true,
-    );
+    expect(
+      isJobTimeEventRelevant(
+        request({ status: 'submitted', subject_user_id: 'other', requested_by: 'boss' }),
+        [],
+      ),
+    ).toBe(true);
+  });
+
+  test('an approval reads even when the worker is not yet a participant', () => {
+    expect(
+      isJobTimeEventRelevant(
+        request({ status: 'approved', subject_user_id: 'new-worker', requested_by: 'boss' }),
+        ['worker'],
+      ),
+    ).toBe(true);
+  });
+
+  test('a missing new status cannot rule out a correction', () => {
+    expect(
+      isJobTimeEventRelevant(request({ subject_user_id: 'other', requested_by: 'boss' }), ['worker']),
+    ).toBe(true);
+    expect(
+      isJobTimeEventRelevant(
+        {
+          table: 'time_correction_requests',
+          new: null,
+          old: { status: 'submitted', subject_user_id: 'other', requested_by: 'boss' },
+        },
+        ['worker'],
+      ),
+    ).toBe(true);
   });
 
   test('every other table still triggers a read', () => {
