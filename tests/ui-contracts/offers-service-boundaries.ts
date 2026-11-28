@@ -130,6 +130,22 @@ export async function startOfferRevision(
       };
 }
 
+/** „Annahme erfassen“ of the sent offer: the Annahme the spec answers. */
+export async function acceptOffer(
+  input: unknown,
+): Promise<
+  { success: true; offerId: string; version: number; updatedAt: string } | { success: false; error: string }
+> {
+  const refusal = await holdWrite('accept-offer', input);
+  return refusal
+    ? { success: false, error: refusal }
+    : { success: true, offerId: 'contract-offer', version: 2, updatedAt: '2026-11-28T08:00:00.000000+00:00' };
+}
+
+/** A rejection, a withdrawal or the withdrawal of an Annahme are not part of these contracts. */
+export const closeOffer = unexpectedWrite;
+export const withdrawOfferAcceptance = unexpectedWrite;
+
 /** „Als gesendet festhalten“ is not part of these contracts. */
 export const sendOffer = unexpectedWrite;
 
