@@ -2,7 +2,7 @@ import { unresolvableDeleteRefusal } from '../../lib/testing/runner/unresolvable
 import { shellCommand } from '../../lib/testing/runner/edit-guard';
 
 /**
- * PreToolUse hook for Bash calls, wired in .claude/settings.json (pinned by
+ * PreToolUse hook for Bash calls, wired in .claude/settings.json and .codex/hooks.json (pinned by
  * lib/testing/runner/guard-wiring.test.ts): exits 2 with the reason when the
  * command runs `rm` on a variable or on a wildcard with a relative path
  * (lib/testing/runner/unresolvable-delete.ts). A call it cannot read passes, as

@@ -9,6 +9,12 @@
             "command": "root=\"$(git rev-parse --show-toplevel)\" || exit 0; bun \"$root/.claude/hooks/refuse-pattern-kill.ts\"",
             "timeout": 20,
             "statusMessage": "Checking that only recorded processes are stopped"
+          },
+          {
+            "type": "command",
+            "command": "root=\"$(git rev-parse --show-toplevel)\" || exit 0; bun \"$root/.claude/hooks/refuse-unresolvable-delete.ts\"",
+            "timeout": 20,
+            "statusMessage": "Checking that delete paths are resolvable"
           }
         ]
       },

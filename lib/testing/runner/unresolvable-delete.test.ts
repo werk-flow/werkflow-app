@@ -138,7 +138,7 @@ test('an rm in a heredoc an unknown program reads is refused, and data-only here
     expect(unresolvableDeleteRefusal(command), command).toBeUndefined();
 });
 
-test('the Claude hook refuses the delete with the reason and lets other calls through', () => {
+test('the agent hook refuses the delete with the reason and lets other calls through', () => {
   const script = resolve(import.meta.dir, '../../../.claude/hooks/refuse-unresolvable-delete.ts');
   const call = (stdin: string) => {
     const result = Bun.spawnSync({
@@ -150,6 +150,10 @@ test('the Claude hook refuses the delete with the reason and lets other calls th
     return { exitCode: result.exitCode, output: `${result.stdout.toString()}${result.stderr.toString()}` };
   };
   const bash = (command: string) => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
+  // Codex normalizes shell calls to Bash with tool_input.command too.
+  const codex = call(bash('rm -f logs/*'));
+  expect(codex.exitCode, codex.output).toBe(2);
+  expect(codex.output).toContain('rm -rf /tmp/x/*');
   for (const command of [
     'mkdir -p /tmp/ev35 && cd /tmp/ev35 && rm -rf * && gh run download 123',
     'cd /tmp/ci-measure; rm -f logs/*',
