@@ -25,9 +25,13 @@ const scopeSchema = z.array(
   }),
 );
 
-/** Words and signs of a text about money, which the field never reads; „450,-“ and „450EUR“ are amounts. */
+/**
+ * Words and signs of a text about money, which the field never reads. „450,-“,
+ * „450EUR“ and „85,00“ are amounts; „1,50 m“ is a measure. „Kosten“ counts as
+ * a word or a word's end, so „Heizkostenverteiler“ stays.
+ */
 const PRICE_TEXT =
-  /€|\beuro?\b|\d\s*euro?\b|\beuro?\s*\d|\d\s*,[-–]|preis|rabatt|nachlass|skonto|zahlung|zahlbar|netto|brutto|mwst|umsatzsteuer|kosten|betrag|zuschlag/i;
+  /€|\beuro?\b|\d\s*euro?\b|\beuro?\s*\d|\d\s*,[-–]|\d,\d{2}(?!\d|\s*[a-zäöüµ°%²³])|preis|rabatt|nachlass|skonto|zahlung|zahlbar|netto|brutto|mwst|umsatzsteuer|\bkosten|kosten\b|betrag|zuschlag|stundensatz|stundenlohn|verrechnungssatz/i;
 
 function fieldLine(line: z.infer<typeof lineSchema>): FieldScopeLine[] {
   const moneyDescription = PRICE_TEXT.test(line.description);
