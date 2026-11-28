@@ -5,6 +5,7 @@ import { runExtraction } from '@/lib/ai/extract/call';
 import { LIEFERSCHEIN_EXTRACTION, cappedLieferschein } from '@/lib/ai/extract/lieferschein';
 import { AI_TURN_LIMITS, AI_UPLOAD_LIMITS } from '@/lib/ai/limits';
 import { type AiToolRun, defineTool } from '@/lib/ai/tools/define-tool';
+import { matchedLines } from '@/lib/ai/tools/lieferschein-abgleich';
 import { logError } from '@/lib/logging';
 import type { ActionContext } from '@/lib/org/action-context';
 import { readStorageObject } from '@/lib/storage/r2';
@@ -78,7 +79,7 @@ export const lieferscheinLesen = defineTool({
   name: 'lieferschein_lesen',
   label: 'Lieferschein lesen',
   description:
-    'Liest einen Lieferschein (PDF oder Foto), den die Person im Gespräch angehängt hat: Lieferant, Nummer, Datum und Positionen als KI-Entwurf. Bucht nichts.',
+    'Liest einen Lieferschein (PDF oder Foto), den die Person im Gespräch angehängt hat: Lieferant, Nummer, Datum und Positionen, je mit eigenem Artikel, Menge in dessen Einheit und Hinweisen, als KI-Entwurf. Bucht nichts.',
   input: z.strictObject({
     datei: z.number().int().min(1).max(MAX_POSITION).describe('1 = zuletzt angehängte Datei, 2 = die davor'),
   }),
@@ -111,6 +112,7 @@ export const lieferscheinLesen = defineTool({
     if (read.status === 'stopped' || read.status === 'failed') return { status: 'failed' };
     const lieferschein = read.status === 'read' ? cappedLieferschein(read.answer) : null;
     if (!lieferschein) return { status: 'refused', message: MESSAGES.unreadable };
+    const matches = await matchedLines(ctx, lieferschein.positionen);
     return {
       status: 'ok',
       value: {
@@ -126,7 +128,10 @@ export const lieferscheinLesen = defineTool({
           menge: line.menge,
           einheit: documentText(line.einheit),
           packungsinhalt: line.packungsinhalt,
+          abgleich: matches?.[index] ?? null,
         })),
+        // The lines stand unmatched when the articles could not be read.
+        abgleichGelesen: matches !== null,
         // Null when the count of left-out lines is unknown.
         weggelassenePositionen: lieferschein.weggelassen,
       },

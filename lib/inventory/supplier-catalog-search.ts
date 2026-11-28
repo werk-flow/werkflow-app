@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
-import { resolveActionContext } from '@/lib/org/action-context';
+import { type ActionContext, resolveActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import {
   catalogRowSchema,
@@ -27,12 +27,24 @@ export async function searchSupplierCatalog(
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await resolveActionContext();
   if (!auth.success) return auth;
-  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
-  const term = parsed.data.search.trim().toLowerCase();
+  return searchSupplierCatalogAs(auth.context, parsed.data.search);
+}
+
+/**
+ * The same search for a caller whose context is already resolved, such as
+ * WerkFlow KI's Lieferschein matching (werk-flow/werkflow-planning#535).
+ * Admin and Büro only; a field worker is refused here too.
+ */
+export async function searchSupplierCatalogAs(
+  ctx: Pick<ActionContext, 'orgId' | 'isManagerOrAbove'>,
+  search: string,
+): Promise<ActionResult<{ options: SupplierCatalogOption[]; hasMore: boolean }>> {
+  if (!ctx.isManagerOrAbove) return { success: false, error: 'not_authorized' };
+  const term = search.trim().toLowerCase();
   if (term.length < SUPPLIER_CATALOG_SEARCH_MIN_LENGTH) return { success: true, options: [], hasMore: false };
 
   const { data, error } = await createSupabaseAdminClient().rpc('search_supplier_catalog_articles', {
-    p_organization_id: auth.context.orgId,
+    p_organization_id: ctx.orgId,
     p_search: term,
     // One row more than shown tells the picker that more rows match.
     p_limit: SUPPLIER_CATALOG_SEARCH_LIMIT + 1,

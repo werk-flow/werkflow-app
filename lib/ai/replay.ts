@@ -440,6 +440,25 @@ const EXTRACTIONS: Readonly<Record<string, () => StreamPart[]>> = {
         },
       ],
     }),
+  // Lines that do not fit the inventory as they stand: a pack of 10 against a piece article, a
+  // number no own article carries, and a unit outside the list.
+  abweichend: () =>
+    extraction({
+      ...LIEFERSCHEIN,
+      positionen: [
+        LIEFERSCHEIN.positionen[0],
+        LIEFERSCHEIN.positionen[1],
+        {
+          ...LIEFERSCHEIN.positionen[0],
+          artikelnummer: 'GC-99999',
+          ean: null,
+          beschreibung: 'Flexschlauch 3/8"',
+          menge: 3,
+          einheit: 'Stk',
+        },
+        { ...LIEFERSCHEIN.positionen[0], ean: null, menge: 2, einheit: 'Bündel' },
+      ],
+    }),
   // About three seconds of writing: a stop lands while the extractor runs.
   langsam: () => extraction(LIEFERSCHEIN, 30),
   // An answer cut at the extractor's output cap: paid for, and nothing read from it.
