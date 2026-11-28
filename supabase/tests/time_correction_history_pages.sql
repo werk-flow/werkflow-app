@@ -1,6 +1,7 @@
 -- Service-only page reader of the correction history: the visibility each
 -- caller class resolves to, the count and the page boundary apply in the
--- database, more than 1,000 requests stay reachable newest first, a foreign
+-- database, a former member's request never counts for an employee approver,
+-- more than 1,000 requests stay reachable newest first, a foreign
 -- organization neither counts nor matches, a request of a record its subject
 -- no longer holds lists only for approvers of others, and browser roles
 -- cannot execute the reader.
@@ -85,6 +86,16 @@ begin
   result := public.list_time_correction_history_page(org_id,caller,'own_and_employee_subjects');
   if (result->>'total')::int is distinct from 1053 or result->'ids'->>0 is distinct from md5('tc-1056')::uuid::text or result->'ids'->>2 is distinct from md5('tc-1051')::uuid::text then raise exception 'delegated employee history wrong: %',result->>'total'; end if;
   if public.list_time_correction_history_page(org_id,caller,'own_and_employee_subjects',22)->'ids' is distinct from jsonb_build_array(md5('tc-3')::uuid,md5('tc-2')::uuid,md5('tc-1')::uuid) then raise exception 'delegated employee tail unreachable'; end if;
+  -- An employee whose time approval reaches every role (an admin source or a
+  -- direct assignment): their own and every subject who is still a member,
+  -- never the former member's request at the top of the history. The server
+  -- shows another person's request to them only for a subject with a
+  -- membership (`holderCovers`), so the total and a full first page agree with
+  -- what it shows.
+  result := public.list_time_correction_history_page(org_id,caller,'own_and_member_subjects');
+  if (result->>'total')::int is distinct from 1056 or jsonb_array_length(result->'ids') is distinct from 50 or result->'ids' ? md5('tc-1057')::uuid::text then raise exception 'delegated history counts or pages a former member''s request: %',result->>'total'; end if;
+  if exists(select 1 from jsonb_array_elements_text(result->'ids') with ordinality listed(id,position) where id<>md5('tc-'||(1057-position))::uuid::text) then raise exception 'delegated history first page is not the newest member requests'; end if;
+  if public.list_time_correction_history_page(org_id,caller,'own_and_member_subjects',22)->'ids' is distinct from jsonb_build_array(md5('tc-6')::uuid,md5('tc-5')::uuid,md5('tc-4')::uuid,md5('tc-3')::uuid,md5('tc-2')::uuid,md5('tc-1')::uuid) then raise exception 'delegated history tail unreachable'; end if;
   -- A Büro member who only sees their own (the rule follows the passed visibility, not the role).
   if (public.list_time_correction_history_page(org_id,'77000000-0000-4000-8000-000000000002','own')->>'total')::int is distinct from 3 then raise exception 'own history of a Büro subject wrong'; end if;
   -- An unknown visibility lists nothing.
@@ -142,6 +153,8 @@ begin
   if (result->>'total')::int is distinct from 2 or result->'ids' ? removed then raise exception 'own history lists a request of a record its subject no longer holds: %',result; end if;
   if public.list_time_correction_history_page(org_id,caller,'own_and_employee_subjects')->'ids' ? removed then raise exception 'delegated history lists the caller''s request of a record they no longer hold'; end if;
   if public.list_time_correction_history_page(org_id,caller,'all')->'ids' ? removed then raise exception 'full history lists the caller''s request of a record they no longer hold'; end if;
+  if public.list_time_correction_history_page(org_id,caller,'own_and_member_subjects')->'ids' ? removed then raise exception 'member-subject history lists the caller''s request of a record they no longer hold'; end if;
+  if public.list_time_correction_history_page(org_id,buero,'own_and_member_subjects')->'ids'->>0 is distinct from removed then raise exception 'a member-subject approver''s history lost a request of a record its subject no longer holds'; end if;
   result := public.list_time_correction_history_page(org_id,buero,'all');
   if (result->>'total')::int is distinct from 1060 or result->'ids'->>0 is distinct from removed then raise exception 'an approver''s history lost a request of a record its subject no longer holds: %',result->>'total'; end if;
   if public.list_time_correction_history_page(org_id,buero,'own_and_employee_subjects')->'ids'->>0 is distinct from removed then raise exception 'an employee-subject approver''s history lost a request of a record its subject no longer holds'; end if;
