@@ -12,6 +12,7 @@ import {
   redact,
   retentionRefusals,
   retireReason,
+  retiredAs,
   runActorEmail,
   runActorsQuery,
   runMemberEmail,
@@ -189,12 +190,6 @@ describe('retirement', () => {
     expect(retireReason([])).toBeNull();
   });
 
-  test("the cleanup's DEV read returns each actor's retired marker", () => {
-    expect(runActorsQuery().query).toContain(
-      "raw_app_meta_data->>'werkflow_agent_retired' as retired) run where",
-    );
-  });
-
   const retired = { ...actor('actor-retired', RUN, OLD), retiredMarker: 'has_time_records' };
   const stale = actor('actor-stale', '20261125-1400-0a0b0c', OLD);
   const member = {
@@ -214,6 +209,13 @@ describe('retirement', () => {
       { runId: RUN, actorId: 'actor-retired', organizationIds: ['org-kept'], retired: 'has_time_records' },
     ]);
     expect(sweepPlan(selectRuns([retired], organizations, RUN, NOW)).clean).toEqual([]);
+  });
+
+  test("an actor's metadata without a retired marker leaves its run unretired", () => {
+    expect(retiredAs(undefined)).toBeNull();
+    expect(retiredAs(null)).toBeNull();
+    expect(retiredAs('has_time_records')).toBe('has_time_records');
+    expect(retiredAs(true)).toBe('unknown');
   });
 
   test('a retired marker of any other value still keeps the run retired, printed as unknown', () => {

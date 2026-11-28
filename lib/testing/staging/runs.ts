@@ -141,6 +141,15 @@ export function retireReason(refusals: readonly string[]): RetireReason | null {
 }
 
 /**
+ * The reason a retired marker names, `unknown` for any other value it holds, or null when the actor
+ * carries none: any marker keeps the run retired.
+ */
+export function retiredAs(marker: unknown): RetireReason | 'unknown' | null {
+  if (marker === null || marker === undefined) return null;
+  return marker === RETIRE_REASON ? RETIRE_REASON : 'unknown';
+}
+
+/**
  * What a cleanup does with its selected runs: it skips each retired one and cleans the rest, an Admin's
  * run first, since its organization's deletion ends its members' memberships, which their account
  * deletion waits for.
@@ -178,9 +187,7 @@ export function selectRuns(
     const organizationIds = organizations
       .filter((row) => row.adminId === actor.id && row.name === runOrganizationName(actorRun))
       .map((row) => row.id);
-    const retired =
-      actor.retiredMarker === null ? null : actor.retiredMarker === RETIRE_REASON ? RETIRE_REASON : 'unknown';
-    return [{ runId: actorRun, actorId: actor.id, organizationIds, retired }];
+    return [{ runId: actorRun, actorId: actor.id, organizationIds, retired: retiredAs(actor.retiredMarker) }];
   });
 }
 

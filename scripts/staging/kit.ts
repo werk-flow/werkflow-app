@@ -34,6 +34,7 @@ import {
   isRunId,
   retentionRefusals,
   retireReason,
+  retiredAs,
   runActorEmail,
   runMemberEmail,
   runActorsQuery,
@@ -328,13 +329,19 @@ export async function createActor(kit: Kit, runId: string, invitedAs?: MemberRol
  * The run's actor with a new password set through the secret key, so a cleanup works from any machine
  * and after any other machine's attempt. The user must still carry the run's address and run marker.
  */
-async function actorFor(kit: Kit, run: RunRows): Promise<Actor> {
+async function actorFor(kit: Kit, run: RunRows): Promise<Actor | 'retired'> {
   const user = userAnswer.parse(
     await json(await authAdmin(kit, `users/${run.actorId}`), 'Reading the actor'),
   );
   const email = user.email;
   if (actorRunId(email) !== run.runId || user.app_metadata[RUN_MARKER] !== run.runId)
     throw new StagingFailure('The user does not carry its run address and marker; nothing changed.');
+  // Another machine's cleanup retired it after this one read DEV.
+  const retired = retiredAs(user.app_metadata[RETIRED_MARKER]);
+  if (retired !== null) {
+    kit.log('retired', { run: run.runId, actor: run.actorId, reason: retired });
+    return 'retired';
+  }
   const password = newPassword();
   kit.secrets.push(password);
   await json(
@@ -568,6 +575,7 @@ async function deleteAccount(page: Page): Promise<void> {
 }
 
 const SUBSCRIPTION_ID = /^sub_[A-Za-z0-9]+$/;
+const CUSTOMER_ID = /^cus_[A-Za-z0-9]+$/;
 /** The states after which Stripe never debits a subscription again. */
 const ENDED_SUBSCRIPTION_STATES = new Set(['canceled', 'incomplete_expired']);
 
@@ -627,14 +635,36 @@ async function retireRun(
   const organization = await runOrganization(kit, admin);
   if (organization.id !== organizationId)
     throw new StagingFailure(`Organization ${organizationId} is not the run's own.`);
-  const subscriptions = z.array(z.object({ stripe_subscription_id: z.string().nullable() })).parse(
-    await readDev(kit, organization, {
-      table: 'werkflow_subscriptions',
-      columns: ['stripe_subscription_id'],
-    }),
-  );
-  for (const { stripe_subscription_id: subscriptionId } of subscriptions)
-    if (subscriptionId !== null) await cancelSandboxSubscription(kit, subscriptionId);
+  // The refusal came from the actor's active organization: it is the run's only when the actor
+  // administers no other.
+  const administered = z
+    .array(z.object({ id: uuidSchema }))
+    .parse(
+      await readOnlySql(kit, 'select id from public.organizations where admin_id = $1::uuid', [admin.id]),
+    );
+  if (administered.length !== 1)
+    throw new StagingFailure(`Actor ${admin.id} administers ${administered.length} organizations.`);
+  const billing = z
+    .array(
+      z.object({ stripe_customer_id: z.string().nullable(), stripe_subscription_id: z.string().nullable() }),
+    )
+    .parse(
+      await readDev(kit, organization, {
+        table: 'werkflow_subscriptions',
+        columns: ['stripe_customer_id', 'stripe_subscription_id'],
+      }),
+    );
+  // Stripe's own list too: a subscription its webhook has not recorded yet still debits.
+  const subscriptionIds = new Set(billing.flatMap((row) => row.stripe_subscription_id ?? []));
+  for (const { stripe_customer_id: customerId } of billing) {
+    if (customerId === null) continue;
+    if (!CUSTOMER_ID.test(customerId)) throw new StagingFailure('No customer id.');
+    const listed = await readStripe(kit, `subscriptions?customer=${customerId}&status=all&limit=100`);
+    if (listed.length === 100)
+      throw new StagingFailure(`Customer ${customerId} has 100 subscriptions or more.`);
+    for (const { id } of listed) if (typeof id === 'string') subscriptionIds.add(id);
+  }
+  for (const subscriptionId of subscriptionIds) await cancelSandboxSubscription(kit, subscriptionId);
   const memberIds = new Set(
     z
       .array(z.object({ user_id: uuidSchema }))
@@ -665,6 +695,7 @@ async function cleanUpRun(
   runActors: readonly ActorRow[],
 ): Promise<string[]> {
   const actor = await actorFor(kit, run);
+  if (actor === 'retired') return [run.actorId];
   const kept = await withStagingBrowser(kit, async (page) => {
     await signIn(page, actor);
     for (const id of run.organizationIds) {
