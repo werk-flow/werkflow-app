@@ -469,6 +469,7 @@ export async function kiThreadWithLieferschein(
           positionen: LIEFERSCHEINE[kind],
           weggelassenePositionen: 0,
           abgleichGelesen: true,
+          katalogGelesen: true,
         },
       },
       p_ledger_key: `${command}:tool:1`,

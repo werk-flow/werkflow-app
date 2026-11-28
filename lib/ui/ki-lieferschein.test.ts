@@ -50,6 +50,7 @@ const RESULT = {
   ],
   weggelassenePositionen: 3,
   abgleichGelesen: true,
+  katalogGelesen: true,
 };
 
 test('a read Lieferschein shows as delivered, its own article with the converted quantity, and each mismatch in German', () => {
@@ -127,13 +128,7 @@ test('a line whose EAN names another article shows both its number and its EAN',
 });
 
 test('a failed read behind the card, of the articles or of the catalog, offers to read it again', () => {
-  const [first, second] = RESULT.positionen;
-  const catalogFailed = {
-    ...second?.abgleich,
-    katalog: null,
-    hinweise: ['artikel_unbekannt', 'katalog_nicht_gelesen'],
-  };
-  const positionen = [first, { ...second, abgleich: catalogFailed }];
-  expect(lieferscheinCard({ ...RESULT, positionen })?.retry).toBe(true);
+  // The catalog flag counts every line, also one the result budget left off.
+  expect(lieferscheinCard({ ...RESULT, katalogGelesen: false })?.retry).toBe(true);
   expect(lieferscheinCard({ ...RESULT, abgleichGelesen: false })?.retry).toBe(true);
 });

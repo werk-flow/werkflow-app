@@ -125,7 +125,7 @@ export const lieferscheinLesen = defineTool({
       menge: line.menge,
       einheit: documentText(line.einheit),
       packungsinhalt: line.packungsinhalt,
-      abgleich: matches?.[index] ?? null,
+      abgleich: matches?.lines[index] ?? null,
     }));
     const value = (kept: number) => ({
       hinweis: 'KI-Entwurf: aus dem Dokument gelesen, von niemandem geprüft und nicht gebucht.',
@@ -135,6 +135,8 @@ export const lieferscheinLesen = defineTool({
       positionen: lines.slice(0, kept),
       // The lines stand unmatched when the articles could not be read.
       abgleichGelesen: matches !== null,
+      // Counted over every line, also those the result budget leaves off.
+      katalogGelesen: matches?.catalogRead ?? true,
       // Null when the count of left-out lines is unknown.
       weggelassenePositionen:
         lieferschein.weggelassen === null ? null : lieferschein.weggelassen + lines.length - kept,

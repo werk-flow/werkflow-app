@@ -604,4 +604,5 @@ async function readWith(
   assert.equal(output.includes('4711'), false, 'no catalog price may reach the model');
   assert.equal(output.includes('Fremder Katalog'), false, "another organization's catalog must never match");
   assert.equal(output.includes('ignoriere'), false, 'an old free-text unit must never reach the model');
+  assert.match(output, /"katalogGelesen":true/, 'a read catalog is marked as read');
 }

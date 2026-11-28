@@ -34,6 +34,7 @@ const resultSchema = z.object({
   // Null when the extractor could not say how many lines it left out.
   weggelassenePositionen: z.number().nullable(),
   abgleichGelesen: z.boolean(),
+  katalogGelesen: z.boolean(),
 });
 
 /** The German words of a match's problem codes (lib/inventory/delivery-matching.ts). */
@@ -88,9 +89,7 @@ export function lieferscheinCard(result: unknown): LieferscheinCard | null {
     facts: dotted([read.lieferant?.text, read.datum && formatDate(read.datum)]),
     left: read.weggelassenePositionen,
     matched: read.abgleichGelesen,
-    retry:
-      !read.abgleichGelesen ||
-      read.positionen.some((line) => line.abgleich?.hinweise.includes('katalog_nicht_gelesen')),
+    retry: !read.abgleichGelesen || !read.katalogGelesen,
     lines: read.positionen.map((line) => {
       // Quantity, unit and pack content each show when read, also without the others.
       const quantity = [

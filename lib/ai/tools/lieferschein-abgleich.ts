@@ -38,14 +38,15 @@ async function catalogMatch(ctx: ActionContext, number: string, signal: AbortSig
 
 /**
  * Each line's match as the model and the card read it: the own article and its
- * base quantity, or the catalog article, and the problems by code. Null when
- * the articles could not be read: the lines then stand unmatched.
+ * base quantity, or the catalog article, and the problems by code, and whether
+ * every catalog lookup could be read. Null when the articles could not be
+ * read: the lines then stand unmatched.
  */
 export async function matchedLines(
   ctx: ActionContext,
   lines: Lieferschein['positionen'],
   signal: AbortSignal,
-): Promise<ToolValue[] | null> {
+): Promise<{ lines: ToolValue[]; catalogRead: boolean } | null> {
   const articles = await readDeliveryArticles(
     createSupabaseAdminClient(),
     ctx.orgId,
@@ -75,7 +76,8 @@ export async function matchedLines(
       looked.map(async ({ index, number }) => [index, await catalogMatch(ctx, number, signal)] as const),
     ),
   );
-  return matches.map((match, index) => {
+  const catalogRead = [...catalog.values()].every((hit) => hit?.hinweis !== 'katalog_nicht_gelesen');
+  const matchedLines = matches.map((match, index) => {
     const hit = catalog.get(index);
     return {
       artikel: match.article && {
@@ -94,4 +96,5 @@ export async function matchedLines(
           : [...match.problems, hit.hinweis],
     };
   });
+  return { lines: matchedLines, catalogRead };
 }
