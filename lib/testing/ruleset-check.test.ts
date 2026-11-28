@@ -158,3 +158,29 @@ test('an answer without the caller’s bypass, or one that is no JSON, proves no
   writeFileSync(join(stub, 'gh'), '#!/usr/bin/env bash\necho \'{"rules": [\'\n');
   expect(check(liveMain(), liveProduction()).status).toBe(2);
 });
+
+test('a rule whose value has an unexpected shape proves nothing (exit 2), never drift', () => {
+  const shaped = liveMain();
+  shaped.rules = shaped.rules.map((rule) =>
+    rule.type === 'merge_queue'
+      ? { type: 'merge_queue', parameters: { grouping_strategy: ['ALLGREEN'] } }
+      : rule,
+  );
+  // jq cannot index a string: the merge queue's parameters arrive as one.
+  const raw = JSON.stringify(shaped).replace('{"grouping_strategy":["ALLGREEN"]}', '"squash"');
+  writeFileSync(join(stub, '25878425.json'), raw);
+  writeFileSync(join(stub, '25878432.json'), JSON.stringify(liveProduction()));
+  const result = spawnSync('bash', [script], {
+    encoding: 'utf8',
+    env: {
+      NODE_ENV: 'test',
+      PATH: `${stub}:${process.env.PATH}`,
+      STUB: stub,
+      GH_TOKEN: 'job-token',
+      GH_REPO: 'werk-flow/werkflow-app',
+    },
+  });
+  const output = `${result.stdout}${result.stderr}`;
+  expect(result.status, output).toBe(2);
+  expect(output).toContain('unexpected shape');
+});

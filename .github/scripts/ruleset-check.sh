@@ -30,11 +30,12 @@ for name in main production; do
 done
 
 # Adds "<name>: <expectation>" to the drift when the jq check is not true.
+# A check jq cannot evaluate, such as on a value of an unexpected type, proves nothing: exit 2.
 expect() {
-  local ruleset="$1" name="$2" text="$3" check="$4"
-  if test "$(jq -r "def rule(\$type): [.rules[] | select(.type == \$type)][0]; ${check}" <<< "$ruleset")" != true; then
-    drift+=("${name}: ${text}")
-  fi
+  local ruleset="$1" name="$2" text="$3" check="$4" verdict
+  verdict="$(jq -r "def rule(\$type): [.rules[] | select(.type == \$type)][0]; ${check}" <<< "$ruleset" 2> /dev/null)" \
+    || { echo "::error::The ${name} ruleset has a value of an unexpected shape where it ${text}."; exit 2; }
+  test "$verdict" = true || drift+=("${name}: ${text}")
 }
 
 for name in main production; do
