@@ -51,6 +51,8 @@ export type ToolCalls = {
   asked: boolean;
   /** Bytes of the results the model read so far, against the turn's `maxToolResultBytes`. */
   resultBytes: number;
+  /** A result was refused for the cap: no later result of the turn joins the context. */
+  resultsFull: boolean;
   /** Model calls the tools started, against the turn's `maxToolModelCalls`. */
   modelCalls: number;
   /** The tools' model calls still running: the run settles only after each one is ledgered. */
@@ -70,6 +72,7 @@ export function newToolCalls(): ToolCalls {
     pending: new Map(),
     asked: false,
     resultBytes: 0,
+    resultsFull: false,
     modelCalls: 0,
     runningModelCalls: new Set(),
     costUnrecorded: false,
@@ -203,26 +206,34 @@ async function currentCaller(command: AiTurnCommand): Promise<ActionContext | nu
  */
 export function toolRunFor(
   context: ToolCallRun,
+  tool: AiTool,
   hooks: {
     signal: AbortSignal;
     progress: () => void;
-    /** Reads the turn's gate again (switch, stop, access): whether a model call may start now. */
-    admit: () => Promise<boolean>;
+    /** Reads the turn's gate again (switch, stop, access): whether the turn may take a model step now. */
+    gate: () => Promise<boolean>;
     record: (key: string, usage: AiTokenUsage, outcome: string, promptVersion: string) => Promise<boolean>;
   },
 ): AiToolRun {
   const { toolCalls } = context;
   const canCallModel = () =>
     toolCalls.modelCalls < AI_TURN_LIMITS[context.command.entryPoint].maxToolModelCalls;
+  // A member lowered or suspended while the tool read sends nothing more (B5).
+  const admit = async () => {
+    if (hooks.signal.aborted || !(await hooks.gate())) return false;
+    const caller = await currentCaller(context.command).catch(() => null);
+    return caller !== null && tool.roles.includes(caller.role) && !hooks.signal.aborted;
+  };
   return {
     threadId: context.command.threadId,
     signal: hooks.signal,
     progress: hooks.progress,
     canCallModel,
+    admit,
     async modelCall<T>(call: (record: AiModelCallRecord) => Promise<T>): Promise<T | 'over_cap' | 'stopped'> {
       if (!canCallModel()) return 'over_cap';
-      // A stop, a lost thread or a switch that landed while the tool read never reaches a paid call.
-      if (hooks.signal.aborted || !(await hooks.admit()) || hooks.signal.aborted) return 'stopped';
+      // A stop, a lost thread, a switch or a lowered role that landed meanwhile never reaches a paid call.
+      if (!(await admit())) return 'stopped';
       if (!canCallModel()) return 'over_cap';
       toolCalls.modelCalls += 1;
       const key = `${context.runKey}:model-call:${toolCalls.modelCalls}`;
@@ -252,12 +263,15 @@ const outputBytes = (output: ToolResultPart['output']): number =>
  * (lib/ai/turn.ts).
  */
 function withinResultCap(context: ToolCallRun, result: AiToolResult): AiToolResult {
+  const { toolCalls } = context;
   if (result.status !== 'ok') return result;
   const cap = AI_TURN_LIMITS[context.command.entryPoint].maxToolResultBytes;
   const bytes = outputBytes(untrustedToolOutput(result.value));
-  return context.toolCalls.resultBytes + bytes > cap
-    ? { status: 'refused', message: TOOL_RESULTS_FULL }
-    : result;
+  if (!toolCalls.resultsFull && toolCalls.resultBytes + bytes <= cap) return result;
+  // The sentence goes once; every later call past the cap reads the bare status (`toolFramingBytes`).
+  const first = !toolCalls.resultsFull;
+  toolCalls.resultsFull = true;
+  return first ? { status: 'refused', message: TOOL_RESULTS_FULL } : { status: 'refused' };
 }
 
 /** What the model reads of a call, counted against the turn's result cap. */

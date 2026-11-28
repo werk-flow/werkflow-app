@@ -40,3 +40,25 @@ export function costMicroUsd(usage: AiTokenUsage, price: ModelPrice): number {
       usage.outputTokens * rate.output);
   return Math.ceil(nanoUsd / 1000);
 }
+
+/** The usage of one finished step as the AI SDK reports it. */
+type StreamUsage = {
+  inputTokens: number | undefined;
+  inputTokenDetails: {
+    noCacheTokens: number | undefined;
+    cacheReadTokens: number | undefined;
+    cacheWriteTokens: number | undefined;
+  };
+  outputTokens: number | undefined;
+};
+
+/** A step's reported usage split the way it is priced, or null when the provider reported none. */
+export function reportedUsage(usage: StreamUsage): AiTokenUsage | null {
+  if (usage.inputTokens === undefined || usage.outputTokens === undefined) return null;
+  const cacheReadTokens = usage.inputTokenDetails.cacheReadTokens ?? 0;
+  const cacheWriteTokens = usage.inputTokenDetails.cacheWriteTokens ?? 0;
+  const inputTokens =
+    usage.inputTokenDetails.noCacheTokens ??
+    Math.max(0, usage.inputTokens - cacheReadTokens - cacheWriteTokens);
+  return { inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens: usage.outputTokens };
+}

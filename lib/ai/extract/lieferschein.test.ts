@@ -11,15 +11,16 @@ const line = {
   einheit: 'Stange',
   packungsinhalt: null,
 };
-const answer = {
+const fields = {
   lieferant: 'GC Großhandel',
   lieferscheinnummer: 'LS-1187',
   datum: '2026-11-20',
   positionen: [line],
 };
+const answer = { ...fields, weiterePositionen: 0 };
 
 test('a Lieferschein of the schema keeps its fields', () => {
-  expect(cappedLieferschein(answer)).toEqual({ ...answer, weggelassen: 0 });
+  expect(cappedLieferschein(answer)).toEqual({ ...fields, weggelassen: 0 });
 });
 
 test('a field that does not fit is none, and a long text is cut by code point', () => {
@@ -65,7 +66,23 @@ test('the lines the model reports as left out are counted with those past the ca
   expect(cappedLieferschein({ ...answer, weiterePositionen: 12 })?.weggelassen).toBe(12);
   const lines = Array.from({ length: AI_EXTRACT_LIMITS.maxLines + 2 }, () => line);
   expect(cappedLieferschein({ ...answer, positionen: lines, weiterePositionen: 3 })?.weggelassen).toBe(5);
-  expect(cappedLieferschein({ ...answer, weiterePositionen: -1 })?.weggelassen).toBe(0);
+});
+
+test('a count of left-out lines the model did not give or gave wrong stays unknown', () => {
+  expect(cappedLieferschein({ ...answer, weiterePositionen: -1 })?.weggelassen).toBeNull();
+  expect(cappedLieferschein(fields)?.weggelassen).toBeNull();
+});
+
+test('an answer of empty fields reads as nothing: no draft without content', () => {
+  expect(
+    cappedLieferschein({
+      lieferant: ' ',
+      lieferscheinnummer: null,
+      datum: 'gestern',
+      positionen: [],
+      weiterePositionen: 0,
+    }),
+  ).toBeNull();
 });
 
 test('an answer that is no Lieferschein of the schema reads as nothing', () => {

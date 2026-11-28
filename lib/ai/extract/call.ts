@@ -3,8 +3,8 @@ import 'server-only';
 import { Output, asSchema, streamText } from 'ai';
 
 import { acceptedByProvider, classifyAttemptFailure } from '@/lib/ai/attempt-failure';
-import type { AiTokenUsage } from '@/lib/ai/cost';
-import { AI_EXTRACT_LIMITS, inputTokenCeiling } from '@/lib/ai/limits';
+import { type AiTokenUsage, reportedUsage } from '@/lib/ai/cost';
+import { AI_EXTRACT_LIMITS } from '@/lib/ai/limits';
 import {
   type AiDocument,
   type AiModel,
@@ -46,29 +46,8 @@ export type ExtractionResult =
   | { status: 'stopped' }
   | { status: 'failed' };
 
-type StreamUsage = {
-  inputTokens: number | undefined;
-  inputTokenDetails: { cacheReadTokens: number | undefined; cacheWriteTokens: number | undefined };
-  outputTokens: number | undefined;
-};
-
-function reportedUsage(usage: StreamUsage): AiTokenUsage | null {
-  if (usage.inputTokens === undefined || usage.outputTokens === undefined) return null;
-  const cacheReadTokens = usage.inputTokenDetails.cacheReadTokens ?? 0;
-  const cacheWriteTokens = usage.inputTokenDetails.cacheWriteTokens ?? 0;
-  return {
-    inputTokens: Math.max(0, usage.inputTokens - cacheReadTokens - cacheWriteTokens),
-    cacheReadTokens,
-    cacheWriteTokens,
-    outputTokens: usage.outputTokens,
-  };
-}
-
-/**
- * Anthropic adds a system prompt for a structured output's schema, which its
- * token count of the document does not hold; this covers it with room to spare.
- */
-const STRUCTURED_OUTPUT_HEADROOM_TOKENS = 2_000;
+/** Room above the provider's count, which estimates the request it would bill. */
+const COUNT_MARGIN_TOKENS = 1_000;
 
 type Streamed = {
   text: string;
@@ -183,21 +162,24 @@ async function ledgeredExtraction(
 export async function runExtraction(
   spec: ExtractionSpec,
   document: AiDocument,
-  run: Pick<AiToolRun, 'signal' | 'progress' | 'modelCall'>,
+  run: Pick<AiToolRun, 'signal' | 'progress' | 'admit' | 'modelCall'>,
 ): Promise<ExtractionResult> {
   const model = resolveAiModel();
   const countTokens = resolveAiTokenCounter();
   if (model === 'unavailable' || countTokens === 'unavailable' || !isAllowedModel(model)) {
     return { status: 'failed' };
   }
-  const counted = await countTokens({ document, system: spec.instructions, text: spec.request }, run.signal);
+  // The count sends the document to the provider too: only for a turn and a caller that may still use it.
+  if (!(await run.admit())) return { status: 'stopped' };
+  const schema = await asSchema(spec.schema).jsonSchema;
+  const counted = await countTokens(
+    { document, system: spec.instructions, text: spec.request, schema },
+    run.signal,
+  );
   if (run.signal.aborted) return { status: 'stopped' };
   if (counted === 'failed') return { status: 'failed' };
   if (counted === 'refused') return { status: 'unreadable' };
-  // The schema at one token per byte, and the provider's prompt for it.
-  const schema = JSON.stringify(await asSchema(spec.schema).jsonSchema);
-  const inputTokens = counted + inputTokenCeiling(schema) + STRUCTURED_OUTPUT_HEADROOM_TOKENS;
-  if (inputTokens > AI_EXTRACT_LIMITS.maxInputTokens) return { status: 'too_long' };
+  if (counted + COUNT_MARGIN_TOKENS > AI_EXTRACT_LIMITS.maxInputTokens) return { status: 'too_long' };
   const called = await run.modelCall((record) => ledgeredExtraction(model, spec, document, run, record));
   if (called === 'over_cap' || called === 'stopped') return { status: called };
   return called;

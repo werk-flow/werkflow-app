@@ -61,6 +61,11 @@ export type AiToolRun = {
   /** Whether the turn has a model call left: a tool checks it before it reads what it would send. */
   canCallModel: () => boolean;
   /**
+   * Reads the turn's gate (switch, stop, access) and the caller's role again:
+   * whether the tool may send anything to a model now. `modelCall` reads it too.
+   */
+  admit: () => Promise<boolean>;
+  /**
    * Runs one model call of the tool, such as the quarantined extractor's, under
    * the turn's cap and its reservation; `call` ledgers it through `record`, and
    * the run settles only after `call` ended. `over_cap` when the turn has no call

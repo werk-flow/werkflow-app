@@ -81,21 +81,30 @@ const lieferscheinSchema = z.object({
 
 type LieferscheinLine = z.infer<typeof line>;
 
-/** A read Lieferschein: its capped fields, the lines up to the cap, and how many lines were left out. */
+/**
+ * A read Lieferschein: its capped fields, the lines up to the cap, and how
+ * many lines were left out, null when the model's count is unknown.
+ */
 export type Lieferschein = Omit<z.infer<typeof lieferscheinSchema>, 'positionen' | 'weiterePositionen'> & {
   positionen: LieferscheinLine[];
-  weggelassen: number;
+  weggelassen: number | null;
 };
 
-/** The capped fields of the extractor's answer, or null when it is no Lieferschein of the schema. */
+/**
+ * The capped fields of the extractor's answer, or null when it is no
+ * Lieferschein of the schema or nothing of one survived the caps.
+ */
 export function cappedLieferschein(answer: unknown): Lieferschein | null {
   const parsed = lieferscheinSchema.safeParse(answer);
   if (!parsed.success) return null;
   const { positionen, weiterePositionen, ...fields } = parsed.data;
+  if (!fields.lieferant && !fields.lieferscheinnummer && !fields.datum && positionen.length === 0)
+    return null;
   // The model counts the lines it left out; a longer list than asked is cut here and counted too.
+  const cut = Math.max(0, positionen.length - AI_EXTRACT_LIMITS.maxLines);
   return {
     ...fields,
     positionen: positionen.slice(0, AI_EXTRACT_LIMITS.maxLines),
-    weggelassen: (weiterePositionen ?? 0) + Math.max(0, positionen.length - AI_EXTRACT_LIMITS.maxLines),
+    weggelassen: weiterePositionen === null ? null : weiterePositionen + cut,
   };
 }

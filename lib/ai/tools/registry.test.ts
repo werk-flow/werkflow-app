@@ -48,6 +48,7 @@ const run = {
   signal: new AbortController().signal,
   progress: () => undefined,
   canCallModel: () => false,
+  admit: async () => false,
   modelCall: async () => 'over_cap' as const,
 };
 

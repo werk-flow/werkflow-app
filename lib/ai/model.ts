@@ -62,8 +62,8 @@ export type AiDocument = {
  */
 export type AiDocumentTokenCount = number | 'refused' | 'failed';
 
-/** A request to count: the document with the call's own instructions and request text. */
-export type AiDocumentRequest = { document: AiDocument; system: string; text: string };
+/** A request to count: the document with the call's own instructions, request text and answer schema. */
+export type AiDocumentRequest = { document: AiDocument; system: string; text: string; schema: object };
 
 const tokenCountSchema = z.object({ input_tokens: z.number().int().nonnegative() });
 
@@ -89,6 +89,8 @@ async function countAnthropicTokens(
         model: AI_MODEL_ID,
         system: request.system,
         messages: [{ role: 'user', content: [block, { type: 'text', text: request.text }] }],
+        // The structured output adds its own prompt, which the count then holds.
+        output_config: { format: { type: 'json_schema', schema: request.schema } },
       }),
       signal,
     });

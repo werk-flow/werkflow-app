@@ -45,6 +45,12 @@ export const AI_TURN_LIMITS = {
      * gets a short refusal the model can read, so the results never outgrow the next step's input cap.
      */
     maxToolResultBytes: 32_000,
+    /**
+     * Bytes the thread leaves free besides the tool results: the steps' own tool
+     * calls and the short refusals past the result cap. The thread drops its
+     * oldest messages until both fit; the input cap still ends a turn past it.
+     */
+    toolFramingBytes: 4_000,
   },
 } as const;
 

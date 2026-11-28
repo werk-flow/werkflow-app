@@ -125,6 +125,7 @@ export const lieferscheinLesen = defineTool({
           einheit: documentText(line.einheit),
           packungsinhalt: line.packungsinhalt,
         })),
+        // Null when the count of left-out lines is unknown.
         weggelassenePositionen: lieferschein.weggelassen,
       },
     };

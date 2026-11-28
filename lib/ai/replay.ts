@@ -2,6 +2,7 @@ import 'server-only';
 
 import { APICallError } from 'ai';
 
+import { AI_EXTRACT_LIMITS } from '@/lib/ai/limits';
 import type { AiDocumentRequest, AiModel } from '@/lib/ai/model';
 import { z } from '@/lib/zod';
 
@@ -88,6 +89,18 @@ const slowSteps = (count: number): string[] =>
     { length: count },
     (_, index) => `Schritt ${index + 1}: Druck am Manometer prüfen und notieren. `,
   );
+
+/** Calls the tool the message names once in each of `steps` steps, then answers. */
+function repeatedToolCall(steps: number): ReplayAttempt[] {
+  return Array.from(
+    { length: steps },
+    (_, step): ReplayAttempt =>
+      (userText) => {
+        const call = requestedToolCall(userText, `call-${step + 1}`);
+        return call ? [call, finish('tool-calls', 1100, 30)] : [finish('stop', 900, 0)];
+      },
+  ).concat(() => [...textParts('Erledigt.'), finish('stop', 1300, 20)]);
+}
 
 const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
   antwort: [answer],
@@ -234,15 +247,9 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
     () => [...textParts('Erledigt.'), finish('stop', 1300, 20)],
   ],
   // Calls the named tool in two steps, so a change between them reaches the second call.
-  zweimal: [1, 2]
-    .map(
-      (step): ReplayAttempt =>
-        (userText) => {
-          const call = requestedToolCall(userText, `call-${step}`);
-          return call ? [call, finish('tool-calls', 1100, 30)] : [finish('stop', 900, 0)];
-        },
-    )
-    .concat(() => [...textParts('Erledigt.'), finish('stop', 1300, 20)]),
+  zweimal: repeatedToolCall(2),
+  // The same in three steps: the third call comes after the turn's results are full.
+  dreimal: repeatedToolCall(3),
   // Reads the latest file three times in one step: the third read is past the turn's model-call cap.
   'drei-lieferscheine': [
     () => [
@@ -363,9 +370,6 @@ function extraction(fields: object, deltas = 4): StreamPart[] {
   return [...textParts(...pieces.filter(Boolean)), finish('stop', 2400, 300)];
 }
 
-/** The extractor's output cap, which a cut answer reports as used. */
-const AI_EXTRACT_OUTPUT_CAP = 8_192;
-
 const LIEFERSCHEIN = {
   lieferant: 'GC Großhandel Stuttgart',
   lieferscheinnummer: 'LS-2026-1187',
@@ -425,7 +429,7 @@ const EXTRACTIONS: Readonly<Record<string, () => StreamPart[]>> = {
   abgeschnitten: () => [
     ...textParts('{"lieferant":"GC Großhandel","positionen":[{"artikelnummer":"GC-1'),
     {
-      ...finish('stop', 2400, AI_EXTRACT_OUTPUT_CAP),
+      ...finish('stop', 2400, AI_EXTRACT_LIMITS.maxOutputTokens),
       finishReason: { unified: 'length', raw: 'max_tokens' },
     },
   ],
@@ -454,10 +458,10 @@ function replayExtraction(bytes: Uint8Array): { name: string; parts: StreamPart[
 /**
  * The replay's stand-in for the provider's token count: 1,800 tokens per page
  * object a PDF really holds, whatever page count it declares, 1,600 per image,
- * and one per byte of the instructions and request.
+ * and one per byte of the instructions, request and schema.
  */
-export function countReplayDocumentTokens({ document, system, text }: AiDocumentRequest): number {
-  const framing = Buffer.byteLength(system + text, 'utf8');
+export function countReplayDocumentTokens({ document, system, text, schema }: AiDocumentRequest): number {
+  const framing = Buffer.byteLength(system + text + JSON.stringify(schema), 'utf8');
   if (document.mimeType !== 'application/pdf') return framing + 1_600;
   return framing + (documentText(document.bytes).match(/\/Type\s*\/Page(?![A-Za-z])/g)?.length ?? 0) * 1_800;
 }

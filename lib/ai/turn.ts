@@ -3,7 +3,7 @@ import 'server-only';
 import { type ModelMessage, type ToolSet, streamText } from 'ai';
 
 import { type AiContext, type AiThreadMessage, buildAiContext, serializedInput } from '@/lib/ai/context';
-import { AI_MODEL_PRICE, type AiTokenUsage, costMicroUsd } from '@/lib/ai/cost';
+import { AI_MODEL_PRICE, type AiTokenUsage, costMicroUsd, reportedUsage } from '@/lib/ai/cost';
 import {
   AI_TURN_LIMITS,
   AI_UPLOAD_LIMITS,
@@ -383,8 +383,8 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
       const modelContext = await buildAiContext({
         tools: aiToolsFor(command.role),
         thread: [...history, { role: 'user', text: command.text }],
-        // The thread leaves room for the turn's tool results, which share their own cap.
-        inputTokenCap: limits.maxInputTokens - limits.maxToolResultBytes,
+        // The thread leaves room for the turn's tool results, which share their own cap, and their framing.
+        inputTokenCap: limits.maxInputTokens - limits.maxToolResultBytes - limits.toolFramingBytes,
       });
       end = await runSteps({ ...context, modelContext, turnSignal, toolCalls }, answer);
     }
@@ -660,7 +660,7 @@ async function runAttempt(
         // The provider accepted the request: from here on it bills the prompt.
         started = true;
       } else if (part.type === 'finish-step') {
-        usage = tokenUsage(part.usage);
+        usage = reportedUsage(part.usage);
         finishReason = part.finishReason;
       } else if (part.type === 'error') {
         return fail(part.error);
@@ -710,26 +710,6 @@ function savePartial(context: RunContext, answer: Answer): void {
     if (error) haltOnRefusal(context, answer, error.message);
     answer.saving = null;
   })();
-}
-
-type StreamUsage = {
-  inputTokens: number | undefined;
-  inputTokenDetails: {
-    noCacheTokens: number | undefined;
-    cacheReadTokens: number | undefined;
-    cacheWriteTokens: number | undefined;
-  };
-  outputTokens: number | undefined;
-};
-
-function tokenUsage(usage: StreamUsage): AiTokenUsage | null {
-  if (usage.inputTokens === undefined || usage.outputTokens === undefined) return null;
-  const cacheReadTokens = usage.inputTokenDetails.cacheReadTokens ?? 0;
-  const cacheWriteTokens = usage.inputTokenDetails.cacheWriteTokens ?? 0;
-  const inputTokens =
-    usage.inputTokenDetails.noCacheTokens ??
-    Math.max(0, usage.inputTokens - cacheReadTokens - cacheWriteTokens);
-  return { inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens: usage.outputTokens };
 }
 
 /**
@@ -786,11 +766,11 @@ function prepareStep(context: RunContext, answer: Answer): ToolSet {
   const { tools } = context.modelContext;
   const offered = context.toolCalls.tainted ? tools.filter((tool) => !tool.writesMemory) : tools;
   return toToolSet(offered, (tool, input, toolCallId, signal) => {
-    const run = toolRunFor(context, {
+    const run = toolRunFor(context, tool, {
       signal: AbortSignal.any([context.turnSignal, answer.halt.signal, ...(signal ? [signal] : [])]),
       // A long read's progress saves the answer as a stream part does, so a stop or a lost thread aborts it.
       progress: () => savePartial(context, answer),
-      admit: async () => (await readStepGate(context, answer, context.turnSignal)) === 'open',
+      gate: async () => (await readStepGate(context, answer, context.turnSignal)) === 'open',
       record: (key, ...attempt) => recordAttempt(context, key, ...attempt),
     });
     return runTool(context, tool, input, toolCallId, run);

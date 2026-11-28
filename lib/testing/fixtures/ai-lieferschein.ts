@@ -7,8 +7,16 @@ import { mock } from 'bun:test';
 import { installInMemoryBucket } from './in-memory-bucket';
 import { AI_MODEL_PRICE, costMicroUsd } from '@/lib/ai/cost';
 import { AI_EXTRACT_LIMITS, maxTurnCostMicroUsd } from '@/lib/ai/limits';
-import { signInAs, tableRows } from './action-boundary-world';
-import { postTurn, readTurn, resetAiTables, stopAnswer, toolCallOutcomes } from './ai-turn-world';
+import { CALLER_ID, ORGANIZATION_A, signInAs, tableRows } from './action-boundary-world';
+import {
+  THREAD_ID,
+  appendItem,
+  postTurn,
+  readTurn,
+  resetAiTables,
+  stopAnswer,
+  toolCallOutcomes,
+} from './ai-turn-world';
 import { installAiToolWorld, toolResults } from './ai-tool-world';
 import {
   attachFile,
@@ -65,12 +73,15 @@ async function readWith(
   file: Parameters<typeof attachFile>[2],
   transcript = 'werkzeug',
   role: 'admin' | 'buero' = 'buero',
+  /** What lands while the turn runs, set after the reset. */
+  meanwhile: () => void = () => undefined,
 ) {
   resetAiTables(world);
   signInAs(world, role);
   world.tables.ai_thread_files = [];
   world.rpcCalls.length = 0;
   attachFile(world, bucket, file);
+  meanwhile();
   return readTurn(world, await postTurn(`[replay:${transcript}] ${READ}`));
 }
 
@@ -208,6 +219,32 @@ async function readWith(
   assert.deepEqual(toolCallOutcomes(world), ['tool_call_lieferschein_lesen_failed']);
 }
 
+// A member suspended while the tool reads the file sends nothing to the provider, not even to its
+// free token count; one lowered to employee while the document is counted starts no paid call.
+{
+  const get = bucket.get.bind(bucket);
+  bucket.get = (key) => {
+    world.memberships = [{ orgId: ORGANIZATION_A, role: 'buero', accessState: 'suspended' }];
+    return get(key);
+  };
+  await readWith({ body: lieferscheinPdf('sauber'), mimeType: PDF, pages: 1 });
+  bucket.get = get;
+  assert.equal(world.documentCounts, 0, 'a suspended member’s document must never reach the token count');
+  assert.equal(extractionRequests(world).length, 0);
+  await readWith({ body: lieferscheinPdf('sauber'), mimeType: PDF, pages: 1 }, 'werkzeug', 'buero', () => {
+    world.onDocumentCount = () => {
+      world.memberships = [{ orgId: ORGANIZATION_A, role: 'employee' }];
+    };
+  });
+  assert.equal(world.documentCounts, 1);
+  assert.equal(
+    extractionRequests(world).length,
+    0,
+    'a member lowered to employee must start no paid extraction',
+  );
+  assert.deepEqual(modelCallRows(), []);
+}
+
 // Three reads in one step: the turn's model-call cap refuses the third before it calls the model.
 {
   await readWith({ body: lieferscheinPdf('sauber'), mimeType: PDF, pages: 1 }, 'drei-lieferscheine');
@@ -229,9 +266,10 @@ async function readWith(
   let rowsAtSettlement: number | null = null;
   world.rpc = (call) => {
     const item = answerItem();
-    // The extraction's ledger row lands late; the settlement must wait for it.
+    // The extraction's ledger row lands only after every pending piece of work of the turn ran:
+    // a turn that did not wait for it would have settled by then.
     if (call.name === 'record_ai_run_attempt' && String(call.args.p_idempotency_key).includes(':model-call:'))
-      return new Promise((resolve) => setTimeout(() => resolve(answer(call)), 300));
+      return new Promise((resolve) => setImmediate(() => resolve(answer(call))));
     if (call.name === 'settle_ai_run') rowsAtSettlement = modelCallRows().length;
     if (
       call.name === 'update_ai_thread_item' &&
@@ -271,15 +309,40 @@ async function readWith(
   assert.equal(chatRequests(world).length, 1, 'a stopped turn starts no further step');
 }
 
-// The tool results of one turn share one cap: a call past it gets a refusal the model reads.
+// The tool results of one turn share one cap, and a long thread leaves their room: with the history
+// at the input cap, two large results still fit the next steps, the call past the cap reads the
+// refusal's sentence, and a later one only its status.
 {
   resetAiTables(world);
   signInAs(world, 'buero');
   const call = JSON.stringify({ name: 'gross_lesen', input: {} });
-  await readTurn(world, await postTurn(`[replay:zweimal] ${call}`));
-  assert.deepEqual(toolCallOutcomes(world), ['tool_call_gross_lesen_ok', 'tool_call_gross_lesen_refused']);
-  assert.deepEqual(toolResults(chatRequests(world).at(-1)).at(-1)?.output, {
-    type: 'json',
-    value: { status: 'refused', meldung: TOOL_RESULTS_FULL },
-  });
+  // Earlier messages that alone fill the input cap.
+  for (let index = 0; index < 20; index += 1)
+    appendItem(
+      world,
+      { p_thread_id: THREAD_ID, p_organization_id: ORGANIZATION_A },
+      index % 2 === 0 ? 'user_message' : 'assistant_message',
+      'complete',
+      { text: 'Rohr '.repeat(600) },
+      `history:${index}`,
+    );
+  world.tables.ai_threads = [
+    { id: THREAD_ID, organization_id: ORGANIZATION_A, user_id: CALLER_ID, title: 'Lang' },
+  ];
+  const events = await readTurn(world, await postTurn(`[replay:dreimal] ${call}`));
+  assert.deepEqual(
+    events.at(-1),
+    { type: 'end', status: 'complete' },
+    'the turn must finish within its input cap',
+  );
+  assert.deepEqual(toolCallOutcomes(world), [
+    'tool_call_gross_lesen_ok',
+    'tool_call_gross_lesen_refused',
+    'tool_call_gross_lesen_refused',
+  ]);
+  const outputs = toolResults(chatRequests(world).at(-1)).map((result) => result.output);
+  assert.deepEqual(outputs.slice(-2), [
+    { type: 'json', value: { status: 'refused', meldung: TOOL_RESULTS_FULL } },
+    { type: 'json', value: { status: 'refused' } },
+  ]);
 }
