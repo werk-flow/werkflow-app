@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import type { AiChatFile } from '../../../../lib/ai/thread-types';
 import { testAiOrganizationId } from '../../../../lib/testing/ai-test-organization';
 import {
   createOrganizationWithSettings,
@@ -117,22 +118,26 @@ export async function kiOrganizationFor(world: TestWorld): Promise<KiOrganizatio
 export async function seedKiThread(
   ki: KiOrganization,
   role: KiRole,
-  messages: readonly { role: 'user' | 'assistant'; text: string }[],
+  messages: readonly ({ role: 'user' | 'assistant'; text: string } | { role: 'file'; file: AiChatFile })[],
 ): Promise<string> {
   const admin = createAdminClient();
-  const threadId = seededUuid(`${ki.users[role].id}:${messages.map((message) => message.text).join('|')}`);
+  const texts = messages.map((message) => (message.role === 'file' ? message.file.name : message.text));
+  const threadId = seededUuid(`${ki.users[role].id}:${texts.join('|')}`);
   const author = { p_organization_id: ki.organizationId, p_user_id: ki.users[role].id };
   await admin
-    .rpc('create_ai_thread', { ...author, p_thread_id: threadId, p_title: messages[0]?.text ?? 'Chat' })
+    .rpc('create_ai_thread', { ...author, p_thread_id: threadId, p_title: texts[0] ?? 'Chat' })
     .throwOnError();
   for (const [index, message] of messages.entries()) {
     await admin
       .rpc('append_ai_thread_item', {
         ...author,
         p_thread_id: threadId,
-        p_kind: message.role === 'user' ? 'user_message' : 'assistant_message',
+        p_kind: ({ file: 'file', user: 'user_message', assistant: 'assistant_message' } as const)[
+          message.role
+        ],
         p_status: 'complete',
-        p_body: { text: message.text },
+        // A file item carries only its card's facts: the capture opens no bytes.
+        p_body: message.role === 'file' ? message.file : { text: message.text },
         p_idempotency_key: `seed:${index}`,
       })
       .throwOnError();

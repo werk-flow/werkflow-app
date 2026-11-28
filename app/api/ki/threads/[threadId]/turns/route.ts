@@ -1,6 +1,7 @@
 import { after } from 'next/server';
 
 import { hasVisibleText } from '@/lib/ai/context';
+import { aiMessageFileIds } from '@/lib/ai/files/types';
 import { AI_TURN_LIMITS } from '@/lib/ai/limits';
 import { createKiLiveBroadcast } from '@/lib/ai/live/broadcast';
 import type { AiThreadRow } from '@/lib/ai/thread-types';
@@ -23,6 +24,7 @@ const turnSchema = z.object({
   commandId: uuidSchema,
   // A message of invisible characters alone is empty to the model, so it is refused before it is saved.
   text: z.string().trim().min(1).max(AI_TURN_LIMITS.chat.maxMessageCharacters).refine(hasVisibleText),
+  fileIds: aiMessageFileIds.optional(),
 });
 
 const REFUSAL_STATUS: Readonly<Record<AiTurnRefusal, number>> = {
@@ -31,6 +33,8 @@ const REFUSAL_STATUS: Readonly<Record<AiTurnRefusal, number>> = {
   thread_not_found: 404,
   run_active: 409,
   command_conflict: 409,
+  file_not_found: 409,
+  files_over_cap: 413,
   too_many_turns: 429,
   budget_exhausted: 429,
   unavailable: 503,
@@ -70,13 +74,20 @@ export async function POST(
       commandId: parsed.data.commandId,
       receivedAt,
       text: parsed.data.text,
+      ...(parsed.data.fileIds ? { fileIds: parsed.data.fileIds } : {}),
     });
     if (start.status === 'refused') return refuse(start.refusal, REFUSAL_STATUS[start.refusal]);
     if (start.status === 'already_done')
       return Response.json({ status: 'already_done' }, { headers: privateHeaders });
 
     const stream = createTurnEventStream();
-    stream.send({ type: 'started', userItem: start.userItem, assistantItem: start.assistantItem });
+    stream.send({
+      type: 'started',
+      userItem: start.userItem,
+      assistantItem: start.assistantItem,
+      // Only a message with files names them, so a turn without files sends what it sent before.
+      ...(start.files.length > 0 ? { files: start.files } : {}),
+    });
     const live = createKiLiveBroadcast({
       threadId: threadId.data,
       commandId: parsed.data.commandId,

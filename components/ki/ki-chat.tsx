@@ -39,7 +39,7 @@ function KiIntro(): React.JSX.Element {
 function shownMessages(view: ThreadView | undefined, live: LiveTurn | null): readonly TimelineEntry[] {
   const saved: readonly TimelineEntry[] = view?.window?.messages ?? [];
   if (!live) return saved;
-  const turn = live.started ? [live.user, answerMessage(live)] : [live.user];
+  const turn = live.started ? [...live.files, live.user, answerMessage(live)] : [...live.files, live.user];
   const keys = new Set(turn.map((message) => message.key));
   // The turn's rows stay: they come saved, from its stream and its live channel.
   return [...saved.filter((message) => !keys.has(message.key)), ...turn];
@@ -159,12 +159,13 @@ export function KiChat(props: {
                 onBack={() => openThread(null)}
                 onRetry={show}
                 onLoadOlder={readWindow}
-                onAnswer={(text) => turn.send(text, draft, true)}
+                onAnswer={(text) => turn.send(text, draft, [], true)}
               />
             )}
           </div>
         </PageBody>
         <KiComposer
+          organizationId={props.organizationId}
           draft={draft}
           running={turn.live !== null && turn.live.threadId === threadId}
           stopping={turn.live !== null && turn.live.stoppedAt !== null}

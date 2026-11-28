@@ -8,6 +8,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import type { AiChatMessage, AiThreadRow } from '@/lib/ai/thread-types';
 import { questionAnswer, rowRunning, timelineOrder } from '@/lib/ui/ki-rows';
 import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
+import { KiFileCard } from './ki-file-card';
 import { KiQuestion, KiTodoList, KiToolRow } from './ki-rows';
 
 /** A message in the timeline; `unconfirmed` until the server saved it. */
@@ -17,14 +18,30 @@ export type TimelineMessage = AiChatMessage & { unconfirmed?: boolean };
 export type TimelineEntry = TimelineMessage | AiThreadRow;
 
 const isMessage = (entry: TimelineEntry): entry is TimelineMessage =>
-  entry.role === 'user' || entry.role === 'assistant';
+  entry.role === 'user' || entry.role === 'assistant' || entry.role === 'file';
 
 /**
  * One message. Memo keeps a finished message from rendering again while
  * another one streams; inside a streaming answer only its last block renders
  * (AiMarkdown, brief non-negotiable 3).
  */
-const KiMessage = memo(function KiMessage({ message }: { message: TimelineMessage }) {
+const KiMessage = memo(function KiMessage({
+  organizationId,
+  message,
+}: {
+  organizationId: string;
+  message: TimelineMessage;
+}) {
+  if (message.role === 'file')
+    return (
+      <li {...unconfirmedMarker(message.unconfirmed)}>
+        <KiFileCard
+          organizationId={organizationId}
+          file={message.file}
+          unconfirmed={message.unconfirmed === true}
+        />
+      </li>
+    );
   if (message.role === 'user')
     return (
       <li className="flex justify-end" {...unconfirmedMarker(message.unconfirmed)}>
@@ -106,7 +123,7 @@ export function KiTimeline({
       <ol aria-label="Verlauf" className="space-y-6">
         {timelineOrder(messages).map((entry) =>
           isMessage(entry) ? (
-            <KiMessage key={entry.key} message={entry} />
+            <KiMessage key={entry.key} organizationId={thread.organizationId} message={entry} />
           ) : (
             <KiRow key={entry.key} row={entry} entries={messages} thread={thread} />
           ),

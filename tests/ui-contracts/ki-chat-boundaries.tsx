@@ -15,7 +15,7 @@ import type { AiThreadWindow } from '@/lib/ai/thread-types';
 export { describeTurnRefusal };
 
 type HeldTurn = {
-  calls: { threadId: string; commandId: string; text: string }[];
+  calls: { threadId: string; commandId: string; text: string; fileIds: readonly string[] }[];
   emit: ((event: TurnEvent) => void) | null;
   resolve: ((outcome: TurnOutcome) => void) | null;
   /** Each „Antwort anhalten“ the page sent, and whether the server takes the next one. */
@@ -110,11 +110,17 @@ export function sendTurn(input: {
   threadId: string;
   commandId: string;
   text: string;
+  fileIds?: readonly string[];
   signal: AbortSignal;
   onEvent: (event: TurnEvent) => void;
 }): Promise<TurnOutcome> {
   const held = window.uiContractKiTurn;
-  held.calls.push({ threadId: input.threadId, commandId: input.commandId, text: input.text });
+  held.calls.push({
+    threadId: input.threadId,
+    commandId: input.commandId,
+    text: input.text,
+    fileIds: input.fileIds ?? [],
+  });
   return new Promise((resolve) => {
     held.emit = input.onEvent;
     held.resolve = (outcome) => {

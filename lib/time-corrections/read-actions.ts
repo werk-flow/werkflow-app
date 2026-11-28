@@ -103,9 +103,8 @@ export async function getTimeCorrectionHistoryPage(
   const callerRole = caller.role;
   // The holder lookup answers null for "not responsible" and for a failed
   // read alike; a failed read must not narrow the history silently.
-  if (!(await loadResponsibilityRuntimeState(organizationId))) {
-    return { success: false, error: 'responsibility_load_failed' };
-  }
+  const state = await loadResponsibilityRuntimeState(organizationId);
+  if (!state) return { success: false, error: 'responsibility_load_failed' };
   const holder = await getEffectiveResponsibilityHolderForActor({
     organizationId,
     responsibility: 'time_approval',
@@ -144,6 +143,7 @@ export async function getTimeCorrectionHistoryPage(
     callerUserId: user.id,
     callerRole,
     holder,
+    recordByUser: state.recordByUser,
     roots: selection.data.ids.flatMap((id) => {
       const row = rowById.get(id);
       return row ? [row] : [];

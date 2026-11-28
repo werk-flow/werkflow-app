@@ -6,16 +6,30 @@ import { z } from '@/lib/zod';
 
 export type AiThreadSummary = { id: string; title: string | null; updatedAt: string };
 
-export type AiChatMessage = {
+type AiChatItem = {
   /** The item's idempotency key: the live turn uses it too, so a message keeps its place when it is saved. */
   key: string;
   sequence: number;
-  role: 'user' | 'assistant';
   status: 'streaming' | 'complete' | 'failed' | 'cancelled';
   text: string;
   /** Why an answer ended early, in German; null for a whole answer. */
   failure: string | null;
 };
+
+/** A file in a thread: the person's upload, or a file WerkFlow KI made (a KI-Entwurf until a person takes it). */
+export type AiChatFile = {
+  fileId: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  pages: number | null;
+  origin: 'upload' | 'agent';
+};
+
+/** A typed item of the timeline: a message, or a file whose bytes load only when it is opened. */
+export type AiChatMessage =
+  | (AiChatItem & { role: 'user' | 'assistant' })
+  | (AiChatItem & { role: 'file'; file: AiChatFile });
 
 /** What a tool may do (B1): its row's icon. */
 export type AiToolControl = 'read' | 'draft' | 'confirm';
@@ -26,7 +40,7 @@ export type AiToolOutcome = 'ok' | 'refused' | 'failed' | 'not_run';
 type RowBase = {
   key: string;
   sequence: number;
-  status: AiChatMessage['status'];
+  status: AiChatItem['status'];
   /** Each write of a row raises it: of two copies, the higher one is newer. */
   revision: number;
 };

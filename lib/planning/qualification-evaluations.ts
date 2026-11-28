@@ -46,6 +46,7 @@ async function loadAssignmentContext(input: {
           .eq('organization_id', orgId)
           .eq('job_id', input.jobId)
           .order('created_at')
+          .order('id')
           .limit(101)
       : Promise.resolve({ data: [], error: null }),
     admin

@@ -30,6 +30,14 @@ const WINDOW_MESSAGES = 40;
 const WINDOW_BYTES = 256_000;
 
 const bodySchema = z.object({ text: z.string(), failure: z.string().optional() });
+const fileBodySchema = z.object({
+  fileId: z.string(),
+  name: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
+  pages: z.number().nullable(),
+  origin: z.enum(['upload', 'agent']),
+});
 
 function isTurnFailure(code: string): code is AiTurnFailure {
   return Object.hasOwn(AI_TURN_FAILURE_MESSAGES, code);
@@ -180,6 +188,14 @@ function messageFromItem(item: {
   status: AiThreadEntry['status'];
   body: unknown;
 }): { entry: AiThreadEntry; bytes: number } | null {
+  const base = { key: item.idempotency_key, sequence: item.sequence, status: item.status };
+  if (item.kind === 'file') {
+    // Only the file's name and size come with the thread; its bytes load when it is opened.
+    const file = fileBodySchema.safeParse(item.body);
+    return file.success
+      ? { entry: { ...base, role: 'file', text: '', failure: null, file: file.data }, bytes: 0 }
+      : null;
+  }
   if (item.kind !== 'user_message' && item.kind !== 'assistant_message') {
     const row = rowFromItem(item);
     return row ? { entry: row, bytes: Buffer.byteLength(JSON.stringify(item.body), 'utf8') } : null;
@@ -189,10 +205,8 @@ function messageFromItem(item: {
   return {
     bytes: Buffer.byteLength(text, 'utf8'),
     entry: {
-      key: item.idempotency_key,
-      sequence: item.sequence,
+      ...base,
       role: item.kind === 'user_message' ? 'user' : 'assistant',
-      status: item.status,
       text,
       failure:
         item.status === 'complete' ? null : turnFailureSentence(body.success ? body.data.failure : undefined),

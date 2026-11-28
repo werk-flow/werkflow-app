@@ -3,7 +3,9 @@ import { expect, test } from 'bun:test';
 import type { AiChatMessage, AiQuestionRow, AiThreadEntry, AiToolRow } from '@/lib/ai/thread-types';
 import { questionAnswer, rowRunning, timelineOrder, toolDetailLines } from '@/lib/ui/ki-rows';
 
-const message = (key: string, sequence: number, patch: Partial<AiChatMessage> = {}): AiChatMessage => ({
+type TextMessage = Extract<AiChatMessage, { role: 'user' | 'assistant' }>;
+
+const message = (key: string, sequence: number, patch: Partial<TextMessage> = {}): TextMessage => ({
   key,
   sequence,
   role: key.endsWith(':user') ? 'user' : 'assistant',
