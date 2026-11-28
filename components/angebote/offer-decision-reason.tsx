@@ -134,8 +134,9 @@ function useReasonStep(offer: DecidableOffer, step: keyof typeof STEPS, onClose:
         );
         return;
       }
-      await settle(since);
-      showBanner({ variant: 'success', message: `${offer.offerNumber} ${STEPS[step].banner}` });
+      // A view that did not settle already says so; success shows only for a settled view.
+      if (await settle.confirmChange(since))
+        showBanner({ variant: 'success', message: `${offer.offerNumber} ${STEPS[step].banner}` });
       onClose();
     });
   };

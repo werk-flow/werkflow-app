@@ -180,8 +180,9 @@ function useAcceptOffer(
         );
         return;
       }
-      await settle(since);
-      showBanner({ variant: 'success', message: `Die Annahme von ${offer.offerNumber} ist erfasst.` });
+      // A view that did not settle already says so; success shows only for a settled view.
+      if (await settle.confirmChange(since))
+        showBanner({ variant: 'success', message: `Die Annahme von ${offer.offerNumber} ist erfasst.` });
       onClose();
     });
   };

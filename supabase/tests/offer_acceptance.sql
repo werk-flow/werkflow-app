@@ -231,9 +231,11 @@ from (values
   ('totals that are not the scope''s', format(
     'select pg_temp.accept(%L, 2, gen_random_uuid(), ''{1.2}'', 569000, 108110)', pg_temp.id('rejected')),
     'scope_mismatch'),
-  ('an Annahme dated tomorrow', format(
+  -- Two days ahead: still in the future if Berlin midnight passes between now() (the transaction's
+  -- start) and the RPC's clock_timestamp().
+  ('an Annahme dated in the future', format(
     'select pg_temp.accept(%L, 2, gen_random_uuid(), ''{}'', 569000, 108110, 1, %L)', pg_temp.id('rejected'),
-    (now() at time zone 'Europe/Berlin')::date + 1), 'invalid_input'),
+    (now() at time zone 'Europe/Berlin')::date + 2), 'invalid_input'),
   ('an Annahme dated before the send', format(
     'select pg_temp.accept(%L, 2, gen_random_uuid(), ''{}'', 569000, 108110, 1, %L)', pg_temp.id('rejected'),
     (now() at time zone 'Europe/Berlin')::date - 1), 'invalid_input'),
