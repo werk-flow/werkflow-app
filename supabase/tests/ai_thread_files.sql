@@ -293,9 +293,20 @@ begin
     or pg_temp.send(v_user, v_thread, 'cmd-6', array[v_kept, v_removed]) is distinct from 'command_conflict' then
     raise exception 'A repeat of either command did not match the files it holds';
   end if;
+  -- The command the file left is spent, also with the files its message still holds.
+  if pg_temp.send(v_user, v_thread, 'cmd-6', array[v_removed]) is distinct from 'command_conflict' then
+    raise exception 'A command a changed resend took a file from could start with the files left';
+  end if;
   if (select array_agg(item.id order by item.sequence) from public.ai_thread_items item
       where item.thread_id = v_thread) is distinct from v_items then
     raise exception 'A repeat after the move wrote or removed an item';
+  end if;
+
+  -- Moved on again, the file keeps every command it left spent.
+  if pg_temp.send(v_user, v_thread, 'cmd-11', array[v_kept]) is distinct from 'disabled'
+    or pg_temp.send(v_user, v_thread, 'cmd-6', array[v_removed]) is distinct from 'command_conflict'
+    or pg_temp.send(v_user, v_thread, 'cmd-7', '{}'::uuid[]) is distinct from 'command_conflict' then
+    raise exception 'A second move let a command the file left start again';
   end if;
 
   -- The file left behind moves to no other thread, and to no other person.
