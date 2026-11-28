@@ -112,7 +112,7 @@ function OfferPageHeader({
   offer: OfferWithCosts;
   owners: Awaited<ReturnType<typeof getManagerAssigneeOptions>> | null;
   revisions: OfferRevision[];
-  /** The newest sent revision's content while the customer's decision is open. */
+  /** The newest sent revision's content while the customer's decision is open; null while it cannot be read. */
   content: RevisionContent | null;
 }) {
   // The newest sent revision; a draft is the one after it.
@@ -144,8 +144,10 @@ function OfferPageHeader({
               <StartOfferRevisionButton offer={offer} sentRevision={sentRevision} />
             ) : null}
             {content && revisions[0] && (
+              <AcceptOfferButton offer={offer} revision={revisions[0]} content={content} />
+            )}
+            {sentRevision > 0 && (offer.status === 'gesendet' || offer.status === 'entwurf') && (
               <>
-                <AcceptOfferButton offer={offer} revision={revisions[0]} content={content} />
                 <OfferReasonButton offer={offer} step="abgelehnt" />
                 <OfferReasonButton offer={offer} step="zurueckgezogen" />
               </>

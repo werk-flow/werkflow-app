@@ -87,7 +87,7 @@ function StandingAcceptance({ acceptance }: { acceptance: OfferAcceptance }) {
   );
 }
 
-/** One Titel of the Auftragsumfang: its Positionen with quantity and amount, a chosen option marked. */
+/** One Titel of the Auftragsumfang: its lines with their descriptions, quantity and amount, a chosen option marked. */
 function ScopeSection({ section }: { section: AcceptedScopeSection }) {
   return (
     <div className="space-y-1">
@@ -98,8 +98,13 @@ function ScopeSection({ section }: { section: AcceptedScopeSection }) {
       <ul className="divide-y">
         {section.positions.map((position, index) =>
           position.kind === 'text' ? (
-            <li key={`text-${index}`} className="py-1.5 text-muted-foreground wrap-anywhere">
+            <li key={`text-${index}`} className="py-1.5 wrap-anywhere">
               {position.name}
+              {position.description && (
+                <span className="block whitespace-pre-line text-muted-foreground">
+                  {position.description}
+                </span>
+              )}
             </li>
           ) : (
             <li key={position.number} className="flex justify-between gap-4 py-1.5">
@@ -111,6 +116,11 @@ function ScopeSection({ section }: { section: AcceptedScopeSection }) {
                     <Badge variant="secondary">{`Statt ${position.replaces ?? ''}`}</Badge>
                   )}
                 </span>
+                {position.description && (
+                  <span className="block whitespace-pre-line text-muted-foreground">
+                    {position.description}
+                  </span>
+                )}
                 <span className="block text-muted-foreground tabular-nums">
                   {`${formatQuantity(position.quantity)} ${position.unitLabel}`}
                 </span>

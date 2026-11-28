@@ -147,7 +147,8 @@ begin
     and revision.offer_id = pg_temp.id('accepted') and revision.revision = 1;
   if v_acceptance.id::text is distinct from v_answer ->> 'acceptanceId'
     or v_acceptance.revision is distinct from 1
-    or v_acceptance.accepted_by_name is distinct from 'Erika Musterfrau'
+    -- The name is stored exactly as the office typed it.
+    or v_acceptance.accepted_by_name is distinct from '  Erika Musterfrau '
     or v_acceptance.channel is distinct from 'unterschrift'
     or v_acceptance.chosen_options is distinct from array['1.2', '1.3']
     or v_acceptance.recorded_by is distinct from '38590000-0000-4000-8000-000000000002' then
@@ -344,8 +345,10 @@ $$;
 reset role;
 select pg_temp.expect_refusal(label, statement, 'event_ledger_history_immutable')
 from (values
-  ('change a withdrawal', 'update public.offer_acceptance_withdrawals set reason = ''Anders'''),
-  ('delete a withdrawal', 'delete from public.offer_acceptance_withdrawals')
+  ('change a withdrawal', 'update public.offer_acceptance_withdrawals set reason = ''Anders''
+    where organization_id = ''38590000-0000-4000-8000-000000000010'''),
+  ('delete a withdrawal', 'delete from public.offer_acceptance_withdrawals
+    where organization_id = ''38590000-0000-4000-8000-000000000010''')
 ) attempts(label, statement);
 set local role service_role;
 
@@ -355,15 +358,28 @@ select public.close_offer('38590000-0000-4000-8000-000000000002', '38590000-0000
   pg_temp.id('rejected'), 2, gen_random_uuid(), 'abgelehnt', 'Zu teuer');
 select public.start_offer_revision('38590000-0000-4000-8000-000000000002', '38590000-0000-4000-8000-000000000010',
   pg_temp.id('withdrawn'), 2, gen_random_uuid());
+-- The draft changes only its header: a later validity, another title and opening text.
+select public.update_offer(p_actor_id => '38590000-0000-4000-8000-000000000002',
+  p_organization_id => '38590000-0000-4000-8000-000000000010', p_offer_id => pg_temp.id('withdrawn'),
+  p_expected_version => 3, p_attempt_key => gen_random_uuid(), p_title => 'Neuer Titel', p_site_id => null,
+  p_contact_id => null, p_recipient_client_id => null,
+  p_valid_until => (now() at time zone 'Europe/Berlin')::date + 90, p_opening_text => 'Neue Einleitung',
+  p_closing_text => '', p_owner_user_id => '38590000-0000-4000-8000-000000000002');
 select public.close_offer('38590000-0000-4000-8000-000000000002', '38590000-0000-4000-8000-000000000010',
-  pg_temp.id('withdrawn'), 3, gen_random_uuid(), 'zurueckgezogen', 'Lieferant kann nicht liefern');
+  pg_temp.id('withdrawn'), 4, gen_random_uuid(), 'zurueckgezogen', 'Lieferant kann nicht liefern');
 do $$
 begin
   if (select status from public.offers where id = pg_temp.id('rejected')) is distinct from 'abgelehnt'
     or (select status from public.offers where id = pg_temp.id('withdrawn')) is distinct from 'zurueckgezogen'
     or (select payload from public.offer_events where offer_id = pg_temp.id('withdrawn')
         and event_type = 'draft_closed' and organization_id = '38590000-0000-4000-8000-000000000010')
-      is distinct from '{"revision": 2, "decidedRevision": 1, "cause": "withdrawn", "draftChanged": false}'::jsonb
+      is distinct from '{"revision": 2, "decidedRevision": 1, "cause": "withdrawn", "draftChanged": true}'::jsonb
+    -- The closed draft's title and validity return to what revision 1 printed.
+    or (select (offer.title, offer.valid_until) from public.offers offer
+        where offer.organization_id = '38590000-0000-4000-8000-000000000010' and offer.id = pg_temp.id('withdrawn'))
+      is distinct from (select (revision.title, revision.valid_until) from public.offer_revisions revision
+        where revision.organization_id = '38590000-0000-4000-8000-000000000010'
+          and revision.offer_id = pg_temp.id('withdrawn') and revision.revision = 1)
     or (public.get_offer_decisions('38590000-0000-4000-8000-000000000010', pg_temp.id('rejected')) -> 'closing')
       - 'recordedAt' - 'recordedBy' is distinct from
       '{"outcome": "abgelehnt", "revision": 1, "reason": "Zu teuer"}'::jsonb then
@@ -399,7 +415,7 @@ begin
   if jsonb_array_length(v_decisions -> 'acceptances') is distinct from 2
     or v_decisions #> '{acceptances,0,withdrawal}' is distinct from 'null'::jsonb
     or v_decisions #>> '{acceptances,1,withdrawal,reason}' is distinct from 'Beim falschen Angebot erfasst'
-    or v_decisions #>> '{acceptances,1,acceptedByName}' is distinct from 'Erika Musterfrau'
+    or v_decisions #>> '{acceptances,1,acceptedByName}' is distinct from '  Erika Musterfrau '
     or v_decisions #>> '{acceptances,1,recordedBy,lastName}' is distinct from 'Mustermann'
     or v_decisions -> 'closing' is distinct from 'null'::jsonb
     or public.get_offer_decisions('38590000-0000-4000-8000-000000000011', pg_temp.id('accepted'))

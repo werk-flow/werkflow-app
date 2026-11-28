@@ -202,14 +202,16 @@ export const acceptOfferSchema = z.object({
   /** One key per opening of the dialog: a press repeated after a lost answer gets the first Annahme. */
   attemptKey: uuidSchema,
   revision: z.number().int().positive(),
-  acceptedByName: z.string().trim().min(1).max(200),
+  /** Stored exactly as typed; only a blank name is refused. */
+  acceptedByName: z
+    .string()
+    .max(200)
+    .refine((name) => name.trim() !== ''),
   acceptedOn: z.iso.date(),
   channel: z.enum(ACCEPTANCE_CHANNELS),
   note: z.string().trim().max(2000),
   /** The chosen Bedarfs- and Alternativpositionen by their printed numbers. */
-  chosenOptions: z
-    .array(z.string().regex(/^\d{1,4}\.\d{1,4}$/))
-    .max(OFFER_CONTENT_LIMITS.positionsPerSection),
+  chosenOptions: z.array(z.string().regex(/^\d{1,4}\.\d{1,4}$/)).max(OFFER_CONTENT_LIMITS.positions),
 });
 
 export type AcceptOfferInput = z.input<typeof acceptOfferSchema>;

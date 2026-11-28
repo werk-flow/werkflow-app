@@ -1329,9 +1329,11 @@ end;
 $$;
 
 
--- A sent offer revision (werk-flow/werkflow-planning#383) refuses UPDATE and
--- DELETE: service_role holds no privilege, and the owner meets the history
--- guard. Only the organization's deletion cascades through it, its document too.
+-- A sent offer revision (werk-flow/werkflow-planning#383), its recorded
+-- Annahme and the Annahme's withdrawal (werk-flow/werkflow-planning#385)
+-- refuse UPDATE and DELETE: service_role holds no privilege, and the owner
+-- meets the history guard. Only the organization's deletion cascades through
+-- them, the revision's document too.
 insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
   raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values
 ('5e380000-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated',
@@ -1357,49 +1359,72 @@ insert into public.offer_revisions (organization_id, offer_id, revision, offer_n
  '2037-12-31', '2037-11-26', 'post', '5e380000-0000-4000-8000-000000000020',
  '5e380000-0000-4000-8000-000000000020', 'WEG Ledger', '{}', '[]', 100, 19, 119,
  '5e380000-0000-4000-8000-000000000040');
+insert into public.offer_acceptances (id, organization_id, offer_id, revision, accepted_by_name, accepted_on, channel,
+  scope, net_cents, tax_cents, gross_cents) values
+('5e380000-0000-4000-8000-000000000050', '5e380000-0000-4000-8000-000000000010',
+ '5e380000-0000-4000-8000-000000000030', 1, 'Erika Musterfrau', '2037-11-27', 'telefon', '[]', 100, 19, 119);
+insert into public.offer_acceptance_withdrawals (organization_id, acceptance_id, reason) values
+('5e380000-0000-4000-8000-000000000010', '5e380000-0000-4000-8000-000000000050', 'Irrtum');
 set local role service_role;
 do $$
+declare
+  v_table text;
 begin
-  begin
-    update public.offer_revisions set gross_cents = 0
-    where organization_id = '5e380000-0000-4000-8000-000000000010';
-    raise exception 'service-role offer revision update was accepted';
-  exception when insufficient_privilege then null;
-  end;
-  begin
-    delete from public.offer_revisions where organization_id = '5e380000-0000-4000-8000-000000000010';
-    raise exception 'service-role offer revision delete was accepted';
-  exception when insufficient_privilege then null;
-  end;
+  foreach v_table in array array['offer_revisions', 'offer_acceptances', 'offer_acceptance_withdrawals'] loop
+    begin
+      execute format('update public.%I set created_at = now() where organization_id = %L', v_table,
+        '5e380000-0000-4000-8000-000000000010');
+      raise exception 'service-role % update was accepted', v_table;
+    exception when insufficient_privilege then null;
+    end;
+    begin
+      execute format('delete from public.%I where organization_id = %L', v_table,
+        '5e380000-0000-4000-8000-000000000010');
+      raise exception 'service-role % delete was accepted', v_table;
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
 end;
 $$;
 reset role;
 do $$
+declare
+  v_table text;
 begin
-  begin
-    update public.offer_revisions set gross_cents = 0
-    where organization_id = '5e380000-0000-4000-8000-000000000010';
-    raise exception 'privileged offer revision update was accepted';
-  exception when raise_exception then
-    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
-  end;
-  begin
-    delete from public.offer_revisions where organization_id = '5e380000-0000-4000-8000-000000000010';
-    raise exception 'privileged offer revision delete was accepted';
-  exception when raise_exception then
-    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
-  end;
+  foreach v_table in array array['offer_revisions', 'offer_acceptances', 'offer_acceptance_withdrawals'] loop
+    begin
+      execute format('update public.%I set created_at = now() - interval ''1 day'' where organization_id = %L',
+        v_table, '5e380000-0000-4000-8000-000000000010');
+      raise exception 'privileged % update was accepted', v_table;
+    exception when raise_exception then
+      if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+    end;
+    begin
+      execute format('delete from public.%I where organization_id = %L', v_table,
+        '5e380000-0000-4000-8000-000000000010');
+      raise exception 'privileged % delete was accepted', v_table;
+    exception when raise_exception then
+      if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+    end;
+  end loop;
   if (select gross_cents from public.offer_revisions
       where organization_id = '5e380000-0000-4000-8000-000000000010') is distinct from 119::bigint
-  then raise exception 'the offer revision changed despite the denials'; end if;
+    or (select accepted_by_name from public.offer_acceptances
+      where organization_id = '5e380000-0000-4000-8000-000000000010') is distinct from 'Erika Musterfrau'
+    or (select reason from public.offer_acceptance_withdrawals
+      where organization_id = '5e380000-0000-4000-8000-000000000010') is distinct from 'Irrtum'
+  then raise exception 'an offer revision, Annahme or withdrawal changed despite the denials'; end if;
 end;
 $$;
 delete from public.organizations where id = '5e380000-0000-4000-8000-000000000010';
 do $$
 begin
   if exists (select 1 from public.offer_revisions where organization_id = '5e380000-0000-4000-8000-000000000010')
+    or exists (select 1 from public.offer_acceptances where organization_id = '5e380000-0000-4000-8000-000000000010')
+    or exists (select 1 from public.offer_acceptance_withdrawals
+      where organization_id = '5e380000-0000-4000-8000-000000000010')
     or exists (select 1 from public.documents where organization_id = '5e380000-0000-4000-8000-000000000010')
-  then raise exception 'the organization''s deletion left an offer revision or its document'; end if;
+  then raise exception 'the organization''s deletion left an offer revision, Annahme, withdrawal or document'; end if;
 end;
 $$;
 

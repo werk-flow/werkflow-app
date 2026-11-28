@@ -18,8 +18,9 @@
 --    Auftragsumfang from that revision and the chosen options, checks the
 --    server's totals against it, writes the Annahme, sets „Angenommen“ and
 --    writes the history. An open draft of the next revision is closed in the
---    same call with its own history entry: the customer accepted what was
---    sent. An Annahme after the validity date is recorded; the page derives
+--    same call with its own history entry, and the offer's title, validity
+--    and texts return to what the decided revision printed: the customer
+--    accepted what was sent. An Annahme after the validity date is recorded; the page derives
 --    its hint from the revision's date.
 -- 4. withdraw_offer_acceptance: the standing Annahme gets its withdrawal
 --    row, the offer is „Gesendet“ again, and the history names both.
@@ -48,7 +49,7 @@ create table public.offer_acceptances (
   organization_id uuid not null references public.organizations (id) on delete cascade,
   offer_id uuid not null,
   revision integer not null,
-  -- The accepting person as the office names them; no contact is linked.
+  -- The accepting person exactly as the office typed the name; no contact is linked.
   accepted_by_name text not null,
   accepted_on date not null,
   -- unterschrift, email, telefon or vor_ort.
@@ -120,9 +121,12 @@ create trigger guard_event_ledger_history before update or delete on public.offe
 
 -- The open draft of revision p_sent + 1 of the locked offer p_offer closes
 -- because the customer decided on revision p_sent (p_cause: accepted,
--- rejected or withdrawn). Its history entry says whether the draft held
--- changes since its start: the offer's Positionen then differ from the
--- revision. Its callers check the actor and lock the offer first.
+-- rejected or withdrawn). The title, validity and texts return to what that
+-- revision printed, so the page, the list and „Abgelaufen“ read the decided
+-- revision. Its history entry says whether the draft held changes since its
+-- start, to its header or its Positionen: the Positionen then keep the
+-- unsent ones, since a revision holds no cost to restore. Its callers check
+-- the actor, lock the offer and bump its version after it.
 create function app_private.close_offer_draft(
   p_offer public.offers,
   p_actor_id uuid,
@@ -136,20 +140,30 @@ security invoker
 set search_path to ''
 as $$
 declare
-  v_started_content_version integer;
+  v_started public.offer_events;
+  v_revision public.offer_revisions;
 begin
-  select (event.payload ->> 'contentVersion')::integer into v_started_content_version
-  from public.offer_events event
+  select * into v_started from public.offer_events event
   where event.organization_id = p_offer.organization_id and event.offer_id = p_offer.id
     and event.event_type = 'revision_started'
   order by event.version desc
   limit 1;
+  select * into v_revision from public.offer_revisions revision
+  where revision.organization_id = p_offer.organization_id and revision.offer_id = p_offer.id
+    and revision.revision = p_sent;
+  update public.offers offer set
+    title = v_revision.title,
+    valid_until = v_revision.valid_until,
+    opening_text = coalesce(v_revision.snapshot ->> 'openingText', offer.opening_text),
+    closing_text = coalesce(v_revision.snapshot ->> 'closingText', offer.closing_text)
+  where offer.organization_id = p_offer.organization_id and offer.id = p_offer.id;
   insert into public.offer_events (
     organization_id, offer_id, event_type, status, version, payload, actor_id, attempt_key
   ) values (
     p_offer.organization_id, p_offer.id, 'draft_closed', p_status, p_offer.version + 1,
     jsonb_build_object('revision', p_sent + 1, 'decidedRevision', p_sent, 'cause', p_cause,
-      'draftChanged', p_offer.content_version is distinct from v_started_content_version),
+      'draftChanged', p_offer.version is distinct from v_started.version
+        or p_offer.content_version is distinct from (v_started.payload ->> 'contentVersion')::integer),
     p_actor_id, gen_random_uuid()
   );
 end;
@@ -300,7 +314,7 @@ begin
     organization_id, offer_id, revision, accepted_by_name, accepted_on, channel, note, chosen_options,
     scope, net_cents, tax_cents, gross_cents, recorded_by
   ) values (
-    p_organization_id, p_offer_id, p_revision, btrim(p_accepted_by_name), p_accepted_on, p_channel,
+    p_organization_id, p_offer_id, p_revision, p_accepted_by_name, p_accepted_on, p_channel,
     btrim(p_note), p_chosen_options, v_scope, v_net, (p_totals ->> 'taxCents')::bigint,
     (p_totals ->> 'grossCents')::bigint, p_actor_id
   )
