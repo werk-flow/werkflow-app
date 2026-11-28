@@ -359,6 +359,7 @@ language sql as $$
     ('redeem_organization_invite_for_user(text,uuid)', 'An invite code names its own organization; the caller has none yet'),
     ('prune_realtime_deletions()', 'Maintenance across every organization by age, from no request'),
     ('delete_expired_ai_thread_items()', 'Maintenance across every organization by age, from the daily cron, from no request'),
+    ('delete_unattached_ai_thread_files()', 'Maintenance across every organization by age, from the daily cron, from no request'),
     ('settle_stale_ai_runs()', 'Maintenance across every organization by age, from the cron every five minutes, from no request'),
     ('sync_begun_inventory_item_prices()', 'Maintenance across every organization from the hourly cron, from no request; it syncs each organization''s prices with that organization''s own rows only'),
     ('assert_time_correction_sources_current(uuid,bigint)', 'Step of a public write that resolved the organization; reads the request it loaded there'),

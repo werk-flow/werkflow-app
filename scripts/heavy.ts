@@ -11,4 +11,4 @@ if (command.length === 0) {
   console.error('Usage: bun scripts/heavy.ts -- <command> [arguments...]');
   process.exit(2);
 }
-process.exit(await runInHeavySlot(command));
+process.exit(await runInHeavySlot([command]));

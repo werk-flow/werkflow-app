@@ -1,6 +1,6 @@
 import { lineAmountCents, type PriceQuantity } from '@/lib/inventory/line-amount';
 import { MAX_LINE_NET_CENTS } from '@/lib/invoices/amounts';
-import type { OfferAmounts } from './amounts';
+import { countsInTotal, type OfferAmounts } from './amounts';
 import type { OfferPositionCost, OfferSection } from './types';
 
 // The office's calculation of an offer: what each Position costs, what it
@@ -9,7 +9,9 @@ import type { OfferPositionCost, OfferSection } from './types';
 // offer carries one. A Position's cost is its quantity at its own cost per
 // price quantity, by the shared line rule, rounded once like its amount, and
 // within the same ten billion euros, so every sum stays an exact integer. The
-// sale amount is the one the offer's totals count (lib/offers/amounts.ts).
+// sale amount is the one the offer's totals count (lib/offers/amounts.ts). A
+// Bedarfs- or Alternativposition has its own figures, and no Titel or offer
+// sum counts it, as no total does.
 
 /** One Position: its cost and margin are null while it has no cost. */
 export type PositionFigures = {
@@ -33,6 +35,8 @@ export type OfferCalculation = {
   /** Per Titel, with each Position's figures, null for a text line. */
   sections: Array<CalculationFigures & { positions: Array<PositionFigures | null> }>;
   offer: CalculationFigures;
+  /** How many Bedarfs- and Alternativpositionen the sums leave out. */
+  outsideTotal: number;
 };
 
 const PER_MILLE = BigInt(1000);
@@ -103,7 +107,10 @@ export function offerCalculation(sections: readonly OfferSection[], amounts: Off
       const marginCents = saleCents - costCents;
       return { saleCents, costCents, marginCents, marginPermille: permilleOf(marginCents, saleCents) };
     });
-    const priced = positions.flatMap((position) => (position ? [position] : []));
+    const priced = positions.flatMap((figures, index) => {
+      const position = section.positions[index];
+      return figures && position && countsInTotal(position) ? [figures] : [];
+    });
     return {
       ...figures(
         priced.reduce((total, position) => total + position.saleCents, 0),
@@ -113,7 +120,10 @@ export function offerCalculation(sections: readonly OfferSection[], amounts: Off
       positions,
     };
   });
-  return { sections: calculated, offer: sum(calculated) };
+  const outsideTotal = sections
+    .flatMap((section) => section.positions)
+    .filter((position) => position.kind === 'free' && !countsInTotal(position)).length;
+  return { sections: calculated, offer: sum(calculated), outsideTotal };
 }
 
 /** The largest markup the editor takes, in tenths of a percent: 999,9 %. */

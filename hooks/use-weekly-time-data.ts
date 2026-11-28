@@ -96,7 +96,9 @@ export function useWeeklyTimeData({
       'time_sessions',
       'time_segments',
       // An approved correction changes its days: its approval updates the request.
-      // The filter below reads only for the shown person's requests.
+      // The filter below reads only for the shown person's requests. Time the
+      // office moves to the person arrives through their own
+      // employment_target_signals row, one of the daily target's tables below.
       'time_correction_requests',
       // Every source of a daily target, approved vacation and sickness and the
       // entry and exit dates included. A saved break rule also reads the week

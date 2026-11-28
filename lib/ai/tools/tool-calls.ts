@@ -6,19 +6,27 @@ import { boundedWrite } from '@/lib/ai/bounded-write';
 import { carriesUntrustedText, untrustedToolOutput } from '@/lib/ai/context';
 import { AI_TURN_LIMITS } from '@/lib/ai/limits';
 import { AI_PROMPT_VERSION } from '@/lib/ai/prompt/system-prompt';
+import { type QuestionBody, type TodoBody, type ToolCallBody, rowFromItem } from '@/lib/ai/thread-rows';
+import type { AiThreadRow, AiToolOutcome } from '@/lib/ai/thread-types';
 import type { AiTool, AiToolResult } from '@/lib/ai/tools/define-tool';
 import { AI_TOOLS } from '@/lib/ai/tools/registry';
-import type { AiTurnCommand } from '@/lib/ai/turn';
+import type { AiTurnCommand, AiTurnSink } from '@/lib/ai/turn';
 import { getCachedMemberships } from '@/lib/data/cached';
 import { logError } from '@/lib/logging';
 import type { ActionContext } from '@/lib/org/action-context';
 import { isManagerRole } from '@/lib/roles';
 import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/supabase/database.types';
+import { z } from '@/lib/zod';
 
 // The tool calls of one WerkFlow KI turn (lib/ai/turn.ts): each runs as the
-// current caller, and each call the model emits leaves a ledger row before
-// the turn goes on. The thread's tool rows come with the chat's tool rows
-// (werk-flow/werkflow-planning#533), written in one call with the ledger row.
+// current caller, and each call the model emits leaves its thread row and its
+// ledger row in one database call before the turn goes on
+// (werk-flow/werkflow-planning#533). A tool's row shows while it runs; a
+// harness tool's call shows as a question or as the turn's to-do list.
+
+/** A row's detail above this size keeps the input and drops the result, under the item's 64 KB cap. */
+const DETAIL_BYTES = 48_000;
 
 /** What the turn's tool calls did so far. */
 export type ToolCalls = {
@@ -34,11 +42,21 @@ export type ToolCalls = {
   ran: Set<string>;
   /** Calls a tool started whose ledger row is not written yet: tool name by ledger key. */
   pending: Map<string, string>;
+  /** The agent asked the person a question: the turn ends after this step, and the answer is the next message. */
+  asked: boolean;
 };
 
 /** A turn's tool calls before the first one. */
 export function newToolCalls(): ToolCalls {
-  return { tainted: false, unrecorded: false, count: 0, seen: new Map(), ran: new Set(), pending: new Map() };
+  return {
+    tainted: false,
+    unrecorded: false,
+    count: 0,
+    seen: new Map(),
+    ran: new Set(),
+    pending: new Map(),
+    asked: false,
+  };
 }
 
 /** The ledger key of the turn's next call: one per call, so a late repeat of its row lands once. */
@@ -47,7 +65,7 @@ function nextKey(context: ToolCallRun): string {
   return `${context.runKey}:tool:${context.toolCalls.count}`;
 }
 
-/** What a turn's tool calls write with: its run, ledger key and caller. */
+/** What a turn's tool calls write with: its run, ledger key and caller, and where their rows go live. */
 type ToolCallRun = {
   admin: ReturnType<typeof createSupabaseAdminClient>;
   command: AiTurnCommand;
@@ -55,7 +73,89 @@ type ToolCallRun = {
   runKey: string;
   model: { modelId: string };
   toolCalls: ToolCalls;
+  sink: Pick<AiTurnSink, 'row'>;
 };
+
+/** One write of a row: the item it shows as, under its key, and the revision that orders its writes. */
+type RowWrite =
+  | { kind: 'tool_call'; key: string; status: AiThreadRow['status']; body: ToolCallBody; detail?: Json }
+  | { kind: 'question'; key: string; status: 'complete'; body: QuestionBody }
+  | { kind: 'todo_list'; key: string; status: 'complete'; body: TodoBody };
+
+const questionInput = z.object({ frage: z.string(), optionen: z.array(z.string()) });
+const todoInput = z.object({ schritte: z.array(z.object({ text: z.string(), erledigt: z.boolean() })) });
+
+/** A tool row's summary: what the collapsed row shows. A name outside the registry shows as unknown. */
+function toolBody(name: string, revision: number, outcome?: AiToolOutcome, detail?: boolean): ToolCallBody {
+  const tool = AI_TOOLS.find((entry) => entry.name === name);
+  return {
+    revision,
+    label: tool?.label ?? 'Unbekannte Aktion',
+    control: tool?.control ?? 'read',
+    ...(outcome ? { outcome } : {}),
+    ...(detail ? { detail } : {}),
+  };
+}
+
+/**
+ * What an opened tool row shows: the validated input, and the result of a
+ * call that ran, JSON-encoded as the model read it (record text with its
+ * source label). A result over the cap stays out; the model's answer holds
+ * what it took from it.
+ */
+function toolDetail(tool: AiTool, input: unknown, result: AiToolResult): Json | undefined {
+  const parsed = z.json().safeParse(tool.inputSchema.safeParse(input).data);
+  const shown = parsed.success && parsed.data !== undefined ? { input: parsed.data } : {};
+  if (result.status !== 'ok') return parsed.success ? shown : undefined;
+  const output = untrustedToolOutput(result.value);
+  const value = z.json().safeParse(output.type === 'json' ? output.value : null);
+  const full = { ...shown, result: value.success ? value.data : null };
+  return Buffer.byteLength(JSON.stringify(full), 'utf8') <= DETAIL_BYTES
+    ? full
+    : { ...shown, resultOmitted: true };
+}
+
+/** The row a finished call writes: a harness tool's question or list, every other call's tool row. */
+function finishedRow(
+  context: ToolCallRun,
+  key: string,
+  tool: AiTool,
+  input: unknown,
+  result: AiToolResult,
+): RowWrite {
+  const ran = result.status === 'ok';
+  // The row holds the input as the tool validated it, trimmed, so the thread reads back what the tool took.
+  const validated = tool.inputSchema.safeParse(input).data;
+  const question = tool.shows === 'question' && ran ? questionInput.safeParse(validated) : null;
+  if (question?.success) {
+    const { frage, optionen } = question.data;
+    return {
+      kind: 'question',
+      key,
+      status: 'complete',
+      body: { revision: 1, question: frage, options: optionen },
+    };
+  }
+  const todo = tool.shows === 'todo_list' && ran ? todoInput.safeParse(validated) : null;
+  if (todo?.success) {
+    // One list per turn: each call replaces it, and its call count orders the writes.
+    const steps = todo.data.schritte.map((entry) => ({ text: entry.text, done: entry.erledigt }));
+    return {
+      kind: 'todo_list',
+      key: `${context.runKey}:plan`,
+      status: 'complete',
+      body: { revision: context.toolCalls.count, steps },
+    };
+  }
+  const detail = toolDetail(tool, input, result);
+  return {
+    kind: 'tool_call',
+    key,
+    status: ran ? 'complete' : 'failed',
+    body: toolBody(tool.name, 2, result.status, detail !== undefined),
+    ...(detail === undefined ? {} : { detail }),
+  };
+}
 
 /**
  * The caller as the membership reads now: the route resolved it at the
@@ -92,6 +192,16 @@ export async function runTool(
   if (context.toolCalls.unrecorded) return { type: 'json', value: { status: 'failed' } };
   const key = nextKey(context);
   context.toolCalls.pending.set(key, tool.name);
+  const limitMs = AI_TURN_LIMITS[context.command.entryPoint].costWriteTimeoutMs;
+  // A tool's row shows while it runs; a missed write costs only that, as the finished row follows.
+  const running = tool.shows
+    ? null
+    : writeRow(
+        context,
+        { kind: 'tool_call', key, status: 'streaming', body: toolBody(tool.name, 1) },
+        null,
+        limitMs,
+      );
   const caller = await currentCaller(context.command).catch((error: unknown) => {
     logError('aiTurn: caller read failed', error);
     return 'failed' as const;
@@ -104,8 +214,10 @@ export async function runTool(
         ? await tool.execute(input, caller)
         : { status: 'refused' };
   if (result.status === 'ok' && carriesUntrustedText(result.value)) context.toolCalls.tainted = true;
-  const limitMs = AI_TURN_LIMITS[context.command.entryPoint].costWriteTimeoutMs;
-  const recorded = await recordToolCall(context, key, tool.name, result.status, limitMs);
+  await running;
+  const row = finishedRow(context, key, tool, input, result);
+  const recorded = await recordToolCall(context, key, tool.name, result.status, limitMs, row);
+  if (recorded && row.kind === 'question') context.toolCalls.asked = true;
   context.toolCalls.pending.delete(key);
   if (!recorded) return { type: 'json', value: { status: 'failed' } };
   return result.status === 'ok'
@@ -133,7 +245,9 @@ export async function recordUnrunCalls(context: ToolCallRun): Promise<void> {
       context.toolCalls.unrecorded = true;
       break;
     }
-    if (!(await recordToolCall(context, nextKey(context), name, 'not_run', left))) break;
+    const key = nextKey(context);
+    const row: RowWrite = { kind: 'tool_call', key, status: 'failed', body: toolBody(name, 2, 'not_run') };
+    if (!(await recordToolCall(context, key, name, 'not_run', left, row))) break;
   }
   seen.clear();
   ran.clear();
@@ -149,7 +263,8 @@ export async function recordPendingCalls(context: ToolCallRun): Promise<void> {
   const deadline = Date.now() + AI_TURN_LIMITS[context.command.entryPoint].costWriteTimeoutMs;
   for (const [key, name] of context.toolCalls.pending) {
     const left = deadline - Date.now();
-    if (left <= 0 || !(await recordToolCall(context, key, name, 'failed', left))) {
+    const row: RowWrite = { kind: 'tool_call', key, status: 'failed', body: toolBody(name, 2, 'failed') };
+    if (left <= 0 || !(await recordToolCall(context, key, name, 'failed', left, row))) {
       context.toolCalls.unrecorded = true;
       return;
     }
@@ -158,35 +273,67 @@ export async function recordPendingCalls(context: ToolCallRun): Promise<void> {
 }
 
 /**
- * A tool call's ledger row (B19): the run names user, organization and
- * thread; the row names the tool, its outcome, the prompt version and the
- * model, with nil cost: ids and codes, never text. When it cannot be
- * written, the turn takes no further step.
+ * Writes a row of the run's thread, and with `ledger` the call's ledger row
+ * in the same database call. The row then goes live to the author's tabs.
+ * Resolves whether both landed.
+ */
+async function writeRow(
+  context: ToolCallRun,
+  row: RowWrite,
+  ledger: { key: string; outcome: string } | null,
+  limitMs: number,
+): Promise<boolean> {
+  let sequence: number | null = null;
+  const written = await boundedWrite(
+    ledger ? 'aiTurn: tool call record failed' : 'aiTurn: tool row write failed',
+    limitMs,
+    ledger ? 2 : 1,
+    async (signal) => {
+      const answer = await context.admin
+        .rpc('record_ai_tool_item', {
+          p_organization_id: context.command.organizationId,
+          p_user_id: context.command.userId,
+          p_run_id: context.runId,
+          p_kind: row.kind,
+          p_status: row.status,
+          p_item_key: row.key,
+          p_body: row.body,
+          ...(row.kind === 'tool_call' && row.detail !== undefined ? { p_detail: row.detail } : {}),
+          ...(ledger
+            ? {
+                p_ledger_key: ledger.key,
+                p_model_id: context.model.modelId,
+                p_prompt_version: AI_PROMPT_VERSION,
+                p_outcome: ledger.outcome,
+              }
+            : {}),
+        })
+        .abortSignal(signal);
+      // A null sequence: another write already recorded this call's outcome, so nothing changed.
+      if (!answer.error && typeof answer.data === 'number') sequence = answer.data;
+      return answer;
+    },
+  );
+  const shown = sequence === null ? null : rowFromItem({ ...row, idempotency_key: row.key, sequence });
+  if (shown) context.sink.row?.(shown);
+  return written;
+}
+
+/**
+ * A tool call's row and its ledger row (B19): the run names user,
+ * organization and thread; the ledger row names the tool, its outcome, the
+ * prompt version and the model, with nil cost: ids and codes, never text.
+ * When they cannot be written, the turn takes no further step.
  */
 async function recordToolCall(
   context: ToolCallRun,
   key: string,
   name: string,
-  status: AiToolResult['status'] | 'not_run',
+  status: AiToolOutcome,
   limitMs: number,
+  row: RowWrite,
 ): Promise<boolean> {
-  const recorded = await boundedWrite('aiTurn: tool call record failed', limitMs, 2, (signal) =>
-    context.admin
-      .rpc('record_ai_run_attempt', {
-        p_organization_id: context.command.organizationId,
-        p_run_id: context.runId,
-        p_idempotency_key: key,
-        p_model_id: context.model.modelId,
-        p_prompt_version: AI_PROMPT_VERSION,
-        p_input_tokens: 0,
-        p_output_tokens: 0,
-        p_cache_read_tokens: 0,
-        p_cache_write_tokens: 0,
-        p_cost_micro_usd: 0,
-        p_outcome: `tool_call_${name}_${status}`,
-      })
-      .abortSignal(signal),
-  );
+  const recorded = await writeRow(context, row, { key, outcome: `tool_call_${name}_${status}` }, limitMs);
   if (!recorded) context.toolCalls.unrecorded = true;
   return recorded;
 }

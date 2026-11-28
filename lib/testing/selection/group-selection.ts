@@ -19,6 +19,20 @@ type SelectableGroup = {
 type GroupSelection = { reason: string; changedFiles: readonly string[] };
 
 const MEASURED_GROUP_PREFIX = 'audit:performance:';
+/**
+ * The visual references (tests/audit/visual/references.spec.ts) compare every page family's pixels
+ * and exact text, and almost any file can move them: a page, a shared control, a reader or label
+ * under lib/, a public asset, a migration behind a read, a dependency, the CSS toolchain. So every
+ * changed file selects the group except test code and the files below, which render nothing in a
+ * test run (vercel.json configures only the hosting); a new kind of input selects it until it is
+ * listed here. An import closure from the pages missed
+ * deleted routes and assets loaded by URL, and widened to every file at its first unresolved import
+ * anyway. #694 changed the offer header through its page and reader, its queue run selected no
+ * reference, and main turned red.
+ */
+const VISUAL_REFERENCE_GROUP = 'audit:visual';
+const RENDERS_NOTHING =
+  /^(?:(?:docs|scripts|ci|eslint-rules|\.github|\.claude|\.agents|\.codex|\.t3|temporary-transcripts|supabase\/tests|lib\/docs)\/|(?:bunfig\.toml|eslint\.config\.mjs|knip\.ts|\.prettierrc\.json|\.prettierignore|\.editorconfig|\.coderabbit\.yaml|\.gitattributes|\.gitignore|t3\.json|vercel\.json|package-lock\.json)$)|\.md$/;
 /** The browser groups that prove the runner itself: a runner or tooling change runs them. */
 export const RUNNER_PILOTS: ReadonlySet<string> = new Set(['golden:p1-24a', 'audit:wave-3:p1-24a']);
 const ORCHESTRATION_INPUTS =
@@ -66,6 +80,8 @@ export function runnerPilotInputs(groupId: string, files: readonly string[]): st
  */
 export const RUNTIME_LOADED_SUPPORT: Readonly<Record<string, string>> = {
   'tests/audit/support/acceptance-sets.ts': 'tests/audit/support/acceptance-sets/',
+  // Playwright reads each visual reference, image and text, by its path.
+  'tests/audit/visual/references.spec.ts': 'tests/audit/visual/references.spec.ts-snapshots/',
 };
 
 /** Whether a group executes `file`: an execution input, or a path under a directory a module it executes loads. */
@@ -170,8 +186,13 @@ export function groupSelections(input: {
     } else if (group.trigger === 'release-only') {
       // The author of a sweep or a capture gets feedback on the change; a wall-clock group never runs in it.
       const testChanges = ownTestChanges(group, input.changedFiles);
-      // A layout sweep also runs when a page, tab or dialog it audits, or a file only a few sweeps render, changed.
-      const surfaceChanges = input.changedFiles.filter((file) => group.renderedFiles?.includes(file));
+      // A layout sweep also runs when a page, tab or dialog it audits, or a file only a few sweeps render,
+      // changed; the visual references when any file but test code, docs and tooling changed.
+      const surfaceChanges = input.changedFiles.filter((file) =>
+        group.id === VISUAL_REFERENCE_GROUP
+          ? !isTestInput(file) && !RENDERS_NOTHING.test(file)
+          : group.renderedFiles?.includes(file),
+      );
       // A pass counts only on the current content of every file that selected the group, product files included.
       if (testChanges.length && !group.id.startsWith(MEASURED_GROUP_PREFIX))
         selections.set(group.id, {

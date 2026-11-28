@@ -1,3 +1,5 @@
+import { buffer } from 'node:stream/consumers';
+
 import { seedRuleReadyCompanyProfile } from '../../golden/support/db/company-profile';
 import {
   getServiceReportDocuments,
@@ -5,7 +7,7 @@ import {
 } from '../../golden/support/db/maintenance-visits';
 import { expect, test } from '../support/fixtures';
 import {
-  COMPLETED_VISITS_PATH,
+  openCompletedVisits,
   completedVisitRow,
   createServiceReportButton,
   downloadServiceReportButton,
@@ -58,7 +60,7 @@ test.describe('Document PDFs in the built app @AUDIT-W3-DOCUMENT-PDFS @AUDIT-W3'
     });
 
     await test.step('„Servicebericht erstellen“ renders, files and offers the report', async () => {
-      await bueroPage.goto(COMPLETED_VISITS_PATH);
+      await openCompletedVisits(bueroPage);
       const row = completedVisitRow(bueroPage, visit.planNumber);
       await createServiceReportButton(row).click();
       await expect(serviceReportFiledBanner(bueroPage)).toBeVisible();
@@ -67,6 +69,19 @@ test.describe('Document PDFs in the built app @AUDIT-W3-DOCUMENT-PDFS @AUDIT-W3'
       expect(others, 'one Servicebericht for the visit').toHaveLength(0);
       expect(report?.mimeType).toBe('application/pdf');
       expect(report?.filedAt, 'the Servicebericht is filed').not.toBeNull();
+    });
+
+    await test.step('The Servicebericht download contains a complete PDF', async () => {
+      const downloadEvent = bueroPage.waitForEvent('download');
+      await downloadServiceReportButton(completedVisitRow(bueroPage, visit.planNumber)).click();
+      const download = await downloadEvent;
+      const bytes = await buffer(await download.createReadStream());
+      expect(bytes.subarray(0, 5).toString('latin1'), 'the Servicebericht download is a PDF').toBe('%PDF-');
+      expect(
+        bytes.subarray(-8).toString('latin1'),
+        'the Servicebericht download ends with the PDF EOF marker',
+      ).toMatch(/%%EOF(?:\r?\n)?$/);
+      expect(bytes.length, 'the Servicebericht download is larger than 1 KB').toBeGreaterThan(1024);
     });
   });
 });

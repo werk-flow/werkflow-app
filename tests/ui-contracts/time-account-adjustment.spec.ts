@@ -7,6 +7,9 @@ import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fi
 // first. Typing clears a mark. A valid value is sent as typed with
 // the clicked kind, and the server parses it again.
 test.beforeEach(async ({ page }) => {
+  // The fixture's form takes today as 2026-11-02, so the page's clock does too: the calendar opens on
+  // the real month otherwise, and a date look-ahead run in December finds no November day to pick.
+  await page.clock.install({ time: new Date('2026-11-02T10:00:00Z') });
   await openContractFixture(page, 'time-account-adjustment');
 });
 

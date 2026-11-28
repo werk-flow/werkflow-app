@@ -39,8 +39,17 @@ export function ProvisionalTimeSummary({
   userId: string;
 }) {
   const view = useLiveView<ProvisionalTimeSummaryData>({
-    // The accepted day comes from recorded entries and live capture too.
-    tables: ['time_correction_requests', 'time_entries', 'time_sessions', 'time_segments'],
+    // The accepted day comes from recorded entries and live capture too. Only
+    // requests of the record the person holds now count, so a relink re-reads:
+    // the office hears the record, the person their own signal row.
+    tables: [
+      'time_correction_requests',
+      'time_entries',
+      'time_sessions',
+      'time_segments',
+      'employee_records',
+      'employment_target_signals',
+    ],
     read: async ({ signal }): Promise<LiveViewResult<ProvisionalTimeSummaryData>> => {
       const result = await readInBackground('provisional-time-summary', { organizationId, userId }, signal);
       return result.success ? { ok: true, data: result } : { ok: false };

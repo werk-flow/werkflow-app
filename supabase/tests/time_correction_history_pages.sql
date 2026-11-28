@@ -1,8 +1,9 @@
 -- Service-only page reader of the correction history: the visibility each
 -- caller class resolves to, the count and the page boundary apply in the
 -- database, more than 1,000 requests stay reachable newest first, a foreign
--- organization neither counts nor matches, and browser roles cannot execute
--- the reader.
+-- organization neither counts nor matches, a request of a record its subject
+-- no longer holds lists only for approvers of others, and browser roles
+-- cannot execute the reader.
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
 insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
@@ -24,15 +25,22 @@ insert into public.organization_members(organization_id,user_id,role) values
 ('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000004','employee');
 
 -- Requests are written only through their RPCs; the seed bypasses the
--- triggers and the employee-record reference. Request n was filed n minutes
+-- triggers. Each request names the record its subject holds: a member's from
+-- their membership, the former member's own. Request n was filed n minutes
 -- after the base:
 -- * 1..1051: the colleague (employee) about themself;
 -- * 1052..1054: the Büro member about themself;
 -- * 1055..1056: the caller (employee) about themself;
 -- * 1057: the admin about a former member, who no longer belongs to the organization.
 set local session_replication_role = replica;
+insert into public.employee_records(id,organization_id,user_id,first_name,last_name) values
+('77000000-0000-4000-8000-0000000000a5','77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000005','History','Former'),
+('77000000-0000-4000-8000-0000000000a7','77000000-0000-4000-8000-000000000010',null,'History','Removed'),
+('77000000-0000-4000-8000-000000000091','77000000-0000-4000-8000-000000000011','77000000-0000-4000-8000-000000000003','History','Foreign');
 insert into public.time_correction_requests(id,organization_id,subject_employee_record_id,subject_user_id,requested_by,kind,status,source_scope_key,created_at)
-select md5('tc-'||number)::uuid,'77000000-0000-4000-8000-000000000010',md5('tc-record-'||number)::uuid,subject::uuid,requester::uuid,
+select md5('tc-'||number)::uuid,'77000000-0000-4000-8000-000000000010',
+  (select record.id from public.employee_records record where record.organization_id='77000000-0000-4000-8000-000000000010' and record.user_id=subject::uuid),
+  subject::uuid,requester::uuid,
   'add','withdrawn',md5('tc-scope-a-'||number)||md5('tc-scope-b-'||number),
   '2026-01-01T00:00:00Z'::timestamptz + number * interval '1 minute'
 from (
@@ -92,7 +100,8 @@ begin
 
   -- Tenant isolation: the caller's own request in the other organization never lists here, and vice versa.
   if exists(select 1 from jsonb_array_elements_text(public.list_time_correction_history_page(org_id,caller,'own')->'ids') listed(id) where id='77000000-0000-4000-8000-000000000090') then raise exception 'history tenant leaked'; end if;
-  result := public.list_time_correction_history_page('77000000-0000-4000-8000-000000000011',caller,'all');
+  -- Organization B's admin, as the caller there holds no record with access.
+  result := public.list_time_correction_history_page('77000000-0000-4000-8000-000000000011','77000000-0000-4000-8000-000000000001','all');
   if (result->>'total')::int is distinct from 1 or result->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000090'::uuid) then raise exception 'foreign organization history wrong'; end if;
   result := public.list_time_correction_history_page('77000000-0000-4000-8000-000000000012',caller,'all');
   if (result->>'total')::int is distinct from 0 or result->'ids' is distinct from '[]'::jsonb then raise exception 'empty organization reports history'; end if;
@@ -102,15 +111,93 @@ end $$;
 reset role;
 set local session_replication_role = replica;
 insert into public.time_correction_requests(id,organization_id,subject_employee_record_id,subject_user_id,requested_by,kind,status,source_scope_key,created_at) values
-('77000000-0000-4000-8000-000000000082','77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000093','77000000-0000-4000-8000-000000000005','77000000-0000-4000-8000-000000000005','add','withdrawn',md5('tc-same-b')||md5('tc-same-b'),'2027-01-01'),
-('77000000-0000-4000-8000-000000000081','77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000093','77000000-0000-4000-8000-000000000005','77000000-0000-4000-8000-000000000005','add','withdrawn',md5('tc-same-a')||md5('tc-same-a'),'2027-01-01');
+('77000000-0000-4000-8000-000000000082','77000000-0000-4000-8000-000000000010',(select record.id from public.employee_records record where record.organization_id='77000000-0000-4000-8000-000000000010' and record.user_id='77000000-0000-4000-8000-000000000004'),'77000000-0000-4000-8000-000000000004','77000000-0000-4000-8000-000000000004','add','withdrawn',md5('tc-same-b')||md5('tc-same-b'),'2027-01-01'),
+('77000000-0000-4000-8000-000000000081','77000000-0000-4000-8000-000000000010',(select record.id from public.employee_records record where record.organization_id='77000000-0000-4000-8000-000000000010' and record.user_id='77000000-0000-4000-8000-000000000004'),'77000000-0000-4000-8000-000000000004','77000000-0000-4000-8000-000000000004','add','withdrawn',md5('tc-same-a')||md5('tc-same-a'),'2027-01-01');
 set local session_replication_role = origin;
 set local role service_role;
 do $$ begin
-  if public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000005','own',1,1)->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000081'::uuid)
-    or public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000005','own',2,1)->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000082'::uuid) then
+  if public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000004','own',1,1)->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000081'::uuid)
+    or public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000004','own',2,1)->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000082'::uuid) then
     raise exception 'identical filing times lost the id order';
   end if;
+end $$;
+
+-- The caller's old record lost its login. A request they filed on it, newest
+-- of all, no longer lists for them under any visibility; an approver of
+-- others still lists it, since an open request blocks its month's close.
+reset role;
+set local session_replication_role = replica;
+insert into public.time_correction_requests(id,organization_id,subject_employee_record_id,subject_user_id,requested_by,kind,status,source_scope_key,created_at) values
+('77000000-0000-4000-8000-000000000095','77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-0000000000a7','77000000-0000-4000-8000-000000000003','77000000-0000-4000-8000-000000000003','add','withdrawn',md5('tc-removed-a')||md5('tc-removed-b'),'2037-12-31');
+set local session_replication_role = origin;
+set local role service_role;
+do $$ declare
+  org_id uuid := '77000000-0000-4000-8000-000000000010';
+  caller uuid := '77000000-0000-4000-8000-000000000003';
+  buero uuid := '77000000-0000-4000-8000-000000000002';
+  removed text := '77000000-0000-4000-8000-000000000095';
+  result jsonb;
+begin
+  result := public.list_time_correction_history_page(org_id,caller,'own');
+  if (result->>'total')::int is distinct from 2 or result->'ids' ? removed then raise exception 'own history lists a request of a record its subject no longer holds: %',result; end if;
+  if public.list_time_correction_history_page(org_id,caller,'own_and_employee_subjects')->'ids' ? removed then raise exception 'delegated history lists the caller''s request of a record they no longer hold'; end if;
+  if public.list_time_correction_history_page(org_id,caller,'all')->'ids' ? removed then raise exception 'full history lists the caller''s request of a record they no longer hold'; end if;
+  result := public.list_time_correction_history_page(org_id,buero,'all');
+  if (result->>'total')::int is distinct from 1060 or result->'ids'->>0 is distinct from removed then raise exception 'an approver''s history lost a request of a record its subject no longer holds: %',result->>'total'; end if;
+  if public.list_time_correction_history_page(org_id,buero,'own_and_employee_subjects')->'ids'->>0 is distinct from removed then raise exception 'an employee-subject approver''s history lost a request of a record its subject no longer holds'; end if;
+end $$;
+
+-- The Data API follows the same rule. Two more requests: the caller filed one
+-- about the colleague, who holds its record (096), and the Büro member filed
+-- one about themself on the record that lost its login (097).
+reset role;
+set local session_replication_role = replica;
+insert into public.time_correction_requests(id,organization_id,subject_employee_record_id,subject_user_id,requested_by,kind,status,source_scope_key,created_at) values
+('77000000-0000-4000-8000-000000000096','77000000-0000-4000-8000-000000000010',
+  (select record.id from public.employee_records record where record.organization_id='77000000-0000-4000-8000-000000000010' and record.user_id='77000000-0000-4000-8000-000000000004'),
+  '77000000-0000-4000-8000-000000000004','77000000-0000-4000-8000-000000000003','add','withdrawn',md5('tc-filed-a')||md5('tc-filed-b'),'2025-06-01'),
+('77000000-0000-4000-8000-000000000097','77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-0000000000a7','77000000-0000-4000-8000-000000000002','77000000-0000-4000-8000-000000000002','add','withdrawn',md5('tc-own-old-a')||md5('tc-own-old-b'),'2025-06-01');
+set local session_replication_role = origin;
+-- While the colleague holds the record, the caller reads the request they
+-- filed about them in the history and through the Data API alike.
+set local role service_role;
+do $$ begin
+  if not public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000003','own')->'ids' ? '77000000-0000-4000-8000-000000000096' then raise exception 'own history lost a request filed about a colleague who holds its record'; end if;
+end $$;
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"77000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+  if not exists(select 1 from public.time_correction_requests where id='77000000-0000-4000-8000-000000000096') then raise exception 'the caller cannot read a request they filed about a colleague who holds its record'; end if;
+end $$;
+reset role;
+-- The colleague's access is suspended. Every reader counts a record as held
+-- only with effective access (RLS helpers must check it), so the history and
+-- the Data API both drop the caller's request about them, together.
+insert into public.personnel_access_lifecycles (organization_id, employee_record_id, state, state_effective_at)
+select record.organization_id, record.id, 'suspended', now() from public.employee_records record
+where record.organization_id='77000000-0000-4000-8000-000000000010' and record.user_id='77000000-0000-4000-8000-000000000004'
+on conflict (employee_record_id) do update set state = 'suspended', state_effective_at = now();
+set local role service_role;
+do $$ begin
+  if public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000003','own')->'ids' ? '77000000-0000-4000-8000-000000000096' then raise exception 'own history lists a request about a suspended colleague'; end if;
+end $$;
+reset role;
+set local role authenticated;
+-- The caller reads their request on the record they hold, never their request
+-- on the record they no longer hold nor the one about the suspended colleague.
+select set_config('request.jwt.claims','{"sub":"77000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+  if not exists(select 1 from public.time_correction_requests where id=md5('tc-1055')::uuid) then raise exception 'the caller cannot read their request on the record they hold'; end if;
+  if exists(select 1 from public.time_correction_requests where id='77000000-0000-4000-8000-000000000096') then raise exception 'the Data API lists a request about a suspended colleague'; end if;
+  if exists(select 1 from public.time_correction_requests where id='77000000-0000-4000-8000-000000000095') then raise exception 'the caller reads a request of a record they no longer hold'; end if;
+end $$;
+-- Büro reads another person's request on a record its subject no longer holds,
+-- never its own.
+select set_config('request.jwt.claims','{"sub":"77000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+  if not exists(select 1 from public.time_correction_requests where id='77000000-0000-4000-8000-000000000095') then raise exception 'Büro cannot read a request of a record its subject no longer holds'; end if;
+  if exists(select 1 from public.time_correction_requests where id='77000000-0000-4000-8000-000000000097') then raise exception 'Büro reads its own request on a record it no longer holds'; end if;
 end $$;
 
 -- A browser session cannot execute the reader, even for its own organization.

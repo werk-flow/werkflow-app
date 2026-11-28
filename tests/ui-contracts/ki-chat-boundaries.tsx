@@ -15,7 +15,7 @@ import type { AiThreadWindow } from '@/lib/ai/thread-types';
 export { describeTurnRefusal };
 
 type HeldTurn = {
-  calls: { threadId: string; commandId: string; text: string }[];
+  calls: { threadId: string; commandId: string; text: string; fileIds: readonly string[] }[];
   emit: ((event: TurnEvent) => void) | null;
   resolve: ((outcome: TurnOutcome) => void) | null;
   /** Each „Antwort anhalten“ the page sent, and whether the server takes the next one. */
@@ -35,6 +35,10 @@ declare global {
     uiContractKiWindows: Record<string, AiThreadWindow>;
     /** Every thread read's input, in the order the page sent them. */
     uiContractKiReadInputs: unknown[];
+    /** Set by the spec: what an opened tool row's detail read answers, by row key. */
+    uiContractKiToolDetails: Record<string, unknown>;
+    /** Every tool row detail read's input: a row reads its detail only once it is opened. */
+    uiContractKiDetailReads: unknown[];
     /** The live channel the page joined: its thread, null for none, and what the spec sends on it. */
     uiContractKiLive: {
       threadId: string | null;
@@ -51,6 +55,8 @@ window.uiContractKiReadsFail = false;
 window.uiContractKiHeldReads = null;
 window.uiContractKiWindows = {};
 window.uiContractKiReadInputs = [];
+window.uiContractKiToolDetails = {};
+window.uiContractKiDetailReads = [];
 window.uiContractKiLive = { threadId: null, joins: [], emit: null, join: null };
 
 /** The live channel's stand-in: it joins at once and hands the spec the thread's event handler. */
@@ -93,15 +99,28 @@ export function readKiThreadWindowContract(input: unknown) {
   return new Promise((resolve) => held.push({ threadId, release: () => resolve(answer) }));
 }
 
+export function readKiToolDetailContract(input: unknown) {
+  window.uiContractKiDetailReads.push(input);
+  const key = input && typeof input === 'object' && 'key' in input ? String(input.key) : '';
+  const detail = window.uiContractKiToolDetails[key];
+  return detail ? { success: true, detail } : { success: false, error: 'not_found' };
+}
+
 export function sendTurn(input: {
   threadId: string;
   commandId: string;
   text: string;
+  fileIds?: readonly string[];
   signal: AbortSignal;
   onEvent: (event: TurnEvent) => void;
 }): Promise<TurnOutcome> {
   const held = window.uiContractKiTurn;
-  held.calls.push({ threadId: input.threadId, commandId: input.commandId, text: input.text });
+  held.calls.push({
+    threadId: input.threadId,
+    commandId: input.commandId,
+    text: input.text,
+    fileIds: input.fileIds ?? [],
+  });
   return new Promise((resolve) => {
     held.emit = input.onEvent;
     held.resolve = (outcome) => {

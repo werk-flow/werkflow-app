@@ -35,3 +35,16 @@ export function formatTaxRate(basisPoints: number): string {
     .replace(/0+$/, '');
   return `${Math.trunc(basisPoints / 100)}${fraction ? `,${fraction}` : ''} %`;
 }
+
+/**
+ * An Alternativposition's mark: the Position it stands for and what it costs
+ * more or less, `Alternativposition zu 2.1, Minderpreis 370,00 €`.
+ */
+export function formatAlternativeMark(alternative: { number: string; differenceCents: number }): string {
+  const { number, differenceCents } = alternative;
+  const difference =
+    differenceCents === 0
+      ? 'gleicher Preis'
+      : `${differenceCents > 0 ? 'Mehrpreis' : 'Minderpreis'} ${formatEuroCents(Math.abs(differenceCents))}`;
+  return `Alternativposition zu ${number}, ${difference}`;
+}

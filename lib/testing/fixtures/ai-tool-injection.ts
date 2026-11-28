@@ -72,7 +72,7 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
   );
   assert.deepEqual(
     offeredTools(second),
-    ['artikel_finden', 'auftraege_finden', 'auftrag_lesen', 'kunden_finden'],
+    ['artikel_finden', 'auftraege_finden', 'auftrag_lesen', 'frage_stellen', 'kunden_finden', 'plan_zeigen'],
     'a turn that read untrusted text must offer no memory write and no write tool (B10)',
   );
   const asked = toolResults(third).slice(1);
@@ -127,7 +127,7 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
   assert.equal(offeredTools(world.streamRequests[0]).includes('notiz_merken'), true);
   assert.deepEqual(
     offeredTools(world.streamRequests[1]),
-    ['auftraege_finden', 'auftrag_lesen'],
+    ['auftraege_finden', 'auftrag_lesen', 'frage_stellen', 'plan_zeigen'],
     'a turn that read a job must offer no memory write (B10)',
   );
   seedToolTables(world);

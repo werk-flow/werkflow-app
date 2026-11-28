@@ -5,13 +5,19 @@ import { useMemo } from 'react';
 import { useLiveView } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { getJobDisplayTitle, type Job } from '@/lib/jobs/types';
+import { isJobTimeEventRelevant, JOB_TIME_LIVE_TABLES } from '@/lib/time-tracking/job-time-live-tables';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { calculateWorkSessions } from '@/lib/time-tracking/work-sessions';
 
 /** Live time entries of every job in the project and their per-job totals. */
 export function useProjectDetailTime(projectId: string, liveJobs: Job[]) {
   const timeView = useLiveView<{ jobId: string; jobTitle: string; entries: TimeEntry[] }[]>({
-    tables: ['time_entries', 'time_sessions', 'time_segments'],
+    tables: JOB_TIME_LIVE_TABLES,
+    eventFilter: (event): boolean =>
+      isJobTimeEventRelevant(
+        event,
+        timeView.data?.flatMap((job) => job.entries.map((entry) => entry.userId)) ?? [],
+      ),
     // Reads over GET, outside the Server Action queue the project's saves use.
     read: async ({ signal }) => {
       const result = await readInBackground('project-job-time-entries', { projectId }, signal);

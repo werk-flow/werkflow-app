@@ -59,14 +59,20 @@ describe('independent group registry', () => {
         .filter((candidate) => /^audit:(performance|visual|layout)(:|$)/.test(candidate.id))
         .map((candidate) => candidate.id),
     ).toEqual(releaseOnly.map((candidate) => candidate.id));
-    // The runner passes the same flag; a change plan with every file changed still leaves them out.
+    // The runner passes the same flag. A shared control and the global styles leave the other release-only
+    // groups out of a change plan, and select the visual references (decision 0007, amendment 2026-11-27).
     const plan = groupSelections({
       mode: 'change',
       groups: groups.map((candidate) => ({ ...candidate, trigger: candidate.changeTrigger })),
-      changedFiles: ['components/ui/button.tsx', 'app/globals.css', 'tests/audit/visual/references.spec.ts'],
+      changedFiles: ['components/ui/button.tsx', 'app/globals.css'],
       unresolvedGroupIds: [],
     });
-    for (const candidate of releaseOnly) expect(plan.has(candidate.id)).toBe(false);
+    for (const candidate of releaseOnly)
+      expect([candidate.id, plan.has(candidate.id)]).toEqual([candidate.id, candidate.id === 'audit:visual']);
+    expect(plan.get('audit:visual')).toEqual({
+      reason: 'Audited surface changed',
+      changedFiles: ['components/ui/button.tsx', 'app/globals.css'],
+    });
   });
 
   test('a golden slice takes the scopes of its audit definition in any wave', () => {

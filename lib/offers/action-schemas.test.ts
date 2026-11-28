@@ -33,6 +33,7 @@ test('a content save takes a cost per a price quantity of a price, and refuses a
         positions: [
           {
             kind: 'free',
+            positionType: { kind: 'normal' },
             name: 'Monteurstunde',
             description: '',
             quantity: '1',
@@ -72,6 +73,7 @@ test('a content save takes a cost per a price quantity of a price, and refuses a
 test('a content save whose priced Position names no cost is refused, not taken as no cost', () => {
   const position = {
     kind: 'free',
+    positionType: { kind: 'normal' },
     name: 'Monteurstunde',
     description: '',
     quantity: '1',
@@ -92,6 +94,7 @@ test('a content save whose priced Position names no cost is refused, not taken a
 test('a content save whose priced Position names no price source is refused', () => {
   const position = {
     kind: 'free',
+    positionType: { kind: 'normal' },
     name: 'Monteurstunde',
     description: '',
     quantity: '1',
@@ -122,5 +125,48 @@ test('a content save whose priced Position names no price source is refused', ()
     { kind: 'rabatt', proof },
   ]) {
     expect(saveOfferContentSchema.safeParse(content([{ ...position, priceSource }])).success).toBe(false);
+  }
+});
+
+// A tab older than Bedarfs- and Alternativpositionen sends no type: its save is refused, so it never
+// counts one in the sums. An Alternativposition names a normal priced Position of its own Titel.
+test('a content save names each priced Position’s type, and an Alternativposition a normal Position of its Titel', () => {
+  const priced = (positionType?: unknown) => ({
+    kind: 'free',
+    ...(positionType === undefined ? {} : { positionType }),
+    name: 'Gas-Brennwerttherme',
+    description: '',
+    quantity: '1',
+    unit: 'piece',
+    unitPriceCents: 425_000,
+    priceQuantity: 1,
+    taxRateBasisPoints: 1900,
+    source: null,
+    cost: null,
+    priceSource: { kind: 'manuell' },
+  });
+  const content = (positions: unknown[]) => ({ ...save('', 0), sections: [{ title: 'Heizung', positions }] });
+  const text = { kind: 'text', name: 'Hinweis', description: '' };
+  const alternativeTo = (place: number) => priced({ kind: 'alternative', alternativeTo: place });
+  const normal = priced({ kind: 'normal' });
+  const bedarf = priced({ kind: 'bedarf' });
+  for (const positions of [
+    [normal, bedarf],
+    [text, normal, alternativeTo(2)],
+    [alternativeTo(2), normal],
+  ]) {
+    expect(saveOfferContentSchema.safeParse(content(positions)).success).toBe(true);
+  }
+  for (const positions of [
+    [priced()],
+    [priced({ kind: 'optional' })],
+    [normal, priced({ kind: 'alternative' })],
+    // Its Position is a text line, a Bedarfsposition, itself, or no line of the Titel.
+    [text, alternativeTo(1)],
+    [bedarf, alternativeTo(1)],
+    [normal, alternativeTo(2)],
+    [normal, alternativeTo(3)],
+  ]) {
+    expect(saveOfferContentSchema.safeParse(content(positions)).success).toBe(false);
   }
 });

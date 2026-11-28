@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb, type PDFEmbeddedPage, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 
-import { formatEuroCents, formatQuantity, formatTaxRate } from './format';
+import { formatAlternativeMark, formatEuroCents, formatQuantity, formatTaxRate } from './format';
 import type {
   BusinessDocument,
   DocumentImage,
@@ -193,7 +193,12 @@ function positionFlow(
   textWidth: number,
 ): FlowItem[] {
   const [firstLine = '', ...moreLines] = wrap(position.text, fonts.regular, BODY_SIZE, textWidth);
-  const mark = position.kind === 'text' ? null : POSITION_MARKS[position.kind];
+  const mark =
+    position.kind === 'text'
+      ? null
+      : position.alternativeTo
+        ? formatAlternativeMark(position.alternativeTo)
+        : POSITION_MARKS[position.kind];
   const descriptionLines = position.description.trim()
     ? wrap(position.description, fonts.regular, DESCRIPTION_SIZE, textWidth)
     : [];

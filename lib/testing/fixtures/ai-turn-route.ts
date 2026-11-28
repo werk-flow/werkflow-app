@@ -383,7 +383,9 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
   const commandId = crypto.randomUUID();
   const answerOf = world.rpc;
   world.rpc = (call) =>
-    call.name === 'start_ai_turn' ? { data: null, error: { message: 'connection failure' } } : answerOf(call);
+    call.name === 'start_ai_turn_with_files'
+      ? { data: null, error: { message: 'connection failure' } }
+      : answerOf(call);
   assert.equal((await postTurn('Hallo', { commandId })).status, 503);
   assert.equal((await postTurn('Hallo', { commandId })).status, 503);
   world.rpc = answerOf;

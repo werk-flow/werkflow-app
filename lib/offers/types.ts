@@ -11,7 +11,8 @@ import { z } from '@/lib/zod';
 // its content in 20270201090000_write_titel_and_positionen_into_an_offer.sql,
 // a Position's article in 20270301090000_take_offer_positions_from_articles.sql,
 // its Leistung and its cost in 20270501090000_calculate_offers_with_leistungen_and_costs.sql,
-// its price source in 20270601100000_price_new_offer_positions_by_customer_conditions.sql).
+// its price source in 20270601100000_price_new_offer_positions_by_customer_conditions.sql,
+// its type in 20270701100000_keep_bedarfs_and_alternativpositionen_out_of_an_offer_total.sql).
 
 /** Every status the database check allows; this release writes `entwurf` and `gesendet`. */
 export const OFFER_STATUSES = ['entwurf', 'gesendet', 'angenommen', 'abgelehnt', 'zurueckgezogen'] as const;
@@ -60,6 +61,18 @@ export type OfferPositionCost = { amountCents: number; priceQuantity: PriceQuant
 export type OfferPriceSource = { kind: 'manuell' } | (CatalogPriceSource & { proof: string });
 
 /**
+ * A priced Position's type. A normal one counts in the sums. A Bedarfsposition
+ * is offered with its price, outside every sum. An Alternativposition is
+ * offered instead of the normal priced Position at place `alternativeTo` of
+ * its Titel (1 for the Titel's first line, text lines counted), with its
+ * price and the difference, outside every sum.
+ */
+export type OfferPositionType =
+  | { kind: 'normal' }
+  | { kind: 'bedarf' }
+  | { kind: 'alternative'; alternativeTo: number };
+
+/**
  * A priced Position: Bezeichnung, Beschreibung, quantity in a unit of the
  * inventory list, a net price per price quantity and a VAT rate, the fields
  * of a priced invoice line. Typed by hand, or taken from an article or a
@@ -67,6 +80,7 @@ export type OfferPriceSource = { kind: 'manuell' } | (CatalogPriceSource & { pro
  * its price came from included.
  */
 export type OfferFreePosition = { kind: 'free' } & InvoiceLineValues & {
+    positionType: OfferPositionType;
     source: InvoiceLineSourceRef | null;
     cost: OfferPositionCost | null;
     priceSource: PriceSourceClaim;

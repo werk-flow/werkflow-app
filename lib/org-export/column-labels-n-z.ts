@@ -102,6 +102,7 @@ export const COLUMN_LABELS_N_TO_Z = {
   policy_id: 'Regel-ID',
   policy_version_id: 'Regelfassung-ID',
   position: 'Position',
+  position_type: 'Positionsart',
   postal_code: 'PLZ',
   predecessor_equipment_id: 'Vorgängeranlage (ID)',
   predecessor_instruction_item_id: 'Vorheriger Arbeitsschritt (ID)',

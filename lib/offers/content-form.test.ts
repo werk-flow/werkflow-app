@@ -4,6 +4,7 @@ import {
   catalogPositionForm,
   contentFieldId,
   contentFormOf,
+  contentFitsOneSave,
   contentLimitSentence,
   emptyPosition,
   liveContentFigures,
@@ -41,6 +42,21 @@ describe('contentLimitSentence', () => {
 
   test('a Titel with 501 positions names the limit per Titel', () => {
     expect(contentLimitSentence(textLines(501, ''))).toContain('höchstens 500 Positionen');
+  });
+
+  test("a normal Position's type is left out of the count, so a draft that fit before the types still fits", () => {
+    const typed = (kind: 'normal' | 'bedarf') => [
+      {
+        title: 'Material',
+        positions: Array.from({ length: 450 }, () => ({
+          kind: 'free' as const,
+          positionType: { kind },
+          description: 'x'.repeat(1960),
+        })),
+      },
+    ];
+    expect(contentFitsOneSave(typed('normal'))).toBe(true);
+    expect(contentFitsOneSave(typed('bedarf'))).toBe(false);
   });
 
   test('101 Titel name the limit of Titel', () => {
@@ -121,10 +137,13 @@ describe('catalogPositionForm', () => {
       costPriceQuantity: 10,
       markup: '',
       priceSource: { kind: 'listenpreis', proof: 'listenpreis-proof' },
+      positionType: 'normal',
+      alternativeTo: null,
     });
     const parsed = parseContentForm([{ key: 's', title: 'Material', positions: [position] }]);
     expect(parsed.ok && parsed.sections[0]?.positions[0]).toEqual({
       kind: 'free',
+      positionType: { kind: 'normal' },
       name: 'Kupferrohr 15 mm',
       description: 'Hartkupfer, Stange 5 m',
       quantity: '1',
@@ -209,6 +228,7 @@ describe('catalogPositionForm', () => {
         positions: [
           {
             kind: 'free',
+            positionType: { kind: 'normal' },
             name: 'Kupferrohr 15 mm',
             description: '',
             quantity: '2.500',
@@ -292,6 +312,7 @@ describe('cost and markup', () => {
         positions: [
           {
             kind: 'free',
+            positionType: { kind: 'normal' },
             name: 'Pressfitting 15 mm',
             description: '',
             quantity: '1000',
@@ -346,5 +367,83 @@ describe('cost and markup', () => {
         cost: null,
       });
     }
+  });
+});
+
+// An Alternativposition holds its Position by the editor's key, so moving
+// either keeps the pair; the save names the Position's place in the Titel.
+describe('Bedarfs- and Alternativpositionen', () => {
+  const priced = (key: string, name: string, price: string) => ({
+    ...emptyPosition(key, 'free'),
+    name,
+    price,
+  });
+  const base = priced('base', 'Gas-Brennwerttherme 25 kW', '4890,00');
+  const alternative = {
+    ...priced('alt', 'Gas-Brennwerttherme 20 kW', '4520,00'),
+    positionType: 'alternative' as const,
+    alternativeTo: 'base',
+  };
+  const bedarf = { ...priced('bedarf', 'Neutralisationsbox', '185,00'), positionType: 'bedarf' as const };
+  const note = { ...emptyPosition('note', 'text'), name: 'Hinweis' };
+
+  test('a move keeps an Alternativposition with its Position, named by its place in the Titel', () => {
+    const parsed = parseContentForm([
+      { key: 's', title: 'Heizung', positions: [alternative, note, bedarf, base] },
+    ]);
+    expect(
+      parsed.ok &&
+        parsed.sections[0]?.positions.map((position) => position.kind === 'free' && position.positionType),
+    ).toEqual([{ kind: 'alternative', alternativeTo: 4 }, false, { kind: 'bedarf' }, { kind: 'normal' }]);
+  });
+
+  test('a stored Alternativposition reads back with the key of its Position', () => {
+    const parsed = parseContentForm([{ key: 's', title: 'Heizung', positions: [base, note, alternative] }]);
+    if (!parsed.ok) throw new Error('the content did not parse');
+    const sections = parsed.sections.map((section) => ({
+      ...section,
+      positions: section.positions.map((position) =>
+        position.kind === 'free'
+          ? { ...position, source: null, priceSource: { kind: 'manuell' as const } }
+          : position,
+      ),
+    }));
+    const [section] = contentFormOf(sections, 'load');
+    expect(section?.positions.map((position) => [position.positionType, position.alternativeTo])).toEqual([
+      ['normal', null],
+      ['normal', null],
+      ['alternative', 'load-0-0'],
+    ]);
+    expect(parseContentForm(section ? [section] : [])).toEqual(parsed);
+  });
+
+  test('an Alternativposition whose Position is gone or no longer normal stops the save at its field, and the totals stand', () => {
+    const field = contentFieldId(0, { position: 1, field: 'alternative' });
+    for (const positions of [
+      [note, alternative],
+      [{ ...base, positionType: 'bedarf' as const }, alternative],
+      [base, { ...alternative, alternativeTo: null }],
+    ]) {
+      const parsed = parseContentForm([{ key: 's', title: 'Heizung', positions }]);
+      expect(parsed.ok ? null : parsed.errors).toEqual({
+        [field]: 'Wähle die Position, statt der diese Alternative angeboten wird.',
+      });
+    }
+    const figures = liveContentFigures([
+      { key: 's', title: 'Heizung', positions: [note, alternative, bedarf] },
+    ]);
+    expect(figures?.amounts.totals.lineNetCents).toBe(0);
+    expect(figures?.calculation.outsideTotal).toBe(2);
+  });
+
+  test('the live totals leave out a Bedarfs- and an Alternativposition', () => {
+    const figures = liveContentFigures([
+      { key: 's', title: 'Heizung', positions: [base, bedarf, alternative] },
+    ]);
+    expect(figures?.amounts.sections[0]).toEqual({
+      netCents: 489_000,
+      positionCents: [489_000, 18_500, 452_000],
+    });
+    expect(figures?.amounts.totals.grossCents).toBe(581_910);
   });
 });

@@ -124,6 +124,8 @@ export const ADVISOR_EXCEPTIONS: Record<string, string> = {
     'Two access paths: the requester reads their own request, approvers read the organization queue.',
   multiple_permissive_policies_public_profiles_authenticated_SELECT:
     'Two access paths: a user reads their own profile before any membership exists, members read co-member profiles.',
+  multiple_permissive_policies_public_school_days_authenticated_SELECT:
+    "Two access paths: managers read the organization's school days, an apprentice reads their own, as for profiles and organization_join_requests.",
 };
 
 function needsReview(lint: AdvisorLint): boolean {

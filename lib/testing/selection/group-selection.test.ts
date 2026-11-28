@@ -9,6 +9,7 @@ import {
   passedSinceSelection,
   selectionBaseline,
 } from './group-selection';
+import { testExecutionClosure } from '../evidence/group-qualification';
 import type { ChangeTrigger } from './change-triggers';
 import { getTestGroups } from './test-groups';
 
@@ -73,6 +74,7 @@ const groups = [
   ),
 ];
 const CRITICAL = ['golden:gg-00', 'golden:p1-21'];
+const VISUAL = 'audit:visual';
 const CHEAP = ['static:docs', 'static:dependencies', 'unit:all', 'ui:contracts', 'sql:p1-21'];
 function select(
   changedFiles: string[],
@@ -85,7 +87,9 @@ const browserOnly = (ids: string[]): string[] => ids.filter((id) => /^(golden|au
 
 test('the cheap gates and the advisory check are always in a change plan', () => {
   expect(select([])).toEqual(CHEAP);
-  expect(select(['docs-free/script.ts'])).toEqual(CHEAP);
+  // A file of a kind no rule knows selects the visual references: they fail open.
+  expect(select(['docs-free/script.ts'])).toEqual([...CHEAP, VISUAL]);
+  expect(select(['docs/README.md', 'scripts/check-docs.ts', 'vercel.json'])).toEqual(CHEAP);
   const reason = (changedFiles: string[], unresolved: string[] = []) =>
     groupSelections({ mode: 'change', groups, changedFiles, unresolvedGroupIds: unresolved }).get(
       'static:dependencies',
@@ -103,15 +107,21 @@ test('a product file selects the critical journeys and the permission groups tha
     ...CRITICAL,
     'golden:p1-24a',
     'audit:wave-3:p1-24a',
+    VISUAL,
   ]);
-  expect(browserOnly(select(['lib/inventory/actions.ts']))).toEqual([...CRITICAL, 'audit:wave-2:p1-13']);
+  expect(browserOnly(select(['lib/inventory/actions.ts']))).toEqual([
+    ...CRITICAL,
+    'audit:wave-2:p1-13',
+    VISUAL,
+  ]);
   // A deleted or new file under an owned directory is owned by its path; nothing widens.
   expect(browserOnly(select(['lib/inventory/removed-module.ts']))).toEqual([
     ...CRITICAL,
     'audit:wave-2:p1-13',
+    VISUAL,
   ]);
   // A group without a permission test waits for the nightly run, even when its scope owns the file.
-  expect(browserOnly(select(['lib/clients/actions.ts']))).toEqual(CRITICAL);
+  expect(browserOnly(select(['lib/clients/actions.ts']))).toEqual([...CRITICAL, VISUAL]);
   const selection = groupSelections({
     mode: 'change',
     groups,
@@ -140,26 +150,27 @@ test('a group outside the critical set and the permission groups runs only when 
   expect(browserOnly(select(['docs/technical/testing.md', 'README.md']))).toEqual([]);
 });
 
-test('the critical journeys and the core table are the whole answer for product code no scope owns', () => {
+test('the critical journeys, the core table and the visual references are the whole answer for product code no scope owns', () => {
   const account = 'audit:security:account';
+  const all = [...CRITICAL, VISUAL];
   const expectations: readonly (readonly [string, string[]])[] = [
     // Shared controls and tokens leave the layout sweeps to full runs (decision 0007, amendment 2026-10-29).
-    ['components/ui/button.tsx', CRITICAL],
-    ['components/ui/dialog.tsx', CRITICAL],
-    ['components/shared/area-nav.tsx', CRITICAL],
-    ['app/globals.css', CRITICAL],
-    ['proxy.ts', [...CRITICAL, account]],
-    ['lib/auth/actions.ts', [...CRITICAL, account]],
-    ['app/(auth)/login/page.tsx', [...CRITICAL, account]],
-    ['lib/data/cached.ts', [...CRITICAL, account]],
-    ['package.json', [...CRITICAL, account]],
-    ['<environment>', [...CRITICAL, account]],
-    ['hooks/use-live-view.ts', CRITICAL],
-    ['lib/data/background-reads.ts', CRITICAL],
-    ['lib/supabase/database.types.ts', CRITICAL],
-    ['supabase/migrations/20261001000000_new.sql', CRITICAL],
-    ['app/(app)/layout.tsx', CRITICAL],
-    ['lib/removed-unmapped-module.ts', CRITICAL],
+    ['components/ui/button.tsx', all],
+    ['components/ui/dialog.tsx', all],
+    ['components/shared/area-nav.tsx', all],
+    ['app/globals.css', all],
+    ['proxy.ts', [...CRITICAL, account, VISUAL]],
+    ['lib/auth/actions.ts', [...CRITICAL, account, VISUAL]],
+    ['app/(auth)/login/page.tsx', [...CRITICAL, account, VISUAL]],
+    ['lib/data/cached.ts', [...CRITICAL, account, VISUAL]],
+    ['package.json', [...CRITICAL, account, VISUAL]],
+    ['<environment>', [...CRITICAL, account, VISUAL]],
+    ['hooks/use-live-view.ts', all],
+    ['lib/data/background-reads.ts', all],
+    ['lib/supabase/database.types.ts', all],
+    ['supabase/migrations/20261001000000_new.sql', all],
+    ['app/(app)/layout.tsx', all],
+    ['lib/removed-unmapped-module.ts', all],
   ];
   for (const [file, expected] of expectations)
     expect([file, browserOnly(select([file]))]).toEqual([file, expected]);
@@ -212,11 +223,12 @@ test('repair mode selects the failed or blocked browser groups, whatever product
     'lib/inventory/b.ts',
     'lib/testing/selection/group-selection.ts',
   ];
-  expect(select(repair, ['audit:wave-2:p1-13'])).toEqual([...CHEAP, 'audit:wave-2:p1-13']);
+  // The visual references still run on the product code: a repair absorbs it into the baseline.
+  expect(select(repair, ['audit:wave-2:p1-13'])).toEqual([...CHEAP, 'audit:wave-2:p1-13', VISUAL]);
   // A group's own test code changed during the repair runs too: it would otherwise become baseline unrun.
   // The critical journeys that do not execute it wait, like any group the repair's product code would select.
   const withTestCode = select([...repair, 'tests/golden/support/steps/shared.ts'], ['audit:wave-2:p1-13']);
-  expect(browserOnly(withTestCode)).toEqual(['golden:gg-00', 'golden:p1-24a', 'audit:wave-2:p1-13']);
+  expect(browserOnly(withTestCode)).toEqual(['golden:gg-00', 'golden:p1-24a', 'audit:wave-2:p1-13', VISUAL]);
   expect(select([], ['audit:wave-2:p1-13', 'golden:gg-00'])).toEqual([
     ...CHEAP,
     'golden:gg-00',
@@ -225,7 +237,7 @@ test('repair mode selects the failed or blocked browser groups, whatever product
   // An unresolved cheap gate or a release-only group does not start repair mode.
   expect(
     browserOnly(select(['lib/inventory/b.ts'], ['unit:all', 'audit:performance:calendar', 'retired:group'])),
-  ).toEqual([...CRITICAL, 'audit:wave-2:p1-13']);
+  ).toEqual([...CRITICAL, 'audit:wave-2:p1-13', VISUAL]);
 });
 
 test('performance groups run in release mode only; release selects every group', () => {
@@ -240,19 +252,21 @@ test('performance groups run in release mode only; release selects every group',
   expect(select([], [], 'release')).toEqual(groups.map((group) => group.id));
 });
 
-test('visual references run in release mode only, even when shared controls or tokens change', () => {
+test('visual references run on a product or dependency change, and a failed visual run starts no repair mode', () => {
   for (const changed of [
     ['components/ui/button.tsx'],
     ['app/globals.css'],
     ['app/(app)/kunden/page.tsx'],
     ['package.json'],
   ]) {
-    expect(select(changed)).not.toContain('audit:visual');
+    expect(select(changed)).toContain(VISUAL);
   }
-  // A failed visual run neither starts repair mode nor returns in a change plan; its repair runs with --group.
-  expect(browserOnly(select(['lib/inventory/b.ts'], ['audit:visual']))).toEqual([
+  expect(select(['docs/technical/testing.md', 'tests/golden/p1-24a.spec.ts'])).not.toContain(VISUAL);
+  // Its repair runs with --group or with the next product change; the other groups keep their selection.
+  expect(browserOnly(select(['lib/inventory/b.ts'], [VISUAL]))).toEqual([
     ...CRITICAL,
     'audit:wave-2:p1-13',
+    VISUAL,
   ]);
   expect(select([], [], 'release')).toContain('audit:visual');
 });
@@ -362,17 +376,16 @@ test('the plan names a wall-clock group whose scope owns a changed product file,
   );
 });
 
-test('a release-only group runs in a change plan only when its own spec or test support changed', () => {
+test('a release-only group other than the visual references runs in a change plan only when its own spec or test support changed', () => {
   const plan = (changedFiles: string[], unresolvedGroupIds: string[] = []): Map<string, unknown> =>
     groupSelections({ mode: 'change', groups, changedFiles, unresolvedGroupIds });
-  // Its scope owns the file, yet the layout and visual groups wait for a full run.
+  // Its scope owns the file, yet the layout groups wait for a full run.
   const owned = plan([
     'components/kalender/board/board-row.tsx',
     'lib/work/actions.ts',
     'components/ui/button.tsx',
   ]);
-  for (const id of ['audit:layout', 'audit:layout:work', 'audit:visual'])
-    expect([id, owned.has(id)]).toEqual([id, false]);
+  for (const id of ['audit:layout', 'audit:layout:work']) expect([id, owned.has(id)]).toEqual([id, false]);
   expect(browserOnly([...plan(['tests/audit/layout/surfaces-work.spec.ts']).keys()])).toEqual([
     'audit:layout:work',
   ]);
@@ -383,6 +396,7 @@ test('a release-only group runs in a change plan only when its own spec or test 
   expect(browserOnly([...plan(['lib/inventory/b.ts'], ['audit:layout:work']).keys()])).toEqual([
     ...CRITICAL,
     'audit:wave-2:p1-13',
+    VISUAL,
   ]);
 });
 
@@ -451,7 +465,7 @@ test('every product, migration or dependency change runs both lab groups; a docs
     changedFiles: ['lib/inventory/stock.ts'],
     unresolvedGroupIds: ['audit:lab:office'],
   });
-  expect(browserOnly([...repair.keys()])).toEqual(['audit:lab:office']);
+  expect(browserOnly([...repair.keys()])).toEqual([VISUAL, 'audit:lab:office']);
 });
 
 test('changed-spec-first: a group whose own spec or test support changed is tier 0; harness and product changes decide no order', () => {
@@ -504,4 +518,45 @@ test('a layout sweep runs when a product file its audited surfaces render change
       selection: both.get(sweep.id),
     }),
   ).toBe(false);
+});
+
+test('the visual references run on any product change and on a changed reference, never for docs or other tests', () => {
+  const spec = 'tests/audit/visual/references.spec.ts';
+  const visual = browser('audit:visual', 'release-only', [], [spec]);
+  const plan = (changedFiles: string[]) =>
+    groupSelections({ mode: 'change', groups: [visual], changedFiles, unresolvedGroupIds: [] }).get(
+      visual.id,
+    );
+  // #694 changed the offer header through its page and reader; its queue run selected no visual reference.
+  const offer = [
+    'app/(app)/angebote/[offerId]/page.tsx',
+    'components/angebote/offer-revisions.tsx',
+    'lib/offers/reads.ts',
+    'supabase/migrations/20270701090000_start_the_next_revision_of_a_sent_offer.sql',
+  ];
+  expect(plan([...offer, 'tests/ui-contracts/offers.spec.ts', 'docs/README.md'])).toEqual({
+    reason: 'Audited surface changed',
+    changedFiles: offer,
+  });
+  // Another family, a shared control, a deleted layout, an asset loaded by URL, the CSS toolchain and an
+  // unknown kind of input each can move references too.
+  for (const file of [
+    'components/zeiterfassung/zeiterfassung-dashboard-hero.tsx',
+    'components/ui/button.tsx',
+    'app/(app)/layout.tsx',
+    'public/logo-text-light.svg',
+    'postcss.config.mjs',
+    'messages/de.json',
+  ])
+    expect(plan([file])?.changedFiles, file).toEqual([file]);
+  expect(plan(['docs/README.md', 'tests/golden/p1-01.spec.ts', 'lib/testing/selection/fast-tier.ts'])).toBe(
+    undefined,
+  );
+  // A reference image or text is loaded by path: changing one selects the group and moves its proof.
+  const reference = 'tests/audit/visual/references.spec.ts-snapshots/angebot-desktop-light-linux.txt';
+  expect(plan([reference])).toEqual({
+    reason: 'Test execution dependency changed',
+    changedFiles: [reference],
+  });
+  expect([...testExecutionClosure(new Map(), [spec, reference], [spec])]).toContain(reference);
 });

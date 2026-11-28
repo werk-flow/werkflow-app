@@ -12,6 +12,7 @@ function free(
   return {
     kind: 'free',
     name: 'Position',
+    positionType: { kind: 'normal' },
     description: '',
     quantity,
     unit: 'piece',
@@ -118,6 +119,35 @@ describe('offerCalculation', () => {
       positions: [free('100000', 100, { amountCents: 100_000_001, priceQuantity: 1 })],
     };
     expect(() => offerCalculation([section], offerAmounts([section]))).toThrow(RangeError);
+  });
+
+  test('a Bedarfs- and an Alternativposition keep their own figures and count in no Titel or offer sum', () => {
+    const section: OfferSection = {
+      title: 'Heizung',
+      positions: [
+        free('1', 425_000, { amountCents: 310_000, priceQuantity: 1 }),
+        {
+          ...free('1', 18_500, { amountCents: 9_000, priceQuantity: 1 }, { taxRateBasisPoints: 700 }),
+          positionType: { kind: 'bedarf' },
+        },
+        // Without a cost: it adds nothing to „Positionen ohne Kosten“ either.
+        { ...free('1', 388_000, null), positionType: { kind: 'alternative', alternativeTo: 1 } },
+      ],
+    };
+    const calculation = offerCalculation([section], offerAmounts([section]));
+    expect(calculation.sections[0]?.positions).toEqual([
+      { saleCents: 425_000, costCents: 310_000, marginCents: 115_000, marginPermille: 271 },
+      { saleCents: 18_500, costCents: 9000, marginCents: 9500, marginPermille: 514 },
+      { saleCents: 388_000, costCents: null, marginCents: null, marginPermille: null },
+    ]);
+    expect(calculation.offer).toEqual({
+      saleCents: 425_000,
+      costCents: 310_000,
+      marginCents: 115_000,
+      marginPermille: 271,
+      withoutCost: 0,
+    });
+    expect(calculation.outsideTotal).toBe(2);
   });
 
   test('a sale amount of zero has no margin in percent', () => {

@@ -1,8 +1,8 @@
 {
   "systemPrompt": 1908,
   "toolDefinitions": {
-    "admin": 2404,
-    "buero": 2404,
-    "employee": 1305
+    "admin": 3523,
+    "buero": 3523,
+    "employee": 2424
   }
 }

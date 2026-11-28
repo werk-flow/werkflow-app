@@ -8,29 +8,39 @@ import {
 } from '@/lib/testing/invoice-arbitraries';
 import { offerAmounts } from './amounts';
 import { markupPriceCents, MAX_MARKUP_TENTHS, offerCalculation } from './calculation';
-import type { OfferFreePosition, OfferSection } from './types';
+import type { OfferFreePosition, OfferPositionType, OfferSection } from './types';
 
 // Property tests (docs/technical/testing.md, "Property tests"). The rule comes from
 // docs/features/commercial-and-finance.md, "Offers": a Position's cost is its quantity at its own
 // cost per price quantity, rounded once; its margin is its amount less its cost, in percent of its
-// amount rounded once; a Titel and the offer sum their Positionen, counting the ones without a cost;
-// a markup on the cost sets the price, rounded once.
+// amount rounded once; a Titel and the offer sum their normal Positionen, counting the ones without a
+// cost; a Bedarfs- or Alternativposition counts in no sum, total or VAT; a markup on the cost sets the
+// price, rounded once.
 
 const THOUSAND = BigInt(1000);
 
 /** Quantities of up to 500 pieces, credits included, which keep every sum far inside the line bound. */
 const thousandthsArbitrary = fc.bigInt({ min: BigInt(-50_000), max: BigInt(500_000) });
 
+/** Mostly normal Positions; an Alternativposition's Position plays no part in an amount. */
+const positionTypeArbitrary: fc.Arbitrary<OfferPositionType> = fc.oneof(
+  { weight: 3, arbitrary: fc.constant({ kind: 'normal' as const }) },
+  { weight: 1, arbitrary: fc.constant({ kind: 'bedarf' as const }) },
+  { weight: 1, arbitrary: fc.constant({ kind: 'alternative' as const, alternativeTo: 1 }) },
+);
+
 const positionArbitrary: fc.Arbitrary<OfferFreePosition> = fc
   .record({
+    positionType: positionTypeArbitrary,
     thousandths: thousandthsArbitrary,
     unitPriceCents: priceCentsArbitrary,
     priceQuantity: priceQuantityArbitrary,
     taxRateBasisPoints: fc.constantFrom(1900, 700, 0),
     cost: fc.option(fc.record({ amountCents: priceCentsArbitrary, priceQuantity: priceQuantityArbitrary })),
   })
-  .map(({ thousandths, unitPriceCents, priceQuantity, taxRateBasisPoints, cost }) => ({
+  .map(({ positionType, thousandths, unitPriceCents, priceQuantity, taxRateBasisPoints, cost }) => ({
     kind: 'free',
+    positionType,
     name: 'Position',
     description: '',
     quantity: quantityText(thousandths),
@@ -42,6 +52,10 @@ const positionArbitrary: fc.Arbitrary<OfferFreePosition> = fc
     cost,
     priceSource: { kind: 'manuell' },
   }));
+
+/** The rule, stated here on its own: only a normal Position counts in a sum. */
+const isNormal = (position: OfferSection['positions'][number]): position is OfferFreePosition =>
+  position.kind === 'free' && position.positionType.kind === 'normal';
 
 const offerArbitrary: fc.Arbitrary<OfferSection[]> = fc.array(
   fc.record({ title: fc.constant('Titel'), positions: fc.array(positionArbitrary, { maxLength: 8 }) }),
@@ -106,7 +120,7 @@ describe('An offer’s calculation', () => {
         const amounts = offerAmounts(sections);
         const calculation = offerCalculation(sections, amounts);
         const priced = sections.flatMap((section) =>
-          section.positions.flatMap((p) => (p.kind === 'free' ? [p] : [])),
+          section.positions.flatMap((p) => (isNormal(p) ? [p] : [])),
         );
         const cost = priced.reduce(
           (total, position) => total + (exactCost(position) ?? BigInt(0)),
@@ -122,6 +136,38 @@ describe('An offer’s calculation', () => {
         });
         expect(calculation.sections.map((section) => section.saleCents)).toEqual(
           amounts.sections.map((section) => section.netCents),
+        );
+      }),
+    );
+  });
+
+  test('leaves each Bedarfs- and Alternativposition out of every sum, total and VAT, at its own line amount', () => {
+    fc.assert(
+      fc.property(offerArbitrary, (sections) => {
+        const amounts = offerAmounts(sections);
+        const counted = sections.map((section) => ({
+          ...section,
+          positions: section.positions.filter(isNormal),
+        }));
+        const without = offerAmounts(counted);
+        expect(amounts.totals).toEqual(without.totals);
+        expect(amounts.taxSubtotals).toEqual(without.taxSubtotals);
+        expect(amounts.sections.map((section) => section.netCents)).toEqual(
+          without.sections.map((section) => section.netCents),
+        );
+        sections.forEach((section, sectionIndex) => {
+          section.positions.forEach((position, positionIndex) => {
+            if (position.kind === 'text' || position.positionType.kind === 'normal') return;
+            const thousandths = BigInt(Math.round(Number(position.quantity) * 1000));
+            const exact = roundHalfAwayFromZero(
+              thousandths * BigInt(position.unitPriceCents),
+              BigInt(position.priceQuantity) * THOUSAND,
+            );
+            expect(amounts.sections[sectionIndex]?.positionCents[positionIndex]).toBe(Number(exact));
+          });
+        });
+        expect(offerCalculation(sections, amounts).outsideTotal).toBe(
+          sections.flatMap((section) => section.positions).filter((position) => !isNormal(position)).length,
         );
       }),
     );

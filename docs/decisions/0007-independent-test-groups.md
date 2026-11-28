@@ -214,3 +214,13 @@ Decided in the CI overhaul under owner decision 21 (werk-flow/werkflow-planning#
 3. A rule test fails when an audited page or dialog does not select the sweep that audits it.
 
 Measured on the same 60 PRs: 7 of the 32 that planned by diff gain sweeps, 18 sweep runs and 3 shards in all, at most 4 sweeps on one PR. Known limit: a change to a shared control or to the data layer surfaces in the nightly run, as before.
+
+## Amendment 2026-11-27: the visual references run on every change that can render
+
+Decided for the CI hill climb, as an owner priority. werk-flow/werkflow-app#694 changed the offer page's header. Its merge-queue run selected 46 browser groups but not `audit:visual`, because the first 2026-10-29 amendment runs it only in release mode, CI's full runs and for its own test code. The next full run failed the offer's text reference, and `main` stayed red for two hours (alerts #720, #721). #700 had already repaired the same references after an earlier change.
+
+1. A change plan, in CI and locally, selects `audit:visual` when any file changed except test code, documentation and repository tooling (`lib/testing/selection/group-selection.ts`). For `audit:visual` this supersedes both items of that amendment: it is no longer release-only, and CI adds it to every PR that changes rendered UI. The references compare every family's pixels and exact text, so a page, a shared control, a reader or label under `lib/`, a public asset loaded by URL, a migration behind a read, a dependency or the CSS toolchain can each move one. The rule lists what renders nothing, so a new kind of input selects the group until it is listed. In CI, a dependency change that moves only lint and type packages selects no browser group, this one included. An import closure from the pages missed deleted routes and assets, and it widens to every file at its first unresolved import anyway.
+2. A changed reference image or text selects the group and moves its proof, since Playwright loads it by path.
+3. A failed `audit:visual` still starts no repair mode.
+
+Measured with `scripts/ci-plan.ts` on 9 merges of 2026-11-27: 7 gain the group. 5 of the 7 add a visual shard of about 10 job-minutes (about 5 min of setup and 5 min of tests). The other 2 fit it into their existing visual shards. 19 of the last 30 merges on `main`, about 12 hours, select it: 17 product changes and 2 reference updates, no tooling change. That is at most about 190 job-minutes per 30 merges, about 4 % of the 9,000-minute daily guard if 60 merges land in a day.

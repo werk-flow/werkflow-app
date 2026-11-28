@@ -4,7 +4,13 @@ import { type ModelMessage, type ToolSet, streamText } from 'ai';
 
 import { type AiContext, type AiThreadMessage, buildAiContext, serializedInput } from '@/lib/ai/context';
 import { AI_MODEL_PRICE, type AiTokenUsage, costMicroUsd } from '@/lib/ai/cost';
-import { AI_TURN_LIMITS, type AiEntryPoint, inputTokenCeiling, maxTurnCostMicroUsd } from '@/lib/ai/limits';
+import {
+  AI_TURN_LIMITS,
+  AI_UPLOAD_LIMITS,
+  type AiEntryPoint,
+  inputTokenCeiling,
+  maxTurnCostMicroUsd,
+} from '@/lib/ai/limits';
 import { type AiModel, isAllowedModel, resolveAiModel } from '@/lib/ai/model';
 import {
   TurnStop,
@@ -16,6 +22,8 @@ import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import { AI_PROMPT_VERSION } from '@/lib/ai/prompt/system-prompt';
 import { isAiReleasedFor } from '@/lib/ai/release-gate';
 import { readAiOrganizationSwitch } from '@/lib/ai/settings';
+import { rowFromItem } from '@/lib/ai/thread-rows';
+import type { AiThreadRow } from '@/lib/ai/thread-types';
 import { toToolSet } from '@/lib/ai/tools/define-tool';
 import { aiToolsFor } from '@/lib/ai/tools/registry';
 import {
@@ -54,6 +62,8 @@ export type AiTurnCommand = {
   /** When the request arrived (epoch ms): the turn's total timeout counts from here. */
   receivedAt: number;
   text: string;
+  /** The person's uploads this message attaches; the model does not read them (KI-9 will). */
+  fileIds?: readonly string[];
 };
 
 /** Why a turn did not start. Every code is stable; the client shows its own German text. */
@@ -65,7 +75,9 @@ export type AiTurnRefusal =
   | 'too_many_turns'
   | 'budget_exhausted'
   | 'run_active'
-  | 'command_conflict';
+  | 'command_conflict'
+  | 'file_not_found'
+  | 'files_over_cap';
 
 /** Why a started turn ended early. The answer keeps what was written and says why. */
 export type AiTurnFailure =
@@ -95,6 +107,8 @@ export type AiTurnSink = {
   text: (delta: string) => void;
   saved?: (length: number) => void;
   revoked?: () => void;
+  /** A row of the turn's tool calls, questions or to-do list, each time it is saved (lib/ai/tools/tool-calls.ts). */
+  row?: (row: AiThreadRow) => void;
 };
 
 type ItemRef = { id: string; sequence: number };
@@ -106,6 +120,8 @@ export type AiTurnStart =
       status: 'started';
       userItem: ItemRef;
       assistantItem: ItemRef;
+      /** The message's file items, by file id. */
+      files: Array<{ fileId: string; sequence: number }>;
       run: (sink: AiTurnSink) => Promise<AiTurnEnd>;
     };
 
@@ -113,6 +129,14 @@ type Admin = ReturnType<typeof createSupabaseAdminClient>;
 type Refused = Extract<AiTurnStart, { status: 'refused' }>;
 
 const refused = (refusal: AiTurnRefusal): Refused => ({ status: 'refused', refusal });
+
+const FILE_REFUSALS: Readonly<Record<string, AiTurnRefusal>> = {
+  ai_file_not_found: 'file_not_found',
+  ai_files_over_turn_cap: 'files_over_cap',
+};
+const startedFilesSchema = z.object({
+  files: z.array(z.object({ fileId: z.string(), sequence: z.number() })).default([]),
+});
 
 const messageBodySchema = z.object({ text: z.string() });
 // What `start_ai_turn` answers: ids only when the turn started.
@@ -162,18 +186,27 @@ export async function startAiTurn(command: AiTurnCommand): Promise<AiTurnStart> 
   if (limit === 'unavailable') return refused('unavailable');
 
   // The reservation's key is the command id, never a value of its message (decision 19).
+  const args = {
+    p_organization_id: organizationId,
+    p_user_id: userId,
+    p_thread_id: command.threadId,
+    p_title: threadTitle(command.text),
+    p_command_id: commandId,
+    p_text: command.text,
+    p_reserve_micro_usd: maxTurnCostMicroUsd(command.entryPoint),
+  };
+  // The message's files, none included, save in the same call, before it, bound to the command.
   const { data, error } = await admin
-    .rpc('start_ai_turn', {
-      p_organization_id: organizationId,
-      p_user_id: userId,
-      p_thread_id: command.threadId,
-      p_title: threadTitle(command.text),
-      p_command_id: commandId,
-      p_text: command.text,
-      p_reserve_micro_usd: maxTurnCostMicroUsd(command.entryPoint),
+    .rpc('start_ai_turn_with_files', {
+      ...args,
+      p_file_ids: [...(command.fileIds ?? [])],
+      p_max_files: AI_UPLOAD_LIMITS.maxFilesPerMessage,
+      p_max_bytes: AI_UPLOAD_LIMITS.maxMessageBytes,
     })
     .single();
   if (error) {
+    const fileRefusal = FILE_REFUSALS[error.message];
+    if (fileRefusal) return refused(fileRefusal);
     if (error.message === 'ai_thread_not_found') return refused('thread_not_found');
     // An earlier build closed this command's run before its answer existed; the client sends a new command.
     if (error.message === 'ai_run_closed') return refused('command_conflict');
@@ -196,6 +229,7 @@ export async function startAiTurn(command: AiTurnCommand): Promise<AiTurnStart> 
     status: 'started',
     userItem,
     assistantItem,
+    files: startedFilesSchema.safeParse(data).data?.files ?? [],
     run: (sink) =>
       runTurn({
         admin,
@@ -216,7 +250,14 @@ function threadTitle(text: string): string {
   return Array.from(firstLine).slice(0, 80).join('') || AI_PRODUCT_NAME;
 }
 
-/** The thread's latest finished messages, oldest first: the model's memory of the conversation. */
+/** A question the agent asked, as the model reads it back: the question and the answers it offered. */
+function questionText(item: { kind: string; sequence: number; body: unknown }): string {
+  const row = rowFromItem({ ...item, idempotency_key: 'history', status: 'complete' });
+  if (row?.role !== 'question') return '';
+  return [row.question, ...row.options.map((option) => `- ${option}`)].join('\n');
+}
+
+/** The thread's latest finished messages and questions, oldest first: the model's memory of the conversation. */
 async function readHistory(
   admin: Admin,
   command: AiTurnCommand,
@@ -229,7 +270,7 @@ async function readHistory(
     .eq('organization_id', command.organizationId)
     .eq('thread_id', command.threadId)
     .eq('status', 'complete')
-    .in('kind', ['user_message', 'assistant_message'])
+    .in('kind', ['user_message', 'assistant_message', 'question'])
     .lt('sequence', beforeSequence)
     .order('sequence', { ascending: false })
     .limit(HISTORY_MESSAGES)
@@ -241,6 +282,10 @@ async function readHistory(
   return data
     .toSorted((left, right) => left.sequence - right.sequence)
     .flatMap((item): AiThreadMessage[] => {
+      if (item.kind === 'question') {
+        const text = questionText(item);
+        return text ? [{ role: 'assistant', text }] : [];
+      }
       const body = messageBodySchema.safeParse(item.body);
       if (!body.success || !body.data.text) return [];
       return [{ role: item.kind === 'user_message' ? 'user' : 'assistant', text: body.data.text }];
@@ -493,8 +538,8 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
     }
     if (outcome.finishReason === 'length') return failedEnd('cancelled', 'answer_too_long');
     if (outcome.finishReason === 'content-filter') return failedEnd('failed', 'model_refused');
-    // A step that ends in tool calls continues with their results.
-    if (outcome.finishReason !== 'tool-calls') return { status: 'complete' };
+    // A step that ends in tool calls continues with their results; one that asked the person waits for them.
+    if (outcome.finishReason !== 'tool-calls' || context.toolCalls.asked) return { status: 'complete' };
     messages = [...messages, ...outcome.responseMessages];
   }
 }
@@ -543,8 +588,9 @@ async function runStep(
       };
     }
     const { failure, retryable } = classified ?? { failure: 'interrupted', retryable: false };
-    // What the user already saw is never written twice: a stream that broke after it wrote is not retried.
-    if (!retryable || written || answer.retriesLeft <= 0) {
+    // What the user already saw is never written twice: a stream that broke after it wrote, or after
+    // it asked the person a question, is not retried.
+    if (!retryable || written || context.toolCalls.asked || answer.retriesLeft <= 0) {
       // Only the harness's own classification reaches the log, never a field the provider sent (B17).
       const status = provider?.status;
       logError('aiTurn: provider attempt failed', status === undefined ? outcome : `${outcome}_${status}`);

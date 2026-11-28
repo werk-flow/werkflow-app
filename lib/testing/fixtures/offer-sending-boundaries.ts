@@ -334,6 +334,8 @@ for (const printed of [
   '"openingText":"Sehr geehrte Damen und Herren,"',
   '"closingText":"Mit freundlichen Grüßen"',
   '"companyName":"Haustechnik Sonnenberg GmbH"',
+  // Its sums left out Bedarfs- and Alternativpositionen, which send_offer requires of an offer holding one.
+  '"positionTypes":true',
 ]) {
   assert.ok(snapshot.includes(printed), `${printed} missing from ${snapshot}`);
 }
