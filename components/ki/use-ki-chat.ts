@@ -606,8 +606,9 @@ function settleRefused(turn: LiveTurn, outcome: TurnOutcome, host: TurnHost): vo
 /**
  * The thread and command of a message. Only a message sent again unchanged
  * after its refusal, the same text with the same files in the same order, is
- * the same command in the same thread; other text or files from the new chat
- * start a new thread.
+ * the same command in the same thread. A changed one from the new chat goes
+ * to the refused message's thread while it keeps one of its files, which
+ * moves there from that message; otherwise it starts a new thread.
  */
 function commandFor(
   text: string,
@@ -621,8 +622,9 @@ function commandFor(
     (host.threadId === null || host.threadId === refused.threadId)
       ? refused
       : undefined;
+  const keeps = uploads.some((upload) => refused?.fileIds.includes(upload.fileId)) ? refused : undefined;
   return {
-    target: host.threadId ?? retry?.threadId ?? crypto.randomUUID(),
+    target: host.threadId ?? (retry ?? keeps)?.threadId ?? crypto.randomUUID(),
     commandId: retry?.commandId ?? crypto.randomUUID(),
   };
 }

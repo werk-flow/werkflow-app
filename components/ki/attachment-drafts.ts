@@ -44,6 +44,29 @@ export function writeAttachments(draft: string, uploads: readonly AiUploadedFile
   writeDraft(attachmentsKey(draft), uploads.length > 0 ? JSON.stringify(uploads) : '');
 }
 
+/** A removed upload whose discard the server has not answered: it keeps its place, since a refused one comes back. */
+type Removal = { fileId: string; draft: string; sizeBytes: number };
+
+/**
+ * The removals the server has not answered, with the drafts they keep a place
+ * in. Memory only: they outlive the composer through a client-side navigation,
+ * and a reload ends the wait for the answer, after which nothing comes back.
+ */
+let removals: readonly Removal[] = [];
+
+export function holdRemoval(removal: Removal): void {
+  removals = [...removals, removal];
+}
+
+/** Frees the place once the server answered; a refused removal's file comes back after it. */
+export function releaseRemoval(fileId: string): void {
+  removals = removals.filter((removal) => removal.fileId !== fileId);
+}
+
+export function pendingRemovals(draft: string): readonly Removal[] {
+  return removals.filter((removal) => removal.draft === draft);
+}
+
 const moveListeners = new Set<(from: string, to: string) => void>();
 
 /** Hears each move of a draft's uploads, so an upload still on its way follows its draft. */
@@ -52,13 +75,14 @@ export function onAttachmentsMoved(listener: (from: string, to: string) => void)
   return () => moveListeners.delete(listener);
 }
 
-/** Moves a draft's uploads behind those of another draft: a new chat's, once its thread exists. */
+/** Moves a draft's uploads and pending removals behind those of another draft: a new chat's, once its thread exists. */
 export function moveAttachments(from: string, to: string): void {
   const moved = readAttachments(from);
   if (moved.length > 0) {
     writeAttachments(from, []);
     writeAttachments(to, [...readAttachments(to), ...moved]);
   }
+  removals = removals.map((removal) => (removal.draft === from ? { ...removal, draft: to } : removal));
   for (const listener of moveListeners) listener(from, to);
 }
 

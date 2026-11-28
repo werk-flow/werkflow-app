@@ -22,8 +22,12 @@ const DICTIONARY_REACH = 4_096;
 const MAX_OBJECT_CHARS = 65_536;
 /** Objects the indexes of all object streams of one file may list together, bounding what the reader keeps of them. */
 const MAX_INDEX_ENTRIES = 100_000;
-/** A Flate filter, as a name or as an array of that one name (PDF 32000-1, 7.3.8.2). */
-const FLATE_FILTER = /\/Filter\s*(?:\/FlateDecode(?![A-Za-z0-9#])|\[\s*\/FlateDecode\s*\])/;
+/**
+ * A Flate filter, as a name or as an array of that one name (PDF 32000-1,
+ * 7.3.8.2). The name ends at white space, a delimiter or the end (7.2.2), so a
+ * longer name such as /FlateDecode-X is not Flate.
+ */
+const FLATE_FILTER = /\/Filter\s*(?:\/FlateDecode(?=[\0\t\n\f\r ()<>[\]{}/%]|$)|\[\s*\/FlateDecode\s*\])/;
 
 type ObjectStream = { decoded: string; first: number; offsets: Map<number, number> };
 

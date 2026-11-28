@@ -4,7 +4,7 @@
 // stands in for the thread's live channel (components/ki/use-ki-live.ts): the
 // spec sees which thread the page joined and sends its events. The thread
 // reads go to `/api/background-read`, which the spec routes.
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { KiChat } from '@/components/ki/ki-chat';
 import { describeTurnRefusal, type TurnEvent, type TurnOutcome } from '@/components/ki/turn-client';
@@ -42,6 +42,8 @@ declare global {
       emit: ((event: KiLiveEvent) => void) | null;
       join: (() => void) | null;
     };
+    /** Set by the fixture: false takes the chat off the page, as a client-side navigation away does; true brings it back. */
+    uiContractKiShowChat: (shown: boolean) => void;
   }
 }
 
@@ -136,17 +138,23 @@ export const KI_CONTRACT_THREADS = [
 ];
 
 export function KiChatContractFixture(): React.JSX.Element {
+  const [shown, setShown] = useState(true);
+  useEffect(() => {
+    window.uiContractKiShowChat = setShown;
+  }, []);
   return (
     <BannerProvider>
       <main className="flex h-dvh flex-col">
         <h1>Komponentenverträge</h1>
-        <KiChat
-          organizationId="00000000-0000-4000-8000-0000000000a1"
-          userId="00000000-0000-4000-8000-0000000000b1"
-          initialThreadId={null}
-          initialThreads={{ threads: KI_CONTRACT_THREADS, hasMore: false }}
-          initialWindow={null}
-        />
+        {shown && (
+          <KiChat
+            organizationId="00000000-0000-4000-8000-0000000000a1"
+            userId="00000000-0000-4000-8000-0000000000b1"
+            initialThreadId={null}
+            initialThreads={{ threads: KI_CONTRACT_THREADS, hasMore: false }}
+            initialWindow={null}
+          />
+        )}
       </main>
     </BannerProvider>
   );

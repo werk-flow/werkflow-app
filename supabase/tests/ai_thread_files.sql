@@ -217,9 +217,11 @@ begin
     raise exception 'A conflicting repeat wrote an item or attached a file';
   end if;
 
-  -- An attached file joins no other message, of this thread or another.
-  perform pg_temp.expect_refusal('ai_file_not_found', 'An attached file joined a second message', v_user, v_thread,
-    'cmd-2', array['af000000-0000-4000-8000-000000000101']::uuid[]);
+  -- A file of an answered message joins no other message, of this thread or another.
+  perform public.append_ai_thread_item(v_org, v_user, v_thread, 'assistant_message', 'complete',
+    '{"text":"Gelesen."}'::jsonb, 'cmd-1:assistant');
+  perform pg_temp.expect_refusal('ai_file_not_found', 'A file of an answered message joined a second message',
+    v_user, v_thread, 'cmd-2', array['af000000-0000-4000-8000-000000000101']::uuid[]);
   perform pg_temp.expect_refusal('ai_file_not_found', 'An attached file joined a second thread', v_user,
     'af000000-0000-4000-8000-000000000022', 'cmd-3', array['af000000-0000-4000-8000-000000000101']::uuid[]);
   -- Another person's thread takes no files.
@@ -237,6 +239,72 @@ begin
   perform pg_temp.expect_refusal('ai_file_not_found', 'A foreign organization attached this organization''s file',
     'af000000-0000-4000-8000-000000000003', 'af000000-0000-4000-8000-000000000023', 'cmd-5',
     array['af000000-0000-4000-8000-000000000103']::uuid[], 5, 100000, 'af000000-0000-4000-8000-000000000011');
+end;
+$$;
+
+-- A changed resend of a refused message (werk-flow/werkflow-planning#623): the
+-- message was saved with two files, the person removed one and sent again as
+-- a new command. The file they kept moves to the new message, with one item;
+-- the removed one stays where it was. Only a refused, unanswered message of
+-- the same thread gives a file up.
+do $$
+declare
+  v_org constant uuid := 'af000000-0000-4000-8000-000000000010';
+  v_user constant uuid := 'af000000-0000-4000-8000-000000000002';
+  v_thread constant uuid := 'af000000-0000-4000-8000-000000000024';
+  v_kept constant uuid := 'af000000-0000-4000-8000-000000000111';
+  v_removed constant uuid := 'af000000-0000-4000-8000-000000000112';
+  v_file uuid;
+  v_items uuid[];
+begin
+  foreach v_file in array array[v_kept, v_removed] loop
+    perform public.register_ai_thread_file(v_org, v_user, v_file,
+      v_org || '/ki/' || v_user || '/' || v_file || '/a-datei', 'aufmass.pdf', 'application/pdf', 1000, 1, 10);
+  end loop;
+  -- Refused: the organization is off. 'run_active' and 'budget_exhausted' keep the message the same way.
+  if pg_temp.send(v_user, v_thread, 'cmd-6', array[v_kept, v_removed]) is distinct from 'disabled' then
+    raise exception 'The first send of two files was not refused as disabled';
+  end if;
+
+  if pg_temp.send(v_user, v_thread, 'cmd-7', array[v_kept]) is distinct from 'disabled' then
+    raise exception 'A changed resend did not carry the file it kept';
+  end if;
+  if (select array_agg(item.idempotency_key order by item.sequence) from public.ai_thread_items item
+      where item.thread_id = v_thread) is distinct from array[
+        'cmd-6:file:' || v_removed, 'cmd-6:user', 'cmd-7:file:' || v_kept, 'cmd-7:user'
+      ] then
+    raise exception 'The kept file did not move to the changed resend, once, before its message';
+  end if;
+  if (select file.item_id from public.ai_thread_files file where file.id = v_kept) is distinct from (
+      select item.id from public.ai_thread_items item where item.idempotency_key = 'cmd-7:file:' || v_kept)
+    or (select file.item_id from public.ai_thread_files file where file.id = v_removed) is distinct from (
+      select item.id from public.ai_thread_items item where item.idempotency_key = 'cmd-6:file:' || v_removed) then
+    raise exception 'A file row does not point at the one item that shows it';
+  end if;
+  if exists (select 1 from public.storage_purge_queue queued
+      where queued.organization_id = v_org and queued.storage_path like '%' || v_kept || '%') then
+    raise exception 'Moving a file queued its bytes for the purge';
+  end if;
+
+  -- Each command stays bound to the files it now holds: a repeat writes nothing new.
+  select array_agg(item.id order by item.sequence) into v_items from public.ai_thread_items item
+  where item.thread_id = v_thread;
+  if pg_temp.send(v_user, v_thread, 'cmd-7', array[v_kept]) is distinct from 'disabled'
+    or pg_temp.send(v_user, v_thread, 'cmd-6', array[v_kept, v_removed]) is distinct from 'command_conflict' then
+    raise exception 'A repeat of either command did not match the files it holds';
+  end if;
+  if (select array_agg(item.id order by item.sequence) from public.ai_thread_items item
+      where item.thread_id = v_thread) is distinct from v_items then
+    raise exception 'A repeat after the move wrote or removed an item';
+  end if;
+
+  -- The file left behind moves to no other thread, and to no other person.
+  perform pg_temp.expect_refusal('ai_file_not_found', 'A refused message''s file moved to another thread',
+    v_user, 'af000000-0000-4000-8000-000000000025', 'cmd-8', array[v_removed]);
+  perform pg_temp.expect_refusal('ai_thread_not_found', 'The admin took a file from another person''s thread',
+    'af000000-0000-4000-8000-000000000001', v_thread, 'cmd-9', array[v_removed]);
+  perform pg_temp.expect_refusal('ai_file_not_found', 'The admin moved another person''s file into their own thread',
+    'af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000026', 'cmd-10', array[v_removed]);
 end;
 $$;
 

@@ -34,12 +34,31 @@ function KiIntro(): React.JSX.Element {
   );
 }
 
+/**
+ * Each file once, with its latest message: a changed resend of a refused
+ * message takes the files it kept from that message (start_ai_turn_with_files),
+ * and a page may still hold the earlier card. Unchanged when no file repeats.
+ */
+function eachFileOnce(messages: readonly TimelineMessage[]): readonly TimelineMessage[] {
+  const latest = new Map<string, number>();
+  let files = 0;
+  for (const [index, message] of messages.entries()) {
+    if (message.role !== 'file') continue;
+    files += 1;
+    latest.set(message.file.fileId, index);
+  }
+  if (latest.size === files) return messages;
+  return messages.filter(
+    (message, index) => message.role !== 'file' || latest.get(message.file.fileId) === index,
+  );
+}
+
 /** The thread's saved messages with the running turn's in place of their saved copies. */
 function shownMessages(view: ThreadView | undefined, live: LiveTurn | null): readonly TimelineMessage[] {
   const saved: readonly TimelineMessage[] = view?.window?.messages ?? [];
-  if (!live) return saved;
+  if (!live) return eachFileOnce(saved);
   const turn = live.started ? [...live.files, live.user, answerMessage(live)] : [...live.files, live.user];
-  return [...saved.filter((message) => !message.key.startsWith(live.commandId)), ...turn];
+  return eachFileOnce([...saved.filter((message) => !message.key.startsWith(live.commandId)), ...turn]);
 }
 
 function KiThreads({

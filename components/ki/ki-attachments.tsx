@@ -7,9 +7,12 @@ import { Button } from '@/components/ui/button';
 import { draftClears, readDraft, subscribeDrafts } from '@/lib/ai/chat-drafts';
 import {
   attachmentsKey,
+  holdRemoval,
   onAttachmentsMoved,
   parseAttachments,
+  pendingRemovals,
   readAttachments,
+  releaseRemoval,
   restoreAttachments,
   writeAttachments,
 } from './attachment-drafts';
@@ -42,23 +45,21 @@ const WAIT_FOR_UPLOADS = 'Warte, bis alle Dateien hochgeladen sind, und schick d
 
 type Uploading = { id: string; draft: string; name: string; mimeType: string; sizeBytes: number };
 
-/** A removed upload whose discard the server has not answered: it keeps its slot, since a refused one comes back. */
-type Removing = { fileId: string; draft: string; sizeBytes: number };
-
 type Refusal = { draft: string; message: string };
 
 /**
  * Removes an upload from its draft; a removal the server refused, or never
- * answered, brings it back with why. `settled` runs once the server answered,
- * before the file comes back.
+ * answered, brings it back with why. Until the server answered, the file
+ * keeps its place in the draft's caps (attachment-drafts.ts), also while the
+ * chat is off the page.
  */
 function removeUpload(
   organizationId: string,
   draft: string,
   file: AiUploadedFile,
   refuse: (refusal: Refusal | null) => void,
-  settled: () => void,
 ): void {
+  holdRemoval({ fileId: file.fileId, draft, sizeBytes: file.sizeBytes });
   writeAttachments(
     draft,
     readAttachments(draft).filter((held) => held.fileId !== file.fileId),
@@ -72,7 +73,7 @@ function removeUpload(
   });
   const settle = (refused: boolean): void => {
     stopFollowing();
-    settled();
+    releaseRemoval(file.fileId);
     // A sign-out cleared the drafts meanwhile: the file's name stays out of this tab.
     if (!refused || draftClears() !== session) return;
     restoreAttachments(target, [file]);
@@ -89,13 +90,11 @@ function removeUpload(
 
 /**
  * The uploads still on their way, each with its transfer so it can be
- * cancelled, and the removals the server has not answered, which keep their
- * places. Both follow a new chat's draft to its saved thread.
+ * cancelled. They follow a new chat's draft to its saved thread.
  */
 function usePending() {
   const [uploading, setUploading] = useState<readonly Uploading[]>([]);
   const uploadingRef = useRef<readonly Uploading[]>([]);
-  const removingRef = useRef<readonly Removing[]>([]);
   const transfers = useRef(new Map<string, AbortController>());
   const track = useCallback((change: (current: readonly Uploading[]) => readonly Uploading[]) => {
     uploadingRef.current = change(uploadingRef.current);
@@ -103,12 +102,9 @@ function usePending() {
   }, []);
   useEffect(
     () =>
-      onAttachmentsMoved((from, to) => {
-        const follow = <T extends { draft: string }>(item: T): T =>
-          item.draft === from ? { ...item, draft: to } : item;
-        track((current) => current.map(follow));
-        removingRef.current = removingRef.current.map(follow);
-      }),
+      onAttachmentsMoved((from, to) =>
+        track((current) => current.map((item) => (item.draft === from ? { ...item, draft: to } : item))),
+      ),
     [track],
   );
   /** Stops an upload still on its way, a stalled one too; the draft's text and other files stay. */
@@ -120,7 +116,7 @@ function usePending() {
     },
     [track],
   );
-  return { uploading, uploadingRef, removingRef, transfers, track, cancel };
+  return { uploading, uploadingRef, transfers, track, cancel };
 }
 
 /** The draft's uploads, the ones still on their way, and the last refusal. */
@@ -131,7 +127,7 @@ export function useKiUploads(organizationId: string, draft: string) {
     () => '',
   );
   const uploads = useMemo(() => parseAttachments(raw), [raw]);
-  const { uploading, uploadingRef, removingRef, transfers, track, cancel } = usePending();
+  const { uploading, uploadingRef, transfers, track, cancel } = usePending();
   const [error, setError] = useState<Refusal | null>(null);
   // The draft whose message waits for its uploads: it says so until they are stored.
   const [waiting, setWaiting] = useState<string | null>(null);
@@ -142,7 +138,8 @@ export function useKiUploads(organizationId: string, draft: string) {
       for (const file of files) {
         const held = [
           ...readAttachments(draft),
-          ...[...uploadingRef.current, ...removingRef.current].filter((item) => item.draft === draft),
+          ...uploadingRef.current.filter((item) => item.draft === draft),
+          ...pendingRemovals(draft),
         ];
         const refused = uploadPrecheck(file, held);
         if (refused) {
@@ -177,19 +174,15 @@ export function useKiUploads(organizationId: string, draft: string) {
         });
       }
     },
-    [organizationId, draft, track, uploadingRef, removingRef, transfers],
+    [organizationId, draft, track, uploadingRef, transfers],
   );
 
   const remove = useCallback(
     (fileId: string) => {
       const file = readAttachments(draft).find((held) => held.fileId === fileId);
-      if (!file) return;
-      removingRef.current = [...removingRef.current, { fileId, draft, sizeBytes: file.sizeBytes }];
-      removeUpload(organizationId, draft, file, setError, () => {
-        removingRef.current = removingRef.current.filter((item) => item.fileId !== fileId);
-      });
+      if (file) removeUpload(organizationId, draft, file, setError);
     },
-    [organizationId, draft, removingRef],
+    [organizationId, draft],
   );
 
   const shown = uploading.filter((item) => item.draft === draft);
