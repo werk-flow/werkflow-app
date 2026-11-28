@@ -3,6 +3,9 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { OfferContentEditor } from '@/components/angebote/editor/offer-content-editor';
+import { AcceptOfferButton } from '@/components/angebote/offer-acceptance-dialog';
+import { OfferDecision } from '@/components/angebote/offer-decision';
+import { OfferReasonButton } from '@/components/angebote/offer-decision-reason';
 import { EditOfferHeaderButton } from '@/components/angebote/offer-header-dialog';
 import { OfferHeaderFacts } from '@/components/angebote/offer-header-facts';
 import { StartOfferRevisionButton } from '@/components/angebote/offer-revision-start';
@@ -16,6 +19,8 @@ import { RouteRedirect } from '@/components/shared/route-redirect';
 import { SubpageHeader } from '@/components/shared/subpage-header';
 import { logError } from '@/lib/logging';
 import { getManagerAssigneeOptions } from '@/lib/members/profile-name';
+import type { RevisionContent } from '@/lib/offers/accepted-scope';
+import { readRevisionContent } from '@/lib/offers/decision-reads';
 import { readOfferWithRevisions } from '@/lib/offers/reads';
 import type { OfferRevision, OfferWithCosts } from '@/lib/offers/types';
 import { resolvePageMembership } from '@/lib/org/page-context';
@@ -50,17 +55,37 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
       </RouteRedirect>
     );
   }
-  const { offer, revisions } = page;
+  const { offer, revisions, decisions } = page;
   // Only a draft's header changes; its picker offers the office's members as responsible.
   const owners =
     offer.status === 'entwurf'
       ? await getManagerAssigneeOptions(createSupabaseAdminClient(), membership.orgId)
       : null;
+  // A sent offer, or the draft of its next revision, awaits the customer's decision on the newest
+  // sent revision, whose frozen content the Annahme offers options from.
+  const [newest] = revisions;
+  const awaited =
+    newest && (offer.status === 'gesendet' || offer.status === 'entwurf')
+      ? await readRevisionContent(membership.orgId, offer.id, newest.revision).catch((error: unknown) => {
+          logError('angebot.revision_read_failed', error);
+          return 'failed' as const;
+        })
+      : null;
 
   return (
     <OfferUnsavedProvider>
       <div className="space-y-6">
-        <OfferPageHeader offer={offer} owners={owners} revisions={revisions} />
+        <OfferPageHeader
+          offer={offer}
+          owners={owners}
+          revisions={revisions}
+          content={awaited === 'failed' ? null : awaited}
+        />
+        {awaited === 'failed' && (
+          <RegionLoadError title="Annahme erfassen ist gerade nicht möglich">
+            Die gesendete Revision konnte nicht geladen werden. Versuche es in einem Moment erneut.
+          </RegionLoadError>
+        )}
         {owners && !owners.success && (
           // The offer stays on screen; only its editing waits for the office's members.
           <RegionLoadError title="Bearbeiten ist gerade nicht möglich">
@@ -68,6 +93,7 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
           </RegionLoadError>
         )}
         <OfferHeaderFacts offer={offer} />
+        <OfferDecision decisions={decisions} />
         <OfferRevisions offerId={offer.id} revisions={revisions} editing={offer.status === 'entwurf'} />
         {/* Only a draft's content changes; a sent offer is edited as the draft of its next revision. */}
         {offer.status === 'entwurf' && <OfferContentEditor key={offer.id} offer={offer} />}
@@ -81,10 +107,13 @@ function OfferPageHeader({
   offer,
   owners,
   revisions,
+  content,
 }: {
   offer: OfferWithCosts;
   owners: Awaited<ReturnType<typeof getManagerAssigneeOptions>> | null;
   revisions: OfferRevision[];
+  /** The newest sent revision's content while the customer's decision is open; null while it cannot be read. */
+  content: RevisionContent | null;
 }) {
   // The newest sent revision; a draft is the one after it.
   const sentRevision = revisions[0]?.revision ?? 0;
@@ -114,6 +143,16 @@ function OfferPageHeader({
             {offer.status === 'gesendet' && sentRevision ? (
               <StartOfferRevisionButton offer={offer} sentRevision={sentRevision} />
             ) : null}
+            {content && revisions[0] && (
+              <AcceptOfferButton offer={offer} revision={revisions[0]} content={content} />
+            )}
+            {sentRevision > 0 && (offer.status === 'gesendet' || offer.status === 'entwurf') && (
+              <>
+                <OfferReasonButton offer={offer} step="abgelehnt" />
+                <OfferReasonButton offer={offer} step="zurueckgezogen" />
+              </>
+            )}
+            {offer.status === 'angenommen' && <OfferReasonButton offer={offer} step="annahme" />}
           </div>
         }
       />

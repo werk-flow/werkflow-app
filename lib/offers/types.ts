@@ -3,6 +3,7 @@ import type { InvoiceLineSource, InvoiceLineSourceRef } from '@/lib/invoices/lin
 import type { InvoiceLineValues, InvoiceTaxRate } from '@/lib/invoices/types';
 import type { CatalogPriceSource, PriceSourceClaim } from '@/lib/price-catalog/customer-conditions';
 import { z } from '@/lib/zod';
+import type { AcceptedScopeSection, ScopeTotals } from './accepted-scope';
 
 // An Angebot: number, title, customer, recipient, validity, texts and the
 // responsible member, and its content of Titel with Positionen
@@ -15,7 +16,7 @@ import { z } from '@/lib/zod';
 // its type in 20270701100000_keep_bedarfs_and_alternativpositionen_out_of_an_offer_total.sql,
 // a Nachlass or Zuschlag in 20270701140000_add_discount_and_surcharge_positions_to_an_offer.sql).
 
-/** Every status the database check allows; this release writes `entwurf` and `gesendet`. */
+/** Every status of an offer. */
 export const OFFER_STATUSES = ['entwurf', 'gesendet', 'angenommen', 'abgelehnt', 'zurueckgezogen'] as const;
 export type OfferStatus = (typeof OFFER_STATUSES)[number];
 export const offerStatusSchema = z.enum(OFFER_STATUSES);
@@ -200,3 +201,49 @@ export function offerSendBlocker(
   if (offer.validUntil < todayIso) return 'offer_expired';
   return null;
 }
+
+/** How the customer accepted, as the office observed it (offer_acceptances.channel). */
+export const ACCEPTANCE_CHANNELS = ['unterschrift', 'email', 'telefon', 'vor_ort'] as const;
+export type AcceptanceChannel = (typeof ACCEPTANCE_CHANNELS)[number];
+
+export const ACCEPTANCE_CHANNEL_LABELS: Record<AcceptanceChannel, string> = {
+  unterschrift: 'Unterschriebenes Angebot',
+  email: 'E-Mail',
+  telefon: 'Telefon',
+  vor_ort: 'Vor Ort',
+};
+
+/**
+ * A recorded Annahme of a sent revision: the person as the office named
+ * them, the day and channel, the chosen options and the frozen
+ * Auftragsumfang. `late`: accepted after the revision's validity date. A
+ * withdrawn Annahme stays, with its withdrawal.
+ */
+export type OfferAcceptance = {
+  id: string;
+  revision: number;
+  acceptedByName: string;
+  /** `YYYY-MM-DD`. */
+  acceptedOn: string;
+  channel: AcceptanceChannel;
+  note: string;
+  chosenOptions: string[];
+  scope: AcceptedScopeSection[];
+  totals: ScopeTotals;
+  late: boolean;
+  /** Who recorded it; null once the person's account is deleted. */
+  recordedBy: string | null;
+  withdrawal: { reason: string; withdrawnAt: string; withdrawnBy: string | null } | null;
+};
+
+/** A closed offer: the customer declined it, or the office withdrew it, with the reason. */
+type OfferClosing = {
+  outcome: Extract<OfferStatus, 'abgelehnt' | 'zurueckgezogen'>;
+  revision: number;
+  reason: string;
+  recordedAt: string;
+  recordedBy: string | null;
+};
+
+/** An offer's Annahmen, the standing one first, and its closing while it is closed. */
+export type OfferDecisions = { acceptances: OfferAcceptance[]; closing: OfferClosing | null };

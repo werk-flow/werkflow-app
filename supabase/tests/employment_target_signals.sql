@@ -1,11 +1,14 @@
 -- The employee's target signal
 -- (20270503090002_signal_target_changes_to_the_employee.sql,
+-- 20270701110002_tell_a_login_its_record_was_taken.sql,
 -- werk-flow/werkflow-planning#589). A change of a person's entry or exit
 -- date, login or employment conditions moves their own signal row and no
 -- other; a change of anything else on the record or the conditions, and the
--- author's account leaving, move nothing. A login's account leaving retires
--- its signal. A new login gets a new row, so no
--- event of the old row's key reaches it. The row
+-- author's account leaving, move nothing. A login that loses its record
+-- keeps its row under the same key, cleared of the record and moved, so it
+-- hears of the loss (werk-flow/werkflow-planning#621); the cleared row leaves
+-- with the login's next record, membership, account or organization. A new
+-- login gets a new row, so no event of the old row's key reaches it. The row
 -- holds ids and a timestamp, never a column of the personnel tables. Only
 -- its own person selects it, while a member of its organization; Realtime
 -- delivers by that policy, so no other session hears of the change. No
@@ -34,7 +37,13 @@ insert into auth.users (
  '{"first_name":"Emil","last_name":"Signal"}', now(), now()),
 ('58900000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000000',
  'authenticated', 'authenticated', 'signal-new-login@example.test', '', now(), '{}',
- '{"first_name":"Frida","last_name":"Signal"}', now(), now());
+ '{"first_name":"Frida","last_name":"Signal"}', now(), now()),
+('58900000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'signal-leaver@example.test', '', now(), '{}',
+ '{"first_name":"Gül","last_name":"Signal"}', now(), now()),
+('58900000-0000-0000-0000-000000000008', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'signal-closed-account@example.test', '', now(), '{}',
+ '{"first_name":"Hanna","last_name":"Signal"}', now(), now());
 
 insert into public.organizations (id, name, admin_id, unique_code) values
 ('58900000-0000-0000-0000-000000000010', 'Signal GmbH', '58900000-0000-0000-0000-000000000001', 'SIGNAL10'),
@@ -80,6 +89,15 @@ begin
     if v_role = 'anon'
       and has_table_privilege(v_role, 'public.employment_target_signals', 'SELECT')
     then raise exception '% reads the target signals', v_role; end if;
+    -- Realtime leaves out the columns its subscriber may not select, so a
+    -- client never receives the record id, also in an event queued before a clear.
+    if v_role = 'authenticated' and (
+      has_column_privilege(v_role, 'public.employment_target_signals', 'employee_record_id', 'SELECT')
+      or not has_column_privilege(v_role, 'public.employment_target_signals', 'id', 'SELECT')
+      or not has_column_privilege(v_role, 'public.employment_target_signals', 'organization_id', 'SELECT')
+      or not has_column_privilege(v_role, 'public.employment_target_signals', 'user_id', 'SELECT')
+      or not has_column_privilege(v_role, 'public.employment_target_signals', 'updated_at', 'SELECT'))
+    then raise exception '% selects the record id or misses an id or the timestamp', v_role; end if;
     if v_role is distinct from 'service_role'
       and has_function_privilege(v_role, 'app_private.signal_employment_target_change()', 'EXECUTE')
     then raise exception '% executes the signal trigger', v_role; end if;
@@ -188,9 +206,11 @@ begin
 end;
 $$;
 
--- The ids the client roles below name; they cannot read the records.
-select set_config('test.employee_record', pg_temp.record_of('58900000-0000-0000-0000-000000000002')::text, true);
-select set_config('test.colleague_record', pg_temp.record_of('58900000-0000-0000-0000-000000000003')::text, true);
+-- The signal ids the client roles below name.
+select set_config('test.employee_signal', (select id::text from public.employment_target_signals
+  where user_id = '58900000-0000-0000-0000-000000000002'), true);
+select set_config('test.colleague_signal', (select id::text from public.employment_target_signals
+  where user_id = '58900000-0000-0000-0000-000000000003'), true);
 
 -- The employee reads their own signal row, by its id or another person's id
 -- (the foreign-id read), and nothing else; nobody writes one.
@@ -204,9 +224,14 @@ begin
     raise exception 'the employee did not read exactly their own signal row';
   end if;
   if exists (select 1 from public.employment_target_signals
-      where employee_record_id = current_setting('test.colleague_record')::uuid) then
-    raise exception 'the employee read a colleague''s signal by its record id';
+      where id = current_setting('test.colleague_signal')::uuid) then
+    raise exception 'the employee read a colleague''s signal by its id';
   end if;
+  begin
+    perform employee_record_id from public.employment_target_signals;
+    raise exception 'the employee read the record id of their signal';
+  exception when insufficient_privilege then null;
+  end;
   begin
     update public.employment_target_signals set updated_at = now();
     raise exception 'the employee wrote a signal row';
@@ -234,7 +259,7 @@ do $$
 begin
   if exists (select 1 from public.employment_target_signals
       where organization_id = '58900000-0000-0000-0000-000000000010'
-        or employee_record_id = current_setting('test.employee_record')::uuid) then
+        or id = current_setting('test.employee_signal')::uuid) then
     raise exception 'another organization read a signal row';
   end if;
 end;
@@ -253,54 +278,149 @@ end;
 $$;
 reset role;
 
--- A former member hears of no later change; a record that loses its login
--- drops its signal, and the person who gets it is signalled.
+-- A former member hears of no later change. A record that loses its login
+-- keeps that login's row under the same key, naming no record, and moves
+-- only that row (werk-flow/werkflow-planning#621): the publication sends the
+-- update to the login's own policy, without the record it no longer holds.
 do $$
 declare
+  v_employee constant uuid := '58900000-0000-0000-0000-000000000002';
   v_employee_record constant uuid := pg_temp.record_of('58900000-0000-0000-0000-000000000002');
-  v_old_signal uuid;
+  v_signal uuid;
 begin
   delete from public.organization_members
   where organization_id = '58900000-0000-0000-0000-000000000010'
     and user_id = '58900000-0000-0000-0000-000000000003';
 
+  select id into v_signal from public.employment_target_signals where employee_record_id = v_employee_record;
+  perform pg_temp.age_signals();
   update public.employee_records set user_id = null where id = v_employee_record;
   if exists (select 1 from public.employment_target_signals where employee_record_id = v_employee_record) then
-    raise exception 'a record without its login kept its signal';
+    raise exception 'a record without its login kept a signal naming it';
   end if;
-  update public.employee_records set user_id = '58900000-0000-0000-0000-000000000002' where id = v_employee_record;
   if not exists (select 1 from public.employment_target_signals
-      where employee_record_id = v_employee_record and user_id = '58900000-0000-0000-0000-000000000002') then
+      where id = v_signal and user_id = v_employee and employee_record_id is null) then
+    raise exception 'the former login''s signal did not stay under its key without a record';
+  end if;
+  if pg_temp.moved() is distinct from array[v_employee] then
+    raise exception 'an unlinked record did not move exactly its former login''s signal: %', pg_temp.moved();
+  end if;
+  perform set_config('test.cleared_signal', v_signal::text, true);
+  perform set_config('test.unlinked_record', v_employee_record::text, true);
+end;
+$$;
+
+-- The former login still reads its one row.
+set local role authenticated;
+select set_config('request.jwt.claims',
+  '{"sub":"58900000-0000-0000-0000-000000000002","role":"authenticated"}', true);
+do $$
+begin
+  if (select array_agg(id) from public.employment_target_signals)
+    is distinct from array[current_setting('test.cleared_signal')::uuid] then
+    raise exception 'the former login did not read exactly its cleared signal';
+  end if;
+end;
+$$;
+reset role;
+
+-- A login that gets a record back retires its cleared row and gets a new
+-- key. A direct relink keeps the old login's key with it, cleared, and gives
+-- the new login a new key, so no event of the old row reaches the new login.
+do $$
+declare
+  v_employee constant uuid := '58900000-0000-0000-0000-000000000002';
+  v_new_login constant uuid := '58900000-0000-0000-0000-000000000006';
+  v_employee_record constant uuid := current_setting('test.unlinked_record')::uuid;
+  v_cleared constant uuid := current_setting('test.cleared_signal')::uuid;
+  v_old_signal uuid;
+begin
+  update public.employee_records set user_id = v_employee where id = v_employee_record;
+  select id into v_old_signal from public.employment_target_signals
+  where employee_record_id = v_employee_record and user_id = v_employee;
+  if v_old_signal is null then
     raise exception 'a record that got its login back did not signal its person';
   end if;
+  if exists (select 1 from public.employment_target_signals where id = v_cleared)
+    or (select count(*) from public.employment_target_signals
+      where organization_id = '58900000-0000-0000-0000-000000000010' and user_id = v_employee) <> 1 then
+    raise exception 'a login that got a record kept its cleared signal';
+  end if;
 
-  -- A direct relink to another login retires the old row and its key.
-  select id into v_old_signal from public.employment_target_signals where employee_record_id = v_employee_record;
-  update public.employee_records set user_id = '58900000-0000-0000-0000-000000000006' where id = v_employee_record;
+  perform pg_temp.age_signals();
+  update public.employee_records set user_id = v_new_login where id = v_employee_record;
   if (select array_agg(user_id) from public.employment_target_signals where employee_record_id = v_employee_record)
-    is distinct from array['58900000-0000-0000-0000-000000000006'::uuid] then
+    is distinct from array[v_new_login] then
     raise exception 'a relinked record did not signal exactly its new login';
   end if;
-  if exists (select 1 from public.employment_target_signals where id = v_old_signal) then
-    raise exception 'a relinked record kept the old login''s signal key';
+  if not exists (select 1 from public.employment_target_signals
+      where id = v_old_signal and user_id = v_employee and employee_record_id is null) then
+    raise exception 'a relinked record did not leave the old login its key, cleared';
+  end if;
+  if pg_temp.moved() is distinct from array[v_employee, v_new_login] then
+    raise exception 'a relink moved other signals than the old and new login''s: %', pg_temp.moved();
   end if;
 
-  -- The login's account leaving clears the record's login and retires its signal.
-  delete from auth.users where id = '58900000-0000-0000-0000-000000000006';
-  if exists (select 1 from public.employment_target_signals where employee_record_id = v_employee_record) then
+  -- The new login is no member: its account leaving clears the record's
+  -- login, and its row goes with nobody to tell.
+  delete from auth.users where id = v_new_login;
+  if exists (select 1 from public.employment_target_signals
+      where employee_record_id = v_employee_record or user_id = v_new_login) then
     raise exception 'a deleted account kept its signal';
   end if;
 
   -- Deleting a record takes its conditions and its signal, and signals nobody.
-  update public.employee_records set user_id = '58900000-0000-0000-0000-000000000002' where id = v_employee_record;
+  update public.employee_records set user_id = v_employee where id = v_employee_record;
   insert into public.employment_conditions (organization_id, employee_record_id, valid_from, employment_type, weekly_hours)
   values ('58900000-0000-0000-0000-000000000010', v_employee_record, '2026-02-01', 'teilzeit', 25);
   perform pg_temp.age_signals();
   delete from public.employee_records where id = v_employee_record;
   if exists (select 1 from public.employment_conditions where employee_record_id = v_employee_record)
-    or exists (select 1 from public.employment_target_signals where employee_record_id = v_employee_record)
+    or exists (select 1 from public.employment_target_signals where user_id = v_employee)
     or pg_temp.moved() is distinct from array[]::uuid[] then
-    raise exception 'a deleted record left its conditions or signal, or moved a signal';
+    raise exception 'a deleted record left its conditions or a signal, or moved a signal';
+  end if;
+end;
+$$;
+
+-- No cleared row outlives its person: it leaves with the membership, with
+-- the account, and with the organization.
+do $$
+declare
+  v_member constant uuid := '58900000-0000-0000-0000-000000000007';
+  v_account constant uuid := '58900000-0000-0000-0000-000000000008';
+  v_other_admin constant uuid := '58900000-0000-0000-0000-000000000004';
+begin
+  insert into public.organization_members (organization_id, user_id, role) values
+  ('58900000-0000-0000-0000-000000000010', v_member, 'employee'),
+  ('58900000-0000-0000-0000-000000000010', v_account, 'employee');
+  update public.employee_records set user_id = null
+  where organization_id = '58900000-0000-0000-0000-000000000010' and user_id = v_member;
+  update public.employee_records set user_id = null
+  where organization_id = '58900000-0000-0000-0000-000000000011' and user_id = v_other_admin;
+  if (select array_agg(user_id order by user_id) from public.employment_target_signals
+      where user_id in (v_member, v_other_admin) and employee_record_id is null)
+    is distinct from array[v_other_admin, v_member] then
+    raise exception 'unlinked members did not keep their cleared signals';
+  end if;
+
+  delete from public.organization_members
+  where organization_id = '58900000-0000-0000-0000-000000000010' and user_id = v_member;
+  if exists (select 1 from public.employment_target_signals where user_id = v_member) then
+    raise exception 'a cleared signal outlived its membership';
+  end if;
+
+  -- The account leaves while its record still holds it: the cascade clears
+  -- the login and ends the membership, in either order, and leaves no row.
+  delete from auth.users where id = v_account;
+  if exists (select 1 from public.employment_target_signals where user_id = v_account) then
+    raise exception 'a signal outlived its account';
+  end if;
+
+  delete from public.organizations where id = '58900000-0000-0000-0000-000000000011';
+  if exists (select 1 from public.employment_target_signals
+      where organization_id = '58900000-0000-0000-0000-000000000011') then
+    raise exception 'a signal outlived its organization';
   end if;
 end;
 $$;

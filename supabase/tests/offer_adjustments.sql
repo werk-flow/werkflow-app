@@ -306,6 +306,32 @@ begin
   end if;
 end;
 $$;
+
+-- The Annahme of revision 1 with its Bedarfsposition 1.3 keeps the Nachlass and the Zuschlag in
+-- the Auftragsumfang as the revision froze them, and the scope's net counts them: 160,50 € + 200,00 €.
+select pg_temp.expect_refusal('an Annahme whose net leaves out the Nachlass', format(
+  'select public.accept_offer(%L, %L, %L, 3, gen_random_uuid(), 1, %L, %L, %L, %L, %L, %L)',
+  '36110000-0000-4000-8000-000000000002', '36110000-0000-4000-8000-000000000010', pg_temp.id('offer'),
+  'Erika Musterfrau', (now() at time zone 'Europe/Berlin')::date, 'email', '', '{1.3}',
+  '{"netCents": 36500, "taxCents": 6935, "grossCents": 43435}'), 'scope_mismatch');
+select public.accept_offer('36110000-0000-4000-8000-000000000002', '36110000-0000-4000-8000-000000000010',
+  pg_temp.id('offer'), 3, gen_random_uuid(), 1, 'Erika Musterfrau', (now() at time zone 'Europe/Berlin')::date,
+  'email', '', '{1.3}', '{"netCents": 36050, "taxCents": 6848, "grossCents": 42898}');
+do $$
+declare
+  v_scope jsonb := (select acceptance.scope from public.offer_acceptances acceptance
+    where acceptance.organization_id = '36110000-0000-4000-8000-000000000010' and acceptance.offer_id = pg_temp.id('offer'));
+begin
+  if jsonb_path_query_array(v_scope, '$[0].positions[*] ? (@.kind == "adjustment").taxSplit') is distinct from
+      '[[{"taxRateBasisPoints": 1900, "amountCents": -300}, {"taxRateBasisPoints": 700, "amountCents": -150}],
+        [{"taxRateBasisPoints": 1900, "amountCents": 1500}]]'::jsonb
+    or jsonb_path_query_array(v_scope, '$[0].positions[*] ? (@.kind == "adjustment").amountCents')
+      is distinct from '[-450, 1500]'::jsonb
+    or v_scope #> '{0,netCents}' is distinct from '36050'::jsonb then
+    raise exception 'the Auftragsumfang holds %', v_scope;
+  end if;
+end;
+$$;
 reset role;
 
 rollback;

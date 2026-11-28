@@ -347,8 +347,8 @@ assert.deepEqual(
 // A site may lack address parts (client_sites.street, postal_code and city allow null):
 // its offer still reads, and the header names what the site has.
 const { readOfferWithRevisions } = await import('@/lib/offers/reads');
-/** get_offer_with_revisions's answer: the offer as get_offer_with_costs answers it, and no sent revision. */
-const pageOf = (offer: unknown) => ({ offer, revisions: [] });
+/** get_offer_with_revisions's answer: the offer as get_offer_with_costs answers it, no sent revision and no decision. */
+const pageOf = (offer: unknown) => ({ offer, revisions: [], decisions: { acceptances: [], closing: null } });
 world.rpc = ({ name }) =>
   name === 'get_offer_with_revisions'
     ? {
