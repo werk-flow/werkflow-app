@@ -60,6 +60,9 @@ describe('the page count of an uploaded PDF', () => {
     expect(countPdfPages(await compressedWithFilter(3, '/FlateDecode.X'))).toBeNull();
     expect(countPdfPages(await compressedWithFilter(3, '/FlateDecode/Length'))).toBe(3);
     expect(countPdfPages(await compressedWithFilter(3, '/FlateDecode>>'))).toBe(3);
+    // PDF white space is its own six bytes: NUL ends a name, a no-break space (0xA0) does not.
+    expect(countPdfPages(await compressedWithFilter(3, '[/FlateDecode\u0000]'))).toBe(3);
+    expect(countPdfPages(await compressedWithFilter(3, '[/FlateDecode\u00a0]'))).toBeNull();
   });
 
   test('object stream indexes that list more objects than the bound are not read', async () => {

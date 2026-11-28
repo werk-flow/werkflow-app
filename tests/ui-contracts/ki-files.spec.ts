@@ -541,6 +541,37 @@ test('a removal still pending when a sign-out clears the drafts keeps no place i
   await expect(page.getByRole('main').getByText('höchstens 5 Dateien', { exact: false })).toHaveCount(0);
 });
 
+test('a removal refused before a new chat is saved brings its file and its reason into the saved thread', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'ki-chat');
+  await choose(page, [pdf('Notiz.pdf')]);
+  await finishUpload(page, FILE_ID, 1);
+  await page.evaluate(() => {
+    window.uiContractKiHeldDiscards = [];
+  });
+  await attached(page).getByRole('button', { name: 'Notiz.pdf entfernen' }).click();
+  await composer(page).fill('Welche Teile fehlen?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  await page.evaluate(() => window.uiContractKiHeldDiscards?.shift()?.(false));
+  const reason = page
+    .getByRole('main')
+    .getByText('„Notiz.pdf“ konnte nicht entfernt werden. Versuch es noch einmal.');
+  await expect(reason).toBeVisible();
+
+  // The new chat is saved: file and reason move to its thread, and the next new chat holds neither.
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 1 },
+    assistantItem: { id: 'a', sequence: 2 },
+  });
+  await expect(attached(page).getByText('Notiz.pdf')).toBeVisible();
+  await expect(reason).toBeVisible();
+  await page.getByRole('button', { name: 'Neuer Chat', exact: true }).click();
+  await expect(attached(page)).toHaveCount(0);
+  await expect(reason).toHaveCount(0);
+});
+
 test('a new chat takes its files along once saved, and a refusal after sign-out writes nothing back', async ({
   page,
 }) => {

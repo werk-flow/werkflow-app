@@ -102,6 +102,11 @@ export function moveAttachments(from: string, to: string): void {
     writeAttachments(to, [...readAttachments(to), ...moved]);
   }
   removals = removals.map((removal) => (removal.draft === from ? { ...removal, draft: to } : removal));
+  // A refused removal's reason goes with the file it brought back.
+  if (refusedRemovals.some((refusal) => refusal.draft === from))
+    refusedRemovals = refusedRemovals
+      .filter((refusal) => refusal.draft !== to)
+      .map((refusal) => (refusal.draft === from ? { ...refusal, draft: to } : refusal));
   for (const listener of moveListeners) listener(from, to);
 }
 
