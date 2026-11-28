@@ -24,6 +24,8 @@ import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 import { getLedProjectOverview, getWorkLead } from '@/lib/projects/work-lead-reads';
 import { LedProjectPage } from '@/components/auftraege/project-detail/led-project-overview';
 import type { LedProjectOverview } from '@/lib/projects/work-lead-types';
+import { readWorkOrders, readWorkScope } from '@/lib/orders/reads';
+import type { FieldScopeOrder, WorkOrder } from '@/lib/orders/types';
 
 interface ProjectDetailPageProps {
   params: Promise<{ projectNumber: string }>;
@@ -96,6 +98,18 @@ async function loadProjectDetailReads({
       ? getWorkHandoverWorkspace({ targetType: 'project', targetId: result.details.project.id })
       : null,
   );
+  const workLeadReadsPromise = readWorkLeads(projectResultPromise, projectNumber, isAdminOrManager);
+  // Admin and Büro read the project's orders with prices; its „Projektleitung“ reads their scope.
+  const ordersPromise = isAdminOrManager
+    ? projectResultPromise.then((result) =>
+        result.success ? readWorkOrders({ targetType: 'project', targetId: result.details.project.id }) : null,
+      )
+    : Promise.resolve(null);
+  const leadScopePromise = workLeadReadsPromise.then(({ ledOverviewResult }) =>
+    ledOverviewResult?.success
+      ? readWorkScope({ targetType: 'project', targetId: ledOverviewResult.overview.projectId })
+      : null,
+  );
 
   const [
     result,
@@ -109,6 +123,8 @@ async function loadProjectDetailReads({
     approvalHolder,
     handoverWorkspaceResult,
     workLeadReads,
+    ordersResult,
+    leadScopeResult,
   ] = await Promise.all([
     projectResultPromise,
     // The create-job dialog assigns employees; only managers open it.
@@ -121,7 +137,9 @@ async function loadProjectDetailReads({
     instructionItemsResultPromise,
     approvalHolderPromise,
     handoverWorkspacePromise,
-    readWorkLeads(projectResultPromise, projectNumber, isAdminOrManager),
+    workLeadReadsPromise,
+    ordersPromise,
+    leadScopePromise,
   ]);
   return {
     result,
@@ -135,6 +153,8 @@ async function loadProjectDetailReads({
     approvalHolder,
     handoverWorkspaceResult,
     ...workLeadReads,
+    ordersResult,
+    leadScopeResult,
   };
 }
 
@@ -145,6 +165,18 @@ function ledOverviewFrom(
   if (!result) return null;
   if (result.success) return result.overview;
   return result.error === 'not_authorized' ? null : 'failed';
+}
+
+/** The office's orders of the project: null for everyone else, `failed` when the read failed. */
+function ordersFrom(result: Awaited<ReturnType<typeof readWorkOrders>> | null): WorkOrder[] | 'failed' | null {
+  if (!result) return null;
+  return result.success ? result.orders : 'failed';
+}
+
+/** The lead's scope of the project: null when the viewer leads it not, `failed` when the read failed. */
+function leadScopeFrom(result: Awaited<ReturnType<typeof readWorkScope>> | null): FieldScopeOrder[] | 'failed' | null {
+  if (!result) return null;
+  return result.success ? result.scope : 'failed';
 }
 
 type ProjectDetailReads = Awaited<ReturnType<typeof loadProjectDetailReads>>;
@@ -164,6 +196,8 @@ function projectDetailRegions(
     handoverWorkspaceResult,
     workLeadResult,
     ledOverviewResult,
+    ordersResult,
+    leadScopeResult,
   }: ProjectDetailReads,
   isAdminOrManager: boolean,
 ) {
@@ -214,6 +248,8 @@ function projectDetailRegions(
     handoverWorkspace,
     workLeadPanel: workLeadResult ? (workLeadResult.success ? workLeadResult.panel : 'failed') : null,
     ledOverview: ledOverviewFrom(ledOverviewResult),
+    orders: ordersFrom(ordersResult),
+    leadScope: leadScopeFrom(leadScopeResult),
   } satisfies Partial<ProjectDetailContentProps>;
 }
 
@@ -288,6 +324,7 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
     ) : (
       <LedProjectPage
         overview={ledOverview}
+        scope={leadScopeFrom(reads.leadScopeResult) ?? []}
         currentUserId={user.id}
         canApprove={Boolean(reads.approvalHolder)}
       />

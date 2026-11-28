@@ -7598,6 +7598,166 @@ export type Database = {
           },
         ];
       };
+      order_lines: {
+        Row: {
+          amount_cents: number | null;
+          description: string;
+          id: string;
+          item_id: string | null;
+          kind: string;
+          name: string;
+          number: string | null;
+          option: string | null;
+          order_id: string;
+          organization_id: string;
+          position: number;
+          price_quantity: number | null;
+          quantity: number | null;
+          replaces: string | null;
+          section_number: string;
+          section_title: string;
+          tax_rate_basis_points: number | null;
+          unit: string | null;
+          unit_label: string | null;
+          unit_price_cents: number | null;
+        };
+        Insert: {
+          amount_cents?: number | null;
+          description?: string;
+          id?: string;
+          item_id?: string | null;
+          kind: string;
+          name: string;
+          number?: string | null;
+          option?: string | null;
+          order_id: string;
+          organization_id: string;
+          position: number;
+          price_quantity?: number | null;
+          quantity?: number | null;
+          replaces?: string | null;
+          section_number: string;
+          section_title: string;
+          tax_rate_basis_points?: number | null;
+          unit?: string | null;
+          unit_label?: string | null;
+          unit_price_cents?: number | null;
+        };
+        Update: {
+          amount_cents?: number | null;
+          description?: string;
+          id?: string;
+          item_id?: string | null;
+          kind?: string;
+          name?: string;
+          number?: string | null;
+          option?: string | null;
+          order_id?: string;
+          organization_id?: string;
+          position?: number;
+          price_quantity?: number | null;
+          quantity?: number | null;
+          replaces?: string | null;
+          section_number?: string;
+          section_title?: string;
+          tax_rate_basis_points?: number | null;
+          unit?: string | null;
+          unit_label?: string | null;
+          unit_price_cents?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "order_lines_item_fk";
+            columns: ["item_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "order_lines_order_fk";
+            columns: ["order_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "order_lines_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      orders: {
+        Row: {
+          acceptance_id: string;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          job_id: string | null;
+          offer_id: string;
+          organization_id: string;
+          project_id: string | null;
+        };
+        Insert: {
+          acceptance_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          offer_id: string;
+          organization_id: string;
+          project_id?: string | null;
+        };
+        Update: {
+          acceptance_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          offer_id?: string;
+          organization_id?: string;
+          project_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "orders_acceptance_fk";
+            columns: ["acceptance_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offer_acceptances";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "orders_job_fk";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "orders_offer_fk";
+            columns: ["offer_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offers";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "orders_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "orders_project_fk";
+            columns: ["project_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       organization_capabilities: {
         Row: {
           created_at: string;
@@ -18432,6 +18592,18 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      convert_offer_to_work: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_expected_version: number;
+          p_offer_id: string;
+          p_organization_id: string;
+          p_target: string;
+          p_title: string;
+        };
+        Returns: Json;
+      };
       copy_document: {
         Args: {
           p_actor_id: string;
@@ -20231,6 +20403,10 @@ export type Database = {
         Args: { p_offer_id: string; p_organization_id: string };
         Returns: Json;
       };
+      get_offer_order: {
+        Args: { p_offer_id: string; p_organization_id: string };
+        Returns: Json;
+      };
       get_offer_price_condition: {
         Args: {
           p_leistung_id?: string;
@@ -20297,6 +20473,14 @@ export type Database = {
           p_target_id: string;
           p_target_type: string;
         };
+        Returns: Json;
+      };
+      get_work_orders: {
+        Args: { p_kind: string; p_organization_id: string; p_work_id: string };
+        Returns: Json;
+      };
+      get_work_scope: {
+        Args: { p_kind: string; p_organization_id: string; p_work_id: string };
         Returns: Json;
       };
       hand_out_problem_report: {

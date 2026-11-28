@@ -9,6 +9,7 @@ import { UrlFlashBanner } from '@/components/ui/banner';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { FieldWorkPackExecutionSection } from '@/components/auftraege/work-pack/field-work-pack-execution-section';
 import { FieldWorkPackOverview } from '@/components/auftraege/work-pack/field-work-pack-overview';
+import { FieldScopeSection } from '@/components/auftraege/work-pack/field-scope-section';
 import { dispatchErrorMessage } from '@/lib/dispatch/types';
 import { getJobByNumber } from '@/lib/jobs/actions';
 import { WORK_EXECUTION_LABELS } from '@/lib/work-lifecycle/types';
@@ -76,6 +77,8 @@ export async function FieldWorkPackPage({
                 }
               : {})}
           />
+          {/* What the customer ordered, without a price; a job without an order renders nothing. */}
+          <FieldScopeSection scope={data.scopeResult.success ? data.scopeResult.scope : 'failed'} />
           <FieldWorkPackContextSources job={job} data={data} />
           <FieldWorkPackExecutionSection
             key={job.id}

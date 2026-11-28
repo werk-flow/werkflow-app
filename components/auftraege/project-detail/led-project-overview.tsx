@@ -16,6 +16,8 @@ import { formatGermanDate } from '@/lib/utils';
 import { WORK_EXECUTION_LABELS } from '@/lib/work-lifecycle/types';
 import { WorkArtifactsSection } from '../artifacts/work-artifacts-section';
 import { WORK_EXECUTION_CLASSES } from '../status-classes';
+import { FieldScopeSection } from '../work-pack/field-scope-section';
+import type { FieldScopeOrder } from '@/lib/orders/types';
 
 type LeadViewer = {
   currentUserId: string;
@@ -29,8 +31,9 @@ type LeadViewer = {
  */
 export function LedProjectPage({
   overview,
+  scope,
   ...viewer
-}: LeadViewer & { overview: LedProjectOverview }): ReactElement {
+}: LeadViewer & { overview: LedProjectOverview; scope: FieldScopeOrder[] | 'failed' }): ReactElement {
   return (
     <PageShell>
       <DetailPageHeader
@@ -42,6 +45,7 @@ export function LedProjectPage({
         subtitle="Du bist die Projektleitung."
       />
       <PageBody className="space-y-6">
+        <FieldScopeSection scope={scope} />
         <WorkArtifactsSection
           refreshOnLeadSignal
           targetType="project"

@@ -20,6 +20,7 @@ import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getWorkRequestEntries } from '@/lib/requests/work-attach-server';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
+import { readWorkOrders } from '@/lib/orders/reads';
 import NestedJobDetailLoading from './loading';
 
 interface NestedJobDetailPageProps {
@@ -84,6 +85,7 @@ async function loadNestedJobDetailReads({
     approvalHolder,
     handoverWorkspaceResult,
     requestEntriesResult,
+    ordersResult,
   ] = await Promise.all([
     getProjectByNumber(decodeURIComponent(projectNumber)),
     jobResultPromise,
@@ -97,6 +99,7 @@ async function loadNestedJobDetailReads({
     approvalHolderPromise,
     handoverWorkspacePromise,
     requestEntriesPromise,
+    afterJob(jobResultPromise, (id) => readWorkOrders({ targetType: 'job', targetId: id })),
   ]);
   return {
     projectResult,
@@ -111,6 +114,7 @@ async function loadNestedJobDetailReads({
     approvalHolder,
     handoverWorkspaceResult,
     requestEntriesResult,
+    ordersResult,
   };
 }
 
@@ -126,6 +130,7 @@ function nestedJobDetailRegions(
     approvalHolder,
     handoverWorkspaceResult,
     requestEntriesResult,
+    ordersResult,
   }: Awaited<ReturnType<typeof loadNestedJobDetailReads>>,
   memberRows: readonly OrgMemberInfo[],
 ) {
@@ -160,6 +165,7 @@ function nestedJobDetailRegions(
     lifecycleSnapshot: lifecycleResult?.success ? lifecycleResult.snapshot : null,
     handoverWorkspace,
     requestEntries: requestEntriesResult?.success ? requestEntriesResult.entries : undefined,
+    orders: ordersResult?.success ? ordersResult.orders : ('failed' as const),
   } satisfies Partial<ComponentProps<typeof JobDetailContent>>;
 }
 

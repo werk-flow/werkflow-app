@@ -12,6 +12,7 @@ import { JobMaterialsSection } from '@/components/inventar/job-materials-section
 import { ApplyWorkTemplateCard } from '@/components/arbeitsvorlagen/apply-work-template-card';
 import type { WorkArtifactSummary } from '@/lib/work-artifacts/types';
 import type { WorkBillingParties } from '@/lib/billing-parties/types';
+import type { WorkOrder } from '@/lib/orders/types';
 // Static here: the office job page is a daily journey, and its own chunk group
 // would cost a request and the section's script on every open (lab.office.job-open).
 import { WorkBillingPartiesSection } from '../shared/work-billing-parties-loaders';
@@ -31,6 +32,7 @@ import { JobDispatchSection } from './job-dispatch-section';
 import { WorkArtifactsSection } from '../artifacts/work-artifacts-section';
 import { JobDetailAssigneesCard } from './job-detail-assignees-card';
 import { JobDetailTimeCard } from './job-detail-time-card';
+import { WorkOrdersSection } from './work-orders-section';
 import type { JobDetailTimeSummary } from './use-job-detail-time-summary';
 import { formatBerlinDateTime } from '@/lib/utils';
 
@@ -48,6 +50,7 @@ type JobDetailMainColumnProps = {
   timeEntries: TimeEntry[];
   setShowClientDialog: (open: boolean) => void;
   billingParties: WorkBillingParties | undefined;
+  orders: WorkOrder[] | 'failed';
   openAssignDialog: () => void;
   isUnassigning: (userId: string) => boolean;
   handleUnassign: (userId: string) => Promise<void>;
@@ -186,6 +189,7 @@ export function JobDetailMainColumn({
   timeEntries,
   setShowClientDialog,
   billingParties,
+  orders,
   openAssignDialog,
   isUnassigning,
   handleUnassign,
@@ -201,6 +205,8 @@ export function JobDetailMainColumn({
   return (
     <div className="space-y-6">
       <MetadataSection title="Details" fields={metadataFields} isEditable={isAdminOrManager} />
+
+      {isAdminOrManager && <WorkOrdersSection orders={orders} />}
 
       {instructionItems ? (
         <JobInstructionItemsCard

@@ -33,6 +33,9 @@ import type { LedProjectOverview, WorkLeadPanel } from '@/lib/projects/work-lead
 import { ProjectDetailChildJobsCard } from './project-detail-child-jobs-card';
 import { ProjectDetailClientCard } from './project-detail-client-card';
 import { WorkBillingPartiesSection } from '../shared/work-billing-parties-loaders';
+import { WorkOrdersSection } from '../job-detail/work-orders-section';
+import { FieldScopeSection } from '../work-pack/field-scope-section';
+import type { FieldScopeOrder, WorkOrder } from '@/lib/orders/types';
 import { ProjectDetailDialogs } from './project-detail-dialogs';
 import { ProjectDetailHeader } from './project-detail-header';
 import { ProjectDetailManagerSections } from './project-detail-manager-sections';
@@ -72,6 +75,10 @@ interface ProjectDetailContentProps {
   workLeadPanel: WorkLeadPanel | 'failed' | null;
   /** The jobs the viewer leads as the project's „Projektleitung“; null when they lead none. */
   ledOverview: LedProjectOverview | 'failed' | null;
+  /** Admin and Büro: the accepted offers the project was converted from, with prices; null for everyone else. */
+  orders: WorkOrder[] | 'failed' | null;
+  /** The project's „Projektleitung“: the scope of those orders without prices; null for everyone else. */
+  leadScope: FieldScopeOrder[] | 'failed' | null;
 }
 
 type ProjectDetailStateOptions = Pick<
@@ -318,6 +325,9 @@ export function ProjectDetailContent(content: ProjectDetailContentProps) {
           {/* Left Column: Metadata + Client */}
           <div className="min-w-0 space-y-6">
             <MetadataSection title="Details" fields={metadataFields} isEditable={isAdminOrManager} />
+
+            {content.orders && <WorkOrdersSection orders={content.orders} />}
+            {content.leadScope && <FieldScopeSection scope={content.leadScope} />}
 
             <ProjectDetailClientCard
               liveClient={liveClient}

@@ -1,8 +1,11 @@
 import { SectionTitle } from '@/components/shared/section-title';
 import { Badge } from '@/components/ui/badge';
+import { TextLink } from '@/components/ui/text-link';
 import { formatEuroCents, formatQuantity } from '@/lib/document-rendering/format';
-import type { AcceptedScopeSection } from '@/lib/offers/accepted-scope';
+import { jobDetailHref, projectDetailHref } from '@/lib/jobs/routes';
+import type { AcceptedScopeSection, ScopeTotals } from '@/lib/offers/accepted-scope';
 import { ACCEPTANCE_CHANNEL_LABELS, type OfferAcceptance, type OfferDecisions } from '@/lib/offers/types';
+import type { OfferWork } from '@/lib/orders/types';
 import { formatBerlin, formatGermanDate } from '@/lib/utils';
 
 /**
@@ -11,7 +14,7 @@ import { formatBerlin, formatGermanDate } from '@/lib/utils';
  * rejection or withdrawal of the offer. The screen states what the office
  * recorded; it claims no signature and no legal effect.
  */
-export function OfferDecision({ decisions }: { decisions: OfferDecisions }) {
+export function OfferDecision({ decisions, work }: { decisions: OfferDecisions; work: OfferWork | null }) {
   const standing = decisions.acceptances.find((acceptance) => !acceptance.withdrawal);
   const withdrawn = decisions.acceptances.filter((acceptance) => acceptance.withdrawal);
   const { closing } = decisions;
@@ -31,7 +34,7 @@ export function OfferDecision({ decisions }: { decisions: OfferDecisions }) {
           <p className="whitespace-pre-line text-muted-foreground wrap-anywhere">Grund: {closing.reason}</p>
         </div>
       )}
-      {standing && <StandingAcceptance acceptance={standing} />}
+      {standing && <StandingAcceptance acceptance={standing} work={work} />}
       {withdrawn.length > 0 && (
         <ul className="space-y-2 text-sm">
           {withdrawn.map((acceptance) => (
@@ -55,7 +58,14 @@ export function OfferDecision({ decisions }: { decisions: OfferDecisions }) {
   );
 }
 
-function StandingAcceptance({ acceptance }: { acceptance: OfferAcceptance }) {
+/** The work's detail route: a job of a project lives under its project. */
+function workHref(work: OfferWork): string {
+  if (work.kind === 'project') return projectDetailHref({ id: work.id, projectNumber: work.number });
+  const project = work.projectNumber ? { id: work.id, projectNumber: work.projectNumber } : null;
+  return jobDetailHref({ id: work.id, jobNumber: work.number }, project);
+}
+
+function StandingAcceptance({ acceptance, work }: { acceptance: OfferAcceptance; work: OfferWork | null }) {
   return (
     <div className="space-y-4 rounded-lg border bg-card p-4 text-sm shadow-xs">
       <div className="space-y-1 wrap-anywhere">
@@ -68,21 +78,36 @@ function StandingAcceptance({ acceptance }: { acceptance: OfferAcceptance }) {
           {acceptance.recordedBy ? ` · Annahme erfasst von ${acceptance.recordedBy}` : ' · Annahme erfasst'}
         </p>
         {acceptance.note && <p className="whitespace-pre-line text-muted-foreground">{acceptance.note}</p>}
+        {work && (
+          <p>
+            {`In Arbeit als ${work.kind === 'job' ? 'Auftrag' : 'Projekt'} `}
+            <TextLink href={workHref(work)}>{`${work.number} „${work.title}“`}</TextLink>
+          </p>
+        )}
       </div>
       <div className="space-y-3">
         <p className="font-medium">Auftragsumfang</p>
-        {acceptance.scope.map((section) => (
-          <ScopeSection key={section.number} section={section} />
-        ))}
-        <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 border-t pt-3 tabular-nums">
-          <dt className="text-muted-foreground">Netto</dt>
-          <dd className="text-right">{formatEuroCents(acceptance.totals.netCents)}</dd>
-          <dt className="text-muted-foreground">Umsatzsteuer</dt>
-          <dd className="text-right">{formatEuroCents(acceptance.totals.taxCents)}</dd>
-          <dt className="font-medium">Brutto</dt>
-          <dd className="text-right font-medium">{formatEuroCents(acceptance.totals.grossCents)}</dd>
-        </dl>
+        <AcceptedScopeList scope={acceptance.scope} totals={acceptance.totals} />
       </div>
+    </div>
+  );
+}
+
+/** The Auftragsumfang with its prices and totals, as the office reads it on the offer and on its work. */
+export function AcceptedScopeList({ scope, totals }: { scope: AcceptedScopeSection[]; totals: ScopeTotals }) {
+  return (
+    <div className="space-y-3">
+      {scope.map((section) => (
+        <ScopeSection key={section.number} section={section} />
+      ))}
+      <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 border-t pt-3 tabular-nums">
+        <dt className="text-muted-foreground">Netto</dt>
+        <dd className="text-right">{formatEuroCents(totals.netCents)}</dd>
+        <dt className="text-muted-foreground">Umsatzsteuer</dt>
+        <dd className="text-right">{formatEuroCents(totals.taxCents)}</dd>
+        <dt className="font-medium">Brutto</dt>
+        <dd className="text-right font-medium">{formatEuroCents(totals.grossCents)}</dd>
+      </dl>
     </div>
   );
 }

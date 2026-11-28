@@ -33,6 +33,7 @@ export const DECISION_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   offer_changed: 'Jemand hat das Angebot gerade geändert. Lade die Seite neu.',
   offer_decided: 'Für das Angebot ist schon eine Entscheidung erfasst. Lade die Seite neu.',
   offer_not_accepted: 'Das Angebot ist nicht mehr angenommen. Lade die Seite neu.',
+  offer_converted: 'Aus der Annahme ist schon Arbeit entstanden. Sie lässt sich nicht mehr zurücknehmen.',
   offer_not_sent: 'Das Angebot wurde noch nicht gesendet.',
   offer_not_found: 'Das Angebot gibt es nicht mehr.',
   revision_superseded: 'Inzwischen ist eine neuere Revision gesendet. Lade die Seite neu.',

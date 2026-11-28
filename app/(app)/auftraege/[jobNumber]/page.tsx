@@ -21,6 +21,7 @@ import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 import { getWorkRequestEntries } from '@/lib/requests/work-attach-server';
 import { jobDetailHref } from '@/lib/jobs/routes';
 import { workLeadPanelFrom } from '@/lib/projects/work-lead-reads';
+import { readWorkOrders } from '@/lib/orders/reads';
 import JobDetailLoading from './loading';
 
 interface JobDetailPageProps {
@@ -102,6 +103,10 @@ function loadJobDetailReads(
     originRequestPromise,
     requestEntriesPromise,
     workLeadPromise,
+    // The accepted offers the job was converted from, with their prices.
+    jobResultPromise.then((result) =>
+      result.success ? readWorkOrders({ targetType: 'job', targetId: result.job.id }) : null,
+    ),
   ]);
 }
 
@@ -163,6 +168,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     originRequest,
     requestEntriesResult,
     workLeadResult,
+    ordersResult,
   ] = await loadJobDetailReads(supabase, { jobNumber, activeOrgId, userId: user.id });
 
   // A missing or forbidden job leaves the page; a failed read must not look like one.
@@ -224,6 +230,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       billingParties={result.billingParties}
       lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
       handoverWorkspace={handoverWorkspace}
+      orders={ordersResult?.success ? ordersResult.orders : 'failed'}
       {...(workLeadResult ? { workLeadPanel: workLeadResult.success ? workLeadResult.panel : 'failed' } : {})}
     />
   );

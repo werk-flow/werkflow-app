@@ -28,6 +28,7 @@ import type { OrgMemberOption } from '../shared/employee-multi-select';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import type { InventoryLocation, InventoryPickerOption, JobMaterialLine } from '@/lib/inventory/types';
 import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
+import type { WorkOrder } from '@/lib/orders/types';
 import { JobDetailMainColumn, JobDetailSideColumn } from './job-detail-columns';
 import { WorkLeadSection } from '../project-detail/work-lead-section';
 import type { WorkLeadPanel } from '@/lib/projects/work-lead-types';
@@ -146,6 +147,8 @@ interface JobDetailContentProps {
   billingParties?: WorkBillingParties | undefined;
   /** Admin and Büro on a standalone job: its „Projektleitung“; absent where the screen names none. */
   workLeadPanel?: WorkLeadPanel | 'failed';
+  /** The accepted offers the job was converted from, with prices; `failed` when the read failed. */
+  orders?: WorkOrder[] | 'failed';
 }
 
 /** Every hook of the job page, in render order: the live job, dialogs, assignments, fields, time and refresh. */
@@ -234,6 +237,7 @@ function JobDetailContentColumns({
         timeEntries={view.timeEntries}
         setShowClientDialog={view.dialogs.setShowClientDialog}
         billingParties={content.billingParties}
+        orders={content.orders ?? []}
         openAssignDialog={view.assignment.openAssignDialog}
         isUnassigning={view.assignment.isUnassigning}
         handleUnassign={view.assignment.handleUnassign}
