@@ -42,6 +42,14 @@ function planted(input: z.ZodType, ran: string[] = []): Defined {
   });
 }
 
+/** A planted tool reads no thread and calls no model. */
+const run = {
+  threadId: '40000000-0000-4000-8000-000000000001',
+  signal: new AbortController().signal,
+  progress: () => undefined,
+  modelCall: async () => 'over_cap' as const,
+};
+
 const caller = (role: ActionContext['role']): ActionContext => ({
   userId: '30000000-0000-4000-8000-000000000001',
   orgId: '20000000-0000-4000-8000-00000000000a',
@@ -88,23 +96,24 @@ test('the boundary walk fails on a planted tool without its foreign-organization
 test('a tool refuses a role it does not serve and an input with an extra key before its reader runs', async () => {
   const ran: string[] = [];
   const tool = planted(z.strictObject({ suche: z.string().max(10) }), ran);
-  expect(await tool.execute({ suche: 'Rohr' }, caller('employee'))).toEqual({ status: 'refused' });
+  expect(await tool.execute({ suche: 'Rohr' }, caller('employee'), run)).toEqual({ status: 'refused' });
   expect(
-    await tool.execute({ suche: 'Rohr', organizationId: caller('admin').orgId }, caller('admin')),
+    await tool.execute({ suche: 'Rohr', organizationId: caller('admin').orgId }, caller('admin'), run),
   ).toEqual({
     status: 'refused',
   });
   expect(ran).toEqual([]);
-  expect(await tool.execute({ suche: 'Rohr' }, caller('admin'))).toEqual({ status: 'ok', value: null });
+  expect(await tool.execute({ suche: 'Rohr' }, caller('admin'), run)).toEqual({ status: 'ok', value: null });
 });
 
-test('an employee gets the job search and the harness tools; customers and articles stay with Admin and Büro (B6)', () => {
+test('an employee gets the job search and the harness tools; customers, articles and Lieferscheine stay with Admin and Büro (B6)', () => {
   const names = (role: ActionContext['role']) => aiToolsFor(role).map((tool) => tool.name);
   expect(names('employee')).toEqual(['auftraege_finden', 'frage_stellen', 'plan_zeigen']);
   expect(names('buero')).toEqual([
     'auftraege_finden',
     'kunden_finden',
     'artikel_finden',
+    'lieferschein_lesen',
     'frage_stellen',
     'plan_zeigen',
   ]);

@@ -32,6 +32,7 @@ import {
   recordPendingCalls,
   recordUnrunCalls,
   runTool,
+  toolRunFor,
 } from '@/lib/ai/tools/tool-calls';
 import { boundedWrite } from '@/lib/ai/bounded-write';
 import { AI_TURN_FAILURE_MESSAGES } from '@/lib/ai/turn-messages';
@@ -62,7 +63,7 @@ export type AiTurnCommand = {
   /** When the request arrived (epoch ms): the turn's total timeout counts from here. */
   receivedAt: number;
   text: string;
-  /** The person's uploads this message attaches; the model does not read them (KI-9 will). */
+  /** The person's uploads this message attaches; the model reads one only through a tool's extractor. */
   fileIds?: readonly string[];
 };
 
@@ -390,6 +391,8 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
     logError('aiTurn: run failed', error instanceof Error ? error.name : 'unknown');
     end = failedEnd('failed', 'interrupted');
   }
+  // A tool's model call still running when the turn ended is aborted with it and ledgered before the run settles.
+  await Promise.allSettled(toolCalls.runningModelCalls);
   // A tool still running when the turn ended gets its ledger row before the run settles (B19).
   await recordPendingCalls({ ...context, toolCalls });
   const body =
@@ -402,7 +405,8 @@ async function runTurn(context: TurnContext): Promise<AiTurnEnd> {
   else if (!saved) end = failedEnd('failed', 'interrupted');
   // An attempt the ledger could not take leaves the run open: its reservation stays as the provisional charge.
   // Every other run settles at its recorded cost, a failed final save included, so the person's next turn may start.
-  if (!answer.ledgerFailed) await settleRun(context, end.status === 'complete' ? 'succeeded' : end.status);
+  if (!answer.ledgerFailed && !toolCalls.costUnrecorded)
+    await settleRun(context, end.status === 'complete' ? 'succeeded' : end.status);
   return end;
 }
 
@@ -618,7 +622,7 @@ async function runAttempt(
   const result = streamText({
     model: context.model,
     instructions: context.modelContext.instructions,
-    tools: prepareStep(context),
+    tools: prepareStep(context, answer),
     // One call at a time, so none starts after another's ledger row failed.
     toolCallConcurrency: 1,
     messages: step.messages,
@@ -748,6 +752,7 @@ async function recordAttempt(
   key: string,
   usage: AiTokenUsage,
   outcome: string,
+  promptVersion = AI_PROMPT_VERSION,
 ): Promise<boolean> {
   return boundedWrite(
     'aiTurn: attempt record failed',
@@ -760,7 +765,7 @@ async function recordAttempt(
           p_run_id: context.runId,
           p_idempotency_key: key,
           p_model_id: context.model.modelId,
-          p_prompt_version: AI_PROMPT_VERSION,
+          p_prompt_version: promptVersion,
           p_input_tokens: usage.inputTokens,
           p_output_tokens: usage.outputTokens,
           p_cache_read_tokens: usage.cacheReadTokens,
@@ -776,8 +781,16 @@ async function recordAttempt(
  * The tools of the next model step: the caller's role's tools (B6), without
  * any memory write once the turn read untrusted text (B10).
  */
-function prepareStep(context: RunContext): ToolSet {
+function prepareStep(context: RunContext, answer: Answer): ToolSet {
   const { tools } = context.modelContext;
   const offered = context.toolCalls.tainted ? tools.filter((tool) => !tool.writesMemory) : tools;
-  return toToolSet(offered, (tool, input, toolCallId) => runTool(context, tool, input, toolCallId));
+  return toToolSet(offered, (tool, input, toolCallId, signal) => {
+    const run = toolRunFor(context, {
+      signal: AbortSignal.any([context.turnSignal, answer.halt.signal, ...(signal ? [signal] : [])]),
+      // A long read's progress saves the answer as a stream part does, so a stop or a lost thread aborts it.
+      progress: () => savePartial(context, answer),
+      record: (key, ...attempt) => recordAttempt(context, key, ...attempt),
+    });
+    return runTool(context, tool, input, toolCallId, run);
+  });
 }

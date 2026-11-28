@@ -3,6 +3,7 @@ import 'server-only';
 import { type ToolResultPart, type ToolSet, tool } from 'ai';
 
 import type { ToolValue } from '@/lib/ai/context';
+import type { AiTokenUsage } from '@/lib/ai/cost';
 import type { AiToolControl } from '@/lib/ai/thread-types';
 import { logError } from '@/lib/logging';
 import type { ActionContext } from '@/lib/org/action-context';
@@ -30,8 +31,40 @@ type AiToolDataClass =
   | 'evidence'
   | 'equipment';
 
-/** A tool's answer. Only `ok` carries data; every other status is a stable code. */
-export type AiToolResult = { status: 'ok'; value: ToolValue } | { status: 'refused' | 'failed' };
+/**
+ * A tool's answer. Only `ok` carries data; every other status is a stable
+ * code, with a fixed German sentence of the harness when the person can act on it.
+ */
+export type AiToolResult =
+  | { status: 'ok'; value: ToolValue }
+  | { status: 'refused' | 'failed'; message?: string };
+
+/** Ledgers one model call of a tool at its usage and outcome; false when the ledger could not take it. */
+export type AiModelCallRecord = (
+  usage: AiTokenUsage,
+  outcome: string,
+  promptVersion: string,
+) => Promise<boolean>;
+
+/** What the harness gives one tool call besides the caller: never a value the model chose (B3). */
+export type AiToolRun = {
+  /** The turn's thread, whose author is the caller. */
+  threadId: string;
+  /** Aborts when the person stops the answer, loses the thread, or the turn's time is up. */
+  signal: AbortSignal;
+  /**
+   * A long read calls it as it goes, such as on each part of a model call's
+   * stream: the turn saves its answer at most every save interval, which is how
+   * it hears a stop or a lost thread and aborts `signal`.
+   */
+  progress: () => void;
+  /**
+   * Runs one model call of the tool, such as the quarantined extractor's, under
+   * the turn's cap and its reservation; `call` ledgers it through `record`, and
+   * the run settles only after `call` ended. `over_cap` when the turn has no call left.
+   */
+  modelCall: <T>(call: (record: AiModelCallRecord) => Promise<T>) => Promise<T | 'over_cap'>;
+};
 
 type AiToolSpec<Name extends string, Input> = {
   /** What the model calls: lowercase German words joined by `_`. */
@@ -60,7 +93,7 @@ type AiToolSpec<Name extends string, Input> = {
   /** A memory write is removed for the rest of a turn that read untrusted text (B10). */
   writesMemory: boolean;
   /** Runs the page's own reader with the caller's context; never with an id the model names as identity. */
-  execute: (input: Input, ctx: ActionContext) => Promise<AiToolResult>;
+  execute: (input: Input, ctx: ActionContext, run: AiToolRun) => Promise<AiToolResult>;
 };
 
 const DEFINED: unique symbol = Symbol('defined tool');
@@ -70,7 +103,7 @@ export type AiTool<Name extends string = string> = Readonly<
 > & {
   readonly inputSchema: z.ZodType;
   /** Parses the input and checks the role before the tool's own execute runs. */
-  readonly execute: (input: unknown, ctx: ActionContext) => Promise<AiToolResult>;
+  readonly execute: (input: unknown, ctx: ActionContext, run: AiToolRun) => Promise<AiToolResult>;
   readonly [DEFINED]: true;
 };
 
@@ -81,13 +114,13 @@ export function defineTool<const Name extends string, Input>(spec: AiToolSpec<Na
     ...fields,
     inputSchema,
     [DEFINED]: true,
-    async execute(input, ctx) {
+    async execute(input, ctx, run) {
       // The harness offers a tool only to its roles; this refuses a caller it reaches anyway.
       if (!spec.roles.includes(ctx.role)) return { status: 'refused' };
       const parsed = inputSchema.safeParse(input);
       if (!parsed.success) return { status: 'refused' };
       try {
-        return await execute(parsed.data, ctx);
+        return await execute(parsed.data, ctx, run);
       } catch (error) {
         logError(`aiTool ${spec.name}: read failed`, error);
         return { status: 'failed' };
@@ -97,7 +130,12 @@ export function defineTool<const Name extends string, Input>(spec: AiToolSpec<Na
 }
 
 /** Runs one call of an offered tool: the harness's checks, ledger row and output. */
-type ToolRunner = (tool: AiTool, input: unknown, toolCallId: string) => Promise<ToolResultPart['output']>;
+type ToolRunner = (
+  tool: AiTool,
+  input: unknown,
+  toolCallId: string,
+  signal: AbortSignal | undefined,
+) => Promise<ToolResultPart['output']>;
 
 /** The tools of one model step as the AI SDK takes them; each call goes through `run`. */
 export function toToolSet(tools: readonly AiTool[], run: ToolRunner): ToolSet {
@@ -107,7 +145,7 @@ export function toToolSet(tools: readonly AiTool[], run: ToolRunner): ToolSet {
       tool({
         description: entry.description,
         inputSchema: entry.inputSchema,
-        execute: (input: unknown, options) => run(entry, input, options.toolCallId),
+        execute: (input: unknown, options) => run(entry, input, options.toolCallId, options.abortSignal),
         toModelOutput: ({ output }) => output,
       }),
     ]),

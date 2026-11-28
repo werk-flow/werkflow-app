@@ -1,7 +1,13 @@
 import { expect, test } from 'bun:test';
 
 import { AI_MODEL_PRICE, costMicroUsd } from './cost';
-import { AI_TURN_LIMITS, inputTokenCeiling, maxTurnCostMicroUsd } from './limits';
+import {
+  AI_EXTRACT_LIMITS,
+  AI_TURN_LIMITS,
+  inputTokenCeiling,
+  maxExtractionCostMicroUsd,
+  maxTurnCostMicroUsd,
+} from './limits';
 
 const none = { inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 };
 
@@ -20,15 +26,27 @@ test('a prompt over 100K tokens is priced at five times every rate', () => {
   expect(costMicroUsd({ ...none, inputTokens: 100_001, outputTokens: 1_000 }, AI_MODEL_PRICE)).toBe(52_501);
 });
 
-test('the reservation covers every step and every retry of a turn at its caps', () => {
+test('the reservation covers every step and every retry of a turn, and every extraction its tools may run, at their caps', () => {
   const limits = AI_TURN_LIMITS.chat;
   const dearestAttempt = costMicroUsd(
     { ...none, cacheWriteTokens: limits.maxInputTokens, outputTokens: limits.maxOutputTokens },
     AI_MODEL_PRICE,
   );
-  expect(maxTurnCostMicroUsd('chat')).toBe((limits.maxSteps + limits.maxRetries) * dearestAttempt);
-  // The input cap keeps every prompt on the lower price card.
+  const extraction = costMicroUsd(
+    {
+      ...none,
+      inputTokens: AI_EXTRACT_LIMITS.maxInputTokens,
+      outputTokens: AI_EXTRACT_LIMITS.maxOutputTokens,
+    },
+    AI_MODEL_PRICE,
+  );
+  expect(maxExtractionCostMicroUsd()).toBe(extraction);
+  expect(maxTurnCostMicroUsd('chat')).toBe(
+    (limits.maxSteps + limits.maxRetries) * dearestAttempt + limits.maxToolModelCalls * extraction,
+  );
+  // The input caps keep every prompt on the lower price card.
   expect(limits.maxInputTokens).toBeLessThan(AI_MODEL_PRICE.longPromptTokens);
+  expect(AI_EXTRACT_LIMITS.maxInputTokens).toBeLessThan(AI_MODEL_PRICE.longPromptTokens);
 });
 
 test('the input ceiling counts one token per UTF-8 byte, so umlauts count double', () => {

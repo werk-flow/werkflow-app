@@ -56,6 +56,11 @@ export function recordText(text: string | null): UntrustedText | null {
   return text ? untrustedText('record_text', text) : null;
 }
 
+/** A field the quarantined extractor read from a document (B9): labelled `document`, or null when empty. */
+export function documentText(text: string | null): UntrustedText | null {
+  return text ? untrustedText('document', text) : null;
+}
+
 /**
  * A tool's result: values the tool itself controls (ids, numbers, codes,
  * dates, links) as plain values, and every text a person typed into a record

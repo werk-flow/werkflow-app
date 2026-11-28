@@ -180,17 +180,26 @@ const organizationId = () => world.memberships[0]?.orgId ?? '';
     return found;
   };
   const pad = ' '.repeat(1000);
+  // Harness tools read nothing and call no model.
+  const toolRun = {
+    threadId: THREAD_ID,
+    signal: new AbortController().signal,
+    progress: () => undefined,
+    modelCall: async () => 'over_cap' as const,
+  };
   await runTool(
     run,
     harnessTool('plan_zeigen'),
     { schritte: [{ text: `${pad}Aufträge suchen${pad}`, erledigt: false }] },
     'call-1',
+    toolRun,
   );
   await runTool(
     run,
     harnessTool('frage_stellen'),
     { frage: `${pad}Welchen Kunden meinst du?`, optionen: [`${pad}Müller Bau`, 'Müller Haustechnik '] },
     'call-2',
+    toolRun,
   );
   const stored = (kind: string) => items().find((item) => item.kind === kind)?.body;
   assert.deepEqual(

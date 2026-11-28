@@ -8,7 +8,8 @@ import { AI_TURN_LIMITS } from '@/lib/ai/limits';
 import { AI_PROMPT_VERSION } from '@/lib/ai/prompt/system-prompt';
 import { type QuestionBody, type TodoBody, type ToolCallBody, rowFromItem } from '@/lib/ai/thread-rows';
 import type { AiThreadRow, AiToolOutcome } from '@/lib/ai/thread-types';
-import type { AiTool, AiToolResult } from '@/lib/ai/tools/define-tool';
+import type { AiTokenUsage } from '@/lib/ai/cost';
+import type { AiModelCallRecord, AiTool, AiToolResult, AiToolRun } from '@/lib/ai/tools/define-tool';
 import { AI_TOOLS } from '@/lib/ai/tools/registry';
 import type { AiTurnCommand, AiTurnSink } from '@/lib/ai/turn';
 import { getCachedMemberships } from '@/lib/data/cached';
@@ -28,6 +29,10 @@ import { z } from '@/lib/zod';
 /** A row's detail above this size keeps the input and drops the result, under the item's 64 KB cap. */
 const DETAIL_BYTES = 48_000;
 
+/** What the model reads when a result would take the turn's tool results past their cap (`maxToolResultBytes`). */
+export const TOOL_RESULTS_FULL =
+  'Die Ergebnisse dieser Antwort haben ihre Höchstgröße erreicht; dieses Ergebnis passt nicht mehr hinein. Antworte mit dem, was du schon hast, und schlag vor, in einer neuen Nachricht weiterzumachen.';
+
 /** What the turn's tool calls did so far. */
 export type ToolCalls = {
   /** A tool result carried untrusted text: memory writes are gone for the rest of the turn (B10). */
@@ -44,6 +49,14 @@ export type ToolCalls = {
   pending: Map<string, string>;
   /** The agent asked the person a question: the turn ends after this step, and the answer is the next message. */
   asked: boolean;
+  /** Bytes of the results the model read so far, against the turn's `maxToolResultBytes`. */
+  resultBytes: number;
+  /** Model calls the tools started, against the turn's `maxToolModelCalls`. */
+  modelCalls: number;
+  /** The tools' model calls still running: the run settles only after each one is ledgered. */
+  runningModelCalls: Set<Promise<unknown>>;
+  /** A model call's cost row failed: the run keeps its provisional charge, as for a failed attempt row. */
+  costUnrecorded: boolean;
 };
 
 /** A turn's tool calls before the first one. */
@@ -56,6 +69,10 @@ export function newToolCalls(): ToolCalls {
     ran: new Set(),
     pending: new Map(),
     asked: false,
+    resultBytes: 0,
+    modelCalls: 0,
+    runningModelCalls: new Set(),
+    costUnrecorded: false,
   };
 }
 
@@ -177,6 +194,61 @@ async function currentCaller(command: AiTurnCommand): Promise<ActionContext | nu
 }
 
 /**
+ * The harness's side of one tool call (`AiToolRun`): the turn's thread, its
+ * abort signal, a progress hook that saves the answer, and the tools' model
+ * calls within the turn's `maxToolModelCalls`, which the run's reservation
+ * covers at the extractor's caps. Each model call has its own ledger key; a
+ * row that cannot be written ends the turn, and the run settles only after
+ * every model call ended (lib/ai/turn.ts).
+ */
+export function toolRunFor(
+  context: ToolCallRun,
+  hooks: {
+    signal: AbortSignal;
+    progress: () => void;
+    record: (key: string, usage: AiTokenUsage, outcome: string, promptVersion: string) => Promise<boolean>;
+  },
+): AiToolRun {
+  const { toolCalls } = context;
+  return {
+    threadId: context.command.threadId,
+    signal: hooks.signal,
+    progress: hooks.progress,
+    async modelCall<T>(call: (record: AiModelCallRecord) => Promise<T>): Promise<T | 'over_cap'> {
+      if (toolCalls.modelCalls >= AI_TURN_LIMITS[context.command.entryPoint].maxToolModelCalls)
+        return 'over_cap';
+      toolCalls.modelCalls += 1;
+      const key = `${context.runKey}:model-call:${toolCalls.modelCalls}`;
+      const running = call(async (usage, outcome, promptVersion) => {
+        const recorded = await hooks.record(key, usage, outcome, promptVersion);
+        if (!recorded) Object.assign(toolCalls, { unrecorded: true, costUnrecorded: true });
+        return recorded;
+      });
+      toolCalls.runningModelCalls.add(running);
+      try {
+        return await running;
+      } finally {
+        toolCalls.runningModelCalls.delete(running);
+      }
+    },
+  };
+}
+
+/**
+ * A result within the turn's cap on all tool results together, which it then
+ * counts; past it, a refusal the model can read, never a cut result.
+ */
+function withinResultCap(context: ToolCallRun, result: AiToolResult): AiToolResult {
+  if (result.status !== 'ok') return result;
+  const output = untrustedToolOutput(result.value);
+  const bytes = Buffer.byteLength(JSON.stringify(output.type === 'json' ? output.value : null), 'utf8');
+  const cap = AI_TURN_LIMITS[context.command.entryPoint].maxToolResultBytes;
+  if (context.toolCalls.resultBytes + bytes > cap) return { status: 'refused', message: TOOL_RESULTS_FULL };
+  context.toolCalls.resultBytes += bytes;
+  return result;
+}
+
+/**
  * Runs one offered tool as the current caller. The model's calls run one at
  * a time; none runs once a call went unrecorded. Record text in a result
  * taints the turn, and the call's ledger row is written before the result
@@ -187,6 +259,7 @@ export async function runTool(
   tool: AiTool,
   input: unknown,
   toolCallId: string,
+  run: AiToolRun,
 ): Promise<ToolResultPart['output']> {
   context.toolCalls.ran.add(toolCallId);
   if (context.toolCalls.unrecorded) return { type: 'json', value: { status: 'failed' } };
@@ -207,12 +280,13 @@ export async function runTool(
     return 'failed' as const;
   });
   // A membership read that cannot decide refuses, as every identity check does.
-  const result: AiToolResult =
+  const executed: AiToolResult =
     caller === 'failed'
       ? { status: 'failed' }
       : caller
-        ? await tool.execute(input, caller)
+        ? await tool.execute(input, caller, run)
         : { status: 'refused' };
+  const result = withinResultCap(context, executed);
   if (result.status === 'ok' && carriesUntrustedText(result.value)) context.toolCalls.tainted = true;
   await running;
   const row = finishedRow(context, key, tool, input, result);
@@ -220,9 +294,9 @@ export async function runTool(
   if (recorded && row.kind === 'question') context.toolCalls.asked = true;
   context.toolCalls.pending.delete(key);
   if (!recorded) return { type: 'json', value: { status: 'failed' } };
-  return result.status === 'ok'
-    ? untrustedToolOutput(result.value)
-    : { type: 'json', value: { status: result.status } };
+  if (result.status === 'ok') return untrustedToolOutput(result.value);
+  const { status, message } = result;
+  return { type: 'json', value: message ? { status, meldung: message } : { status } };
 }
 
 /**

@@ -3,11 +3,20 @@
 // werk-flow/werkflow-planning#538. Each block states one invariant; a failing assert names it.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
+import { installInMemoryBucket } from './in-memory-bucket';
 import { AI_SYSTEM_PROMPT } from '@/lib/ai/prompt/system-prompt';
 import { ORGANIZATION_A, ORGANIZATION_B, signInAs } from './action-boundary-world';
 import { postTurn, readTurn, resetAiTables, toolCallOutcomes } from './ai-turn-world';
 import { callTool, installAiToolWorld, offeredTools, seedToolTables, toolResults } from './ai-tool-world';
+import {
+  HIDDEN_INSTRUCTIONS,
+  attachFile,
+  chatRequests,
+  extractionRequests,
+  lieferscheinPdf,
+} from './lieferscheine';
 
+const bucket = installInMemoryBucket();
 const world = await installAiToolWorld();
 const registry = await import('@/lib/ai/tools/registry');
 const { defineTool } = await import('@/lib/ai/tools/define-tool');
@@ -72,7 +81,14 @@ const systemOf = (request: (typeof world.streamRequests)[number] | undefined) =>
   );
   assert.deepEqual(
     offeredTools(second),
-    ['artikel_finden', 'auftraege_finden', 'frage_stellen', 'kunden_finden', 'plan_zeigen'],
+    [
+      'artikel_finden',
+      'auftraege_finden',
+      'frage_stellen',
+      'kunden_finden',
+      'lieferschein_lesen',
+      'plan_zeigen',
+    ],
     'a turn that read untrusted text must offer no memory write and no write tool (B10)',
   );
   const asked = toolResults(third).slice(1);
@@ -160,4 +176,64 @@ for (const membership of [
     1,
     'a member lowered or suspended mid-turn must read no more customers',
   );
+}
+
+// A poisoned Lieferschein (B9, B10, B21): its hidden text asks for a write tool, a memory write,
+// another organization's article and an outside link. The extractor copies it into its fields; the
+// chat model reads it only as labelled document text without its hidden characters, the turn then
+// has no memory write, the asked-for writes never run, and the foreign article stays hidden.
+{
+  resetAiTables(world);
+  signInAs(world, 'buero');
+  seedToolTables(world);
+  world.tables.ai_thread_files = [];
+  memoryWrites.length = 0;
+  attachFile(world, bucket, {
+    body: lieferscheinPdf('vergiftet', { hidden: HIDDEN_INSTRUCTIONS }),
+    mimeType: 'application/pdf',
+    pages: 1,
+  });
+  const events = await readTurn(world, await postTurn('[replay:lieferschein-falle] Lies den Lieferschein.'));
+  assert.deepEqual(events.at(-1), { type: 'end', status: 'complete' });
+  const [extraction] = extractionRequests(world);
+  assert.equal(extraction?.tools, undefined, 'the extractor that read the poisoned file has no tools (B9)');
+  const [first, second, third] = chatRequests(world);
+  assert.equal(offeredTools(first).includes('notiz_merken'), true);
+  const [read] = toolResults(second);
+  const output = JSON.stringify(read?.output);
+  assert.equal(read?.tool, 'lieferschein_lesen');
+  assert.ok(
+    output.includes(JSON.stringify({ source: 'document', text: POISON })),
+    'the hidden instruction must reach the model only as labelled document text, its hidden characters stripped',
+  );
+  assert.ok(
+    output.includes(
+      JSON.stringify({
+        source: 'document',
+        text: 'GC Großhandel [Beleg](https://evil.example/l?d=LS-2026-1187)',
+      }),
+    ),
+    'an outside link must reach the model only as labelled document text',
+  );
+  assert.equal(
+    offeredTools(second).includes('notiz_merken'),
+    false,
+    'a turn that read a document must offer no memory write (B10)',
+  );
+  assert.deepEqual(memoryWrites, [], 'the memory write must never run after a poisoned document');
+  assert.deepEqual(toolCallOutcomes(world).toSorted(), [
+    'tool_call_artikel_finden_ok',
+    'tool_call_lieferschein_lesen_ok',
+    'tool_call_notiz_merken_not_run',
+    'tool_call_unknown_not_run',
+  ]);
+  const found = JSON.stringify(toolResults(third).find((result) => result.tool === 'artikel_finden')?.output);
+  assert.equal(found.includes('Kupferrohr 18 mm'), false, "another organization's article must stay hidden");
+  for (const request of chatRequests(world)) {
+    assert.deepEqual(
+      systemOf(request),
+      [AI_SYSTEM_PROMPT],
+      'document text must never change the system prompt',
+    );
+  }
 }
