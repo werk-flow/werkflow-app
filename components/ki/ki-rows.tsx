@@ -2,7 +2,7 @@
 
 import {
   Check,
-  ChevronDown,
+  ChevronRight,
   CircleDashed,
   CircleCheck,
   ListTodo,
@@ -131,8 +131,8 @@ export const KiToolRow = memo(function KiToolRow({
         </span>
       )}
       {row.hasDetail && (
-        <ChevronDown
-          className={cn('text-muted-foreground transition-transform', open && 'rotate-180')}
+        <ChevronRight
+          className={cn('text-muted-foreground transition-transform', open && 'rotate-90')}
           aria-hidden="true"
         />
       )}
