@@ -5,13 +5,20 @@ import { memo } from 'react';
 import { AiMarkdown } from '@/components/shared/ai-markdown';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
-import { Skeleton } from '@/components/ui/skeleton';
-import type { AiChatMessage } from '@/lib/ai/thread-types';
+import type { AiChatMessage, AiThreadRow } from '@/lib/ai/thread-types';
+import { questionAnswer, rowRunning, timelineOrder } from '@/lib/ui/ki-rows';
 import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 import { KiFileCard } from './ki-file-card';
+import { KiQuestion, KiTodoList, KiToolRow } from './ki-rows';
 
 /** A message in the timeline; `unconfirmed` until the server saved it. */
 export type TimelineMessage = AiChatMessage & { unconfirmed?: boolean };
+
+/** An entry of the timeline: a message, or a row of the agent's work. */
+export type TimelineEntry = TimelineMessage | AiThreadRow;
+
+const isMessage = (entry: TimelineEntry): entry is TimelineMessage =>
+  entry.role === 'user' || entry.role === 'assistant' || entry.role === 'file';
 
 /**
  * One message. Memo keeps a finished message from rendering again while
@@ -57,28 +64,49 @@ const KiMessage = memo(function KiMessage({
   );
 });
 
-export function KiTimelineSkeleton(): React.JSX.Element {
+/** A row of the agent's work, with what it derives from the rest of the thread. */
+function KiRow({
+  row,
+  entries,
+  thread,
+}: {
+  row: AiThreadRow;
+  entries: readonly TimelineEntry[];
+  thread: { organizationId: string; threadId: string; running: boolean; onAnswer: (text: string) => void };
+}): React.JSX.Element {
+  if (row.role === 'todo') return <KiTodoList row={row} />;
+  if (row.role === 'question') {
+    const state = questionAnswer(entries, row);
+    return (
+      <KiQuestion
+        row={row}
+        answered={typeof state === 'object' ? state.answered : null}
+        open={state === 'open' && !thread.running}
+        onAnswer={thread.onAnswer}
+      />
+    );
+  }
   return (
-    <div className="space-y-6" aria-hidden="true">
-      <Skeleton className="ml-auto h-10 w-2/3 rounded-lg" />
-      <Skeleton className="h-4 w-full" />
-      <Skeleton className="h-4 w-2/3" />
-      <Skeleton className="ml-auto h-10 w-1/2 rounded-lg" />
-      <Skeleton className="h-4 w-3/4" />
-    </div>
+    <KiToolRow
+      row={row}
+      running={rowRunning(entries, row)}
+      organizationId={thread.organizationId}
+      threadId={thread.threadId}
+    />
   );
 }
 
 export function KiTimeline({
-  organizationId,
   messages,
+  thread,
   unconfirmed,
   hasOlder,
   loadingOlder,
   onLoadOlder,
 }: {
-  organizationId: string;
-  messages: readonly TimelineMessage[];
+  messages: readonly TimelineEntry[];
+  /** The thread the timeline shows; `running` while a turn of this page runs in it. */
+  thread: { organizationId: string; threadId: string; running: boolean; onAnswer: (text: string) => void };
   /** The last known content, shown while a fresh read runs. */
   unconfirmed: boolean;
   hasOlder: boolean;
@@ -93,9 +121,13 @@ export function KiTimeline({
         </Button>
       )}
       <ol aria-label="Verlauf" className="space-y-6">
-        {messages.map((message) => (
-          <KiMessage key={message.key} organizationId={organizationId} message={message} />
-        ))}
+        {timelineOrder(messages).map((entry) =>
+          isMessage(entry) ? (
+            <KiMessage key={entry.key} organizationId={thread.organizationId} message={entry} />
+          ) : (
+            <KiRow key={entry.key} row={entry} entries={messages} thread={thread} />
+          ),
+        )}
       </ol>
     </div>
   );

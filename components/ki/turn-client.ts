@@ -1,5 +1,6 @@
 import { describeFailure } from '@/lib/action-messages';
 import { AI_PRODUCT_NAME } from '@/lib/ai/name';
+import { aiThreadRowSchema } from '@/lib/ai/thread-rows';
 import { z } from '@/lib/zod';
 
 // The browser side of `POST /api/ki/threads/[threadId]/turns`
@@ -60,6 +61,7 @@ const eventSchema = z.discriminatedUnion('type', [
     files: z.array(z.object({ fileId: z.string(), sequence: z.number() })).optional(),
   }),
   z.object({ type: z.literal('text'), delta: z.string() }),
+  z.object({ type: z.literal('row'), row: aiThreadRowSchema }),
   z.object({
     type: z.literal('end'),
     status: z.enum(['complete', 'failed', 'cancelled']),

@@ -17,8 +17,10 @@ import {
   kiLiveCursor,
   kiLiveGapFillable,
   mergeNewer,
+  mergeWindow,
+  placeRow,
 } from '@/lib/ai/live/follow';
-import type { AiChatMessage, AiThreadSummary, AiThreadWindow } from '@/lib/ai/thread-types';
+import type { AiThreadEntry, AiThreadRow, AiThreadSummary, AiThreadWindow } from '@/lib/ai/thread-types';
 import { readInBackground } from '@/lib/data/background-read-client';
 import {
   draftClears,
@@ -68,7 +70,12 @@ export type LiveTurn = {
   /** The answer's length when the person pressed „Antwort anhalten“: the screen holds it there until the end. */
   stoppedAt: number | null;
   end: { status: 'complete' | 'failed' | 'cancelled'; message: string | null } | null;
+  /** A tapped answer to a question: a refusal keeps it out of the typed draft. */
+  tap: boolean;
 };
+
+/** Where a refused message waits for its unchanged retry: a tapped answer apart from the typed draft. */
+const retryKey = (draft: string, tap: boolean): string => (tap ? `${draft}#tap` : draft);
 
 type WindowRead = 'found' | 'missing' | 'failed';
 
@@ -129,36 +136,6 @@ export function answerMessage(live: LiveTurn): TimelineMessage {
     // Held still only until the end: an answer that completed before the stop landed is whole.
     text: live.stoppedAt === null || live.end ? live.answer : live.answer.slice(0, live.stoppedAt),
     failure: live.end?.message ?? null,
-  };
-}
-
-/**
- * A read window joined with what the page holds, each message once by its key
- * and in sequence order. A read never takes back an answer for an older
- * snapshot of it (lib/ai/live/follow.ts), and keeps the messages it did not
- * cover: turns settled after the read began, and older pages already shown
- * when they reach the window without a gap. An
- * unchanged message keeps its object, so it does not render again.
- */
-function mergeWindow(previous: AiThreadWindow | null, next: AiThreadWindow): AiThreadWindow {
-  const held = new Map(previous?.messages.map((message) => [message.key, message]));
-  const read = new Set(next.messages.map((message) => message.key));
-  const first = Math.min(...next.messages.map((message) => message.sequence));
-  const fresh = next.messages.map((message) => {
-    const old = held.get(message.key);
-    return old ? fresherMessage(old, message) : message;
-  });
-  const unread = (previous?.messages ?? []).filter((message) => !read.has(message.key));
-  // Older pages stay only when they reach the read window; otherwise paging starts at the window again.
-  const older = unread.filter((message) => message.sequence < first);
-  // An empty read has nothing to place the held messages against, so they all stay.
-  const connected =
-    next.messages.length === 0 ||
-    (older.length > 0 && Math.max(...older.map((message) => message.sequence)) === first - 1);
-  const kept = connected ? unread : unread.filter((message) => message.sequence > first);
-  return {
-    hasOlder: connected ? (previous?.hasOlder ?? false) : next.hasOlder,
-    messages: [...kept, ...fresh].toSorted((left, right) => left.sequence - right.sequence),
   };
 }
 
@@ -329,7 +306,7 @@ function useThreadViews(
         // The channel may have brought this turn further than this page's own copy.
         const settled = turn.map((message) => {
           const known = held.get(message.key);
-          return known ? fresherMessage<AiChatMessage>(known, message) : message;
+          return known ? fresherMessage<AiThreadEntry>(known, message) : message;
         });
         const keys = new Set(turn.map((message) => message.key));
         const messages = [...window.messages.filter((message) => !keys.has(message.key)), ...settled];
@@ -338,11 +315,21 @@ function useThreadViews(
     },
     [update],
   );
+  /** Puts a row of the running turn into its thread, in place of an older copy. */
+  const place = useCallback(
+    (id: string, row: AiThreadRow) => {
+      update((all) => {
+        const view = all[id] ?? { window: null, confirmed: true, failed: false };
+        return { ...all, [id]: { ...view, window: placeRow(view.window ?? EMPTY_WINDOW, row) } };
+      });
+    },
+    [update],
+  );
   const { receive, catchUp, drain } = useLiveFollow(viewsRef, update, read);
   useEffect(() => {
     afterRead.current = drain;
   });
-  return { views, readWindow, reopen, settle, supersedeReads: stamp, receive, catchUp };
+  return { views, readWindow, reopen, settle, place, supersedeReads: stamp, receive, catchUp };
 }
 
 /**
@@ -458,6 +445,7 @@ type TurnHost = {
   showOnly: (threadId: string | null) => void;
   touch: (threadId: string, text: string) => void;
   settle: (threadId: string, turn: readonly TimelineMessage[], confirmed: boolean) => void;
+  place: (threadId: string, row: AiThreadRow) => void;
   readWindow: (threadId: string) => Promise<WindowRead>;
   /** A turn sent to the thread: no denied read that began before it may take the thread off the page. */
   supersedeReads: (threadId: string) => void;
@@ -524,6 +512,11 @@ function settleSaved(current: LiveTurn, outcome: TurnOutcome, host: TurnHost): v
   void host.readWindow(current.threadId);
 }
 
+/** A row of the running turn goes into the turn's thread. */
+function placeRowOf(turn: LiveTurn | null, host: TurnHost, row: AiThreadRow): void {
+  if (turn) host.place(turn.threadId, row);
+}
+
 /** Keeps a copy of a message and its uploads until its turn saved them. */
 function holdMessage(message: Parameters<typeof holdSending>[0], uploads: readonly AiUploadedFile[]): void {
   holdSending(message);
@@ -563,6 +556,7 @@ function newTurn(
   draft: string,
   provisional: boolean,
   uploads: readonly AiUploadedFile[],
+  tap: boolean,
 ): LiveTurn {
   const user = userMessage(commandId, text, 0, true);
   return {
@@ -578,6 +572,7 @@ function newTurn(
     started: false,
     stoppedAt: null,
     end: null,
+    tap,
   };
 }
 
@@ -590,13 +585,14 @@ function newTurn(
  */
 function settleRefused(turn: LiveTurn, outcome: TurnOutcome, host: TurnHost): void {
   const commandId = outcome.kind === 'refused' && outcome.spent ? crypto.randomUUID() : turn.commandId;
-  holdRetry(turn.draft, {
+  holdRetry(retryKey(turn.draft, turn.tap), {
     threadId: turn.threadId,
     commandId,
     text: turn.user.text,
     fileIds: turn.uploads.map((upload) => upload.fileId),
   });
-  restoreMessage(turn.draft, turn.user.text, turn.uploads);
+  // A tapped answer is tapped again; only a typed message and its files go back into the draft.
+  if (!turn.tap) restoreMessage(turn.draft, turn.user.text, turn.uploads);
   if (turn.provisional && host.shownRef.current === turn.threadId) host.showOnly(null);
   void host.readWindow(turn.threadId).then((read) => {
     if (read === 'found') host.touch(turn.threadId, turn.user.text);
@@ -690,6 +686,7 @@ function useLiveTurn(host: TurnHost) {
     (event: TurnEvent) => {
       if (leftRef.current || draftClears() !== clears.current) return;
       if (event.type === 'text') return update((turn) => ({ ...turn, answer: turn.answer + event.delta }));
+      if (event.type === 'row') return placeRowOf(liveRef.current, hostRef.current, event.row);
       if (event.type === 'end')
         return update((turn) => ({ ...turn, end: { status: event.status, message: event.message ?? null } }));
       update((turn) => markStarted(turn, event, hostRef.current));
@@ -719,21 +716,22 @@ function useLiveTurn(host: TurnHost) {
   );
 
   const send = useCallback(
-    (text: string, draft: string, uploads: readonly AiUploadedFile[]) => {
+    (text: string, draft: string, uploads: readonly AiUploadedFile[], tap = false) => {
       const host = hostRef.current;
       setError(null);
       if (liveRef.current) {
-        restoreMessage(draft, text, uploads);
+        // A message sent while an answer runs: a typed one goes back into its draft, which shows why.
+        if (!tap) restoreMessage(draft, text, uploads);
         return setError({ draft, message: describeTurnRefusal('run_active') });
       }
       clears.current = draftClears();
-      const { target, commandId } = commandFor(text, uploads, host, takeRetry(draft));
+      const { target, commandId } = commandFor(text, uploads, host, takeRetry(retryKey(draft, tap)));
       invalidateStop();
-      holdMessage({ draft, threadId: target, commandId, text }, uploads);
+      if (!tap) holdMessage({ draft, threadId: target, commandId, text }, uploads);
       host.supersedeReads(target);
       const controller = new AbortController();
       abortRef.current = controller;
-      const turn = newTurn(target, commandId, text, draft, host.threadId === null, uploads);
+      const turn = newTurn(target, commandId, text, draft, host.threadId === null, uploads, tap);
       liveRef.current = turn;
       setLive(turn);
       if (!host.threadId) host.showOnly(target);
@@ -756,7 +754,7 @@ export function useKiChat(input: {
   const list = useThreadList(organizationId, input.initialThreads);
   // A thread the person cannot open here (gone, or another organization's after Back) leaves the screen.
   const missing = useRef<(threadId: string) => void>(() => undefined);
-  const { views, readWindow, reopen, settle, supersedeReads, receive, catchUp } = useThreadViews(
+  const { views, readWindow, reopen, settle, place, supersedeReads, receive, catchUp } = useThreadViews(
     organizationId,
     input.initialThreadId,
     input.initialWindow,
@@ -786,6 +784,7 @@ export function useKiChat(input: {
     showOnly,
     touch: list.touch,
     settle,
+    place,
     readWindow,
     supersedeReads,
   });

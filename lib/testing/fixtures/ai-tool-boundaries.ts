@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import type { AI_TOOLS as RegisteredTools } from '@/lib/ai/tools/registry';
 import { missingBoundaryCases } from '@/lib/testing/ai-tool-walk';
 import { CALLER_ID, ORGANIZATION_A, signInAs, tableRows } from './action-boundary-world';
-import { toolCallOutcomes } from './ai-turn-world';
+import { THREAD_ID, postTurn, readTurn, resetAiTables, toolCallOutcomes } from './ai-turn-world';
 import { IDS, SALE_PRICE_CENTS, callTool, installAiToolWorld, offeredTools } from './ai-tool-world';
 
 type Input = Record<string, unknown>;
@@ -63,6 +63,54 @@ async function notOfferedTo(tool: AiToolName, input: Input, reader: string): Pro
   );
   assert.equal(JSON.stringify(output).includes('Müller'), false);
 }
+
+/**
+ * Posts a turn in which the model calls a harness tool. It reads and changes
+ * nothing outside the thread, so the model can name no record of anyone.
+ */
+async function callHarnessTool(tool: AiToolName, input: Input): Promise<number> {
+  const { callerId, memberships, activeOrganizationCookie } = world;
+  resetAiTables(world);
+  Object.assign(world, { callerId, memberships, activeOrganizationCookie });
+  world.rpcCalls.length = 0;
+  const response = await postTurn(`[replay:werkzeug] ${JSON.stringify({ name: tool, input })}`);
+  if (response.status === 200) await readTurn(world, response);
+  return response.status;
+}
+
+/** A harness tool's row lands only in the caller's own thread and organization, for every role (B3, B6). */
+async function ownThreadOnly(
+  tool: AiToolName,
+  input: Input,
+  kind: string,
+  role: 'admin' | 'employee',
+): Promise<void> {
+  signInAs(world, role);
+  assert.equal(await callHarnessTool(tool, input), 200);
+  assert.equal(
+    offeredTools(world.streamRequests[0]).includes(tool),
+    true,
+    `${tool}: every role is offered it`,
+  );
+  const rows = tableRows(world, 'ai_thread_items').filter((row) => row.kind === kind);
+  assert.deepEqual(
+    rows.map((row) => [row.organization_id, row.thread_id]),
+    [[ORGANIZATION_A, THREAD_ID]],
+    `${tool}: its row must land in the caller's own thread`,
+  );
+  assert.deepEqual(toolCallOutcomes(world), [`tool_call_${tool}_ok`]);
+}
+
+/** A suspended member's turn never starts, so no harness tool writes a row. */
+async function suspendedHarness(tool: AiToolName, input: Input): Promise<void> {
+  signInAs(world, 'admin');
+  world.memberships = [{ orgId: ORGANIZATION_A, role: 'admin', accessState: 'suspended' }];
+  assert.equal(await callHarnessTool(tool, input), 403, `${tool}: a suspended member's turn must be refused`);
+  assert.equal(readerCalls('record_ai_tool_item').length, 0, `${tool}: no row may be written`);
+}
+
+const QUESTION = { frage: 'Welchen Kunden meinst du?', optionen: ['Müller Haustechnik', 'Müller Bau'] };
+const PLAN = { schritte: [{ text: 'Aufträge suchen', erledigt: false }] };
 
 const CASES = {
   auftraege_finden: {
@@ -126,6 +174,16 @@ const CASES = {
     },
     lowerRole: () => notOfferedTo('artikel_finden', { suche: 'Kupferrohr' }, 'list_inventory_page'),
     suspendedMember: () => suspendedMember('artikel_finden', { suche: 'Kupferrohr' }, 'list_inventory_page'),
+  },
+  frage_stellen: {
+    foreignOrganization: () => ownThreadOnly('frage_stellen', QUESTION, 'question', 'admin'),
+    lowerRole: () => ownThreadOnly('frage_stellen', QUESTION, 'question', 'employee'),
+    suspendedMember: () => suspendedHarness('frage_stellen', QUESTION),
+  },
+  plan_zeigen: {
+    foreignOrganization: () => ownThreadOnly('plan_zeigen', PLAN, 'todo_list', 'admin'),
+    lowerRole: () => ownThreadOnly('plan_zeigen', PLAN, 'todo_list', 'employee'),
+    suspendedMember: () => suspendedHarness('plan_zeigen', PLAN),
   },
 } satisfies Record<
   AiToolName,

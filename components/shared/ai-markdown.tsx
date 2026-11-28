@@ -16,7 +16,7 @@ import { FENCE, sameOriginTarget, splitAnswerBlocks } from '@/lib/ui/ai-markdown
 const INLINE =
   /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)|(!?)\[([^[\]\n]+)\]\(([^()[\]\s]*)\)|\*\*(.+?)\*\*|__(.+?)__|\*([^*\s](?:[^*]*[^*\s])?)\*|\b_([^_\s](?:[^_]*[^_\s])?)_\b|`+/g;
 
-function inline(text: string): ReactNode[] {
+function inline(text: string, links = true): ReactNode[] {
   const nodes: ReactNode[] = [];
   let last = 0;
   for (const match of text.matchAll(INLINE)) {
@@ -28,7 +28,9 @@ function inline(text: string): ReactNode[] {
     else if (label !== undefined && href !== undefined) {
       // An image is never fetched, and a link that leaves the app is its text and its address.
       const target = bang === '' ? sameOriginTarget(href) : null;
-      if (target)
+      // Inside a control, a link would be a second action: it shows its label only.
+      if (target && !links) nodes.push(<span key={key}>{inline(label, false)}</span>);
+      else if (target)
         nodes.push(
           <TextLink key={key} href={target} prefetch={false}>
             {inline(label)}
@@ -36,9 +38,9 @@ function inline(text: string): ReactNode[] {
         );
       else nodes.push(bang === '' ? `${label} (${href})` : whole);
     } else if (strong !== undefined || strongAlt !== undefined)
-      nodes.push(<strong key={key}>{inline(strong ?? strongAlt ?? '')}</strong>);
+      nodes.push(<strong key={key}>{inline(strong ?? strongAlt ?? '', links)}</strong>);
     else if (em !== undefined || emAlt !== undefined)
-      nodes.push(<em key={key}>{inline(em ?? emAlt ?? '')}</em>);
+      nodes.push(<em key={key}>{inline(em ?? emAlt ?? '', links)}</em>);
     else nodes.push(whole);
   }
   nodes.push(text.slice(last));
@@ -145,4 +147,13 @@ export function AiMarkdown({ text }: { text: string }): React.JSX.Element {
       ))}
     </div>
   );
+}
+
+/**
+ * One line of model or record text, inline: the same safe subset, for a
+ * label, an option or a list entry. Inside a control, `links={false}` shows a
+ * link's label only, so the control keeps its one action.
+ */
+export function AiInlineText({ text, links = true }: { text: string; links?: boolean }): React.JSX.Element {
+  return <span className="break-words">{inline(text.replace(/\s*\n\s*/g, ' '), links)}</span>;
 }
