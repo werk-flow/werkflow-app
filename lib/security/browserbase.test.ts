@@ -5,6 +5,7 @@ import {
   LEDGER_WINDOW_MS,
   MACHINE_CALL_SHARE,
   apiFailure,
+  redirectNote,
   browseEnvironment,
   callsLeft,
   parseLedger,
@@ -59,6 +60,19 @@ test('the driver environment drops every variable that could change what the CLI
     '/own',
   );
   expect(browseEnvironment({}, { daemonDir: '/d', chromePath: '/pw' }).CHROME_PATH).toBe('/pw');
+});
+
+test('a fetched redirect names a public destination without its query, and nothing else', () => {
+  const page = 'http://zvshk.de/themen';
+  expect(redirectNote(page, 301, { Location: 'https://zvshk.de/' })).toBe(' -> https://zvshk.de/');
+  expect(redirectNote(page, 302, { location: '/neu' })).toBe(' -> http://zvshk.de/neu');
+  expect(redirectNote(page, 302, { location: 'https://app.werk-flow.app/login' })).toContain('refuses');
+  expect(redirectNote(page, 302, { location: 'https://sso.example.com/cb?code=S3cret' })).toContain(
+    'withheld',
+  );
+  expect(redirectNote(page, 302, { location: 'https://example.com/#token=S3cret' })).toContain('withheld');
+  expect(redirectNote(page, 200, { location: 'https://example.com/' })).toBe('');
+  expect(redirectNote(page, 301, undefined)).toBe('');
 });
 
 test('a failed call prints its status and a hint, never its body', () => {

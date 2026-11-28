@@ -5,7 +5,6 @@ import {
   openSync,
   readFileSync,
   renameSync,
-  statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -25,7 +24,7 @@ import {
   callsLeft,
   parseLedger,
   planBrowserbase,
-  urlRefusal,
+  redirectNote,
   withCall,
 } from '../lib/security/browserbase';
 import { readStagingAgentKeys } from '../lib/security/staging-agent-keys';
@@ -104,24 +103,23 @@ function writeState(path: string, value: unknown): void {
   renameSync(next, path);
 }
 
-/** A lock older than this belongs to a run that died while it held the ledger. */
-const STALE_LOCK_MS = 10_000;
+/** How long a call waits for the ledger: the lock is held for one small read and write. */
+const LOCK_WAIT_MS = 10_000;
 
 /**
  * Runs `reserve` while this machine's other agents wait, so two of them never both spend the last
  * call. The lock is a file created exclusively, held only for the read and write, never the request.
- * `reserve` returns its refusal instead of exiting, so the lock is always released.
+ * `reserve` returns its refusal instead of exiting, so the lock is always released. A lock left by a
+ * run that died is never taken over, since two waiters could both take it: the call fails closed.
  */
 async function withLedgerLock(reserve: () => string | undefined): Promise<string | undefined> {
   mkdirSync(STATE, { recursive: true });
-  const deadline = Date.now() + 2 * STALE_LOCK_MS;
+  const deadline = Date.now() + LOCK_WAIT_MS;
   while (Date.now() < deadline) {
     try {
       closeSync(openSync(LEDGER_LOCK, 'wx'));
     } catch {
-      const held = statSync(LEDGER_LOCK, { throwIfNoEntry: false });
-      if (held && Date.now() - held.mtimeMs > STALE_LOCK_MS) unlinkSync(LEDGER_LOCK);
-      else await Bun.sleep(25);
+      await Bun.sleep(25);
       continue;
     }
     try {
@@ -130,7 +128,7 @@ async function withLedgerLock(reserve: () => string | undefined): Promise<string
       unlinkSync(LEDGER_LOCK);
     }
   }
-  return `${LEDGER_LOCK} stayed locked. Another call is stuck; look at it before you delete the lock.`;
+  return `${LEDGER_LOCK} stayed locked. If no browserbase call runs on this machine, a call died holding it: delete it by its absolute path.`;
 }
 
 function readLedger(): ReturnType<typeof parseLedger> {
@@ -191,16 +189,6 @@ const fetchSchema = z.object({
   headers: z.record(z.string(), z.string()).optional(),
 });
 
-/** Where a redirect points, resolved against the page, when that address passes the URL guard. */
-function redirectTarget(url: string, headers: Readonly<Record<string, string>> | undefined): string {
-  const location = Object.entries(headers ?? {}).find(([name]) => name.toLowerCase() === 'location')?.[1];
-  if (location === undefined) return '';
-  const target = URL.parse(location, url)?.href;
-  return target !== undefined && !urlRefusal(target)
-    ? ` -> ${target}`
-    : ' -> an address the URL guard refuses';
-}
-
 async function fetchPage(url: string, output: string | undefined): Promise<number> {
   const key = apiKey();
   await reserveCall('fetch');
@@ -213,10 +201,10 @@ async function fetchPage(url: string, output: string | undefined): Promise<numbe
   if (output) {
     writeFileSync(output, page.content);
     console.log(
-      `[browserbase] HTTP ${page.statusCode}${redirectTarget(url, page.headers)}, ${Buffer.byteLength(page.content)} bytes written to ${output}`,
+      `[browserbase] HTTP ${page.statusCode}${redirectNote(url, page.statusCode, page.headers)}, ${Buffer.byteLength(page.content)} bytes written to ${output}`,
     );
   } else {
-    console.error(`[browserbase] HTTP ${page.statusCode}${redirectTarget(url, page.headers)}`);
+    console.error(`[browserbase] HTTP ${page.statusCode}${redirectNote(url, page.statusCode, page.headers)}`);
     process.stdout.write(page.content);
   }
   return 0;

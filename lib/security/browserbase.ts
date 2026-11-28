@@ -330,6 +330,25 @@ export function planBrowserbase(argv: readonly string[]): Plan {
   }
 }
 
+/**
+ * Where a fetched redirect points, for the caller to fetch next: only for a 3xx answer, resolved
+ * against the page, and only when the URL guard passes it. A query or fragment can carry a code or
+ * signed token, so a destination with either is withheld.
+ */
+export function redirectNote(
+  url: string,
+  status: number,
+  headers: Readonly<Record<string, string>> | undefined,
+): string {
+  if (status < 300 || status >= 400) return '';
+  const location = Object.entries(headers ?? {}).find(([name]) => name.toLowerCase() === 'location')?.[1];
+  const target = location === undefined ? undefined : URL.parse(location, url);
+  if (!target) return '';
+  if (urlRefusal(target.href)) return ' -> an address the URL guard refuses';
+  if (target.search || target.hash) return ' -> an address with a query or fragment, withheld';
+  return ` -> ${target.href}`;
+}
+
 /** What a failed Browserbase call prints: its status and what to do, never its body. */
 export function apiFailure(what: string, status: number): string {
   const hint =
