@@ -145,6 +145,59 @@ export function PositionTaxField({
   );
 }
 
+/** A fixed Nachlass's net amount and VAT rate, or a percentage's „Prozent“. */
+function AdjustmentValueFields({
+  fieldId,
+  position,
+  onChange,
+  errors,
+  disabled,
+}: {
+  fieldId: (field: PositionField) => string;
+  position: PositionForm;
+  onChange: (position: PositionForm) => void;
+  errors: Record<string, string | undefined>;
+  disabled: boolean;
+}) {
+  return position.adjustmentScope === 'betrag' ? (
+    <>
+      <Field label="Betrag netto" htmlFor={fieldId('price')} required error={errors[fieldId('price')]}>
+        <Input
+          inputMode="decimal"
+          autoComplete="off"
+          value={position.price}
+          onChange={(event) => onChange({ ...position, price: event.target.value })}
+          placeholder="0,00"
+          disabled={disabled}
+        />
+      </Field>
+      <PositionTaxField
+        id={`${fieldId('price')}-tax`}
+        position={position}
+        onChange={onChange}
+        disabled={disabled}
+      />
+    </>
+  ) : (
+    <Field
+      label="Prozent"
+      htmlFor={fieldId('percent')}
+      required
+      error={errors[fieldId('percent')]}
+      className="col-span-2"
+    >
+      <Input
+        inputMode="decimal"
+        autoComplete="off"
+        value={position.percent}
+        onChange={(event) => onChange({ ...position, percent: event.target.value })}
+        placeholder="zum Beispiel 3"
+        disabled={disabled}
+      />
+    </Field>
+  );
+}
+
 /**
  * A Nachlass or Zuschlag: its direction, what it is of, its percentage or its
  * fixed net amount with its VAT rate, and its amount, which counts in the
@@ -186,43 +239,13 @@ export function AdjustmentFields({
           onChange={(adjustmentScope) => onChange({ ...position, adjustmentScope })}
           disabled={disabled}
         />
-        {fixed ? (
-          <>
-            <Field label="Betrag netto" htmlFor={fieldId('price')} required error={errors[fieldId('price')]}>
-              <Input
-                inputMode="decimal"
-                autoComplete="off"
-                value={position.price}
-                onChange={(event) => onChange({ ...position, price: event.target.value })}
-                placeholder="0,00"
-                disabled={disabled}
-              />
-            </Field>
-            <PositionTaxField
-              id={`${fieldId('price')}-tax`}
-              position={position}
-              onChange={onChange}
-              disabled={disabled}
-            />
-          </>
-        ) : (
-          <Field
-            label="Prozent"
-            htmlFor={fieldId('percent')}
-            required
-            error={errors[fieldId('percent')]}
-            className="col-span-2"
-          >
-            <Input
-              inputMode="decimal"
-              autoComplete="off"
-              value={position.percent}
-              onChange={(event) => onChange({ ...position, percent: event.target.value })}
-              placeholder="zum Beispiel 3"
-              disabled={disabled}
-            />
-          </Field>
-        )}
+        <AdjustmentValueFields
+          fieldId={fieldId}
+          position={position}
+          onChange={onChange}
+          errors={errors}
+          disabled={disabled}
+        />
         <p className="col-span-2 text-right text-sm font-medium tabular-nums sm:col-span-1 sm:min-w-28 sm:pb-2">
           <span className="sr-only">Betrag netto: </span>
           {figures === null ? '–' : formatEuroCents(figures.saleCents)}
