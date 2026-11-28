@@ -7,7 +7,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { MAX_COST_CENTS } from './calculation';
 import { contentFitsOneSave, OFFER_CONTENT_LIMITS } from './content-form';
-import { OFFER_CHANNELS } from './types';
+import { ACCEPTANCE_CHANNELS, OFFER_CHANNELS } from './types';
 
 // The inputs of the offer actions. The forms check title, customer and the
 // header's required fields before they submit; the server parses every input again.
@@ -193,3 +193,33 @@ export const startOfferRevisionSchema = z.object({
 });
 
 export type StartOfferRevisionInput = z.input<typeof startOfferRevisionSchema>;
+
+/** „Annahme erfassen“ of the newest sent revision, as the office observed it. */
+export const acceptOfferSchema = z.object({
+  offerId: uuidSchema,
+  /** The version the page showed: a change since refuses the Annahme. */
+  expectedVersion: z.number().int().positive(),
+  /** One key per opening of the dialog: a press repeated after a lost answer gets the first Annahme. */
+  attemptKey: uuidSchema,
+  revision: z.number().int().positive(),
+  acceptedByName: z.string().trim().min(1).max(200),
+  acceptedOn: z.iso.date(),
+  channel: z.enum(ACCEPTANCE_CHANNELS),
+  note: z.string().trim().max(2000),
+  /** The chosen Bedarfs- and Alternativpositionen by their printed numbers. */
+  chosenOptions: z
+    .array(z.string().regex(/^\d{1,4}\.\d{1,4}$/))
+    .max(OFFER_CONTENT_LIMITS.positionsPerSection),
+});
+
+export type AcceptOfferInput = z.input<typeof acceptOfferSchema>;
+
+/** „Annahme zurücknehmen“ of a mistaken Annahme, or the closing of a sent offer, with a reason. */
+export const offerDecisionReasonSchema = z.object({
+  offerId: uuidSchema,
+  expectedVersion: z.number().int().positive(),
+  attemptKey: uuidSchema,
+  reason: z.string().trim().min(1).max(2000),
+});
+
+export type OfferDecisionReasonInput = z.input<typeof offerDecisionReasonSchema>;

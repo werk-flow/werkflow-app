@@ -10,7 +10,10 @@ import type { LabeledColumn } from './columns';
 export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   absence_minutes: 'Abwesenheit (Minuten)',
   absence_type: 'Abwesenheitsart',
+  acceptance_id: 'Annahme-ID',
   accepted_at: 'Angenommen am',
+  accepted_by_name: 'Angenommen von',
+  accepted_on: 'Angenommen am (Tag)',
   access_class: 'Zugriffsklasse',
   access_instructions: 'Zugangshinweise',
   access_lifecycle_id: 'Zugang-ID',
@@ -124,6 +127,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   channel: 'Kanal',
   charge_context: 'Abrechnungskontext',
   child_handover_release_id: 'Nachfolgende Übergabefreigabe (ID)',
+  chosen_options: 'Gewählte Optionen',
   city: 'Ort',
   classified_at: 'Eingestuft am',
   classified_by: 'Eingestuft von (ID)',
