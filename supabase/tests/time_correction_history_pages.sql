@@ -111,13 +111,13 @@ end $$;
 reset role;
 set local session_replication_role = replica;
 insert into public.time_correction_requests(id,organization_id,subject_employee_record_id,subject_user_id,requested_by,kind,status,source_scope_key,created_at) values
-('77000000-0000-4000-8000-000000000082','77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-0000000000a5','77000000-0000-4000-8000-000000000005','77000000-0000-4000-8000-000000000005','add','withdrawn',md5('tc-same-b')||md5('tc-same-b'),'2027-01-01'),
-('77000000-0000-4000-8000-000000000081','77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-0000000000a5','77000000-0000-4000-8000-000000000005','77000000-0000-4000-8000-000000000005','add','withdrawn',md5('tc-same-a')||md5('tc-same-a'),'2027-01-01');
+('77000000-0000-4000-8000-000000000082','77000000-0000-4000-8000-000000000010',(select record.id from public.employee_records record where record.organization_id='77000000-0000-4000-8000-000000000010' and record.user_id='77000000-0000-4000-8000-000000000004'),'77000000-0000-4000-8000-000000000004','77000000-0000-4000-8000-000000000004','add','withdrawn',md5('tc-same-b')||md5('tc-same-b'),'2027-01-01'),
+('77000000-0000-4000-8000-000000000081','77000000-0000-4000-8000-000000000010',(select record.id from public.employee_records record where record.organization_id='77000000-0000-4000-8000-000000000010' and record.user_id='77000000-0000-4000-8000-000000000004'),'77000000-0000-4000-8000-000000000004','77000000-0000-4000-8000-000000000004','add','withdrawn',md5('tc-same-a')||md5('tc-same-a'),'2027-01-01');
 set local session_replication_role = origin;
 set local role service_role;
 do $$ begin
-  if public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000005','own',1,1)->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000081'::uuid)
-    or public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000005','own',2,1)->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000082'::uuid) then
+  if public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000004','own',1,1)->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000081'::uuid)
+    or public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000004','own',2,1)->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000082'::uuid) then
     raise exception 'identical filing times lost the id order';
   end if;
 end $$;
