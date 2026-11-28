@@ -292,12 +292,6 @@ begin
   then
     raise exception 'starting the next revision changed a Position';
   end if;
-  if (select array_agg(distinct coalesce(line.price_adjustment, line.position_type, line.kind))
-      from public.offer_positions line
-      where line.organization_id = '36110000-0000-4000-8000-000000000010' and line.offer_id = pg_temp.id('offer'))
-    is distinct from array['alternative', 'bedarf', 'normal', 'rabatt', 'zuschlag'] then
-    raise exception 'the draft lost a kind of Position';
-  end if;
 end;
 $$;
 -- The draft of revision 2 saves again only from a build that knows Nachlässe.

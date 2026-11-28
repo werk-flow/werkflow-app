@@ -177,7 +177,7 @@ test('a Nachlass prints its amount in the sum, what it is of and its parts by ra
         text: 'Nachlass',
         description: 'Für Stammkunden',
         amountCents: -12_840,
-        mark: '3 % auf Titel 1, davon 127,50 € zu 19 % und 0,90 € zu 7 %',
+        mark: '3 % auf Titel 1, davon -127,50 € zu 19 % und -0,90 € zu 7 %',
       },
       {
         kind: 'adjustment',
@@ -194,13 +194,20 @@ test('a Nachlass prints its amount in the sum, what it is of and its parts by ra
   expect(document.sections[1]?.positions[1]).toMatchObject({
     number: '2.2',
     amountCents: -(10_875 + 75),
-    mark: '2,5 % auf das Angebot, davon 108,75 € zu 19 % und 0,75 € zu 7 %',
+    mark: '2,5 % auf das Angebot, davon -108,75 € zu 19 % und -0,75 € zu 7 %',
   });
   expect(document.sections.map((section) => section.subtotalCents)).toEqual([
     425_000 + 2995 - 12_840 + 1500,
     10_000 - 10_950,
   ]);
   expect(formatAdjustmentMark({ percentHundredths: 1000, of: 'Titel 2' }, [])).toBe('10 % auf Titel 2');
+  // A credit at another rate makes that rate's part a raise: each part keeps its sign.
+  expect(
+    formatAdjustmentMark({ percentHundredths: 1000, of: 'Titel 1' }, [
+      { taxRateBasisPoints: 1900, amountCents: -1000 },
+      { taxRateBasisPoints: 700, amountCents: 500 },
+    ]),
+  ).toBe('10 % auf Titel 1, davon -10,00 € zu 19 % und 5,00 € zu 7 %');
 });
 
 function keysOf(value: unknown): string[] {

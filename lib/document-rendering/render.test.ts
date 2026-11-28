@@ -512,7 +512,7 @@ describe('the business document renderer', () => {
               text: 'Nachlass',
               description: '',
               amountCents: -12_840,
-              mark: '3 % auf Titel 1, davon 127,50 € zu 19 % und 0,90 € zu 7 %',
+              mark: '3 % auf Titel 1, davon -127,50 € zu 19 % und -0,90 € zu 7 %',
             },
           ],
         },

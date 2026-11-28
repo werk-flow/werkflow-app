@@ -270,6 +270,23 @@ describe('a Nachlass or Zuschlag', () => {
     expect(amounts.taxSubtotals.map(({ basisCents }) => basisCents)).toEqual([420_000, 2995]);
   });
 
+  test('a part above one line bound is computed, as its lines each kept within it', () => {
+    // Two lines of 6 billion euros each at 19 %: 100 % off brings net and VAT to zero.
+    const sixBillion = free('Fernwärmeanschluss', '60000', 10_000_000);
+    const amounts = offerAmounts([
+      {
+        title: 'Groß',
+        positions: [
+          sixBillion,
+          sixBillion,
+          adjustment('Nachlass', { direction: 'rabatt', scope: 'titel', percentHundredths: 10_000 }),
+        ],
+      },
+    ]);
+    expect(amounts.sections[0]?.positionCents[2]).toBe(-1_200_000_000_000);
+    expect(amounts.totals).toEqual({ lineNetCents: 0, taxCents: 0, grossCents: 0 });
+  });
+
   test('a percentage of nothing is zero and has no part', () => {
     const amounts = offerAmounts([
       {

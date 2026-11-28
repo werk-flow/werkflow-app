@@ -51,8 +51,10 @@ export function formatAlternativeMark(alternative: { number: string; differenceC
 
 /**
  * A Nachlass's or Zuschlag's mark: the percentage and what it is of, and the
- * parts by VAT rate when it has several, `3 % auf Titel 1, davon 127,50 € zu
- * 19 % und 0,90 € zu 7 %`. Null for a fixed amount, which its line says.
+ * parts by VAT rate when it has several, each with its sign, as a credit at
+ * one rate turns that rate's part of a Nachlass into a raise: `3 % auf Titel
+ * 1, davon -127,50 € zu 19 % und -0,90 € zu 7 %`. Null for a fixed amount,
+ * which its line says.
  */
 export function formatAdjustmentMark(
   adjustment: { percentHundredths: number; of: string } | null,
@@ -63,7 +65,7 @@ export function formatAdjustmentMark(
   const head = `${formatTaxRate(adjustment.percentHundredths)} auf ${adjustment.of}`;
   if (parts.length < 2) return head;
   const split = parts.map(
-    (part) => `${formatEuroCents(Math.abs(part.amountCents))} zu ${formatTaxRate(part.taxRateBasisPoints)}`,
+    (part) => `${formatEuroCents(part.amountCents)} zu ${formatTaxRate(part.taxRateBasisPoints)}`,
   );
   return `${head}, davon ${split.slice(0, -1).join(', ')} und ${split.at(-1) ?? ''}`;
 }

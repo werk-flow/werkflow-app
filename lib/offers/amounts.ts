@@ -1,6 +1,6 @@
 import { lineAmountCents } from '@/lib/inventory/line-amount';
 import { INVENTORY_UNITS } from '@/lib/inventory/units';
-import { draftAmounts, type DraftAmounts } from '@/lib/invoices/amounts';
+import { draftAmounts, MAX_LINE_NET_CENTS, type DraftAmounts } from '@/lib/invoices/amounts';
 import { INVOICE_TAX_RATES, type InvoiceLineValues, type InvoiceTaxRate } from '@/lib/invoices/types';
 import { lineCostCents } from './calculation';
 import type {
@@ -88,17 +88,26 @@ function adjustmentParts(adjustment: OfferAdjustment, covered: readonly CoveredL
   });
 }
 
-/** A part as the invoice core takes a line: one flat rate, a credit for a negative part. */
-function partLine(part: AdjustmentPart): InvoiceLineValues {
-  return {
-    name: '',
-    description: '',
-    quantity: part.amountCents < 0 ? '-1' : '1',
-    unit: 'flat_rate',
-    unitPriceCents: Math.abs(part.amountCents),
-    priceQuantity: 1,
-    taxRateBasisPoints: part.taxRateBasisPoints,
-  };
+/**
+ * A part as the invoice core takes lines: flat rates of at most one line's
+ * bound each, a credit for a negative part. A part may exceed that bound, as
+ * the sum of its rate's lines does; split, it adds to its rate's VAT basis
+ * all the same.
+ */
+function partLines(part: AdjustmentPart): InvoiceLineValues[] {
+  const lines: InvoiceLineValues[] = [];
+  for (let rest = Math.abs(part.amountCents); rest > 0; rest -= MAX_LINE_NET_CENTS) {
+    lines.push({
+      name: '',
+      description: '',
+      quantity: part.amountCents < 0 ? '-1' : '1',
+      unit: 'flat_rate',
+      unitPriceCents: Math.min(rest, MAX_LINE_NET_CENTS),
+      priceQuantity: 1,
+      taxRateBasisPoints: part.taxRateBasisPoints,
+    });
+  }
+  return lines;
 }
 
 const sumOf = (parts: readonly AdjustmentPart[]) =>
@@ -144,7 +153,7 @@ export function offerAmounts<Section extends PricedSection>(sections: readonly S
   );
   const amounts = draftAmounts([
     ...priced.filter(isNormalPriced),
-    ...parts.flat().flatMap((lineParts) => (lineParts ?? []).map(partLine)),
+    ...parts.flat().flatMap((lineParts) => (lineParts ?? []).flatMap(partLines)),
   ]);
   // lineNetCents holds the counted lines, each part of a Nachlass or Zuschlag as one.
   return {
