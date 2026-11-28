@@ -283,13 +283,18 @@ function planFetch(args: readonly string[]): Plan {
 
 /** A command that names a page: exactly one URL among its positionals, checked as the driver reads it. */
 function planOpen(args: readonly string[], spec: FlagSpec, skip: number): Plan {
+  if (args.some((arg) => arg.startsWith('--no-')))
+    return refused('an argument is no flag this command takes');
   const parsed = parseFlags(args.slice(skip), spec);
   if ('refusal' in parsed) return refused(parsed.refusal);
   const [target, ...extra] = parsed.positionals;
   if (target === undefined || extra.length) return refused('name exactly one URL');
   // The driver opens only a full URL, so the URL checked is the URL opened.
   const reason = urlRefusal(target);
-  return reason ? refused(`the URL is no public research page: ${reason}`) : { kind: 'drive', args };
+  if (reason) return refused(`the URL is no public research page: ${reason}`);
+  // `open` always starts or joins a managed local browser, never another kind of session.
+  const local = args[0] === 'open' && !args.includes('--local') ? ['--local'] : [];
+  return { kind: 'drive', args: [...args, ...local] };
 }
 
 function planDrive(args: readonly string[]): Plan {
@@ -345,12 +350,12 @@ export function apiFailure(what: string, status: number): string {
 const CLI_VARIABLE = /^(?:BROWSERBASE_|BROWSE_|BB_|STAGEHAND_|DEBUG$|NODE_DEBUG$)/;
 
 /**
- * The driver's environment: the caller's, without any variable the CLI reads. The driver never gets
- * the key. Update checks, telemetry and `.env` loading are off, so it reads nothing from the checkout.
+ * The driver's environment: the caller's, without any variable the CLI reads, and the wrapper's own
+ * session folder. The driver never gets the key. Update checks, telemetry and `.env` loading are off, so it reads nothing from the checkout.
  */
 export function browseEnvironment(
   env: Readonly<Record<string, string | undefined>>,
-  chromePath: string | undefined,
+  options: { daemonDir: string; chromePath: string | undefined },
 ): Record<string, string> {
   const kept = Object.entries(env).filter(
     (entry): entry is [string, string] => entry[1] !== undefined && !CLI_VARIABLE.test(entry[0]),
@@ -361,6 +366,8 @@ export function browseEnvironment(
     BROWSE_DISABLE_UPDATE_CHECK: '1',
     BROWSERBASE_TELEMETRY_DISABLED: '1',
     DO_NOT_TRACK: '1',
-    ...(chromePath && !env.CHROME_PATH ? { CHROME_PATH: chromePath } : {}),
+    // The wrapper's own sessions only: another tool's driver session may hold a signed-in browser.
+    BROWSE_DAEMON_DIR: options.daemonDir,
+    ...(options.chromePath && !env.CHROME_PATH ? { CHROME_PATH: options.chromePath } : {}),
   };
 }

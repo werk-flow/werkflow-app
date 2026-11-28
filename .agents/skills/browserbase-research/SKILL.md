@@ -45,7 +45,7 @@ bun run browserbase -- fetch https://www.bafa.de/DE/Energie/Effiziente_Gebaeude/
 bun run browserbase -- fetch https://www.zvshk.de/ --output ~/scratch/zvshk.html
 ```
 
-Fetch returns a page's raw HTML without running JavaScript, up to 5 MB. The free plan has no markdown or JSON extraction, so the wrapper always asks for `raw`. It never follows a redirect: on a 301 or 302, fetch the new address yourself if it is public. HTML is long: write it to a file with `--output` and search it there instead of reading it into context. For a readable text view of one page, open it with `drive` and take a `snapshot`, which spends nothing.
+Fetch returns a page's raw HTML without running JavaScript, up to 5 MB. The free plan has no markdown or JSON extraction, so the wrapper always asks for `raw`. It never follows a redirect: on a 301 or 302 it prints the destination when the URL guard allows it, and you fetch that address yourself. HTML is long: write it to a file with `--output` and search it there instead of reading it into context. For a readable text view of one page, open it with `drive` and take a `snapshot`, which spends nothing.
 
 ## A browser
 

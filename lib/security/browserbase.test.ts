@@ -40,7 +40,7 @@ test('the driver environment drops every variable that could change what the CLI
       DEBUG: 'true',
       NODE_DEBUG: 'http',
     },
-    undefined,
+    { daemonDir: '/state/driver', chromePath: undefined },
   );
   expect(env).toEqual({
     PATH: '/usr/bin',
@@ -48,9 +48,17 @@ test('the driver environment drops every variable that could change what the CLI
     BROWSE_DISABLE_UPDATE_CHECK: '1',
     BROWSERBASE_TELEMETRY_DISABLED: '1',
     DO_NOT_TRACK: '1',
+    BROWSE_DAEMON_DIR: '/state/driver',
   });
-  expect(browseEnvironment({ CHROME_PATH: '/own' }, '/pw').CHROME_PATH).toBe('/own');
-  expect(browseEnvironment({}, '/pw').CHROME_PATH).toBe('/pw');
+  // A caller's own daemon folder could hold another tool's session on a signed-in browser.
+  expect(
+    browseEnvironment({ BROWSE_DAEMON_DIR: '/tmp/x' }, { daemonDir: '/d', chromePath: undefined })
+      .BROWSE_DAEMON_DIR,
+  ).toBe('/d');
+  expect(browseEnvironment({ CHROME_PATH: '/own' }, { daemonDir: '/d', chromePath: '/pw' }).CHROME_PATH).toBe(
+    '/own',
+  );
+  expect(browseEnvironment({}, { daemonDir: '/d', chromePath: '/pw' }).CHROME_PATH).toBe('/pw');
 });
 
 test('a failed call prints its status and a hint, never its body', () => {
@@ -152,7 +160,7 @@ test('a refusal never repeats the address it refused, so credentials in it stay 
 test('drive runs local driver commands only, never a cloud or attached browser', () => {
   expect(planBrowserbase(['drive', 'open', 'https://example.com'])).toEqual({
     kind: 'drive',
-    args: ['open', 'https://example.com'],
+    args: ['open', 'https://example.com', '--local'],
   });
   expect(planBrowserbase(['drive', 'snapshot', '--session', 'research'])).toEqual({
     kind: 'drive',
@@ -172,6 +180,9 @@ test('drive runs local driver commands only, never a cloud or attached browser',
   for (const command of ['cloud', 'functions', 'skills', 'upload', 'cdp', 'eval', 'status'])
     expect(refusalOf('drive', command), command).toContain('driver command');
   expect(refusalOf('drive', 'open', 'https://app.werk-flow.app')).toContain('WerkFlow app');
+  expect(refusalOf('drive', 'open', 'https://example.com', '--no-local')).toContain(
+    'no flag this command takes',
+  );
   // The driver opens only a full URL; a bare host is refused rather than guessed at.
   expect(refusalOf('drive', 'open', 'app.werk-flow.app')).toContain('no URL');
   expect(refusalOf('drive', 'tab', 'new', 'http://localhost:3000')).toContain('local host');
@@ -195,7 +206,7 @@ test('open and tab new check the URL wherever it stands among the flags', () => 
     planBrowserbase(['drive', 'open', '--session', 'research', 'https://example.com', '--timeout', '45000']),
   ).toEqual({
     kind: 'drive',
-    args: ['open', '--session', 'research', 'https://example.com', '--timeout', '45000'],
+    args: ['open', '--session', 'research', 'https://example.com', '--timeout', '45000', '--local'],
   });
 });
 

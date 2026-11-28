@@ -9,7 +9,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -25,6 +25,7 @@ import {
   callsLeft,
   parseLedger,
   planBrowserbase,
+  urlRefusal,
   withCall,
 } from '../lib/security/browserbase';
 import { readStagingAgentKeys } from '../lib/security/staging-agent-keys';
@@ -40,6 +41,11 @@ const checkout = resolve(import.meta.dir, '..');
 const STATE = join(homedir(), '.local/state/werkflow');
 const LEDGER_FILE = join(STATE, 'browserbase-calls.json');
 const LEDGER_LOCK = `${LEDGER_FILE}.lock`;
+/**
+ * The driver's sessions live here, apart from any other tool's. The driver makes it mode 700 and
+ * accepts only a folder whose parents others cannot write, such as the system's sticky temp folder.
+ */
+const DRIVER_DIR = join(tmpdir(), `werkflow-browserbase-${process.getuid?.() ?? 'user'}`);
 const TIMEOUT_MS = 30_000;
 
 function refuse(why: string): never {
@@ -179,7 +185,21 @@ async function search(request: SearchRequest, output: string | undefined): Promi
   return 0;
 }
 
-const fetchSchema = z.object({ statusCode: z.number(), content: z.string() });
+const fetchSchema = z.object({
+  statusCode: z.number(),
+  content: z.string(),
+  headers: z.record(z.string(), z.string()).optional(),
+});
+
+/** Where a redirect points, resolved against the page, when that address passes the URL guard. */
+function redirectTarget(url: string, headers: Readonly<Record<string, string>> | undefined): string {
+  const location = Object.entries(headers ?? {}).find(([name]) => name.toLowerCase() === 'location')?.[1];
+  if (location === undefined) return '';
+  const target = URL.parse(location, url)?.href;
+  return target !== undefined && !urlRefusal(target)
+    ? ` -> ${target}`
+    : ' -> an address the URL guard refuses';
+}
 
 async function fetchPage(url: string, output: string | undefined): Promise<number> {
   const key = apiKey();
@@ -193,10 +213,10 @@ async function fetchPage(url: string, output: string | undefined): Promise<numbe
   if (output) {
     writeFileSync(output, page.content);
     console.log(
-      `[browserbase] HTTP ${page.statusCode}, ${Buffer.byteLength(page.content)} bytes written to ${output}`,
+      `[browserbase] HTTP ${page.statusCode}${redirectTarget(url, page.headers)}, ${Buffer.byteLength(page.content)} bytes written to ${output}`,
     );
   } else {
-    console.error(`[browserbase] HTTP ${page.statusCode}`);
+    console.error(`[browserbase] HTTP ${page.statusCode}${redirectTarget(url, page.headers)}`);
     process.stdout.write(page.content);
   }
   return 0;
@@ -225,7 +245,7 @@ async function runDriver(args: readonly string[]): Promise<number> {
     stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',
-    env: browseEnvironment(process.env, chromePath()),
+    env: browseEnvironment(process.env, { daemonDir: DRIVER_DIR, chromePath: chromePath() }),
   });
   return child.exited;
 }
