@@ -8,6 +8,13 @@
 -- 2. A condition write holds the record while the login's account is being
 --    deleted; the write's signal waits for no account, so neither session
 --    deadlocks, and the cleared login retires the signal.
+-- 3. An unlink keeps its login's row, cleared, and holds the login's
+--    membership until it commits; the membership's removal waits for it and
+--    then retires the cleared row (werk-flow/werkflow-planning#621).
+-- 4. A membership removal holds the membership, as
+--    remove_member_with_time_capture does before it takes the record; an
+--    unlink of that login's record does not wait for it, and retires the row
+--    instead of clearing it, so no row outlives the membership.
 --
 -- The sessions need committed rows, so this file writes one synthetic
 -- organization through dblink connections and deletes it at the start (a run
@@ -23,7 +30,7 @@ select dblink_connect('signal_race_second', 'dbname=postgres user=postgres');
 create temporary table signal_race_cleanup (statement text) on commit drop;
 insert into signal_race_cleanup values
   ('delete from public.organizations where id = ''58910000-0000-4000-8000-000000000010'''),
-  ('delete from auth.users where id in (''58910000-0000-4000-8000-000000000001'', ''58910000-0000-4000-8000-000000000002'', ''58910000-0000-4000-8000-000000000003'')');
+  ('delete from auth.users where id in (''58910000-0000-4000-8000-000000000001'', ''58910000-0000-4000-8000-000000000002'', ''58910000-0000-4000-8000-000000000003'', ''58910000-0000-4000-8000-000000000004'')');
 select dblink_exec('signal_race_setup', statement) from signal_race_cleanup;
 
 select dblink_exec('signal_race_setup', $setup$
@@ -41,12 +48,16 @@ begin
    '{"first_name":"Max","last_name":"Mustermann"}'::jsonb, now(), now()),
   ('58910000-0000-4000-8000-000000000003', '00000000-0000-0000-0000-000000000000',
    'authenticated', 'authenticated', 'signal-race-new@example.test', '', now(), '{}'::jsonb,
-   '{"first_name":"Moritz","last_name":"Mustermann"}'::jsonb, now(), now());
+   '{"first_name":"Moritz","last_name":"Mustermann"}'::jsonb, now(), now()),
+  ('58910000-0000-4000-8000-000000000004', '00000000-0000-0000-0000-000000000000',
+   'authenticated', 'authenticated', 'signal-race-leaver@example.test', '', now(), '{}'::jsonb,
+   '{"first_name":"Lena","last_name":"Mustermann"}'::jsonb, now(), now());
   insert into public.organizations (id, name, admin_id, unique_code) values
   ('58910000-0000-4000-8000-000000000010', 'Haustechnik Sonnenberg Signalrennen',
    '58910000-0000-4000-8000-000000000001', 'SIGRACE');
   insert into public.organization_members (organization_id, user_id, role) values
-  ('58910000-0000-4000-8000-000000000010', '58910000-0000-4000-8000-000000000002', 'employee')
+  ('58910000-0000-4000-8000-000000000010', '58910000-0000-4000-8000-000000000002', 'employee'),
+  ('58910000-0000-4000-8000-000000000010', '58910000-0000-4000-8000-000000000004', 'employee')
   on conflict do nothing;
 end $$
 $setup$);
@@ -156,6 +167,91 @@ begin
   $read$, (select record_id from signal_race_record))) as state(signals integer, login uuid);
   if v_login is not null or v_signals is distinct from 0 then
     raise exception 'the deleted account kept its login (%) or signal (%)', v_login, v_signals;
+  end if;
+end $$;
+
+-- 3. The unlink holds the membership; its removal waits, then retires the cleared row.
+select dblink_exec('signal_race_setup', format(
+  'update public.employee_records set user_id = %L where id = %L',
+  '58910000-0000-4000-8000-000000000002', (select record_id from signal_race_record)));
+select dblink_exec('signal_race_first', 'begin');
+select dblink_exec('signal_race_first', format(
+  'update public.employee_records set user_id = null where id = %L', (select record_id from signal_race_record)));
+select dblink_send_query('signal_race_second', $remove$
+  delete from public.organization_members
+  where organization_id = '58910000-0000-4000-8000-000000000010'
+    and user_id = '58910000-0000-4000-8000-000000000002'
+$remove$);
+
+do $$
+declare
+  v_pid integer := (select pid from signal_race_second_pid);
+  v_deadline timestamptz := clock_timestamp() + interval '10 seconds';
+begin
+  while cardinality(pg_blocking_pids(v_pid)) = 0 loop
+    if clock_timestamp() > v_deadline then
+      raise exception 'the membership removal never waited for the unlink';
+    end if;
+  end loop;
+end $$;
+
+select dblink_exec('signal_race_first', 'commit');
+
+do $$
+declare
+  v_signals integer;
+begin
+  perform * from dblink_get_result('signal_race_second', false) as result(status text);
+  if dblink_error_message('signal_race_second') is distinct from 'OK' then
+    raise exception 'the membership removal failed: %', dblink_error_message('signal_race_second');
+  end if;
+  perform * from dblink_get_result('signal_race_second', false) as result(status text);
+  select signals into v_signals from dblink('signal_race_setup', $read$
+    select count(*)::integer from public.employment_target_signals
+    where organization_id = '58910000-0000-4000-8000-000000000010'
+      and user_id = '58910000-0000-4000-8000-000000000002'
+  $read$) as state(signals integer);
+  if v_signals is distinct from 0 then
+    raise exception 'a cleared signal outlived the membership removal that waited for it: %', v_signals;
+  end if;
+end $$;
+
+-- 4. The removal holds the membership; the unlink neither waits nor leaves a row.
+create temporary table signal_race_leaver_record on commit drop as
+select record_id from dblink('signal_race_setup', $read$
+  select id from public.employee_records
+  where organization_id = '58910000-0000-4000-8000-000000000010'
+    and user_id = '58910000-0000-4000-8000-000000000004'
+$read$) as record(record_id uuid);
+select dblink_exec('signal_race_first', 'begin');
+select locked from dblink('signal_race_first', $lock$
+  select 1 from public.organization_members
+  where organization_id = '58910000-0000-4000-8000-000000000010'
+    and user_id = '58910000-0000-4000-8000-000000000004'
+  for update
+$lock$) as first(locked integer);
+select dblink_exec('signal_race_second', 'set statement_timeout = ''5s''');
+select dblink_exec('signal_race_second', format(
+  'update public.employee_records set user_id = null where id = %L', (select record_id from signal_race_leaver_record)));
+select dblink_exec('signal_race_second', 'reset statement_timeout');
+select dblink_exec('signal_race_first', $remove$
+  delete from public.organization_members
+  where organization_id = '58910000-0000-4000-8000-000000000010'
+    and user_id = '58910000-0000-4000-8000-000000000004'
+$remove$);
+select dblink_exec('signal_race_first', 'commit');
+
+do $$
+declare
+  v_signals integer;
+begin
+  select signals into v_signals from dblink('signal_race_setup', $read$
+    select count(*)::integer from public.employment_target_signals
+    where organization_id = '58910000-0000-4000-8000-000000000010'
+      and user_id = '58910000-0000-4000-8000-000000000004'
+  $read$) as state(signals integer);
+  if v_signals is distinct from 0 then
+    raise exception 'an unlink during a membership removal left a signal: %', v_signals;
   end if;
 end $$;
 

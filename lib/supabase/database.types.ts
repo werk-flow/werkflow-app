@@ -2666,21 +2666,21 @@ export type Database = {
       };
       employment_target_signals: {
         Row: {
-          employee_record_id: string;
+          employee_record_id: string | null;
           id: string;
           organization_id: string;
           updated_at: string;
           user_id: string;
         };
         Insert: {
-          employee_record_id: string;
+          employee_record_id?: string | null;
           id?: string;
           organization_id: string;
           updated_at?: string;
           user_id: string;
         };
         Update: {
-          employee_record_id?: string;
+          employee_record_id?: string | null;
           id?: string;
           organization_id?: string;
           updated_at?: string;
