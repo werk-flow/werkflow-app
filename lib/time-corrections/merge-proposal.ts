@@ -180,7 +180,7 @@ function editSource(
  * was. An edit moves exactly the named fact. A deletion, split, reclassification
  * or reallocation needs an interval of one clock-in and its clock-out, and a
  * reassignment an application of one; anything else would reach past the interval and is
- * refused. A split keeps the stored activity with its details. New facts get
+ * refused. A split keeps the stored activity and job with its details. New facts get
  * ids from `newFactIdPrefix`, so none collides with a sibling's.
  */
 export function mergeApplicationCorrection(input: {
@@ -209,8 +209,9 @@ export function mergeApplicationCorrection(input: {
     const [patch, ...rest] = proposed.facts;
     if (!patch || rest.length) return { success: false, error: 'invalid_shape' };
     const edited = before.facts.slice(from, to).with(target - from, { ...named, timestamp: patch.timestamp });
-    // One moved boundary never carries an interval over midnight (an applied one never crosses it).
-    const days = new Set(edited.map((fact) => getLocalDayStart(correctionDayOwner(fact)).getTime()));
+    // One moved boundary stays on its day, and never carries its interval over midnight.
+    const dayOf = (fact: TimeCorrectionFact) => getLocalDayStart(correctionDayOwner(fact)).getTime();
+    const days = new Set([dayOf(named), ...edited.map(dayOf)]);
     return days.size > 1 ? { success: false, error: 'correction_crosses_midnight' } : replace(edited);
   }
   const interval = before.facts.slice(from, to);
@@ -222,7 +223,7 @@ export function mergeApplicationCorrection(input: {
   }
   if (kind === 'split') {
     const split = splitInterval(start, proposed, input.newFactIdPrefix);
-    return typeof split === 'string' ? { success: false, error: split } : replace(split);
+    return split ? replace(split) : { success: false, error: 'invalid_shape' };
   }
   const merged = mergeCorrectionProposal(kind, { schemaVersion: 1, facts: interval }, proposed);
   if (!merged) return { success: false, error: 'activity_context_required' };
@@ -231,33 +232,25 @@ export function mergeApplicationCorrection(input: {
 
 /**
  * The split pieces of one stored activity: two pairs that meet at the split
- * time. A piece of the same activity and job keeps the stored activity with
- * its details, such as a drive's route and role. The refusal when the pieces
- * are not two such pairs, or a piece names another activity that needs
- * details the split form cannot supply.
+ * time, both of the stored activity and job with its details, such as a
+ * drive's route and role. A split changes times only; the proposal's activity
+ * and job are not read. Null when the pieces are not two such pairs.
  */
 function splitInterval(
   start: TimeCorrectionFact,
   proposed: TimeCorrectionSnapshot,
   newFactIdPrefix: string,
-): TimeCorrectionFact[] | 'invalid_shape' | 'activity_context_required' {
+): TimeCorrectionFact[] | null {
   const [, firstEnd, secondStart] = proposed.facts;
   const twoPairs =
     proposed.facts.map((fact) => fact.entryType).join() === 'clock_in,clock_out,clock_in,clock_out' &&
     firstEnd?.timestamp === secondStart?.timestamp;
-  if (!twoPairs) return 'invalid_shape';
-  const pieces: TimeCorrectionFact[] = [];
-  for (const [index, piece] of proposed.facts.entries()) {
-    const at = {
-      factId: `${newFactIdPrefix}:${index}`,
-      entryType: piece.entryType,
-      timestamp: piece.timestamp,
-    };
-    if (piece.activityKind === start.activityKind && piece.jobId === start.jobId)
-      pieces.push({ ...start, ...at });
-    else if (piece.activity || ['work', 'callout', 'break'].includes(piece.activityKind ?? 'work'))
-      pieces.push({ ...piece, ...at });
-    else return 'activity_context_required';
-  }
-  return pieces;
+  return twoPairs
+    ? proposed.facts.map((piece, index) => ({
+        ...start,
+        factId: `${newFactIdPrefix}:${index}`,
+        entryType: piece.entryType,
+        timestamp: piece.timestamp,
+      }))
+    : null;
 }

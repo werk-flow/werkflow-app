@@ -264,7 +264,7 @@ describe('A correction of one interval of an approved correction', () => {
     ]);
   });
 
-  test('splits a drive and keeps its route and role in both pieces', async () => {
+  test('splits a drive and keeps it a drive with its route and role in both pieces', async () => {
     const drive: TimeActivitySelection = {
       kind: 'travel',
       allocationKind: 'unallocated',
@@ -280,8 +280,9 @@ describe('A correction of one interval of an approved correction', () => {
         activity: drive,
       })),
     };
+    // The dialog keeps a hidden earlier choice of work when the person switches to „Aufteilen“.
     const piece = (entryType: ProposedFact['entryType'], time: string) =>
-      proposed(entryType, time, { activityKind: 'travel' });
+      proposed(entryType, time, { activityKind: 'work' });
     const result = await correct({
       kind: 'split',
       factId: 'a0',
@@ -317,6 +318,18 @@ describe('A correction of one interval of an approved correction', () => {
     // 2026-10-14T22:00Z is midnight in Berlin.
     expect(
       await correct({ kind: 'edit', factId: 'a3', proposedFacts: [proposed('clock_out', '23:00')] }),
+    ).toEqual({ error: 'correction_crosses_midnight' });
+  });
+
+  test('refuses an edit that moves a clock-out stored on its own to another day', async () => {
+    const lonelyEnd: TimeCorrectionSnapshot = { schemaVersion: 1, facts: [fact('g0', 'clock_out', '15:00')] };
+    expect(
+      await correct({
+        kind: 'edit',
+        factId: 'g0',
+        snapshot: lonelyEnd,
+        proposedFacts: [proposed('clock_out', '23:00')],
+      }),
     ).toEqual({ error: 'correction_crosses_midnight' });
   });
 
