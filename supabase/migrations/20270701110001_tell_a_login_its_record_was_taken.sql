@@ -9,12 +9,37 @@
 -- and a timestamp, never the record the person no longer holds (the replica
 -- identity sends only id and organization_id as the old row).
 
--- 0. A join inserts a membership, whose trigger creates the record and then
--- writes a signal. Section 1 locks the signals and section 3 adds a trigger
--- to the memberships, so the memberships are locked first, in that order.
-lock table public.organization_members in share row exclusive mode;
+-- 1. A cleared row leaves with its login's membership, so no row outlives
+-- the person it tells; a live row keeps following its record, as before. An
+-- organization's deletion skips the call: its cascade takes every row. This
+-- comes first: a join inserts a membership, whose trigger creates the record
+-- and then writes a signal, so the migration takes the memberships' lock
+-- (here) before the signals' (section 2), in that order. The migration runs
+-- as one transaction, which keeps every lock to its end.
+create function app_private.retire_cleared_employment_target_signals()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $$
+begin
+  delete from public.employment_target_signals signal
+  where signal.organization_id = old.organization_id
+    and signal.user_id = old.user_id
+    and signal.employee_record_id is null;
+  return null;
+end;
+$$;
+revoke all on function app_private.retire_cleared_employment_target_signals() from public, anon, authenticated;
 
--- 1. A cleared signal names no record.
+create trigger retire_cleared_employment_target_signals
+  after delete on public.organization_members
+  for each row
+  when (not coalesce(old.organization_id::text = any (pg_catalog.string_to_array(
+    pg_catalog.current_setting('app.deleting_organization_ids', true), ',')), false))
+  execute function app_private.retire_cleared_employment_target_signals();
+
+-- 2. A cleared signal names no record.
 alter table public.employment_target_signals alter column employee_record_id drop not null;
 
 -- Realtime checks a queued event against the current row under its key but
@@ -26,7 +51,7 @@ alter table public.employment_target_signals alter column employee_record_id dro
 revoke select on table public.employment_target_signals from authenticated;
 grant select (id, organization_id, user_id, updated_at) on table public.employment_target_signals to authenticated;
 
--- 2. The record trigger clears the old login's row instead of deleting it.
+-- 3. The record trigger clears the old login's row instead of deleting it.
 -- The key stays with the same login, so a queued event of it reaches nobody
 -- else; the new login still gets a new row and key, as before. A login that
 -- is no longer a member of the record's organization (its account or its
@@ -34,7 +59,7 @@ grant select (id, organization_id, user_id, updated_at) on table public.employme
 -- membership is read under FOR KEY SHARE: a removal that holds it is waited
 -- for, so a refused removal still leaves a cleared row and a committed one
 -- none; a removal that starts later waits for this commit, and its trigger
--- (section 3) then sees the cleared row. A removal that holds the membership
+-- (section 1) then sees the cleared row. A removal that holds the membership
 -- and then waits for this record (remove_member_with_time_capture, or an
 -- account deletion that ends the membership before it clears the login)
 -- deadlocks with it; Postgres cancels one, which the caller retries, and
@@ -106,29 +131,3 @@ begin
 end;
 $$;
 revoke all on function app_private.signal_employment_target_change() from public, anon, authenticated;
-
--- 3. A cleared row leaves with its login's membership, so no row outlives
--- the person it tells; a live row keeps following its record, as before. An
--- organization's deletion skips the call: its cascade takes every row.
-create function app_private.retire_cleared_employment_target_signals()
-returns trigger
-language plpgsql
-security definer
-set search_path to ''
-as $$
-begin
-  delete from public.employment_target_signals signal
-  where signal.organization_id = old.organization_id
-    and signal.user_id = old.user_id
-    and signal.employee_record_id is null;
-  return null;
-end;
-$$;
-revoke all on function app_private.retire_cleared_employment_target_signals() from public, anon, authenticated;
-
-create trigger retire_cleared_employment_target_signals
-  after delete on public.organization_members
-  for each row
-  when (not coalesce(old.organization_id::text = any (pg_catalog.string_to_array(
-    pg_catalog.current_setting('app.deleting_organization_ids', true), ',')), false))
-  execute function app_private.retire_cleared_employment_target_signals();
