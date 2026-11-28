@@ -1,17 +1,10 @@
+import { markdownLinesOutsideFences } from './markdown-lines';
+
 /** The ATX headings and explicit anchors used by repository Markdown. */
 export function markdownHeadingAnchors(markdown: string): Set<string> {
   const anchors = new Set<string>();
   const seen = new Map<string, number>();
-  let fence: { character: string; length: number } | null = null;
-  for (const line of markdown.split(/\r?\n/)) {
-    const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-    if (marker?.[1]) {
-      if (!fence) fence = { character: marker[1][0] ?? '', length: marker[1].length };
-      else if (marker[1][0] === fence.character && marker[1].length >= fence.length && !marker[2]?.trim())
-        fence = null;
-      continue;
-    }
-    if (fence) continue;
+  for (const { text: line } of markdownLinesOutsideFences(markdown)) {
     for (const explicit of line.matchAll(/<a\s+(?:id|name)="([^"]+)"/g)) anchors.add(explicit[1] ?? '');
     const heading = line.match(/^ {0,3}#{1,6}\s+(.+?)(?:\s+#+)?\s*$/)?.[1];
     if (!heading) continue;
