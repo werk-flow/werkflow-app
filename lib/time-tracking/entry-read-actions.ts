@@ -32,6 +32,7 @@ import { getCanonicalTimeEntries } from './canonical-entries';
 import { readWindowProjections } from './entry-window-projections';
 import type { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/actions';
 import { loadApprovedCorrectionProjection } from '@/lib/time-corrections/approved-projection';
+import { keepEffectiveFacts } from '@/lib/time-corrections/person-corrections';
 import { applyApprovedTimeCorrections, correctedEntriesInWindow } from '@/lib/time-corrections/projection';
 import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
 import { verifyCurrentMembership } from './action-access';
@@ -259,8 +260,17 @@ type JobReadScope = {
   correctionApplications: readonly TimeCorrectionApplicationProjection[];
 };
 
-/** One job's canonical entries and the legacy clock-ins that open its sessions. */
-type JobSources = { jobId: string; canonicalEntries: TimeEntry[]; clockIns: TimeEntry[] };
+/**
+ * One job's canonical entries, the legacy clock-ins that open its sessions,
+ * and the employee record each person of the read holds now: the records
+ * whose correction facts count (`keepEffectiveFacts`).
+ */
+type JobSources = {
+  jobId: string;
+  canonicalEntries: TimeEntry[];
+  clockIns: TimeEntry[];
+  recordByUser: ReadonlyMap<string, string>;
+};
 
 /** The canonical entries and legacy clock-ins of one job the caller may see; null when a read fails. */
 async function readJobSources(
@@ -300,7 +310,12 @@ async function readJobSources(
     logError('Error fetching clock-ins for job:', jobClockInsError);
     return null;
   }
-  return { jobId, canonicalEntries: canonicalResult.entries, clockIns: toTimeEntries(jobClockIns || []) };
+  return {
+    jobId,
+    canonicalEntries: canonicalResult.entries,
+    clockIns: toTimeEntries(jobClockIns || []),
+    recordByUser: canonicalResult.recordByUser,
+  };
 }
 
 /** The whole local days of one or more jobs' clock-ins, with the people whose days it reads. */
@@ -421,15 +436,17 @@ async function readSpanJobDays(
  * on each day one of its own clock-ins opens, each start of the job with the
  * event that ends it, whatever job that event names (`jobIntervalEntries`).
  * The days are paired after the approved corrections, so a corrected end
- * still closes the job's time.
+ * still closes the job's time. Only the correction facts of each person's
+ * effective employee record count (`keepEffectiveFacts`).
  */
 function jobTimeEntries(
   scope: JobReadScope,
   job: JobSources,
   entriesByUserDay: ReadonlyMap<string, TimeEntry[]>,
 ): TimeEntry[] {
+  const applications = keepEffectiveFacts(scope.correctionApplications, job.recordByUser);
   const project = (entries: readonly TimeEntry[]): TimeEntry[] =>
-    applyApprovedTimeCorrections(entries, scope.correctionApplications, scope.organizationId);
+    applyApprovedTimeCorrections(entries, applications, scope.organizationId);
   const jobEntries = new Map(
     project(job.canonicalEntries)
       .filter((entry) => entry.jobId === job.jobId)

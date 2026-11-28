@@ -14,6 +14,7 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult, type LiveViewState } from '@/hooks/use-live-view';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { readInBackground } from '@/lib/data/background-read-client';
+import type { RealtimeTable } from '@/lib/realtime/tables';
 import type { TimeCorrectionRequest } from '@/lib/time-corrections/types';
 import { TimeCorrectionRequestCard } from './time-correction-requests-card';
 import { useTimeCorrectionRequestActions } from './use-time-correction-requests';
@@ -69,6 +70,14 @@ async function readCorrectionList(
     ? { ok: true, data: { requests: result.requests, total: result.requests.length } }
     : { ok: false };
 }
+
+// A person's own history lists only requests of the record they hold now, so
+// their relink re-reads it (their own signal row); an approver's queue does not
+// depend on who holds a record.
+const CORRECTION_LIVE_TABLES = {
+  approvals: ['time_correction_requests'],
+  history: ['time_correction_requests', 'employment_target_signals'],
+} as const satisfies Record<TimeCorrectionRequestsProps['mode'], readonly RealtimeTable[]>;
 
 // The approval queue shows only the submitted requests the caller may decide.
 function visibleCorrectionRequests(
@@ -147,7 +156,7 @@ export function TimeCorrectionRequests({ organizationId, mode }: TimeCorrectionR
   // only submitted requests and stays one list.
   const [page, setPage] = useState(1);
   const view = useLiveView<CorrectionList>({
-    tables: ['time_correction_requests'],
+    tables: CORRECTION_LIVE_TABLES[mode],
     read: ({ signal }) => readCorrectionList(organizationId, mode, page, signal),
     resetKey: `${organizationId}:${mode}:${page}`,
   });

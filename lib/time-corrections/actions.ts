@@ -582,7 +582,21 @@ export async function getProvisionalTimeCorrectionProjection(rawInput: {
   });
   if (!projection) throw new Error('Pending time corrections could not be read completely.');
   if (projection.requests.length === 0) return { entries: [], sources: [] };
-  const pending = projection.requests;
+  // Only the requests filed on the record their subject holds now, and only
+  // the facts of each person's effective record, show (`isEffectiveFact`).
+  const people = new Set(
+    projection.requests.flatMap((request) => [
+      request.subjectUserId,
+      ...request.proposedSnapshot.facts.map((fact) => fact.userId),
+    ]),
+  );
+  const recordByUser = await readRecordByUser(admin, input.organizationId, [...people]);
+  const pending = projection.requests.filter((request) =>
+    isEffectiveFact(
+      { userId: request.subjectUserId, employeeRecordId: request.subjectEmployeeRecordId },
+      recordByUser,
+    ),
+  );
   const requestById = new Map(pending.map((request) => [request.id, request]));
   const sources = projection.sources.flatMap((source) => {
     const sourceId = correctionSourceId(source);
@@ -598,10 +612,5 @@ export async function getProvisionalTimeCorrectionProjection(rawInput: {
         ]
       : [];
   });
-  // Only the facts of each person's effective record show (`isEffectiveFact`).
-  const people = new Set(
-    pending.flatMap((request) => request.proposedSnapshot.facts.map((fact) => fact.userId)),
-  );
-  const recordByUser = await readRecordByUser(admin, input.organizationId, [...people]);
   return { entries: provisionalEntries(pending, input, recordByUser), sources };
 }
