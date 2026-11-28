@@ -43,6 +43,12 @@ const EXFILTRATION_CORPUS: ReadonlyArray<readonly [string, string]> = [
   ['link in a list and a quote', '- [a](https://evil.example)\n> ![b](https://evil.example/b.png)'],
   ['link inside a code span', '`![x](https://evil.example)` und `<img src=x>`'],
   ['link inside a code block', '```\n![x](https://evil.example)\n<img src=x>\n```'],
+  // A thread file opens only through its card (werk-flow/werkflow-planning#534): a model that
+  // repeats a file's signed address, or puts it in an image, shows text and loads nothing.
+  [
+    'signed address of a thread file',
+    '![Lieferschein](https://acct.eu.r2.cloudflarestorage.com/b/org/ki/user/file/x-datei?X-Amz-Signature=abc) und [öffnen](https://acct.eu.r2.cloudflarestorage.com/b/org/ki/user/file/x-datei?X-Amz-Expires=600)',
+  ],
 ];
 
 /** Every address in the markup: only `href`s that stay on this origin, never a fetching attribute. */
