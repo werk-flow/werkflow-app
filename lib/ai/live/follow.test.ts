@@ -36,7 +36,11 @@ const end = (length: number): KiLiveEvent => ({
   length,
 });
 
-const message = (key: string, sequence: number, patch: Partial<AiChatMessage> = {}): AiChatMessage => ({
+const message = (
+  key: string,
+  sequence: number,
+  patch: Partial<Extract<AiChatMessage, { role: 'user' | 'assistant' }>> = {},
+): AiChatMessage => ({
   key,
   sequence,
   role: 'assistant',

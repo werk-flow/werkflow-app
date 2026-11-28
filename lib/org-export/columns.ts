@@ -21,6 +21,7 @@ type ExcludedTable =
   | 'ai_runs'
   | 'ai_run_attempts'
   | 'ai_organization_settings'
+  | 'ai_thread_files'
   // Account-wide sign-in codes of a person, no business record.
   | 'email_change_challenges'
   // Rate-limit state of a person before any membership exists.

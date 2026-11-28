@@ -138,6 +138,8 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
       return ok(used < Number(args.p_max_attempts));
     }
     case 'start_ai_turn':
+    // A message with files attaches them too (lib/testing/fixtures/ai-file-boundaries.ts models that).
+    case 'start_ai_turn_with_files':
       return startTurn(world, args);
     case 'read_ai_answer_status': {
       const item = rows('ai_thread_items').find(
@@ -317,7 +319,7 @@ function startTurn(world: AiTurnWorld, args: Row): Outcome {
   ]);
 }
 
-function appendItem(
+export function appendItem(
   world: AiTurnWorld,
   args: Row,
   kind: string,
@@ -405,6 +407,7 @@ export async function postTurn(
     organizationId?: string;
     threadId?: string;
     headers?: Record<string, string>;
+    fileIds?: string[];
   } = {},
 ): Promise<Response> {
   const { POST } = await import('@/app/api/ki/threads/[threadId]/turns/route');
@@ -417,6 +420,7 @@ export async function postTurn(
         organizationId: options.organizationId ?? ORGANIZATION_A,
         commandId: options.commandId ?? crypto.randomUUID(),
         text,
+        ...(options.fileIds ? { fileIds: options.fileIds } : {}),
       }),
     },
   );

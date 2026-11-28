@@ -23,7 +23,14 @@ import { isTimeCorrectionSnapshot, type TimeCorrectionSnapshot } from './types';
 type Tables = Database['public']['Tables'];
 type PendingRequestRow = Pick<
   Tables['time_correction_requests']['Row'],
-  'id' | 'kind' | 'status' | 'subject_user_id' | 'requested_by' | 'current_revision' | 'updated_at'
+  | 'id'
+  | 'kind'
+  | 'status'
+  | 'subject_employee_record_id'
+  | 'subject_user_id'
+  | 'requested_by'
+  | 'current_revision'
+  | 'updated_at'
 >;
 type RevisionRow = Pick<
   Tables['time_correction_request_revisions']['Row'],
@@ -67,7 +74,9 @@ export function createPendingProjectionPort(admin: SupabaseClient<Database>): Pe
       const { data, error } = await readCompleteRows((from, to) => {
         let query = admin
           .from('time_correction_requests')
-          .select('id, kind, status, subject_user_id, requested_by, current_revision, updated_at')
+          .select(
+            'id, kind, status, subject_employee_record_id, subject_user_id, requested_by, current_revision, updated_at',
+          )
           .eq('organization_id', organizationId)
           .in('status', [...PENDING_CORRECTION_STATUSES])
           .order('created_at', { ascending: false })
@@ -147,6 +156,7 @@ export type PendingCorrectionRequest = {
   kind: PendingRequestRow['kind'];
   currentRevision: number;
   updatedAt: string;
+  subjectEmployeeRecordId: string;
   subjectUserId: string;
   proposedSnapshot: TimeCorrectionSnapshot;
 };
@@ -234,6 +244,7 @@ export async function loadPendingCorrectionProjection(
       kind: row.kind,
       currentRevision: row.current_revision,
       updatedAt: row.updated_at,
+      subjectEmployeeRecordId: row.subject_employee_record_id,
       subjectUserId: row.subject_user_id,
       proposedSnapshot: revision.proposed_snapshot,
     });

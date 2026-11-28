@@ -198,6 +198,60 @@ export type Database = {
           },
         ];
       };
+      ai_thread_files: {
+        Row: {
+          created_at: string;
+          file_name: string;
+          id: string;
+          item_id: string | null;
+          mime_type: string;
+          organization_id: string;
+          page_count: number | null;
+          size_bytes: number;
+          storage_path: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          file_name: string;
+          id: string;
+          item_id?: string | null;
+          mime_type: string;
+          organization_id: string;
+          page_count?: number | null;
+          size_bytes: number;
+          storage_path: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          file_name?: string;
+          id?: string;
+          item_id?: string | null;
+          mime_type?: string;
+          organization_id?: string;
+          page_count?: number | null;
+          size_bytes?: number;
+          storage_path?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_thread_files_item_id_fkey";
+            columns: ["item_id"];
+            isOneToOne: true;
+            referencedRelation: "ai_thread_items";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_thread_files_user_id_organization_id_fkey";
+            columns: ["user_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organization_members";
+            referencedColumns: ["user_id", "organization_id"];
+          },
+        ];
+      };
       ai_thread_items: {
         Row: {
           body: Json;
@@ -19600,6 +19654,14 @@ export type Database = {
         };
         Returns: undefined;
       };
+      discard_ai_thread_file: {
+        Args: {
+          p_file_id: string;
+          p_organization_id: string;
+          p_user_id: string;
+        };
+        Returns: undefined;
+      };
       discard_unsent_organization_invite: {
         Args: {
           p_invite_id: string;
@@ -21734,6 +21796,20 @@ export type Database = {
           org_name: string;
         }[];
       };
+      register_ai_thread_file: {
+        Args: {
+          p_file_id: string;
+          p_file_name: string;
+          p_max_unattached: number;
+          p_mime_type: string;
+          p_organization_id: string;
+          p_page_count: number;
+          p_size_bytes: number;
+          p_storage_path: string;
+          p_user_id: string;
+        };
+        Returns: undefined;
+      };
       register_invoice_original: {
         Args: {
           p_actor_id: string;
@@ -23455,6 +23531,29 @@ export type Database = {
         Returns: {
           answer_item_id: string;
           answer_item_sequence: number;
+          run_id: string;
+          user_item_id: string;
+          user_item_sequence: number;
+          verdict: string;
+        }[];
+      };
+      start_ai_turn_with_files: {
+        Args: {
+          p_command_id: string;
+          p_file_ids: string[];
+          p_max_bytes: number;
+          p_max_files: number;
+          p_organization_id: string;
+          p_reserve_micro_usd: number;
+          p_text: string;
+          p_thread_id: string;
+          p_title: string;
+          p_user_id: string;
+        };
+        Returns: {
+          answer_item_id: string;
+          answer_item_sequence: number;
+          files: Json;
           run_id: string;
           user_item_id: string;
           user_item_sequence: number;

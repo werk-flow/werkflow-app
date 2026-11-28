@@ -2,6 +2,8 @@ import 'server-only';
 
 import { z } from '@/lib/zod';
 
+import { getAiFileUrl } from '@/lib/ai/files/thread-files';
+import { aiFileUrlInputSchema } from '@/lib/ai/files/types';
 import { getAiThreadPage, getAiThreadWindow } from '@/lib/ai/thread-reads';
 import { aiThreadPageInput, aiThreadWindowInput } from '@/lib/ai/thread-types';
 import { getAttentionOverview } from '@/lib/attention/actions';
@@ -441,6 +443,8 @@ export const BACKGROUND_READS = {
   // WerkFlow KI: a page of the caller's own threads, and a thread's window as it opens or pages back.
   'ki-thread-page': defineRead(aiThreadPageInput, (input) => getAiThreadPage(input)),
   'ki-thread-window': defineRead(aiThreadWindowInput, (input) => getAiThreadWindow(input)),
+  // Opening a file of the person's thread signs its address when they ask for it.
+  'ki-file-url': defineRead(aiFileUrlInputSchema, (input) => getAiFileUrl(input)),
 } as const;
 
 export type BackgroundReadKind = keyof typeof BACKGROUND_READS;

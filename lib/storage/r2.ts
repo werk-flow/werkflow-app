@@ -176,10 +176,13 @@ export async function createSignedUploadUrl({
   organizationId,
   path,
   contentType,
+  contentLength,
   expiresInSeconds = SIGNED_UPLOAD_URL_EXPIRES_SECONDS,
 }: OrganizationScope & {
   path: string;
   contentType: string;
+  /** The declared size in bytes, pinned like the type: storage refuses a body of any other length. */
+  contentLength?: number;
   expiresInSeconds?: number;
 }): Promise<string> {
   const stagingPath = uploadStagingPath(organizationId, path);
@@ -187,13 +190,16 @@ export async function createSignedUploadUrl({
     Bucket: getR2BucketName(),
     Key: stagingPath,
     ContentType: contentType,
+    ...(contentLength === undefined ? {} : { ContentLength: contentLength }),
   });
 
   // Pin the content type into the signature so the uploading client must send
   // exactly the declared type; otherwise the presigned PUT leaves it unsigned.
   return getSignedUrl(getR2Client(), command, {
     expiresIn: clampExpiry(expiresInSeconds),
-    signableHeaders: new Set(['content-type']),
+    signableHeaders: new Set(
+      contentLength === undefined ? ['content-type'] : ['content-type', 'content-length'],
+    ),
   });
 }
 

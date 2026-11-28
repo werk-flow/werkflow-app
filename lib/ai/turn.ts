@@ -4,7 +4,13 @@ import { type ModelMessage, type ToolSet, streamText } from 'ai';
 
 import { type AiContext, type AiThreadMessage, buildAiContext, serializedInput } from '@/lib/ai/context';
 import { AI_MODEL_PRICE, type AiTokenUsage, costMicroUsd } from '@/lib/ai/cost';
-import { AI_TURN_LIMITS, type AiEntryPoint, inputTokenCeiling, maxTurnCostMicroUsd } from '@/lib/ai/limits';
+import {
+  AI_TURN_LIMITS,
+  AI_UPLOAD_LIMITS,
+  type AiEntryPoint,
+  inputTokenCeiling,
+  maxTurnCostMicroUsd,
+} from '@/lib/ai/limits';
 import { type AiModel, isAllowedModel, resolveAiModel } from '@/lib/ai/model';
 import {
   TurnStop,
@@ -54,6 +60,8 @@ export type AiTurnCommand = {
   /** When the request arrived (epoch ms): the turn's total timeout counts from here. */
   receivedAt: number;
   text: string;
+  /** The person's uploads this message attaches; the model does not read them (KI-9 will). */
+  fileIds?: readonly string[];
 };
 
 /** Why a turn did not start. Every code is stable; the client shows its own German text. */
@@ -65,7 +73,9 @@ export type AiTurnRefusal =
   | 'too_many_turns'
   | 'budget_exhausted'
   | 'run_active'
-  | 'command_conflict';
+  | 'command_conflict'
+  | 'file_not_found'
+  | 'files_over_cap';
 
 /** Why a started turn ended early. The answer keeps what was written and says why. */
 export type AiTurnFailure =
@@ -106,6 +116,8 @@ export type AiTurnStart =
       status: 'started';
       userItem: ItemRef;
       assistantItem: ItemRef;
+      /** The message's file items, by file id. */
+      files: Array<{ fileId: string; sequence: number }>;
       run: (sink: AiTurnSink) => Promise<AiTurnEnd>;
     };
 
@@ -113,6 +125,14 @@ type Admin = ReturnType<typeof createSupabaseAdminClient>;
 type Refused = Extract<AiTurnStart, { status: 'refused' }>;
 
 const refused = (refusal: AiTurnRefusal): Refused => ({ status: 'refused', refusal });
+
+const FILE_REFUSALS: Readonly<Record<string, AiTurnRefusal>> = {
+  ai_file_not_found: 'file_not_found',
+  ai_files_over_turn_cap: 'files_over_cap',
+};
+const startedFilesSchema = z.object({
+  files: z.array(z.object({ fileId: z.string(), sequence: z.number() })).default([]),
+});
 
 const messageBodySchema = z.object({ text: z.string() });
 // What `start_ai_turn` answers: ids only when the turn started.
@@ -162,18 +182,27 @@ export async function startAiTurn(command: AiTurnCommand): Promise<AiTurnStart> 
   if (limit === 'unavailable') return refused('unavailable');
 
   // The reservation's key is the command id, never a value of its message (decision 19).
+  const args = {
+    p_organization_id: organizationId,
+    p_user_id: userId,
+    p_thread_id: command.threadId,
+    p_title: threadTitle(command.text),
+    p_command_id: commandId,
+    p_text: command.text,
+    p_reserve_micro_usd: maxTurnCostMicroUsd(command.entryPoint),
+  };
+  // The message's files, none included, save in the same call, before it, bound to the command.
   const { data, error } = await admin
-    .rpc('start_ai_turn', {
-      p_organization_id: organizationId,
-      p_user_id: userId,
-      p_thread_id: command.threadId,
-      p_title: threadTitle(command.text),
-      p_command_id: commandId,
-      p_text: command.text,
-      p_reserve_micro_usd: maxTurnCostMicroUsd(command.entryPoint),
+    .rpc('start_ai_turn_with_files', {
+      ...args,
+      p_file_ids: [...(command.fileIds ?? [])],
+      p_max_files: AI_UPLOAD_LIMITS.maxFilesPerMessage,
+      p_max_bytes: AI_UPLOAD_LIMITS.maxMessageBytes,
     })
     .single();
   if (error) {
+    const fileRefusal = FILE_REFUSALS[error.message];
+    if (fileRefusal) return refused(fileRefusal);
     if (error.message === 'ai_thread_not_found') return refused('thread_not_found');
     // An earlier build closed this command's run before its answer existed; the client sends a new command.
     if (error.message === 'ai_run_closed') return refused('command_conflict');
@@ -196,6 +225,7 @@ export async function startAiTurn(command: AiTurnCommand): Promise<AiTurnStart> 
     status: 'started',
     userItem,
     assistantItem,
+    files: startedFilesSchema.safeParse(data).data?.files ?? [],
     run: (sink) =>
       runTurn({
         admin,

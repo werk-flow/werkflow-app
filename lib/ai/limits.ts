@@ -69,3 +69,19 @@ export function maxTurnCostMicroUsd(entryPoint: AiEntryPoint): number {
 export function inputTokenCeiling(serializedPrompt: string): number {
   return Buffer.byteLength(serializedPrompt, 'utf8');
 }
+
+/**
+ * The caps of files a person adds to a message (werk-flow/werkflow-planning#534, B13).
+ * The ticket and the finalize check each file; the attach checks each message.
+ */
+export const AI_UPLOAD_LIMITS = {
+  /** PDF and the photo types phones send; iOS Safari converts HEIC to JPEG for this list. */
+  mimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
+  maxFileBytes: 10 * 1024 * 1024,
+  /** Pages of one PDF, counted on the stored copy. */
+  maxPdfPages: 20,
+  maxFilesPerMessage: 5,
+  maxMessageBytes: 25 * 1024 * 1024,
+  /** Uploads a person keeps that no message attached yet; a daily job deletes them after a day. */
+  maxUnsentFiles: 10,
+} as const;

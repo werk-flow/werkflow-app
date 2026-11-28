@@ -38,7 +38,7 @@ function KiIntro(): React.JSX.Element {
 function shownMessages(view: ThreadView | undefined, live: LiveTurn | null): readonly TimelineMessage[] {
   const saved: readonly TimelineMessage[] = view?.window?.messages ?? [];
   if (!live) return saved;
-  const turn = live.started ? [live.user, answerMessage(live)] : [live.user];
+  const turn = live.started ? [...live.files, live.user, answerMessage(live)] : [...live.files, live.user];
   return [...saved.filter((message) => !message.key.startsWith(live.commandId)), ...turn];
 }
 
@@ -67,6 +67,7 @@ function KiThreads({
 }
 
 function KiThread({
+  organizationId,
   threadId,
   view,
   live,
@@ -74,6 +75,7 @@ function KiThread({
   onRetry,
   onLoadOlder,
 }: {
+  organizationId: string;
   threadId: string;
   view: ThreadView | undefined;
   live: LiveTurn | null;
@@ -96,6 +98,7 @@ function KiThread({
       )}
       {view?.window || live ? (
         <KiTimeline
+          organizationId={organizationId}
           messages={shownMessages(view, live)}
           unconfirmed={view?.confirmed === false}
           hasOlder={view?.window?.hasOlder ?? false}
@@ -144,6 +147,7 @@ export function KiChat(props: {
               </>
             ) : (
               <KiThread
+                organizationId={props.organizationId}
                 threadId={threadId}
                 view={views[threadId]}
                 live={turn.live?.threadId === threadId ? turn.live : null}
@@ -155,6 +159,7 @@ export function KiChat(props: {
           </div>
         </PageBody>
         <KiComposer
+          organizationId={props.organizationId}
           draft={draft}
           running={turn.live !== null && turn.live.threadId === threadId}
           stopping={turn.live !== null && turn.live.stoppedAt !== null}

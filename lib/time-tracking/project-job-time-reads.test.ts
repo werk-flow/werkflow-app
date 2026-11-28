@@ -30,3 +30,7 @@ test('a project read whose merged days exceed the row bound returns what each jo
 test('a job read keeps the jobless break and clock-out after its clock-in, as corrected', async () => {
   await runFixture('job-read-paired-clock-out');
 });
+
+test("the job and project time lists count no correction fact of a person's removed employee record", async () => {
+  await runFixture('job-read-removed-record');
+});

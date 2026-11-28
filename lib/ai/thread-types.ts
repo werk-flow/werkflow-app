@@ -6,16 +6,30 @@ import { z } from '@/lib/zod';
 
 export type AiThreadSummary = { id: string; title: string | null; updatedAt: string };
 
-export type AiChatMessage = {
+type AiChatItem = {
   /** The item's idempotency key: the live turn uses it too, so a message keeps its place when it is saved. */
   key: string;
   sequence: number;
-  role: 'user' | 'assistant';
   status: 'streaming' | 'complete' | 'failed' | 'cancelled';
   text: string;
   /** Why an answer ended early, in German; null for a whole answer. */
   failure: string | null;
 };
+
+/** A file in a thread: the person's upload, or a file WerkFlow KI made (a KI-Entwurf until a person takes it). */
+export type AiChatFile = {
+  fileId: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  pages: number | null;
+  origin: 'upload' | 'agent';
+};
+
+/** A typed item of the timeline: a message, or a file whose bytes load only when it is opened. */
+export type AiChatMessage =
+  | (AiChatItem & { role: 'user' | 'assistant' })
+  | (AiChatItem & { role: 'file'; file: AiChatFile });
 
 /** A thread's latest messages, oldest first; `hasOlder` when earlier ones were left out. */
 export type AiThreadWindow = { messages: AiChatMessage[]; hasOlder: boolean };
