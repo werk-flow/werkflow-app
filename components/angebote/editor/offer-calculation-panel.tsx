@@ -10,18 +10,27 @@ export function formatMarginPercent(permille: number): string {
   return `${PERCENT.format(permille / 10)} %`;
 }
 
-/** Kosten, Verkauf netto, Marge and Marge % of a Titel or the offer, one per row on a phone. */
+/**
+ * Kosten, Verkauf netto, Marge and Marge % of a Titel or the offer, one per
+ * row on a phone; with `adjustments`, first what its Nachlässe and Zuschläge
+ * add to Verkauf and Marge.
+ */
 function FigureRow({
   label,
   figures,
+  adjustments,
   total,
 }: {
   label: string;
   figures: CalculationFigures;
+  adjustments: boolean;
   total?: boolean;
 }) {
   const cells: Array<[string, string]> = [
     ['Kosten', formatEuroCents(figures.costCents)],
+    ...(adjustments
+      ? [['Nachlass/Zuschlag', formatEuroCents(figures.adjustmentCents)] satisfies [string, string]]
+      : []),
     ['Verkauf netto', formatEuroCents(figures.saleCents)],
     ['Marge', formatEuroCents(figures.marginCents)],
     ['Marge %', figures.marginPermille === null ? '–' : formatMarginPercent(figures.marginPermille)],
@@ -33,7 +42,9 @@ function FigureRow({
       className={total ? 'space-y-2 border-t pt-3 font-semibold' : 'space-y-2'}
     >
       <p className="min-w-0 text-sm break-words">{label}</p>
-      <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm tabular-nums sm:grid-cols-4">
+      <dl
+        className={`grid grid-cols-1 gap-x-4 gap-y-1 text-sm tabular-nums ${adjustments ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}
+      >
         {cells.map(([term, value]) => (
           <div key={term} className="flex justify-between gap-2 text-right sm:block">
             <dt className="font-normal text-muted-foreground">{term}</dt>
@@ -51,6 +62,8 @@ function FigureRow({
  * Büro, and no document of the offer carries it. A Position without a cost
  * adds its whole sale amount to the margin; the panel names how many do. A
  * Bedarfs- or Alternativposition counts in no sum; the panel names how many it leaves out.
+ * A Nachlass or Zuschlag changes Verkauf and Marge by its amount and no cost;
+ * the panel shows how much once the offer holds one.
  */
 export function OfferCalculationPanel({
   sections,
@@ -61,6 +74,9 @@ export function OfferCalculationPanel({
 }) {
   const withoutCost = calculation?.offer.withoutCost ?? 0;
   const outsideTotal = calculation?.outsideTotal ?? 0;
+  const adjustments = sections.some((section) =>
+    section.positions.some((position) => position.kind === 'adjustment'),
+  );
   return (
     <section aria-labelledby="offer-calculation-title" className="space-y-3 rounded-lg border p-3 sm:p-4">
       <div className="space-y-1">
@@ -80,9 +96,10 @@ export function OfferCalculationPanel({
               key={sections[index]?.key ?? index}
               label={`Titel ${index + 1}${sections[index]?.title.trim() ? ` · ${sections[index]?.title.trim()}` : ''}`}
               figures={figures}
+              adjustments={adjustments}
             />
           ))}
-          <FigureRow label="Angebot gesamt" figures={calculation.offer} total />
+          <FigureRow label="Angebot gesamt" figures={calculation.offer} adjustments={adjustments} total />
           {withoutCost > 0 && (
             <p className="text-sm text-muted-foreground">
               {withoutCost === 1

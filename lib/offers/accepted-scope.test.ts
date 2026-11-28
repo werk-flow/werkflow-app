@@ -146,3 +146,39 @@ describe('offerOptions', () => {
     ]);
   });
 });
+
+// A Nachlass or Zuschlag stays in the Auftragsumfang as the revision froze it: its amount
+// counts in the net and each of its parts in its rate's VAT.
+test('the Auftragsumfang keeps each Nachlass and Zuschlag with its frozen parts', () => {
+  const discounted: RevisionContent = [
+    {
+      number: '1',
+      title: 'Heizung',
+      netCents: 10_000 + 5000 - 450,
+      positions: [
+        priced('1.1', {}),
+        priced('1.2', { unitPriceCents: 5000, amountCents: 5000, taxRateBasisPoints: 700 }),
+        priced('1.3', { unitPriceCents: 20_000, amountCents: 20_000, positionType: 'bedarf' }),
+        {
+          number: '1.4',
+          kind: 'adjustment',
+          name: 'Nachlass',
+          description: '',
+          amountCents: -450,
+          adjustment: { direction: 'rabatt' },
+          taxSplit: [
+            { taxRateBasisPoints: 1900, amountCents: -300 },
+            { taxRateBasisPoints: 700, amountCents: -150 },
+          ],
+        },
+      ],
+    },
+  ];
+  // 19 % on 100,00 € - 3,00 € + 200,00 € is 56,43 €; 7 % on 50,00 € - 1,50 € is 3,395 €.
+  expect(acceptedScopeTotals(discounted, ['1.3'])).toEqual({
+    netCents: 34_550,
+    taxCents: 5983,
+    grossCents: 40_533,
+  });
+  expect(offerOptions(discounted).map((option) => option.number)).toEqual(['1.3']);
+});

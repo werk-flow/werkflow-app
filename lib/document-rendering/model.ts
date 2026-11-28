@@ -41,11 +41,25 @@ export type DocumentPosition = {
 /** A text line between the positions: its text and description, without number, quantity or amount. */
 export type DocumentTextLine = { kind: 'text'; text: string; description: string };
 
+/**
+ * A Nachlass or Zuschlag: its number, text and description, its amount in the
+ * sum (negative for a Nachlass), no quantity or price, and a mark printed below
+ * its text, such as what it is a percentage of.
+ */
+export type DocumentAdjustmentLine = {
+  kind: 'adjustment';
+  number: string;
+  text: string;
+  description: string;
+  amountCents: number;
+  mark: string | null;
+};
+
 export type DocumentSection = {
   /** Empty for a document whose lines are not numbered by section, such as an invoice. */
   number: string;
   title: string;
-  positions: Array<DocumentPosition | DocumentTextLine>;
+  positions: Array<DocumentPosition | DocumentTextLine | DocumentAdjustmentLine>;
   subtotalCents: number;
 };
 

@@ -1,5 +1,7 @@
+import { formatAdjustmentMark } from '@/lib/document-rendering/format';
 import type {
   BusinessDocument,
+  DocumentAdjustmentLine,
   DocumentPosition,
   DocumentTextLine,
   DocumentTotals,
@@ -9,14 +11,15 @@ import { taxRateBasisPoints } from '@/lib/invoicing/calculate';
 import { formatGermanDate } from '@/lib/utils';
 import { offerAmounts } from './amounts';
 import { positionNumbers } from './numbering';
-import type { OfferDetail } from './types';
+import type { OfferAdjustmentPosition, OfferDetail } from './types';
 
 // An offer as the PDF its customer gets, mapped into the renderer's plain
 // model. The preview and the sent revision both render through this one
 // mapping, with the amounts of the one offer rule, so what the office sees is
 // what is stored. A Bedarfs- or Alternativposition prints its amount in
 // parentheses, outside the sums; an Alternativposition names its Position and
-// the difference.
+// the difference. A Nachlass or Zuschlag prints its amount in the sum and
+// what it is a percentage of, with its parts by VAT rate when it has several.
 
 type Letterhead = Pick<BusinessDocument, 'sender' | 'footerColumns' | 'stationery'>;
 
@@ -41,6 +44,46 @@ function priced(amountCents: number | null | undefined): number {
   return amountCents;
 }
 
+/** Number and revision, date, validity, the customer when someone else receives it, and the Einsatzort. */
+function offerMetaRows(offer: PrintedOffer, sending: { issuedOn: string; revision: number }) {
+  return [
+    { label: 'Angebot', value: `${offer.offerNumber}, Revision ${sending.revision}` },
+    { label: 'Datum', value: formatGermanDate(sending.issuedOn) },
+    { label: 'Gültig bis', value: formatGermanDate(offer.validUntil) },
+    ...(offer.recipient.id === offer.client.id ? [] : [{ label: 'Kunde', value: offer.client.name }]),
+    ...(offer.site ? [{ label: 'Objekt', value: offer.site.address || offer.site.name }] : []),
+  ];
+}
+
+/** A Nachlass or Zuschlag as printed: its amount in the sum, and what it is a percentage of with its parts. */
+function adjustmentLine(
+  position: OfferAdjustmentPosition,
+  printed: {
+    number: string;
+    sectionNumber: string;
+    amountCents: number;
+    parts: ReadonlyArray<{ taxRateBasisPoints: number; amountCents: number }>;
+  },
+): DocumentAdjustmentLine {
+  const { adjustment } = position;
+  return {
+    kind: 'adjustment',
+    number: printed.number,
+    text: position.name,
+    description: position.description,
+    amountCents: printed.amountCents,
+    mark: formatAdjustmentMark(
+      adjustment.scope === 'betrag'
+        ? null
+        : {
+            percentHundredths: adjustment.percentHundredths,
+            of: adjustment.scope === 'titel' ? `Titel ${printed.sectionNumber}` : 'das Angebot',
+          },
+      printed.parts,
+    ),
+  };
+}
+
 /**
  * Revision `revision` of the offer, dated `issuedOn`: the number with the
  * revision beside it, the Rechnungsempfänger as addressee, the customer when
@@ -58,13 +101,7 @@ export function offerDocument(
     ...letterhead,
     recipientLines: [offer.recipient.name, ...addressTextLines(offer.recipient.address)],
     title: `Angebot: ${offer.title}`,
-    metaRows: [
-      { label: 'Angebot', value: `${offer.offerNumber}, Revision ${sending.revision}` },
-      { label: 'Datum', value: formatGermanDate(sending.issuedOn) },
-      { label: 'Gültig bis', value: formatGermanDate(offer.validUntil) },
-      ...(offer.recipient.id === offer.client.id ? [] : [{ label: 'Kunde', value: offer.client.name }]),
-      ...(offer.site ? [{ label: 'Objekt', value: offer.site.address || offer.site.name }] : []),
-    ],
+    metaRows: offerMetaRows(offer, sending),
     openingText: offer.openingText,
     sections: offer.sections.map((section, sectionIndex) => {
       const number = String(sectionIndex + 1);
@@ -75,35 +112,45 @@ export function offerDocument(
         number,
         title: section.title,
         subtotalCents: computed.netCents,
-        positions: section.positions.map((position, index): DocumentPosition | DocumentTextLine => {
-          if (position.kind === 'text') {
-            return { kind: 'text', text: position.name, description: position.description };
-          }
-          const amountCents = priced(computed.positionCents[index]);
-          const printed = {
-            number: numbers[index] ?? '',
-            text: position.name,
-            description: position.description,
-            quantity: position.quantity,
-            unitLabel: unitShortLabelOrStored(position.unit),
-            unitPriceCents: position.unitPriceCents,
-            priceQuantity: position.priceQuantity,
-            amountCents,
-          };
-          const type = position.positionType;
-          if (type.kind === 'normal') return { kind: 'standard', ...printed };
-          if (type.kind === 'bedarf') return { kind: 'bedarf', ...printed };
-          // Its Position is a normal priced one of the same Titel (action-schemas.ts, the database's key).
-          const base = type.alternativeTo - 1;
-          return {
-            kind: 'alternative',
-            ...printed,
-            alternativeTo: {
-              number: numbers[base] ?? '',
-              differenceCents: amountCents - priced(computed.positionCents[base]),
-            },
-          };
-        }),
+        positions: section.positions.map(
+          (position, index): DocumentPosition | DocumentTextLine | DocumentAdjustmentLine => {
+            if (position.kind === 'text') {
+              return { kind: 'text', text: position.name, description: position.description };
+            }
+            const amountCents = priced(computed.positionCents[index]);
+            if (position.kind === 'adjustment') {
+              return adjustmentLine(position, {
+                number: numbers[index] ?? '',
+                sectionNumber: number,
+                amountCents,
+                parts: amounts.adjustmentParts[sectionIndex]?.[index] ?? [],
+              });
+            }
+            const printed = {
+              number: numbers[index] ?? '',
+              text: position.name,
+              description: position.description,
+              quantity: position.quantity,
+              unitLabel: unitShortLabelOrStored(position.unit),
+              unitPriceCents: position.unitPriceCents,
+              priceQuantity: position.priceQuantity,
+              amountCents,
+            };
+            const type = position.positionType;
+            if (type.kind === 'normal') return { kind: 'standard', ...printed };
+            if (type.kind === 'bedarf') return { kind: 'bedarf', ...printed };
+            // Its Position is a normal priced one of the same Titel (action-schemas.ts, the database's key).
+            const base = type.alternativeTo - 1;
+            return {
+              kind: 'alternative',
+              ...printed,
+              alternativeTo: {
+                number: numbers[base] ?? '',
+                differenceCents: amountCents - priced(computed.positionCents[base]),
+              },
+            };
+          },
+        ),
       };
     }),
     totals: {

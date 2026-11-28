@@ -7048,6 +7048,9 @@ export type Database = {
           organization_id: string;
           position: number;
           position_type: string;
+          price_adjustment: string | null;
+          price_adjustment_percent_hundredths: number | null;
+          price_adjustment_scope: string | null;
           price_condition_id: string | null;
           price_quantity: number | null;
           price_source: string | null;
@@ -7056,6 +7059,7 @@ export type Database = {
           quantity: number | null;
           section_id: string;
           tax_rate_basis_points: number | null;
+          tax_split: Json | null;
           unit: string | null;
           unit_label: string | null;
           unit_price_cents: number | null;
@@ -7073,6 +7077,9 @@ export type Database = {
           organization_id: string;
           position: number;
           position_type?: string;
+          price_adjustment?: string | null;
+          price_adjustment_percent_hundredths?: number | null;
+          price_adjustment_scope?: string | null;
           price_condition_id?: string | null;
           price_quantity?: number | null;
           price_source?: string | null;
@@ -7081,6 +7088,7 @@ export type Database = {
           quantity?: number | null;
           section_id: string;
           tax_rate_basis_points?: number | null;
+          tax_split?: Json | null;
           unit?: string | null;
           unit_label?: string | null;
           unit_price_cents?: number | null;
@@ -7098,6 +7106,9 @@ export type Database = {
           organization_id?: string;
           position?: number;
           position_type?: string;
+          price_adjustment?: string | null;
+          price_adjustment_percent_hundredths?: number | null;
+          price_adjustment_scope?: string | null;
           price_condition_id?: string | null;
           price_quantity?: number | null;
           price_source?: string | null;
@@ -7106,6 +7117,7 @@ export type Database = {
           quantity?: number | null;
           section_id?: string;
           tax_rate_basis_points?: number | null;
+          tax_split?: Json | null;
           unit?: string | null;
           unit_label?: string | null;
           unit_price_cents?: number | null;

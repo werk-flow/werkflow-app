@@ -1,6 +1,6 @@
 import type { PriceQuantity } from '@/lib/inventory/line-amount';
 import type { InvoiceLineSource, InvoiceLineSourceRef } from '@/lib/invoices/line-sources';
-import type { InvoiceLineValues } from '@/lib/invoices/types';
+import type { InvoiceLineValues, InvoiceTaxRate } from '@/lib/invoices/types';
 import type { CatalogPriceSource, PriceSourceClaim } from '@/lib/price-catalog/customer-conditions';
 import { z } from '@/lib/zod';
 import type { AcceptedScopeSection, ScopeTotals } from './accepted-scope';
@@ -13,7 +13,8 @@ import type { AcceptedScopeSection, ScopeTotals } from './accepted-scope';
 // a Position's article in 20270301090000_take_offer_positions_from_articles.sql,
 // its Leistung and its cost in 20270501090000_calculate_offers_with_leistungen_and_costs.sql,
 // its price source in 20270601100000_price_new_offer_positions_by_customer_conditions.sql,
-// its type in 20270701100000_keep_bedarfs_and_alternativpositionen_out_of_an_offer_total.sql).
+// its type in 20270701100000_keep_bedarfs_and_alternativpositionen_out_of_an_offer_total.sql,
+// a Nachlass or Zuschlag in 20270701140000_add_discount_and_surcharge_positions_to_an_offer.sql).
 
 /** Every status of an offer. */
 export const OFFER_STATUSES = ['entwurf', 'gesendet', 'angenommen', 'abgelehnt', 'zurueckgezogen'] as const;
@@ -88,7 +89,25 @@ export type OfferFreePosition = { kind: 'free' } & InvoiceLineValues & {
   };
 /** A text line: a note between the positions, without an amount. */
 type OfferTextPosition = { kind: 'text'; name: string; description: string };
-export type OfferPosition = OfferFreePosition | OfferTextPosition;
+
+/**
+ * A Nachlass (`rabatt`, it lowers the sum) or a Zuschlag (`zuschlag`, it
+ * raises it): a percentage, in hundredths of a percent, of the normal priced
+ * Positionen of its Titel (`titel`) or of the whole offer (`angebot`), or a
+ * fixed net amount at a VAT rate of its own (`betrag`).
+ */
+export type OfferAdjustment = { direction: 'rabatt' | 'zuschlag' } & (
+  | { scope: 'titel' | 'angebot'; percentHundredths: number }
+  | { scope: 'betrag'; amountCents: number; taxRateBasisPoints: InvoiceTaxRate }
+);
+/** A Nachlass or Zuschlag Position: counted in its Titel's sum, without quantity, unit or cost. */
+export type OfferAdjustmentPosition = {
+  kind: 'adjustment';
+  name: string;
+  description: string;
+  adjustment: OfferAdjustment;
+};
+export type OfferPosition = OfferFreePosition | OfferTextPosition | OfferAdjustmentPosition;
 /** A Titel: a named section of the offer with its positions in order. */
 export type OfferSection = { title: string; positions: OfferPosition[] };
 
@@ -98,12 +117,14 @@ export type OfferSection = { title: string; positions: OfferPosition[] };
  */
 type OfferStoredPosition =
   | OfferTextPosition
+  | OfferAdjustmentPosition
   | (Omit<OfferFreePosition, 'source' | 'cost' | 'priceSource'> & { source: InvoiceLineSource | null });
 type OfferStoredSection = { title: string; positions: OfferStoredPosition[] };
 
 /** As the office's editor reads it: each priced Position with its cost and price source. */
 type OfferCostedPosition =
   | OfferTextPosition
+  | OfferAdjustmentPosition
   | (Omit<OfferFreePosition, 'source' | 'priceSource'> & {
       source: InvoiceLineSource | null;
       priceSource: OfferPriceSource;

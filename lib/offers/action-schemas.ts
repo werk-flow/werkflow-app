@@ -5,6 +5,7 @@ import { INVOICE_TAX_RATES } from '@/lib/invoices/types';
 import { MAX_PRICE_CENTS } from '@/lib/price-catalog/money';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
+import { MAX_ADJUSTMENT_HUNDREDTHS } from './amounts';
 import { MAX_COST_CENTS } from './calculation';
 import { contentFitsOneSave, OFFER_CONTENT_LIMITS } from './content-form';
 import { ACCEPTANCE_CHANNELS, OFFER_CHANNELS } from './types';
@@ -103,11 +104,32 @@ const freePositionSchema = z.object({
 
 const textPositionSchema = z.object({ kind: z.literal('text'), ...positionTextSchema });
 
+/** A Nachlass or Zuschlag (OfferAdjustment): a percentage of its Titel or the offer, or a fixed amount. */
+const adjustmentPositionSchema = z.object({
+  kind: z.literal('adjustment'),
+  ...positionTextSchema,
+  adjustment: z.discriminatedUnion('scope', [
+    z.object({
+      direction: z.enum(['rabatt', 'zuschlag']),
+      scope: z.enum(['titel', 'angebot']),
+      percentHundredths: z.number().int().min(1).max(MAX_ADJUSTMENT_HUNDREDTHS),
+    }),
+    z.object({
+      direction: z.enum(['rabatt', 'zuschlag']),
+      scope: z.literal('betrag'),
+      amountCents: priceCents.min(1),
+      taxRateBasisPoints: z.literal(INVOICE_TAX_RATES),
+    }),
+  ]),
+});
+
 const sectionFields = { title: z.string().trim().min(1).max(200) };
 
 /** Whether an Alternativposition's place names a normal priced Position of the same Titel. */
 function namesNormalPosition(
-  positions: ReadonlyArray<{ kind: 'text' } | { kind: 'free'; positionType: { kind: string } }>,
+  positions: ReadonlyArray<
+    { kind: 'text' | 'adjustment' } | { kind: 'free'; positionType: { kind: string } }
+  >,
   place: number,
 ): boolean {
   const base = positions[place - 1];
@@ -118,12 +140,12 @@ function namesNormalPosition(
 const offerSectionSchema = z.object({
   ...sectionFields,
   positions: z
-    .array(z.discriminatedUnion('kind', [freePositionSchema, textPositionSchema]))
+    .array(z.discriminatedUnion('kind', [freePositionSchema, textPositionSchema, adjustmentPositionSchema]))
     .max(OFFER_CONTENT_LIMITS.positionsPerSection)
     .refine((positions) =>
       positions.every(
         (position) =>
-          position.kind === 'text' ||
+          position.kind !== 'free' ||
           position.positionType.kind !== 'alternative' ||
           namesNormalPosition(positions, position.positionType.alternativeTo),
       ),
@@ -132,8 +154,8 @@ const offerSectionSchema = z.object({
 
 /**
  * A Titel as `get_offer` answers it: each Position's article or Leistung with
- * its number, name and archive state, its type („normal“ when absent), and no
- * cost or price source.
+ * its number, name and archive state, its type („normal“ when absent), each
+ * Nachlass and Zuschlag as typed, and no cost or price source.
  */
 export const storedSectionSchema = z.object({
   ...sectionFields,
@@ -144,6 +166,7 @@ export const storedSectionSchema = z.object({
         positionType: positionTypeSchema.default({ kind: 'normal' }),
       }),
       textPositionSchema,
+      adjustmentPositionSchema,
     ]),
   ),
 });

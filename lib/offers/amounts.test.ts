@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { offerAmounts, offerContentArgument } from './amounts';
-import type { OfferFreePosition, OfferSection } from './types';
+import { offerCalculation } from './calculation';
+import type { OfferAdjustment, OfferAdjustmentPosition, OfferFreePosition, OfferSection } from './types';
 
 function free(
   name: string,
@@ -22,6 +23,10 @@ function free(
     cost: null,
     priceSource: { kind: 'manuell' },
   };
+}
+
+function adjustment(name: string, value: OfferAdjustment): OfferAdjustmentPosition {
+  return { kind: 'adjustment', name, description: '', adjustment: value };
 }
 
 // The table of cases of an offer's amounts: each priced position by the
@@ -135,6 +140,217 @@ describe('offerAmounts', () => {
     ]);
     expect(textOnly.sections).toEqual([{ netCents: 0, positionCents: [null] }]);
     expect(textOnly.totals.grossCents).toBe(0);
+  });
+});
+
+// The table of cases of a Nachlass or Zuschlag: a percentage of the normal
+// Positionen it covers, split by VAT rate, each part rounded once half away
+// from zero, the parts adding up to its amount, and VAT per rate on the sum
+// of that rate's lines and parts.
+describe('a Nachlass or Zuschlag', () => {
+  test('3 % off a Titel with two VAT rates splits per rate, each part rounded once', () => {
+    const amounts = offerAmounts([
+      {
+        title: 'Heizung',
+        positions: [
+          free('Gas-Brennwerttherme', '1', 425_000),
+          free('Wartungsheft', '1', 2995, { taxRateBasisPoints: 700 }),
+          adjustment('Nachlass', { direction: 'rabatt', scope: 'titel', percentHundredths: 300 }),
+        ],
+      },
+    ]);
+    // 3 % of 4.250,00 € is 127,50 €; 3 % of 29,95 € is 0,8985 €, rounded to 0,90 €.
+    expect(amounts.adjustmentParts).toEqual([
+      [
+        null,
+        null,
+        [
+          { taxRateBasisPoints: 1900, amountCents: -12_750 },
+          { taxRateBasisPoints: 700, amountCents: -90 },
+        ],
+      ],
+    ]);
+    expect(amounts.sections).toEqual([{ netCents: 415_155, positionCents: [425_000, 2995, -12_840] }]);
+    // 19 % on 4.122,50 € is 783,275 €; 7 % on 29,05 € is 2,0335 €.
+    expect(amounts.taxSubtotals.map(({ basisCents, taxCents }) => ({ basisCents, taxCents }))).toEqual([
+      { basisCents: 412_250, taxCents: 78_328 },
+      { basisCents: 2905, taxCents: 203 },
+    ]);
+    expect(amounts.totals).toEqual({ lineNetCents: 415_155, taxCents: 78_531, grossCents: 493_686 });
+  });
+
+  test('a half cent of a part rounds away from zero, for a Nachlass and a Zuschlag', () => {
+    const amounts = offerAmounts([
+      {
+        title: 'Kleinteile',
+        positions: [
+          free('Dichtung', '1', 50, { taxRateBasisPoints: 700 }),
+          adjustment('Nachlass', { direction: 'rabatt', scope: 'titel', percentHundredths: 100 }),
+          adjustment('Zuschlag', { direction: 'zuschlag', scope: 'titel', percentHundredths: 100 }),
+        ],
+      },
+    ]);
+    expect(amounts.sections[0]?.positionCents).toEqual([50, -1, 1]);
+  });
+
+  test('a Zuschlag of the offer covers every Titel, never a Bedarfs- or Alternativposition', () => {
+    const amounts = offerAmounts([
+      { title: 'Heizung', positions: [free('Therme', '1', 10_000)] },
+      {
+        title: 'Zubehör',
+        positions: [
+          free('Wartungsheft', '1', 5000, { taxRateBasisPoints: 700 }),
+          { ...free('Neutralisationsbox', '1', 20_000), positionType: { kind: 'bedarf' } },
+          { ...free('Therme klein', '1', 8000), positionType: { kind: 'alternative', alternativeTo: 1 } },
+          adjustment('Kleinmengenzuschlag', {
+            direction: 'zuschlag',
+            scope: 'angebot',
+            percentHundredths: 1000,
+          }),
+        ],
+      },
+    ]);
+    expect(amounts.adjustmentParts[1]?.[3]).toEqual([
+      { taxRateBasisPoints: 1900, amountCents: 1000 },
+      { taxRateBasisPoints: 700, amountCents: 500 },
+    ]);
+    // The Zuschlag counts in the Titel it stands in.
+    expect(amounts.sections.map((section) => section.netCents)).toEqual([10_000, 6500]);
+    expect(amounts.totals.lineNetCents).toBe(16_500);
+  });
+
+  test('a Nachlass beside a Bedarfsposition and a negative line covers the normal lines only', () => {
+    const amounts = offerAmounts([
+      {
+        title: 'Bad',
+        positions: [
+          free('Waschtisch', '1', 10_000),
+          // A credit lowers what the Nachlass is a percentage of.
+          free('Rücknahme', '-1', 3000),
+          { ...free('Spiegelschrank', '1', 40_000), positionType: { kind: 'bedarf' } },
+          adjustment('Nachlass', { direction: 'rabatt', scope: 'titel', percentHundredths: 500 }),
+        ],
+      },
+      // Another Titel's lines are no part of a Titel's Nachlass.
+      { title: 'Heizung', positions: [free('Therme', '1', 90_000)] },
+    ]);
+    expect(amounts.sections[0]).toEqual({ netCents: 6650, positionCents: [10_000, -3000, 40_000, -350] });
+  });
+
+  test('a Nachlass covers no other Nachlass or Zuschlag', () => {
+    const amounts = offerAmounts([
+      {
+        title: 'Heizung',
+        positions: [
+          free('Therme', '1', 10_000),
+          adjustment('Zuschlag', { direction: 'zuschlag', scope: 'titel', percentHundredths: 2000 }),
+          adjustment('Nachlass', { direction: 'rabatt', scope: 'angebot', percentHundredths: 1000 }),
+        ],
+      },
+    ]);
+    expect(amounts.sections[0]?.positionCents).toEqual([10_000, 2000, -1000]);
+  });
+
+  test('a fixed Nachlass is one part at its own VAT rate', () => {
+    const amounts = offerAmounts([
+      {
+        title: 'Heizung',
+        positions: [
+          free('Therme', '1', 425_000),
+          free('Wartungsheft', '1', 2995, { taxRateBasisPoints: 700 }),
+          adjustment('Treuenachlass', {
+            direction: 'rabatt',
+            scope: 'betrag',
+            amountCents: 5000,
+            taxRateBasisPoints: 1900,
+          }),
+        ],
+      },
+    ]);
+    expect(amounts.adjustmentParts[0]?.[2]).toEqual([{ taxRateBasisPoints: 1900, amountCents: -5000 }]);
+    expect(amounts.taxSubtotals.map(({ basisCents }) => basisCents)).toEqual([420_000, 2995]);
+  });
+
+  test('a part above one line bound is computed, as its lines each kept within it', () => {
+    // Two lines of 6 billion euros each at 19 %: 100 % off brings net and VAT to zero.
+    const sixBillion = free('Fernwärmeanschluss', '60000', 10_000_000);
+    const amounts = offerAmounts([
+      {
+        title: 'Groß',
+        positions: [
+          sixBillion,
+          sixBillion,
+          adjustment('Nachlass', { direction: 'rabatt', scope: 'titel', percentHundredths: 10_000 }),
+        ],
+      },
+    ]);
+    expect(amounts.sections[0]?.positionCents[2]).toBe(-1_200_000_000_000);
+    expect(amounts.totals).toEqual({ lineNetCents: 0, taxCents: 0, grossCents: 0 });
+  });
+
+  test('the order of Nachlässe and Zuschläge never changes a total, near the safe range too', () => {
+    // An odd total just below 5 · 10^14 cents at 0 %, then 19 Zuschläge of 100 % of the offer and 19
+    // Nachlässe: added one by one, the Zuschläge alone would pass the safe integer range.
+    const atBound = free('Fernwärmestation', '100000', 10_000_000, { taxRateBasisPoints: 0 });
+    const of = (direction: 'rabatt' | 'zuschlag') =>
+      adjustment('Anpassung', { direction, scope: 'angebot', percentHundredths: 10_000 });
+    type Direction = 'rabatt' | 'zuschlag';
+    const offer = (order: ReadonlyArray<Direction>): OfferSection[] => [
+      {
+        title: 'Material',
+        positions: [
+          ...Array.from({ length: 499 }, () => atBound),
+          free('Restposten', '1', 999_999_999_999, { taxRateBasisPoints: 0 }),
+        ],
+      },
+      { title: 'Nachlässe', positions: order.map(of) },
+    ];
+    const grouped = Array.from({ length: 38 }, (_, index): Direction => (index < 19 ? 'zuschlag' : 'rabatt'));
+    const alternating = Array.from(
+      { length: 38 },
+      (_, index): Direction => (index % 2 === 0 ? 'zuschlag' : 'rabatt'),
+    );
+    expect(offerAmounts(offer(grouped)).totals).toEqual(offerAmounts(offer(alternating)).totals);
+    expect(offerAmounts(offer(grouped)).totals.lineNetCents).toBe(499_999_999_999_999);
+    // The Titel's subtotal the save stores and „Kalkulation“'s sums add up exactly too.
+    for (const order of [grouped, alternating]) {
+      const sections = offer(order);
+      const amounts = offerAmounts(sections);
+      expect(amounts.sections.map((section) => section.netCents)).toEqual([499_999_999_999_999, 0]);
+      expect(offerContentArgument(sections)?.sections[1]?.netCents).toBe(0);
+      const calculation = offerCalculation(sections, amounts);
+      expect(calculation.sections[1]).toMatchObject({ saleCents: 0, adjustmentCents: 0 });
+      expect(calculation.offer).toMatchObject({ saleCents: 499_999_999_999_999, adjustmentCents: 0 });
+    }
+  });
+
+  test('a percentage of nothing is zero and has no part', () => {
+    const amounts = offerAmounts([
+      {
+        title: 'Leer',
+        positions: [adjustment('Nachlass', { direction: 'rabatt', scope: 'titel', percentHundredths: 300 })],
+      },
+    ]);
+    expect(amounts.sections).toEqual([{ netCents: 0, positionCents: [0] }]);
+    expect(amounts.adjustmentParts).toEqual([[[]]]);
+  });
+
+  test('the save stores each one with its amount and its parts', () => {
+    const argument = offerContentArgument([
+      {
+        title: 'Heizung',
+        positions: [
+          free('Therme', '1', 10_000),
+          adjustment('Nachlass', { direction: 'rabatt', scope: 'titel', percentHundredths: 250 }),
+        ],
+      },
+    ]);
+    expect(argument?.sections[0]?.positions[1]).toEqual({
+      ...adjustment('Nachlass', { direction: 'rabatt', scope: 'titel', percentHundredths: 250 }),
+      amountCents: -250,
+      taxSplit: [{ taxRateBasisPoints: 1900, amountCents: -250 }],
+    });
+    expect(argument?.sections[0]?.netCents).toBe(9750);
   });
 });
 

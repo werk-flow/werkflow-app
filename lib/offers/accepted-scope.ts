@@ -2,6 +2,7 @@ import { PRICE_QUANTITIES } from '@/lib/inventory/article-price-terms';
 import { INVOICE_TAX_RATES } from '@/lib/invoices/types';
 import { z } from '@/lib/zod';
 import { offerAmounts } from './amounts';
+import type { OfferAdjustmentPosition } from './types';
 
 // The Auftragsumfang of an Annahme: the accepted revision's Titel and
 // Positionen with each chosen Bedarfsposition in and each chosen
@@ -9,7 +10,8 @@ import { offerAmounts } from './amounts';
 // and freezes its lines from the revision
 // (supabase/migrations/20270701120000_record_an_offer_acceptance_and_freeze_its_scope.sql);
 // the server computes its totals here by the offer's line and VAT rule and
-// the database checks the net against the lines. No cost reaches it.
+// the database checks the net against the lines. A Nachlass or Zuschlag stays
+// as the revision froze it, its parts in their rates' VAT. No cost reaches it.
 
 const textLine = { name: z.string(), description: z.string() };
 
@@ -29,6 +31,18 @@ const frozenPricedSchema = z.object({
 
 const frozenTextSchema = z.object({ kind: z.literal('text'), ...textLine });
 
+/** A Nachlass or Zuschlag as a sent revision froze it: its number, amount and parts by VAT rate. */
+const frozenAdjustmentSchema = z.object({
+  number: z.string(),
+  kind: z.literal('adjustment'),
+  ...textLine,
+  amountCents: z.number().int(),
+  adjustment: z.object({ direction: z.enum(['rabatt', 'zuschlag']) }),
+  taxSplit: z.array(
+    z.object({ taxRateBasisPoints: z.literal(INVOICE_TAX_RATES), amountCents: z.number().int() }),
+  ),
+});
+
 /** offer_revisions.content: Titel in order with their Positionen and subtotals. */
 export const revisionContentSchema = z.array(
   z.object({
@@ -43,6 +57,7 @@ export const revisionContentSchema = z.array(
           alternativeTo: z.string().optional(),
         }),
         frozenTextSchema,
+        frozenAdjustmentSchema,
       ]),
     ),
   }),
@@ -62,6 +77,7 @@ export const acceptedScopeSchema = z.array(
           replaces: z.string().optional(),
         }),
         frozenTextSchema,
+        frozenAdjustmentSchema,
       ]),
     ),
   }),
@@ -125,9 +141,33 @@ export function acceptedScopeTotals(content: RevisionContent, chosen: readonly s
   const kept = pricedLines(content).filter((line) =>
     line.positionType ? chosen.includes(line.number) : !replaced.includes(line.number),
   );
+  // Each Nachlass and Zuschlag stays as the revision froze it: each part a fixed amount at its rate.
+  const frozenParts = content.flatMap((section) =>
+    section.positions.flatMap((line) =>
+      line.kind === 'adjustment'
+        ? line.taxSplit.map(
+            (part): Pick<OfferAdjustmentPosition, 'kind' | 'name' | 'adjustment'> => ({
+              kind: 'adjustment',
+              name: line.name,
+              adjustment: {
+                direction: part.amountCents < 0 ? 'rabatt' : 'zuschlag',
+                scope: 'betrag',
+                amountCents: Math.abs(part.amountCents),
+                taxRateBasisPoints: part.taxRateBasisPoints,
+              },
+            }),
+          )
+        : [],
+    ),
+  );
   try {
     const amounts = offerAmounts([
-      { positions: kept.map((line) => ({ ...line, positionType: { kind: 'normal' as const } })) },
+      {
+        positions: [
+          ...kept.map((line) => ({ ...line, positionType: { kind: 'normal' as const } })),
+          ...frozenParts,
+        ],
+      },
     ]);
     return {
       netCents: amounts.totals.lineNetCents,

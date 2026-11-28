@@ -87,7 +87,10 @@ function StandingAcceptance({ acceptance }: { acceptance: OfferAcceptance }) {
   );
 }
 
-/** One Titel of the Auftragsumfang: its lines with their descriptions, quantity and amount, a chosen option marked. */
+/**
+ * One Titel of the Auftragsumfang: its lines with their descriptions, quantity and amount, a chosen
+ * option marked, a Nachlass or Zuschlag with its amount as the revision froze it.
+ */
 function ScopeSection({ section }: { section: AcceptedScopeSection }) {
   return (
     <div className="space-y-1">
@@ -97,7 +100,24 @@ function ScopeSection({ section }: { section: AcceptedScopeSection }) {
       </p>
       <ul className="divide-y">
         {section.positions.map((position, index) =>
-          position.kind === 'text' ? (
+          position.kind === 'adjustment' ? (
+            <li key={position.number} className="flex justify-between gap-4 py-1.5">
+              <span className="min-w-0 space-y-0.5 wrap-anywhere">
+                <span className="flex flex-wrap items-center gap-2">
+                  {`${position.number} ${position.name}`}
+                  <Badge variant="secondary">
+                    {position.adjustment.direction === 'rabatt' ? 'Nachlass' : 'Zuschlag'}
+                  </Badge>
+                </span>
+                {position.description && (
+                  <span className="block whitespace-pre-line text-muted-foreground">
+                    {position.description}
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0 tabular-nums">{formatEuroCents(position.amountCents)}</span>
+            </li>
+          ) : position.kind === 'text' ? (
             <li key={`text-${index}`} className="py-1.5 wrap-anywhere">
               {position.name}
               {position.description && (

@@ -22,6 +22,8 @@ import type { OfferFreePosition } from './types';
 // and where its price came from: a source stays only with the server's proof
 // for this offer, entry, price and price quantity; any other price is „manuell“
 // (20270601100000_price_new_offer_positions_by_customer_conditions.sql).
+// A Nachlass or Zuschlag goes with its amount and its parts by VAT rate
+// (20270701140000_add_discount_and_surcharge_positions_to_an_offer.sql).
 
 const contentRefusal = writeRefusalFor(
   new Set([
@@ -82,7 +84,7 @@ export async function writeOfferContent(
   const sections = content.sections.map((section) => ({
     ...section,
     positions: section.positions.map((position) => {
-      if (position.kind === 'text') return position;
+      if (position.kind !== 'free') return position;
       const { cost, ...values } = position;
       // The stored source replaces the claim, and never without the server's proof.
       const priceSource = storedPriceSource(position, {
@@ -101,8 +103,9 @@ export async function writeOfferContent(
       p_expected_content_version: input.expectedContentVersion,
       p_attempt_key: input.attemptKey,
       p_sections: sections,
-      // The save knows Bedarfs- and Alternativpositionen; save_offer_content refuses an older caller's save of an offer holding one.
-      p_totals: { ...content.totals, positionTypes: true },
+      // The save knows Bedarfs- and Alternativpositionen, Nachlässe and Zuschläge; save_offer_content
+      // refuses an older caller's save of an offer holding one.
+      p_totals: { ...content.totals, positionTypes: true, adjustments: true },
     }),
   );
   const saved = savedContentSchema.safeParse(data);

@@ -8,6 +8,7 @@ import { PDFDocument, rgb, type PDFEmbeddedPage, type PDFFont, type PDFImage, ty
 import { formatAlternativeMark, formatEuroCents, formatQuantity, formatTaxRate } from './format';
 import type {
   BusinessDocument,
+  DocumentAdjustmentLine,
   DocumentImage,
   DocumentPosition,
   DocumentSection,
@@ -182,23 +183,54 @@ const POSITION_MARKS: Record<DocumentPosition['kind'], string | null> = {
   alternative: 'Alternativposition',
 };
 
+/** The mark below a position's text: its kind, an Alternativposition's Position, or a Nachlass's base. */
+function markOf(position: DocumentPosition | DocumentTextLine | DocumentAdjustmentLine): string | null {
+  if (position.kind === 'text') return null;
+  if (position.kind === 'adjustment') return position.mark;
+  return position.alternativeTo
+    ? formatAlternativeMark(position.alternativeTo)
+    : POSITION_MARKS[position.kind];
+}
+
+/**
+ * The quantity, unit price and amount columns of a position's head line. A
+ * Nachlass or Zuschlag has no quantity or price; its amount counts in the sum.
+ */
+function drawPriceColumns(
+  page: PDFPage,
+  position: DocumentPosition | DocumentAdjustmentLine,
+  columns: ReturnType<typeof columnsOf>,
+  line: number,
+  font: PDFFont,
+) {
+  const amount = formatEuroCents(position.amountCents);
+  if (position.kind === 'adjustment') {
+    drawRight(page, amount, columns.amountRight, line, font, BODY_SIZE);
+    return;
+  }
+  const quantity = `${formatQuantity(position.quantity)} ${position.unitLabel}`;
+  drawRight(page, quantity, columns.quantityRight, line, font, BODY_SIZE);
+  const per = position.priceQuantity && position.priceQuantity !== 1 ? `/${position.priceQuantity}` : '';
+  const unitPrice = `${formatEuroCents(position.unitPriceCents)}${per}`;
+  drawRight(page, unitPrice, columns.priceRight, line, font, BODY_SIZE);
+  // A Bedarfs- or Alternativposition is not in the sum: its amount stands in
+  // parentheses, so a reader adding up the column gets the subtotal.
+  const shownAmount = position.kind === 'standard' ? amount : `(${amount})`;
+  drawRight(page, shownAmount, columns.amountRight, line, font, BODY_SIZE);
+}
+
 /**
  * A position's head line with its price columns and mark, then one item per
  * description line. A text line draws its text and description only.
  */
 function positionFlow(
-  position: DocumentPosition | DocumentTextLine,
+  position: DocumentPosition | DocumentTextLine | DocumentAdjustmentLine,
   travelsWithSubtotal: boolean,
   fonts: Fonts,
   textWidth: number,
 ): FlowItem[] {
   const [firstLine = '', ...moreLines] = wrap(position.text, fonts.regular, BODY_SIZE, textWidth);
-  const mark =
-    position.kind === 'text'
-      ? null
-      : position.alternativeTo
-        ? formatAlternativeMark(position.alternativeTo)
-        : POSITION_MARKS[position.kind];
+  const mark = markOf(position);
   const descriptionLines = position.description.trim()
     ? wrap(position.description, fonts.regular, DESCRIPTION_SIZE, textWidth)
     : [];
@@ -220,30 +252,19 @@ function positionFlow(
         drawLeft(page, position.number, columns.numberLeft, line, fonts.regular, BODY_SIZE);
       }
       drawLeft(page, firstLine, columns.textLeft, line, fonts.regular, BODY_SIZE);
-      if (position.kind === 'text') return;
-      const quantity = `${formatQuantity(position.quantity)} ${position.unitLabel}`;
-      drawRight(page, quantity, columns.quantityRight, line, fonts.regular, BODY_SIZE);
-      const per = position.priceQuantity && position.priceQuantity !== 1 ? `/${position.priceQuantity}` : '';
-      const unitPrice = `${formatEuroCents(position.unitPriceCents)}${per}`;
-      drawRight(page, unitPrice, columns.priceRight, line, fonts.regular, BODY_SIZE);
-      // A Bedarfs- or Alternativposition is not in the sum: its amount stands in
-      // parentheses, so a reader adding up the column gets the subtotal.
-      const amount = formatEuroCents(position.amountCents);
-      const shownAmount = position.kind === 'standard' ? amount : `(${amount})`;
-      drawRight(page, shownAmount, columns.amountRight, line, fonts.regular, BODY_SIZE);
+      if (position.kind !== 'text') drawPriceColumns(page, position, columns, line, fonts.regular);
     }),
     ...moreLines.map((text) =>
       tableLine(BODY_LEADING, (page, top, box) =>
         drawLeft(page, text, columnsOf(box).textLeft, top, fonts.regular, BODY_SIZE),
       ),
     ),
-    ...(mark
-      ? [
-          tableLine(SMALL_LEADING + 1, (page, top, box) =>
-            drawLeft(page, mark, columnsOf(box).textLeft, top + 1, fonts.bold, SMALL_SIZE, MUTED),
-          ),
-        ]
-      : []),
+    // A mark wraps within the text column, as a Nachlass's parts by rate may run long.
+    ...(mark ? wrap(mark, fonts.bold, SMALL_SIZE, textWidth) : []).map((text) =>
+      tableLine(SMALL_LEADING + 1, (page, top, box) =>
+        drawLeft(page, text, columnsOf(box).textLeft, top + 1, fonts.bold, SMALL_SIZE, MUTED),
+      ),
+    ),
   ];
   const last = head.at(-1);
   if (last && !descriptionLines.length) {
