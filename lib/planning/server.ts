@@ -483,9 +483,13 @@ export async function assessPlanningOccurrences(input: {
   excludeOccurrenceId?: string;
   excludeOccurrenceIds?: string[];
 }): Promise<PlanningAssessment | null> {
-  // The fingerprint follows the order of the people, and callers read them
-  // from the database without a fixed order. Sorted, a confirmation that
-  // re-assesses the same people matches the assessment the manager saw.
+  // The fingerprint follows the order of the visits and people, and callers
+  // read them from the database without a fixed order. Sorted, a confirmation
+  // that re-assesses the same plan matches the assessment the manager saw.
+  const byCodePoint = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
+  const occurrences = [...input.occurrences].sort((left, right) =>
+    byCodePoint(left.originalStartLocal, right.originalStartLocal),
+  );
   const assignmentsFor: AssignmentsForOccurrence = (occurrence) =>
     [
       ...new Map(
@@ -494,15 +498,15 @@ export async function assessPlanningOccurrences(input: {
           : input.assignments
         ).map((assignment) => [assignment.employeeRecordId, assignment]),
       ).values(),
-    ].sort((left, right) => (left.employeeRecordId < right.employeeRecordId ? -1 : 1));
+    ].sort((left, right) => byCodePoint(left.employeeRecordId, right.employeeRecordId));
   const employeeRecordIds = [
     ...new Set(
-      input.occurrences.flatMap((occurrence) =>
+      occurrences.flatMap((occurrence) =>
         assignmentsFor(occurrence).map((assignment) => assignment.employeeRecordId),
       ),
     ),
   ].sort();
-  const occurrenceDates = collectAssessedOccurrenceDates(input.occurrences);
+  const occurrenceDates = collectAssessedOccurrenceDates(occurrences);
   const uniqueDates = [...new Set(occurrenceDates)].sort();
   if (uniqueDates.length === 0 || employeeRecordIds.length === 0) {
     return emptyPlanningAssessment();
@@ -512,7 +516,7 @@ export async function assessPlanningOccurrences(input: {
   const context = await loadAssessmentContext({ admin, orgId: input.orgId, employeeRecordIds, uniqueDates });
   if (!context) return null;
   const capacity = evaluateProposedCapacity({
-    occurrences: input.occurrences,
+    occurrences,
     assignmentsFor,
     existingRows: context.existingRows,
     excludedOccurrenceIds: new Set([
@@ -529,7 +533,7 @@ export async function assessPlanningOccurrences(input: {
     admin,
     orgId: input.orgId,
     jobId: input.jobId,
-    assessments: buildQualificationAssessmentRequests(input.occurrences, assignmentsFor),
+    assessments: buildQualificationAssessmentRequests(occurrences, assignmentsFor),
   });
   if (!evaluations) return null;
   return finishPlanningAssessment({ admin, capacity, evaluations, records: context.records });

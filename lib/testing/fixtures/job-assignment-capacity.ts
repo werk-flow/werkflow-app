@@ -205,3 +205,35 @@ const confirmedBoth = await updateJobAssignments(jobId, [CALLER_ID, erikUserId, 
 });
 assert.equal(confirmedBoth.success, true, 'the row order of a read never makes a confirmation stale');
 assert.equal(world.rpcCalls.length, 1);
+
+// A batch reads its visits without a fixed order too: the same visits on
+// different days give the same assessment in either order.
+const { assessPlanningOccurrences } = await import('@/lib/planning/server');
+const visitOn = (date: string) => ({
+  originalStartLocal: `${date}T08:00`,
+  timeKind: 'timed' as const,
+  startAt: `${date}T07:00:00.000Z`,
+  endAt: `${date}T11:00:00.000Z`,
+  startDate: null,
+  endDateExclusive: null,
+  dstResolution: 'exact' as const,
+});
+const visits = [visitOn('2099-11-04'), visitOn('2099-11-09')];
+const crew = [erikRecordId, mehmetRecordId].map((employeeRecordId) => ({
+  employeeRecordId,
+  teamSourceId: null,
+}));
+const inReadOrder = await assessPlanningOccurrences({
+  orgId: ORGANIZATION_A,
+  jobId,
+  occurrences: visits,
+  assignments: crew,
+});
+const reversed = await assessPlanningOccurrences({
+  orgId: ORGANIZATION_A,
+  jobId,
+  occurrences: [...visits].reverse(),
+  assignments: crew,
+});
+assert.ok(inReadOrder && reversed && inReadOrder.conflicts.length > 1);
+assert.equal(reversed.assessmentFingerprint, inReadOrder.assessmentFingerprint);
