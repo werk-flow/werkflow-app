@@ -20,6 +20,8 @@ type DeliveryProblem =
   | 'artikel_unbekannt'
   /** Several own articles carry it. */
   | 'mehrdeutig'
+  /** The line's EAN names another own article than its number. */
+  | 'ean_abweichend'
   | 'menge_fehlt'
   /** The unit is not one of the unit list. */
   | 'einheit_unbekannt'
@@ -46,18 +48,20 @@ export type DeliveryLineMatch = {
 /** Units that hold a counted number of pieces, so a printed pack content converts them. */
 const PACKAGING_UNITS: ReadonlySet<string> = new Set(['package', 'box', 'bundle', 'sack', 'pallet']);
 
+/** Packing words of Lieferscheine outside the unit list, such as „VE“ (Verpackungseinheit). */
+const PACKAGING_WORDS: ReadonlySet<string> = new Set(['ve', 'vpe', 'gebinde']);
+
+/** Whether a printed unit is a packaging unit, so the printed pack content may convert it. */
+function isPackaging(unit: InventoryUnitCode | null, printed: string | null): boolean {
+  if (unit !== null) return PACKAGING_UNITS.has(unit);
+  return printed !== null && PACKAGING_WORDS.has(printed.trim().toLowerCase().replace(/\.$/, ''));
+}
+
 const rounded = (value: number): number => Math.round(value * 1000) / 1000;
 
-/**
- * The values a lookup can send in a PostgREST `in` filter: distinct, and none
- * with a quote or backslash, which the client does not escape. Such a value
- * finds no article and its line stands unmatched.
- */
+/** The distinct values a line set names, for the lookup of its articles. */
 export function lookupValues(values: ReadonlyArray<string | null>): string[] {
-  const sendable = values.filter(
-    (value): value is string => value !== null && !value.includes('"') && !value.includes('\\'),
-  );
-  return [...new Set(sendable)];
+  return [...new Set(values.filter((value): value is string => value !== null))];
 }
 
 /** The own article a line names, how it was found, and the references its pack may convert through. */
@@ -75,12 +79,17 @@ function findArticle(line: DeliveryLine, articles: readonly DeliveryArticle[]) {
   const [article, ...more] = candidates;
   if (!article) return { status: 'unknown' as const };
   if (more.length > 0) return { status: 'ambiguous' as const };
+  // The number wins, but an EAN that names another own article puts the line in doubt.
+  const eanConflict =
+    via === 'artikelnummer' &&
+    ean !== null &&
+    articles.some((other) => other !== article && other.barcodes.includes(ean));
   // A number names its own references; an EAN names the article, so any of its references may fit.
   const references =
     via === 'artikelnummer'
       ? article.references.filter((reference) => reference.supplierArticleNumber === number)
       : article.references;
-  return { status: 'found' as const, article, via, references };
+  return { status: 'found' as const, article, via, references, eanConflict };
 }
 
 /** One line matched against the articles its number or EAN found (lib/inventory/delivery-articles.ts). */
@@ -93,7 +102,7 @@ export function matchDeliveryLine(
     const problem = found.status === 'ambiguous' ? 'mehrdeutig' : 'artikel_unbekannt';
     return { article: null, via: null, baseQuantity: null, problems: [problem] };
   }
-  const { article, via, references } = found;
+  const { article, via, references, eanConflict } = found;
   const baseUnit = isInventoryUnitCode(article.unit) ? article.unit : null;
   const at = (baseQuantity: number | null, problems: DeliveryProblem[] = []): DeliveryLineMatch => ({
     article: { name: article.name, internalSku: article.internalSku, unit: baseUnit },
@@ -101,6 +110,7 @@ export function matchDeliveryLine(
     baseQuantity: baseQuantity === null ? null : rounded(baseQuantity),
     problems,
   });
+  if (eanConflict) return at(null, ['ean_abweichend']);
   if (line.menge === null) return at(null, ['menge_fehlt']);
   if (baseUnit === null) return at(null, ['artikeleinheit_unbekannt']);
   const unit = normalizeInventoryUnitInput(line.einheit);
@@ -118,7 +128,7 @@ export function matchDeliveryLine(
   if (ratio !== undefined)
     return printed !== null && printed !== ratio ? at(null, ['packung_abweichend']) : at(line.menge * ratio);
   // A pack the references do not know, of an article counted in pieces.
-  if (printed !== null && (unit === null || PACKAGING_UNITS.has(unit)))
+  if (printed !== null && isPackaging(unit, line.einheit))
     return at(line.menge * printed, ['packung_umgerechnet']);
   return at(null, [unit === null ? 'einheit_unbekannt' : 'einheit_abweichend']);
 }

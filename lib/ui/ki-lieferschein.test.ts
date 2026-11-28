@@ -106,3 +106,11 @@ test('a line shows its printed pack content, and its EAN when it has no article 
     '2 VE à 10 · EAN 4012345000158 · Kupferrohr 15 x 1 mm',
   );
 });
+
+test('a line without a quantity still shows its unit and pack content', () => {
+  const [first] = RESULT.positionen;
+  const line = { ...first, menge: null, einheit: doc('VE'), packungsinhalt: 10, nr: 1 };
+  expect(lieferscheinCard({ ...RESULT, positionen: [line] })?.lines[0]?.delivered).toBe(
+    'VE à 10 · GC-15015 · Kupferrohr 15 x 1 mm',
+  );
+});

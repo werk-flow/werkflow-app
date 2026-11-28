@@ -41,6 +41,7 @@ const PROBLEMS: Readonly<Record<string, string>> = {
   artikel_unbekannt: 'Kein eigener Artikel',
   nur_im_katalog: 'Nur im Großhandelskatalog',
   mehrdeutig: 'Mehrere eigene Artikel mit dieser Nummer',
+  ean_abweichend: 'EAN gehört zu einem anderen eigenen Artikel',
   menge_fehlt: 'Keine Menge gelesen',
   einheit_unbekannt: 'Einheit nicht in der Einheitenliste',
   einheit_abweichend: 'Einheit passt nicht zum Artikel',
@@ -86,17 +87,20 @@ export function lieferscheinCard(result: unknown): LieferscheinCard | null {
     left: read.weggelassenePositionen,
     matched: read.abgleichGelesen,
     lines: read.positionen.map((line) => {
-      const pack = line.packungsinhalt === null ? '' : ` à ${line.packungsinhalt.toLocaleString('de-DE')}`;
-      const quantity =
-        line.menge === null
-          ? null
-          : `${line.menge.toLocaleString('de-DE')} ${line.einheit?.text ?? ''}${pack}`;
+      // Quantity, unit and pack content each show when read, also without the others.
+      const quantity = [
+        line.menge?.toLocaleString('de-DE'),
+        line.einheit?.text,
+        line.packungsinhalt === null ? null : `à ${line.packungsinhalt.toLocaleString('de-DE')}`,
+      ]
+        .filter(Boolean)
+        .join(' ');
       const match = line.abgleich;
       const article = match?.artikel;
       return {
         nr: line.nr,
         delivered: joined([
-          quantity?.trim(),
+          quantity,
           line.artikelnummer?.text ?? (line.ean && `EAN ${line.ean}`),
           line.beschreibung?.text,
         ]),

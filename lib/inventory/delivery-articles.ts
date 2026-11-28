@@ -48,21 +48,24 @@ async function readNamedRows(
   named: { articleNumbers: readonly string[]; eans: readonly string[] },
   signal: AbortSignal,
 ) {
-  const [byNumber, byBarcode] = await Promise.all([
-    readInBatches(named.articleNumbers, (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('inventory_item_suppliers')
-            .select('item_id')
-            .eq('organization_id', orgId)
-            .in('supplier_article_number', [...batch])
-            .order('id')
-            .range(from, to)
-            .abortSignal(signal),
-        LIST_ROW_CAP,
-      ),
-    ),
+  // postgrest-js does not escape a quote or backslash inside an `in` list, so such a number is looked up alone.
+  const listable = named.articleNumbers.filter((number) => !/["\\]/.test(number));
+  const alone = named.articleNumbers.filter((number) => /["\\]/.test(number));
+  /** One page of the references a number, or a list of numbers, names. */
+  const numberRows = (numbers: string | readonly string[]) => (from: number, to: number) => {
+    const query = admin.from('inventory_item_suppliers').select('item_id').eq('organization_id', orgId);
+    return (
+      typeof numbers === 'string'
+        ? query.eq('supplier_article_number', numbers)
+        : query.in('supplier_article_number', [...numbers])
+    )
+      .order('id')
+      .range(from, to)
+      .abortSignal(signal);
+  };
+  const [byListedNumber, byLoneNumber, byBarcode] = await Promise.all([
+    readInBatches(listable, (batch) => readCompleteRows(numberRows(batch), LIST_ROW_CAP)),
+    readInBatches(alone, ([number = '']) => readCompleteRows(numberRows(number), LIST_ROW_CAP), 1),
     readInBatches(named.eans, (batch) =>
       readCompleteRows(
         (from, to) =>
@@ -78,11 +81,16 @@ async function readNamedRows(
       ),
     ),
   ]);
-  if (byNumber.error || byBarcode.error) {
-    logReadErrors('readDeliveryArticles: match read failed', byNumber.error, byBarcode.error);
+  if (byListedNumber.error || byLoneNumber.error || byBarcode.error) {
+    logReadErrors(
+      'readDeliveryArticles: match read failed',
+      byListedNumber.error,
+      byLoneNumber.error,
+      byBarcode.error,
+    );
     return 'failed';
   }
-  return { byNumber: byNumber.data, byBarcode: byBarcode.data };
+  return { byNumber: [...byListedNumber.data, ...byLoneNumber.data], byBarcode: byBarcode.data };
 }
 
 /**

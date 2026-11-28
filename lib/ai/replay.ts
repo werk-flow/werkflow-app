@@ -441,7 +441,8 @@ const EXTRACTIONS: Readonly<Record<string, () => StreamPart[]>> = {
       ],
     }),
   // Lines that do not fit the inventory as they stand: a pack of 10 against a piece article, a
-  // number no own article carries, a unit outside the list, and an article with an old free-text unit.
+  // number no own article carries, a unit outside the list, an article with an old free-text unit, and a
+  // number with a quote, which a PostgREST `in` list cannot carry.
   abweichend: () =>
     extraction({
       ...LIEFERSCHEIN,
@@ -458,6 +459,7 @@ const EXTRACTIONS: Readonly<Record<string, () => StreamPart[]>> = {
         },
         { ...LIEFERSCHEIN.positionen[0], ean: null, menge: 2, einheit: 'Bündel' },
         { ...LIEFERSCHEIN.positionen[0], artikelnummer: 'GC-30030', ean: null, menge: 1, einheit: 'Stk' },
+        { ...LIEFERSCHEIN.positionen[0], artikelnummer: 'GC-"40", (B)', ean: null, menge: 6, einheit: 'Stk' },
       ],
     }),
   // About three seconds of writing: a stop lands while the extractor runs.

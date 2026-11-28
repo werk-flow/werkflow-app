@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import type { DeliveryArticle } from './delivery-articles';
-import { type DeliveryLine, lookupValues, matchDeliveryLine } from './delivery-matching';
+import { type DeliveryLine, matchDeliveryLine } from './delivery-matching';
 
 const reference = (
   number: string,
@@ -157,9 +157,21 @@ test('an article whose unit is an old free text keeps its match but no quantity,
   });
 });
 
-test('a lookup sends each value once and leaves out one the PostgREST client cannot escape', () => {
-  expect(lookupValues(['GC-1', null, 'GC-1', 'GC "2", (A)', 'GC\\3', 'GC-4, (B)'])).toEqual([
-    'GC-1',
-    'GC-4, (B)',
-  ]);
+test('a printed pack content converts only a packing unit: „VE“ yes, an unknown word such as „Bündel“ no', () => {
+  const pack = (einheit: string) =>
+    matchDeliveryLine(line({ artikelnummer: 'GC-22090', menge: 2, einheit, packungsinhalt: 10 }), ARTICLES);
+  expect([pack('VE').baseQuantity, pack('VE').problems]).toEqual([20, ['packung_umgerechnet']]);
+  expect([pack('Bündel').baseQuantity, pack('Bündel').problems]).toEqual([null, ['einheit_unbekannt']]);
+});
+
+test('an EAN that names another own article than the number puts the line in doubt', () => {
+  const match = matchDeliveryLine(
+    line({ artikelnummer: 'GC-22090', ean: '4012345000158', menge: 20, einheit: 'Stk' }),
+    ARTICLES,
+  );
+  expect(match).toMatchObject({
+    article: { name: 'Pressbogen 90° 22 mm' },
+    baseQuantity: null,
+    problems: ['ean_abweichend'],
+  });
 });
