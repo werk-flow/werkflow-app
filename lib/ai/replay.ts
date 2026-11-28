@@ -471,6 +471,19 @@ const EXTRACTIONS: Readonly<Record<string, () => StreamPart[]>> = {
   ],
   // An answer that is no Lieferschein: the extractor reads nothing from it.
   kaputt: () => [...textParts('Das ist kein Lieferschein.'), finish('stop', 2400, 10)],
+  // Fifty lines with long descriptions: within the extractor's cap, but past the tool's result budget.
+  ausfuehrlich: () =>
+    extraction({
+      ...LIEFERSCHEIN,
+      positionen: Array.from({ length: 50 }, (_, index) => ({
+        ...LIEFERSCHEIN.positionen[0],
+        artikelnummer: `GC-MVR-16X2-ROLLE-50M-TRINKWASSER-${10 + index}`,
+        beschreibung:
+          `Übergangsstück für Fußbodenheizung, Überwurfmutter ¾ Zoll, äußerst flexibel, Größe ${index} `.repeat(
+            2,
+          ),
+      })),
+    }),
   // Lines past the extractor's cap: the result keeps the first ones and says it was cut.
   lang: () =>
     extraction({

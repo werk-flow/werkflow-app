@@ -60,10 +60,16 @@ export function KiLieferscheinCard({ card }: { card: LieferscheinCard }): React.
           })}
         </ol>
       )}
-      {card.left > 0 && (
+      {card.left === null ? (
         <p className="text-xs text-muted-foreground">
-          {card.left} weitere {card.left === 1 ? 'Position' : 'Positionen'} nicht gelesen.
+          Ob der Lieferschein weitere Positionen hat, ist unklar.
         </p>
+      ) : (
+        card.left > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {card.left} weitere {card.left === 1 ? 'Position fehlt' : 'Positionen fehlen'} in dieser Liste.
+          </p>
+        )
       )}
       {!card.matched && (
         <p className="text-xs text-muted-foreground">Die Artikel konnten nicht abgeglichen werden.</p>

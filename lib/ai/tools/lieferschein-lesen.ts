@@ -1,9 +1,9 @@
 import 'server-only';
 
-import { documentText } from '@/lib/ai/context';
+import { documentText, toolResultBytes } from '@/lib/ai/context';
 import { runExtraction } from '@/lib/ai/extract/call';
 import { LIEFERSCHEIN_EXTRACTION, cappedLieferschein } from '@/lib/ai/extract/lieferschein';
-import { AI_TURN_LIMITS, AI_UPLOAD_LIMITS } from '@/lib/ai/limits';
+import { AI_EXTRACT_LIMITS, AI_TURN_LIMITS, AI_UPLOAD_LIMITS } from '@/lib/ai/limits';
 import { type AiToolRun, defineTool } from '@/lib/ai/tools/define-tool';
 import { matchedLines } from '@/lib/ai/tools/lieferschein-abgleich';
 import { logError } from '@/lib/logging';
@@ -113,28 +113,31 @@ export const lieferscheinLesen = defineTool({
     const lieferschein = read.status === 'read' ? cappedLieferschein(read.answer) : null;
     if (!lieferschein) return { status: 'refused', message: MESSAGES.unreadable };
     const matches = await matchedLines(ctx, lieferschein.positionen);
-    return {
-      status: 'ok',
-      value: {
-        hinweis: 'KI-Entwurf: aus dem Dokument gelesen, von niemandem geprüft und nicht gebucht.',
-        lieferant: documentText(lieferschein.lieferant),
-        lieferscheinnummer: documentText(lieferschein.lieferscheinnummer),
-        datum: lieferschein.datum,
-        positionen: lieferschein.positionen.map((line, index) => ({
-          nr: index + 1,
-          artikelnummer: documentText(line.artikelnummer),
-          ean: line.ean,
-          beschreibung: documentText(line.beschreibung),
-          menge: line.menge,
-          einheit: documentText(line.einheit),
-          packungsinhalt: line.packungsinhalt,
-          abgleich: matches?.[index] ?? null,
-        })),
-        // The lines stand unmatched when the articles could not be read.
-        abgleichGelesen: matches !== null,
-        // Null when the count of left-out lines is unknown.
-        weggelassenePositionen: lieferschein.weggelassen,
-      },
-    };
+    const lines = lieferschein.positionen.map((line, index) => ({
+      nr: index + 1,
+      artikelnummer: documentText(line.artikelnummer),
+      ean: line.ean,
+      beschreibung: documentText(line.beschreibung),
+      menge: line.menge,
+      einheit: documentText(line.einheit),
+      packungsinhalt: line.packungsinhalt,
+      abgleich: matches?.[index] ?? null,
+    }));
+    const value = (kept: number) => ({
+      hinweis: 'KI-Entwurf: aus dem Dokument gelesen, von niemandem geprüft und nicht gebucht.',
+      lieferant: documentText(lieferschein.lieferant),
+      lieferscheinnummer: documentText(lieferschein.lieferscheinnummer),
+      datum: lieferschein.datum,
+      positionen: lines.slice(0, kept),
+      // The lines stand unmatched when the articles could not be read.
+      abgleichGelesen: matches !== null,
+      // Null when the count of left-out lines is unknown.
+      weggelassenePositionen:
+        lieferschein.weggelassen === null ? null : lieferschein.weggelassen + lines.length - kept,
+    });
+    // Lines past the result budget are left off from the end and counted, never cut silently.
+    let kept = lines.length;
+    while (kept > 0 && toolResultBytes(value(kept)) > AI_EXTRACT_LIMITS.maxResultBytes) kept -= 1;
+    return { status: 'ok', value: value(kept) };
   },
 });

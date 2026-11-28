@@ -201,6 +201,25 @@ async function readWith(
   assert.equal(value.weggelassenePositionen, 60 - AI_EXTRACT_LIMITS.maxLines);
 }
 
+// A Lieferschein whose matched lines would pass the tool's result budget keeps its first lines
+// and counts the rest, so the read is never refused as a whole by the turn's result cap.
+{
+  await readWith({ body: lieferscheinPdf('ausfuehrlich'), mimeType: PDF, pages: 1 });
+  const output = z
+    .object({
+      value: z.object({ positionen: z.array(z.unknown()), weggelassenePositionen: z.number() }),
+    })
+    .parse(readOutputs()[0]?.output);
+  const bytes = Buffer.byteLength(JSON.stringify(output.value));
+  assert.ok(bytes <= AI_EXTRACT_LIMITS.maxResultBytes, `the result must fit its budget, not ${bytes} bytes`);
+  assert.ok(output.value.positionen.length > 0, 'the first lines must stay');
+  assert.equal(
+    output.value.positionen.length + output.value.weggelassenePositionen,
+    50,
+    'every line left out must be counted',
+  );
+}
+
 // An answer that is no Lieferschein reads as nothing, and the call is still ledgered.
 {
   await readWith({ body: lieferscheinPdf('kaputt'), mimeType: PDF, pages: 1 });

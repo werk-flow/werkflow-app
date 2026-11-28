@@ -29,7 +29,8 @@ const resultSchema = z.object({
         .nullable(),
     }),
   ),
-  weggelassenePositionen: z.number(),
+  // Null when the extractor could not say how many lines it left out.
+  weggelassenePositionen: z.number().nullable(),
   abgleichGelesen: z.boolean(),
 });
 
@@ -57,7 +58,8 @@ export type LieferscheinCard = {
   title: string;
   facts: string;
   lines: LieferscheinCardLine[];
-  left: number;
+  /** Lines not read, or null when that count is unknown. */
+  left: number | null;
   matched: boolean;
 };
 

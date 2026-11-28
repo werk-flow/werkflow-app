@@ -72,6 +72,12 @@ export const AI_EXTRACT_LIMITS = {
   chunkTimeoutMs: 20_000,
   /** Lines of one Lieferschein the extractor keeps; a longer one is marked as cut, never cut silently. */
   maxLines: 50,
+  /**
+   * Bytes of one read's result with its matches, as the model reads it. Lines past it are left off
+   * from the end and counted, so a long Lieferschein is never refused whole by the turn's
+   * `maxToolResultBytes`, and the turn's other tools keep room.
+   */
+  maxResultBytes: 24_000,
 } as const;
 
 export type AiEntryPoint = keyof typeof AI_TURN_LIMITS;

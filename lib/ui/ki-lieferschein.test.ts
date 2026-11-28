@@ -79,3 +79,8 @@ test('another tool’s detail is no Lieferschein', () => {
   expect(lieferscheinCard({ auftraege: [], gesamt: 0 })).toBeNull();
   expect(lieferscheinCard(undefined)).toBeNull();
 });
+
+test('a Lieferschein whose count of left-out lines is unknown still shows as a card and says so', () => {
+  const card = lieferscheinCard({ ...RESULT, weggelassenePositionen: null });
+  expect([card?.title, card?.left]).toEqual(['Lieferschein LS-2026-1187', null]);
+});
