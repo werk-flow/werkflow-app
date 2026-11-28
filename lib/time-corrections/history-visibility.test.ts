@@ -43,7 +43,8 @@ test('an employee reads the subjects their time approval reaches', () => {
     assignmentId: 'assignment',
   } as const;
   expect(correctionHistoryVisibility('employee', delegation(buero))).toBe('own_and_employee_subjects');
-  expect(correctionHistoryVisibility('employee', delegation(admin))).toBe('all');
-  expect(correctionHistoryVisibility('employee', delegation(direct))).toBe('all');
-  expect(correctionHistoryVisibility('employee', holderWith(direct))).toBe('all');
+  // Never `all`: a former member's request would count but not show.
+  expect(correctionHistoryVisibility('employee', delegation(admin))).toBe('own_and_member_subjects');
+  expect(correctionHistoryVisibility('employee', delegation(direct))).toBe('own_and_member_subjects');
+  expect(correctionHistoryVisibility('employee', holderWith(direct))).toBe('own_and_member_subjects');
 });

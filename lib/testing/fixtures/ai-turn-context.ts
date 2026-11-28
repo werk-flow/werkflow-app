@@ -71,6 +71,7 @@ const ROLE_TOOLS = {
     'auftrag_lesen',
     'frage_stellen',
     'kunden_finden',
+    'lieferschein_lesen',
     'plan_zeigen',
   ],
 } as const;

@@ -37,6 +37,7 @@ import { invoiceDeliverySeed, parseDeliverySeed } from '../invoice-delivery-fixt
 import { offerDeliverySeed, parseOfferDeliverySeed } from '../offer-delivery-fixtures';
 import { invoiceChainSeed, parseInvoiceChain } from '../invoice-chain-fixtures';
 import { seedRevisedOffer } from '../../../golden/support/db/offer-revisions';
+import { seedDecidedOffer, type OfferDecisionStage } from '../../../golden/support/db/offer-decisions';
 import type { TestWorld } from '../../../golden/support/world';
 
 type ItemDialogPicker = Parameters<typeof itemDialogPicker>[1];
@@ -352,6 +353,28 @@ function seededRowActionsButton(context: SurfaceContext) {
   return leistungRowActionsButton(leistungRow(context.page, seededLeistungName(context)));
 }
 
+/**
+ * A decision step's button on a sent offer of the stage, as on the offer an
+ * acceptance set opened; else on the world's offer of that stage.
+ */
+async function offerDecisionButton(
+  { page, world }: SurfaceContext,
+  stage: Extract<OfferDecisionStage, 'offen' | 'angenommen'>,
+  name: string,
+): Promise<Locator> {
+  const button = page.getByRole('main').getByRole('button', { name, exact: true });
+  if (/\/angebote\/[0-9a-f-]{36}$/.test(page.url()) && (await button.count()) === 1) return button;
+  const offerId = await surfaceFixture(world, `commercial.offer-decision-${stage}`, () =>
+    seedDecidedOffer(
+      world,
+      stage === 'offen' ? 'Heizungsmodernisierung Zedernhof' : 'Heizungsmodernisierung Mispelweg',
+      stage,
+    ),
+  );
+  await page.goto(`/angebote/${offerId}`);
+  return button;
+}
+
 /** The Angebote openers; their acceptance captures run with the inventory group. */
 export const COMMERCIAL_OPENERS = {
   'commercial.offer': {
@@ -379,6 +402,22 @@ export const COMMERCIAL_OPENERS = {
       return page.getByRole('main').getByRole('button', { name: 'Bearbeiten', exact: true });
     },
     layer: (page) => page.getByRole('alertdialog', { name: /^Revision \d+ bearbeiten\?$/ }),
+  },
+  'commercial.offer-acceptance': {
+    trigger: (context) => offerDecisionButton(context, 'offen', 'Annahme erfassen'),
+    layer: (page) => page.getByRole('dialog', { name: /^Annahme von Revision \d+ erfassen$/ }),
+  },
+  'commercial.offer-rejection': {
+    trigger: (context) => offerDecisionButton(context, 'offen', 'Ablehnung erfassen'),
+    layer: (page) => page.getByRole('dialog', { name: 'Ablehnung erfassen', exact: true }),
+  },
+  'commercial.offer-withdrawal': {
+    trigger: (context) => offerDecisionButton(context, 'offen', 'Zurückziehen'),
+    layer: (page) => page.getByRole('dialog', { name: 'Angebot zurückziehen', exact: true }),
+  },
+  'commercial.offer-acceptance-withdrawal': {
+    trigger: (context) => offerDecisionButton(context, 'angenommen', 'Annahme zurücknehmen'),
+    layer: (page) => page.getByRole('dialog', { name: 'Annahme zurücknehmen', exact: true }),
   },
   'commercial.invoice': {
     trigger: async ({ page }) =>

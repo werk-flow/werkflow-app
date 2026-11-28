@@ -265,7 +265,11 @@ export function DeleteOrgDialog({ orgName, scope }: DeleteOrgDialogProps) {
           Organisation löschen
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent className="sm:max-w-md">
+      <AlertDialogContent
+        className="sm:max-w-md"
+        // The refusal codes, which the staging kit reads to retire a run the app keeps (scripts/staging/kit.ts).
+        data-retention-refusals={retained ? refusals.join(' ') : undefined}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle className={cn('flex items-center gap-2', !retained && 'text-destructive')}>
             <AlertTriangle className="size-5" />

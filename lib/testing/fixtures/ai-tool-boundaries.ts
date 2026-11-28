@@ -4,10 +4,18 @@
 // only its own work; a suspended member's turn never starts. The walk at the end fails when a
 // registered tool has no case.
 import assert from 'node:assert/strict';
+import { installInMemoryBucket } from './in-memory-bucket';
 import type { AI_TOOLS as RegisteredTools } from '@/lib/ai/tools/registry';
 import { missingBoundaryCases } from '@/lib/testing/ai-tool-walk';
-import { CALLER_ID, ORGANIZATION_A, signInAs, tableRows } from './action-boundary-world';
-import { THREAD_ID, postTurn, readTurn, resetAiTables, toolCallOutcomes } from './ai-turn-world';
+import { CALLER_ID, ORGANIZATION_A, ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
+import {
+  OTHER_USER_ID,
+  THREAD_ID,
+  postTurn,
+  readTurn,
+  resetAiTables,
+  toolCallOutcomes,
+} from './ai-turn-world';
 import {
   IDS,
   OFFICE_ONLY,
@@ -17,10 +25,12 @@ import {
   offeredTools,
   toolResults,
 } from './ai-tool-world';
+import { attachFile, chatRequests, extractionRequests, lieferscheinPdf } from './lieferscheine';
 
 type Input = Record<string, unknown>;
 type AiToolName = (typeof RegisteredTools)[number]['name'];
 
+const bucket = installInMemoryBucket();
 const world = await installAiToolWorld();
 const { AI_TOOLS } = await import('@/lib/ai/tools/registry');
 
@@ -118,6 +128,32 @@ async function suspendedHarness(tool: AiToolName, input: Input): Promise<void> {
   assert.equal(await callHarnessTool(tool, input), 403, `${tool}: a suspended member's turn must be refused`);
   assert.equal(readerCalls('record_ai_tool_item').length, 0, `${tool}: no row may be written`);
 }
+
+/**
+ * Posts a turn that reads the thread's latest file as `role`, after `attach`
+ * put files into the caller's thread. Returns the route's status and what the model read.
+ */
+async function readLatestFile(role: 'admin' | 'buero' | 'employee', attach: () => void) {
+  const { memberships } = world;
+  resetAiTables(world);
+  signInAs(world, role);
+  if (role === 'admin') world.memberships = memberships;
+  world.tables.ai_thread_files = [];
+  // The caller's own thread; a file attached under another organization or person lands beside it.
+  world.tables.ai_threads = [
+    { id: THREAD_ID, organization_id: ORGANIZATION_A, user_id: CALLER_ID, title: 'Lieferschein' },
+  ];
+  attach();
+  const read = JSON.stringify({ name: 'lieferschein_lesen', input: { datei: 1 } });
+  const response = await postTurn(`[replay:werkzeug] ${read}`);
+  if (response.status === 200) await readTurn(world, response);
+  return {
+    status: response.status,
+    output: JSON.stringify(toolResults(chatRequests(world)[1]).at(-1)?.output),
+  };
+}
+
+const pdf = { body: lieferscheinPdf('sauber'), mimeType: 'application/pdf', pages: 1 };
 
 const QUESTION = { frage: 'Welchen Kunden meinst du?', optionen: ['Müller Haustechnik', 'Müller Bau'] };
 const PLAN = { schritte: [{ text: 'Aufträge suchen', erledigt: false }] };
@@ -234,6 +270,42 @@ const CASES = {
     },
     lowerRole: () => notOfferedTo('artikel_finden', { suche: 'Kupferrohr' }, 'list_inventory_page'),
     suspendedMember: () => suspendedMember('artikel_finden', { suche: 'Kupferrohr' }),
+  },
+  lieferschein_lesen: {
+    // Another organization's file in the same thread id, and a coworker's upload in the caller's
+    // thread, are never found: no bytes are read and no extraction runs.
+    async foreignOrganization() {
+      const { output } = await readLatestFile('buero', () => {
+        attachFile(world, bucket, { ...pdf, organizationId: ORGANIZATION_B });
+      });
+      assert.match(output, /keine Datei angehängt/, "another organization's file must not be found");
+      assert.equal(extractionRequests(world).length, 0);
+      const coworker = await readLatestFile('buero', () => {
+        attachFile(world, bucket, { ...pdf, userId: OTHER_USER_ID });
+      });
+      assert.match(coworker.output, /keine Datei angehängt/, "another person's file must not be found");
+      assert.equal(extractionRequests(world).length, 0, 'no extraction may run for a foreign file');
+      assert.deepEqual(toolCallOutcomes(world), ['tool_call_lieferschein_lesen_refused']);
+      const own = await readLatestFile('buero', () => attachFile(world, bucket, pdf));
+      assert.match(own.output, /LS-2026-1187/, "the caller's own file is read");
+    },
+    // An employee is not offered the tool; a call it makes anyway runs no extraction.
+    async lowerRole() {
+      const { status } = await readLatestFile('employee', () => attachFile(world, bucket, pdf));
+      assert.equal(status, 200);
+      assert.equal(offeredTools(world.streamRequests[0]).includes('lieferschein_lesen'), false);
+      assert.equal(extractionRequests(world).length, 0, 'no extraction may run for an employee');
+      assert.deepEqual(toolCallOutcomes(world), ['tool_call_lieferschein_lesen_not_run']);
+    },
+    async suspendedMember() {
+      const { status } = await readLatestFile('admin', () => {
+        world.memberships = [{ orgId: ORGANIZATION_A, role: 'admin', accessState: 'suspended' }];
+        attachFile(world, bucket, pdf);
+      });
+      assert.equal(status, 403, "a suspended member's turn must be refused");
+      assert.equal(extractionRequests(world).length, 0);
+      assert.equal(tableRows(world, 'ai_runs').length, 0);
+    },
   },
   frage_stellen: {
     foreignOrganization: () => ownThreadOnly('frage_stellen', QUESTION, 'question', 'admin'),

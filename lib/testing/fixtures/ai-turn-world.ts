@@ -37,6 +37,10 @@ export type AiTurnWorld = ActionWorld & {
   liveSends: Array<{ topic: string; events: unknown[] }>;
   /** Runs at each live send, before it is accepted: what another tab does while the answer is written. */
   onLiveSend: ((events: unknown[]) => Promise<void> | void) | null;
+  /** Each document the replay's token count measured: what reached the provider's free count. */
+  documentCounts: number;
+  /** Runs at each token count, before it answers: what lands while a document is counted. */
+  onDocumentCount: (() => void) | null;
 };
 
 export async function installAiTurnWorld(): Promise<AiTurnWorld> {
@@ -55,13 +59,22 @@ export async function installAiTurnWorld(): Promise<AiTurnWorld> {
     streamRequests: [],
     liveSends: [],
     onLiveSend: null,
+    documentCounts: 0,
+    onDocumentCount: null,
   });
   installLiveChannel(world);
   mock.module('next/server', () => ({ after: (task: Promise<unknown>) => world.pending.push(task) }));
   // The real replay model, watched: each request's abort signal is kept for the fixture to read.
-  const { AI_REPLAY_PROVIDER, createReplayModel } = await import('@/lib/ai/replay');
+  const { AI_REPLAY_PROVIDER, countReplayDocumentTokens, createReplayModel } = await import(
+    '@/lib/ai/replay'
+  );
   mock.module('@/lib/ai/replay', () => ({
     AI_REPLAY_PROVIDER,
+    countReplayDocumentTokens: (request: Parameters<typeof countReplayDocumentTokens>[0]) => {
+      world.documentCounts += 1;
+      world.onDocumentCount?.();
+      return countReplayDocumentTokens(request);
+    },
     createReplayModel: (modelId: string): AiModel => {
       const model = createReplayModel(modelId);
       return {
@@ -123,6 +136,8 @@ export function resetAiTables(world: AiTurnWorld, settings: Row = {}): void {
   world.streamRequests = [];
   world.liveSends = [];
   world.onLiveSend = null;
+  world.documentCounts = 0;
+  world.onDocumentCount = null;
   world.failingTables.clear();
   signInAs(world, 'employee');
 }

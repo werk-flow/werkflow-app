@@ -560,18 +560,19 @@ begin
 end;
 $$;
 
--- The office page's read answers the offer with its costs and its revisions together, and
+-- The office page's read answers the offer with its costs, its revisions and its decisions together, and
 -- another organization's offer as none.
 do $$
 begin
   if public.get_offer_with_revisions('38070000-0000-4000-8000-000000000010', pg_temp.id('first'))
       is distinct from jsonb_build_object(
         'offer', public.get_offer_with_costs('38070000-0000-4000-8000-000000000010', pg_temp.id('first')),
-        'revisions', public.list_offer_revisions('38070000-0000-4000-8000-000000000010', pg_temp.id('first')))
+        'revisions', public.list_offer_revisions('38070000-0000-4000-8000-000000000010', pg_temp.id('first')),
+        'decisions', public.get_offer_decisions('38070000-0000-4000-8000-000000000010', pg_temp.id('first')))
     or public.get_offer_with_revisions('38070000-0000-4000-8000-000000000010', pg_temp.id('first'))
       #>> '{revisions,0,revision}' is distinct from '3'
     or public.get_offer_with_revisions('38070000-0000-4000-8000-000000000011', pg_temp.id('first'))
-      is distinct from '{"offer": null, "revisions": []}'::jsonb then
+      is distinct from '{"offer": null, "revisions": [], "decisions": {"acceptances": [], "closing": null}}'::jsonb then
     raise exception 'the offer page read is not the offer with its revisions';
   end if;
 end;

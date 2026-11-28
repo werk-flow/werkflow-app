@@ -6,6 +6,7 @@ import { auftragLesen } from '@/lib/ai/tools/auftrag-lesen';
 import type { AiTool } from '@/lib/ai/tools/define-tool';
 import { frageStellen } from '@/lib/ai/tools/frage-stellen';
 import { kundenFinden } from '@/lib/ai/tools/kunden-finden';
+import { lieferscheinLesen } from '@/lib/ai/tools/lieferschein-lesen';
 import { planZeigen } from '@/lib/ai/tools/plan-zeigen';
 import type { OrgRole } from '@/lib/roles';
 
@@ -15,6 +16,7 @@ export const AI_TOOLS = [
   auftragLesen,
   kundenFinden,
   artikelFinden,
+  lieferscheinLesen,
   frageStellen,
   planZeigen,
 ] as const;

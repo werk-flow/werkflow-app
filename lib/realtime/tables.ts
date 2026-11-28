@@ -123,8 +123,10 @@ export const UNFILTERED_REALTIME_TABLES: readonly RealtimeTable[] = ['profiles']
 // Published tables whose every row belongs to one person, delivered only to
 // that person by a select-own policy. They carry no deletion notice: a notice
 // reaches every member of the organization (realtime_deletions), so it would
-// tell them of another person's row. Their rows leave only with the person's
-// profile or the organization, which no open view needs to hear of.
+// tell them of another person's row. A row a person must hear of losing is
+// kept and cleared instead (a target signal whose record lost its login); the
+// rest leave only with the person's membership, profile or organization,
+// which no open view needs to hear of.
 // `bun run realtime:check` fails while a listed table carries the trigger.
 export const OWN_USER_REALTIME_TABLES: readonly RealtimeTable[] = [
   'problem_report_signals',

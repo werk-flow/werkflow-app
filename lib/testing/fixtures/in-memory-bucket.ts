@@ -13,7 +13,8 @@ import {
   S3ServiceException,
 } from '@aws-sdk/client-s3';
 
-type StoredObject = { body: string; contentType: string };
+/** A body a fixture seeds as bytes stays bytes; one the adapter wrote is kept as UTF-8 text. */
+type StoredObject = { body: string | Uint8Array; contentType: string };
 
 const BUCKET_NAME = 'synthetic-bucket';
 
@@ -64,7 +65,8 @@ export function installInMemoryBucket(writes?: string[]): Map<string, StoredObje
     if (command instanceof GetObjectCommand) {
       const object = bucket.get(String(command.input.Key));
       if (!object) throw notFound();
-      return { Body: { transformToByteArray: async () => new Uint8Array(Buffer.from(object.body)) } };
+      const bytes = typeof object.body === 'string' ? Buffer.from(object.body) : object.body;
+      return { Body: { transformToByteArray: async () => new Uint8Array(bytes) } };
     }
     if (command instanceof HeadObjectCommand) {
       const object = bucket.get(String(command.input.Key));

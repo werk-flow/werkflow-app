@@ -9,11 +9,13 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { signPriceSource } from '@/lib/price-catalog/price-source-proof';
 import { positionCostSchema, storedSectionSchema } from './action-schemas';
+import { decisionsOf } from './decision-reads';
 import type { OfferListQuery, OfferPage } from './list-page';
 import {
   OFFER_CHANNELS,
   OFFER_STATUSES,
   offerWorkKindSchema,
+  type OfferDecisions,
   type OfferDetail,
   type OfferFreePosition,
   type OfferPriceSource,
@@ -253,19 +255,23 @@ export async function readOfferRevisions(organizationId: string, offerId: string
   return revisionsOf(selected.data);
 }
 
-const offerWithRevisionsSchema = z.object({ offer: z.unknown(), revisions: z.unknown() });
+const offerWithRevisionsSchema = z.object({
+  offer: z.unknown(),
+  revisions: z.unknown(),
+  decisions: z.unknown(),
+});
 
 /**
  * One offer of the organization as the office's page reads it: its header
- * with the names it shows, its content with each priced Position's cost and price source, and
- * its sent revisions, all from one database snapshot, so a draft never shows
+ * with the names it shows, its content with each priced Position's cost and price source,
+ * its sent revisions and its decisions, all from one database snapshot, so a draft never shows
  * beside a revision sent after it. The caller has established Admin or Büro;
  * `null` when there is no such offer. A failed or malformed read throws.
  */
 export async function readOfferWithRevisions(
   organizationId: string,
   offerId: string,
-): Promise<{ offer: OfferWithCosts; revisions: OfferRevision[] } | null> {
+): Promise<{ offer: OfferWithCosts; revisions: OfferRevision[]; decisions: OfferDecisions } | null> {
   const admin = createSupabaseAdminClient();
   const selected = await admin.rpc('get_offer_with_revisions', {
     p_organization_id: organizationId,
@@ -277,5 +283,6 @@ export async function readOfferWithRevisions(
   return {
     offer: offerWithCostsOf(parsed.data.offer, { organizationId, offerId }),
     revisions: revisionsOf(parsed.data.revisions),
+    decisions: decisionsOf(parsed.data.decisions),
   };
 }

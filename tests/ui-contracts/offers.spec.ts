@@ -672,3 +672,61 @@ test('starting revision 2 of a sent offer confirms first and keeps the dialog on
   await expect(dialog.getByText('Jemand hat das Angebot gerade geändert. Lade die Seite neu.')).toBeVisible();
   await expect(confirm).toBeEnabled();
 });
+
+// „Annahme erfassen“: it records against the version it opened on, its fields wait while it is sent
+// and keep their values after a failure. A
+// press repeated after a failure keeps its retry key, so an Annahme recorded
+// before a lost answer answers again; corrected values take a new key, which a recorded Annahme
+// refuses instead of answering with the first values.
+test('an Annahme keeps the version it opened on and locks its fields; a retry keeps its key, corrected values take a new one', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.uiContractOfferSent = true;
+  });
+  await openContractFixture(page, 'offers');
+  await page.getByRole('button', { name: 'Annahme erfassen', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Annahme von Revision 1 erfassen' });
+  // The page renders a newer version while the dialog is open: the Annahme stays on what it opened on.
+  await page.evaluate(() => window.uiContractOfferServerRender?.(5));
+  await dialog.getByRole('textbox', { name: 'Angenommen von' }).fill('Erika Musterfrau');
+  await dialog.getByRole('combobox', { name: 'Angenommen per' }).click();
+  await page.getByRole('option', { name: 'Telefon', exact: true }).click();
+  await dialog.getByRole('checkbox', { name: /^1\.2 Neutralisationsbox/ }).check();
+  const record = dialog.getByRole('button', { name: 'Annahme erfassen', exact: true });
+  await record.click();
+  await expectHeldWrite(page, 'accept-offer');
+  // While the Annahme is sent, the fields hold what the server records.
+  const name = dialog.getByRole('textbox', { name: 'Angenommen von' });
+  await expect(name).toBeDisabled();
+  expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
+    expectedVersion: 1,
+    revision: 1,
+    acceptedByName: 'Erika Musterfrau',
+    channel: 'telefon',
+    chosenOptions: ['1.2'],
+  });
+  await answerHeldWrite(page, 'save_failed');
+  await expect(dialog.getByText('Das konnte nicht festgehalten werden. Versuche es erneut.')).toBeVisible();
+  await expect(name).toBeEnabled();
+  await expect(name).toHaveValue('Erika Musterfrau');
+
+  const keys = () =>
+    page.evaluate(() =>
+      window.uiContractWrites.calls.map((call) =>
+        typeof call.input === 'object' && call.input !== null && 'attemptKey' in call.input
+          ? call.input.attemptKey
+          : null,
+      ),
+    );
+  await record.click();
+  await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
+  await answerHeldWrite(page, 'save_failed');
+  await expect(record).toBeEnabled();
+  await name.fill('Max Mustermann');
+  await record.click();
+  await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
+  const [first, unchanged, corrected] = await keys();
+  expect(unchanged).toBe(first);
+  expect(corrected).not.toBe(first);
+});
