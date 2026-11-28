@@ -14,6 +14,7 @@ export const BROWSERBASE_API = 'https://api.browserbase.com/v1';
  * window at least as long as a billing month; three shares stay below the plan's allocation.
  */
 export const MACHINE_CALL_SHARE = 300;
+/** @internal The ledger's window, exported for its test. */
 export const LEDGER_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
 
 export type CallKind = 'search' | 'fetch';
@@ -62,6 +63,7 @@ const PRIVATE_SUFFIXES = ['localhost', 'local', 'internal', 'lan', 'home.arpa'];
  * Why a URL is no public research target, or undefined when it is one. Refused: any scheme but http
  * and https, credentials in the URL, IP literals, local names, WerkFlow's app and its staging and
  * preview deployments, Supabase projects, and R2 buckets. WerkFlow's public website stays allowed.
+ * @internal Exported for its test.
  */
 export function urlRefusal(raw: string): string | undefined {
   const url = URL.parse(raw);
@@ -91,7 +93,10 @@ const PERSONAL_DETAIL: readonly [RegExp, string][] = [
   [/werk-flow\.app|werkflow-app-git|supabase\.co\b/i, 'a WerkFlow system address'],
 ];
 
-/** Why a search text may not leave the machine, or undefined. A backstop: the skill's rule is wider. */
+/**
+ * Why a search text may not leave the machine, or undefined. A backstop: the skill's rule is wider.
+ * @internal Exported for its test.
+ */
 export function searchTextRefusal(text: string): string | undefined {
   const found = PERSONAL_DETAIL.find(([pattern]) => pattern.test(text));
   return found ? `it contains ${found[1]}` : undefined;
