@@ -95,7 +95,13 @@ await assertRefused(
 
 // Admin and Büro: another organization's offer is refused by the one call, which carries the
 // caller's own organization and person.
-const converted = { version: 4, kind: 'job', workId: newJob, unplannedPositions: ['1.3'] };
+const converted = {
+  version: 4,
+  updatedAt: '2026-11-28T08:00:00.123456+00:00',
+  kind: 'job',
+  workId: newJob,
+  unplannedPositions: ['1.3'],
+};
 for (const role of ['admin', 'buero'] as const) {
   signInAs(world, role);
   refuseForeignIds(world, new Map([[foreignOfferId, 'offer_not_found']]), converted);

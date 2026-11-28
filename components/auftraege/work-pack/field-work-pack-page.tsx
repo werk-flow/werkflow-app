@@ -81,8 +81,6 @@ export async function FieldWorkPackPage({
                 }
               : {})}
           />
-          {/* What the customer ordered, without a price; a job without an order renders nothing. */}
-          <FieldScopeSection scope={scopeResult.success ? scopeResult.scope : 'failed'} />
           <FieldWorkPackContextSources job={job} data={data} />
           <FieldWorkPackExecutionSection
             key={job.id}
@@ -93,6 +91,9 @@ export async function FieldWorkPackPage({
             lifecycleSnapshot={lifecycleResult.success ? lifecycleResult.snapshot : null}
             readOnly={readOnly}
           />
+
+          {/* What the customer ordered, without a price; a job without an order renders nothing. Below the next action. */}
+          <FieldScopeSection scope={scopeResult.success ? scopeResult.scope : 'failed'} />
 
           <FieldWorkPackRecordSources job={job} currentUserId={currentUserId} data={data} />
 

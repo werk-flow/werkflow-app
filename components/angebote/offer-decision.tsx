@@ -59,7 +59,7 @@ export function OfferDecision({ decisions, work }: { decisions: OfferDecisions; 
 }
 
 /** The work's detail route: a job of a project lives under its project. */
-function workHref(work: OfferWork): string {
+function offerWorkHref(work: OfferWork): string {
   if (work.kind === 'project') return projectDetailHref({ id: work.id, projectNumber: work.number });
   const project = work.projectNumber ? { id: work.id, projectNumber: work.projectNumber } : null;
   return jobDetailHref({ id: work.id, jobNumber: work.number }, project);
@@ -81,7 +81,7 @@ function StandingAcceptance({ acceptance, work }: { acceptance: OfferAcceptance;
         {work && (
           <p>
             {`In Arbeit als ${work.kind === 'job' ? 'Auftrag' : 'Projekt'} `}
-            <TextLink href={workHref(work)}>{`${work.number} „${work.title}“`}</TextLink>
+            <TextLink href={offerWorkHref(work)}>{`${work.number} „${work.title}“`}</TextLink>
           </p>
         )}
       </div>

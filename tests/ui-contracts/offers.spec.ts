@@ -766,11 +766,7 @@ test('a conversion keeps its dialog until the page shows the work, then names th
   await expect(dialog).toBeVisible();
   await answerHeldWrite(page, null);
   await expect(
-    visibleText(
-      page,
-      'ANG-2026-001 ist jetzt in Arbeit. Nicht als Material geplant, weil die Einheit nicht die des Artikels ist: 1.3.',
-      true,
-    ),
+    visibleText(page, 'ANG-2026-001 ist jetzt in Arbeit. Nicht als Material geplant: 1.3.', true),
   ).toBeVisible();
   await expect(dialog).toBeHidden();
 });

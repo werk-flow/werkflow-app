@@ -49,21 +49,17 @@ const FIELD = { target: 'offer-conversion-target', title: 'offer-conversion-titl
 
 type ConvertibleOffer = Pick<OfferDetail, 'id' | 'offerNumber' | 'title' | 'version' | 'work'>;
 
-/** The choices of the offer: a new job, a new project, and the job or project it was written for. */
-function targetOptions(offer: ConvertibleOffer): Array<{ value: OrderTarget; label: string }> {
-  const own = offer.work && offer.work.kind !== 'request' ? offer.work : null;
-  return [
-    ...(own
-      ? [
-          {
-            value: 'offer_work' as const,
-            label: `${own.kind === 'job' ? 'Auftrag' : 'Projekt'} ${own.label}`,
-          },
-        ]
-      : []),
-    { value: 'job', label: 'Neuer Auftrag' },
-    { value: 'project', label: 'Neues Projekt' },
-  ];
+const ORDER_TARGET_SET: ReadonlySet<string> = new Set<OrderTarget>(['job', 'project', 'offer_work']);
+
+function isOrderTarget(value: string): value is OrderTarget {
+  return ORDER_TARGET_SET.has(value);
+}
+
+/** The job or project the offer was written for, as the choice names it; null for none. */
+function ownWorkLabel(offer: ConvertibleOffer): string | null {
+  const own = offer.work;
+  if (!own || own.kind === 'request') return null;
+  return `${own.kind === 'job' ? 'Auftrag' : 'Projekt'} ${own.label}`;
 }
 
 /**
@@ -90,8 +86,8 @@ function useConversion(offer: ConvertibleOffer, onClose: () => void) {
   const { showBanner } = useBanner();
   // One key per pressed choice: an unchanged press after a lost answer gets the first work.
   const attempt = usePayloadAttemptKey();
-  const options = targetOptions(offer);
-  const [target, setTarget] = useState<OrderTarget>(options[0]?.value ?? 'job');
+  const ownWork = ownWorkLabel(offer);
+  const [target, setTarget] = useState<OrderTarget>(ownWork ? 'offer_work' : 'job');
   const [title, setTitle] = useState(offer.title);
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +121,7 @@ function useConversion(offer: ConvertibleOffer, onClose: () => void) {
         return;
       }
       const unplanned = result.unplannedPositions.length
-        ? ` Nicht als Material geplant, weil die Einheit nicht die des Artikels ist: ${result.unplannedPositions.join(', ')}.`
+        ? ` Nicht als Material geplant: ${result.unplannedPositions.join(', ')}.`
         : '';
       if (await settle.confirmChange(since))
         showBanner({ variant: 'success', message: `${offer.offerNumber} ist jetzt in Arbeit.${unplanned}` });
@@ -133,7 +129,7 @@ function useConversion(offer: ConvertibleOffer, onClose: () => void) {
     });
   };
   return {
-    options,
+    ownWork,
     target,
     setTarget,
     title,
@@ -146,7 +142,7 @@ function useConversion(offer: ConvertibleOffer, onClose: () => void) {
 }
 
 function OfferConversionDialog({ offer, onClose }: { offer: ConvertibleOffer; onClose: () => void }) {
-  const { options, target, setTarget, title, setTitle, titleError, error, isPending, submit } = useConversion(
+  const { ownWork, target, setTarget, title, setTitle, titleError, error, isPending, submit } = useConversion(
     offer,
     onClose,
   );
@@ -172,19 +168,17 @@ function OfferConversionDialog({ offer, onClose }: { offer: ConvertibleOffer; on
               <Select
                 value={target}
                 disabled={isPending}
-                onValueChange={(value) =>
-                  setTarget(options.find((option) => option.value === value)?.value ?? target)
-                }
+                onValueChange={(value) => {
+                  if (isOrderTarget(value)) setTarget(value);
+                }}
               >
                 <SelectTrigger id={FIELD.target} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {options.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
+                  {ownWork && <SelectItem value="offer_work">{ownWork}</SelectItem>}
+                  <SelectItem value="job">Neuer Auftrag</SelectItem>
+                  <SelectItem value="project">Neues Projekt</SelectItem>
                 </SelectContent>
               </Select>
             </Field>

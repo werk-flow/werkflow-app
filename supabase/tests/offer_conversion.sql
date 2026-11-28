@@ -89,7 +89,7 @@ $$;
 grant execute on function pg_temp.priced(text, text, text, integer, integer, uuid) to service_role;
 
 -- Titel 1: 1.1 the boiler, a text line about prices, 1.2 12,5 m pipe, 1.3 two valves sold per
--- meter, 1.4 a Nachlass. Titel 2: 2.1 the Montage without an article. 5.806,25 € net.
+-- meter, 1.4 a Nachlass, 1.5 a credit that rounds to 0 cents. Titel 2: 2.1 the Montage without an article. 5.806,25 € net.
 create function pg_temp.content() returns jsonb language sql as $$
   select jsonb_build_array(
     jsonb_build_object('title', 'Wärmeerzeuger', 'netCents', 500625, 'positions', jsonb_build_array(
@@ -97,7 +97,8 @@ create function pg_temp.content() returns jsonb language sql as $$
       '{"kind": "text", "name": "Preise gelten vier Wochen", "description": ""}'::jsonb,
       pg_temp.priced('Kupferrohr 15 mm', '12.5', 'meter', 1250, 15625, '38800000-0000-4000-8000-000000000041'),
       pg_temp.priced('Kugelhahn DN 20', '2', 'meter', 3000, 6000, '38800000-0000-4000-8000-000000000042'),
-      pg_temp.priced('Nachlass', '-1', 'piece', 10000, -10000, null))),
+      pg_temp.priced('Nachlass', '-1', 'piece', 10000, -10000, null),
+      pg_temp.priced('Gutschrift Kleinteile', '-0.001', 'piece', 100, 0, null))),
     jsonb_build_object('title', 'Montage', 'netCents', 80000, 'positions', jsonb_build_array(
       pg_temp.priced('Montagepauschale', '1', 'piece', 80000, 80000, null))));
 $$;
@@ -148,7 +149,7 @@ from unnest(array['job', 'project', 'existing', 'stale', 'unaccepted']) name;
 select pg_temp.accepted_offer(pg_temp.id(name)) from ids where name <> 'unaccepted';
 
 -- „job“ becomes a new job for the accepted customer with the next number and the site's address,
--- unassigned and unscheduled. Its order binds the Annahme and copies the Auftragsumfang's six lines.
+-- unassigned and unscheduled. Its order binds the Annahme and copies the Auftragsumfang's seven lines.
 do $$
 declare
   v_answer jsonb := pg_temp.convert(pg_temp.id('job'), 'job', '38800000-0000-4000-8000-000000000101');
@@ -158,6 +159,7 @@ begin
   select * into v_job from public.jobs where id = (v_answer ->> 'workId')::uuid;
   if v_answer ->> 'kind' is distinct from 'job' or v_answer ->> 'replay' is distinct from 'false'
     or v_answer ->> 'version' is distinct from '4'
+    or v_answer ->> 'updatedAt' is null
     or v_job.organization_id is distinct from '38800000-0000-4000-8000-000000000010'
     or v_job.title is distinct from 'Heizung Hofweg 1'
     or v_job.client_id is distinct from '38800000-0000-4000-8000-000000000020'
@@ -178,7 +180,7 @@ begin
   if (select array_agg(coalesce(number, '-') || ' ' || kind || ' ' || coalesce(amount_cents::text, '') order by position)
       from public.order_lines where order_id = v_order.id)
     is distinct from array['1.1 free 489000', '- text ', '1.2 free 15625', '1.3 free 6000', '1.4 free -10000',
-      '2.1 free 80000'] then
+      '1.5 free 0', '2.1 free 80000'] then
     raise exception 'the order baseline is not the Auftragsumfang';
   end if;
 end;
@@ -308,7 +310,7 @@ select pg_temp.expect_refusal('a converted project''s delete',
   format('delete from public.projects where id = %L', pg_temp.id('project_work')), 'work_with_history_cannot_be_deleted');
 
 -- The office reads the orders with their prices; the field reads scope only: the job's own order
--- and its project's, text, quantity and unit, without the Nachlass and without any amount.
+-- and its project's, text, quantity and unit, without the Nachlass, the credit and any amount.
 do $$
 declare
   v_project_job uuid;

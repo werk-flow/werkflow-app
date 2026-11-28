@@ -22,6 +22,8 @@ import { convertOfferSchema, type ConvertOfferInput } from './types';
 type ConversionResult = ActionResult<{
   offerId: string;
   version: number;
+  /** The transaction stamp, so the converting tab knows the Realtime echo of its own write. */
+  updatedAt: string;
   kind: 'job' | 'project';
   workId: string;
   /** The article lines planned as no material, by printed number. */
@@ -30,6 +32,7 @@ type ConversionResult = ActionResult<{
 
 const convertedSchema = z.object({
   version: z.number().int().positive(),
+  updatedAt: z.string(),
   kind: z.enum(['job', 'project']),
   workId: uuidSchema,
   unplannedPositions: z.array(z.string()),

@@ -25,9 +25,9 @@ const scopeSchema = z.array(
   }),
 );
 
-/** Words and signs of a text about money, which the field never reads; „450,-“ is an amount. */
+/** Words and signs of a text about money, which the field never reads; „450,-“ and „450EUR“ are amounts. */
 const PRICE_TEXT =
-  /€|\beur\b|\d\s*,[-–]|preis|rabatt|nachlass|skonto|zahlung|zahlbar|netto|brutto|mwst|umsatzsteuer|kosten|betrag|zuschlag/i;
+  /€|\beuro?\b|\d\s*euro?\b|\beuro?\s*\d|\d\s*,[-–]|preis|rabatt|nachlass|skonto|zahlung|zahlbar|netto|brutto|mwst|umsatzsteuer|kosten|betrag|zuschlag/i;
 
 function fieldLine(line: z.infer<typeof lineSchema>): FieldScopeLine[] {
   const moneyDescription = PRICE_TEXT.test(line.description);

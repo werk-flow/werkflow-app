@@ -148,6 +148,7 @@ export async function convertOfferToWork(input: unknown): Promise<
       success: true;
       offerId: string;
       version: number;
+      updatedAt: string;
       kind: 'job';
       workId: string;
       unplannedPositions: string[];
@@ -161,6 +162,7 @@ export async function convertOfferToWork(input: unknown): Promise<
         success: true,
         offerId: 'contract-offer',
         version: 2,
+        updatedAt: '2026-11-28T09:00:00.000000+00:00',
         kind: 'job',
         workId: 'contract-job',
         unplannedPositions: ['1.3'],

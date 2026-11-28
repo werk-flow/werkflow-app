@@ -133,7 +133,7 @@ create trigger guard_event_ledger_history before update or delete on public.orde
 -- accepted customer with the offer's Einsatzort and Ansprechpartner and the
 -- next number; 'offer_work' takes the job or project the offer was written
 -- for. The answer is {orderId, kind, workId, unplannedPositions, version,
--- replay}: unplannedPositions names the article lines planned as no material
+-- updatedAt, replay}: unplannedPositions names the article lines planned as no material
 -- because their unit is not the article's or their quantity is not positive.
 -- A call under the attempt key of an earlier conversion answers it with
 -- replay true and writes nothing.
@@ -171,6 +171,7 @@ declare
   v_line record;
   v_unplanned text[] := '{}';
   v_payload jsonb;
+  v_updated_at timestamptz;
 begin
   if p_actor_id is null or p_organization_id is null or p_offer_id is null or p_attempt_key is null
     or p_expected_version is null or p_target is null or p_target not in ('job', 'project', 'offer_work')
@@ -192,7 +193,7 @@ begin
       raise exception 'invalid_input';
     end if;
     return (v_earlier.payload - 'revision' - 'acceptanceId' - 'fromVersion')
-      || jsonb_build_object('version', v_earlier.version, 'replay', true);
+      || jsonb_build_object('version', v_earlier.version, 'updatedAt', v_offer.updated_at, 'replay', true);
   end if;
   if exists (
     select 1 from public.orders existing
@@ -314,7 +315,8 @@ begin
   update public.offers offer set
     version = offer.version + 1,
     updated_by = p_actor_id
-  where offer.organization_id = p_organization_id and offer.id = p_offer_id;
+  where offer.organization_id = p_organization_id and offer.id = p_offer_id
+  returning offer.updated_at into v_updated_at;
   insert into public.offer_events (
     organization_id, offer_id, event_type, status, version, payload, actor_id, attempt_key
   ) values (
@@ -323,7 +325,8 @@ begin
       'fromVersion', v_offer.version),
     p_actor_id, p_attempt_key
   );
-  return v_payload || jsonb_build_object('version', v_offer.version + 1, 'replay', false);
+  return v_payload
+    || jsonb_build_object('version', v_offer.version + 1, 'updatedAt', v_updated_at, 'replay', false);
 end;
 $$;
 revoke all on function public.convert_offer_to_work(uuid, uuid, uuid, integer, uuid, text, text)
@@ -486,7 +489,8 @@ grant execute on function public.get_work_orders(uuid, text, uuid) to service_ro
 -- lead: the orders bound to it and, for a job, to its project, each with its
 -- offer number and its Titel in order, each Titel with its lines' number,
 -- kind, name, description, quantity and unit label. Never a price, a cost or
--- a total: a priced line below zero (a Nachlass) and every line of a kind
+-- a total: a priced line below zero or with a negative quantity (a Nachlass,
+-- also one that rounds to 0 cents) and every line of a kind
 -- other than a priced Position or a text line are left out.
 create function public.get_work_scope(p_organization_id uuid, p_kind text, p_work_id uuid)
 returns jsonb language sql stable security invoker set search_path = '' as $$
@@ -516,7 +520,7 @@ returns jsonb language sql stable security invoker set search_path = '' as $$
               order by line.position) as lines
           from public.order_lines line
           where line.organization_id = p_organization_id and line.order_id = bound.id
-            and (line.kind = 'text' or (line.kind = 'free' and line.amount_cents >= 0))
+            and (line.kind = 'text' or (line.kind = 'free' and line.amount_cents >= 0 and line.quantity >= 0))
           group by line.section_number, line.section_title
         ) section
       )
