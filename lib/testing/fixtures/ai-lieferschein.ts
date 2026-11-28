@@ -31,7 +31,6 @@ const world = await installAiToolWorld();
 const registry = await import('@/lib/ai/tools/registry');
 const { defineTool } = await import('@/lib/ai/tools/define-tool');
 const { LIEFERSCHEIN_EXTRACTION } = await import('@/lib/ai/extract/lieferschein');
-const { TOOL_RESULTS_FULL } = await import('@/lib/ai/tools/tool-calls');
 const { z } = await import('@/lib/zod');
 
 // A planted read tool with a large result, for the cap on all tool results of one turn.
@@ -380,10 +379,8 @@ async function readWith(
     'tool_call_gross_lesen_refused',
   ]);
   const outputs = toolResults(chatRequests(world).at(-1)).map((result) => result.output);
-  assert.deepEqual(outputs.slice(-2), [
-    { type: 'json', value: { status: 'refused', meldung: TOOL_RESULTS_FULL } },
-    { type: 'json', value: { status: 'refused' } },
-  ]);
+  assert.match(JSON.stringify(outputs.at(-2)), /"status":"refused","meldung":"Die Ergebnisse dieser Antwort/);
+  assert.deepEqual(outputs.at(-1), { type: 'json', value: { status: 'refused' } });
 }
 
 // Every output counts against the cap, a refusal's sentence too: one that does not fit reads as the
@@ -396,4 +393,26 @@ async function readWith(
   assert.equal(events.at(-1)?.failure, 'input_too_large');
   assert.equal(chatRequests(world).length, 1, 'no step may start with the results past their cap');
   assert.equal(toolCallOutcomes(world).length, 6, 'every call is ledgered');
+}
+
+// A result the AI SDK writes itself, the error for an input the schema refused, counts against the
+// cap too: past it, the model reads the bare `not_run`, and the results stay within the cap.
+{
+  resetAiTables(world);
+  signInAs(world, 'buero');
+  knappCalls = 0;
+  const call = JSON.stringify({ name: 'knapp_lesen', input: {} });
+  const events = await readTurn(world, await postTurn(`[replay:mit-falschem-aufruf] ${call}`));
+  assert.deepEqual(events.at(-1), { type: 'end', status: 'complete' });
+  const results = toolResults(chatRequests(world).at(-1));
+  assert.deepEqual(results.at(-1), {
+    tool: 'lieferschein_lesen',
+    output: { type: 'json', value: { status: 'not_run' } },
+  });
+  const bytes = results.reduce(
+    (sum, result) =>
+      sum + Buffer.byteLength(JSON.stringify(z.object({ value: z.unknown() }).parse(result.output).value)),
+    0,
+  );
+  assert.ok(bytes <= 32_000, `the step's tool results must stay within the cap, not ${bytes} bytes`);
 }

@@ -250,6 +250,15 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
   zweimal: repeatedToolCall(2),
   // The same in three steps: the third call comes after the turn's results are full.
   dreimal: repeatedToolCall(3),
+  // Calls the named tool, then the Lieferschein tool with an input its schema refuses, in one step.
+  'mit-falschem-aufruf': [
+    (userText) => [
+      ...[requestedToolCall(userText, 'call-1')].filter((part) => part !== null),
+      toolCall('lieferschein_lesen', { datei: 'die letzte, bitte '.repeat(100) }, 'call-2'),
+      finish('tool-calls', 1100, 60),
+    ],
+    () => [...textParts('Erledigt.'), finish('stop', 1300, 20)],
+  ],
   // Calls the named tool six times in one step: the turn's results outgrow their cap.
   sechsmal: [
     (userText) => [

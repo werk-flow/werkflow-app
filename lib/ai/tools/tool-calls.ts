@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { ToolResultPart } from 'ai';
+import type { ModelMessage, ToolResultPart } from 'ai';
 
 import { boundedWrite } from '@/lib/ai/bounded-write';
 import { carriesUntrustedText, untrustedToolOutput } from '@/lib/ai/context';
@@ -33,7 +33,7 @@ const DETAIL_BYTES = 48_000;
 const RESULTS_FULL_ROOM_BYTES = 1_000;
 
 /** What the model reads when a result would take the turn's tool results past their cap (`maxToolResultBytes`). */
-export const TOOL_RESULTS_FULL =
+const TOOL_RESULTS_FULL =
   'Die Ergebnisse dieser Antwort haben ihre Höchstgröße erreicht; dieses Ergebnis passt nicht mehr hinein. Antworte mit dem, was du schon hast, und schlag vor, in einer neuen Nachricht weiterzumachen.';
 
 /** What the turn's tool calls did so far. */
@@ -302,6 +302,32 @@ function modelOutput(context: ToolCallRun, result: AiToolResult): ToolResultPart
   if (toolCalls.resultBytes + outputBytes(output) > cap) toolCalls.resultsOverflow = true;
   toolCalls.resultBytes += outputBytes(output);
   return output;
+}
+
+/**
+ * A step's messages with the results the AI SDK wrote itself, such as the
+ * error for an input its schema refused, counted against the turn's result
+ * cap like every result a tool returned: one that does not fit reads as the
+ * bare `not_run`, and when even that does not fit, the turn takes no further step.
+ */
+export function withinResultCapForSdkErrors(context: ToolCallRun, messages: ModelMessage[]): ModelMessage[] {
+  const { toolCalls } = context;
+  const cap = AI_TURN_LIMITS[context.command.entryPoint].maxToolResultBytes;
+  return messages.map((message) => {
+    if (message.role !== 'tool') return message;
+    const content = message.content.map((part) => {
+      if (part.type !== 'tool-result' || !part.output.type.startsWith('error')) return part;
+      let output: ToolResultPart['output'] = part.output;
+      const bytesOf = (value: ToolResultPart['output']) =>
+        Buffer.byteLength(JSON.stringify('value' in value ? value.value : null), 'utf8');
+      if (toolCalls.resultBytes + bytesOf(output) > cap)
+        output = { type: 'json', value: { status: 'not_run' } };
+      if (toolCalls.resultBytes + bytesOf(output) > cap) toolCalls.resultsOverflow = true;
+      toolCalls.resultBytes += bytesOf(output);
+      return { ...part, output };
+    });
+    return { ...message, content };
+  });
 }
 
 /**

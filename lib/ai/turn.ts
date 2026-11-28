@@ -33,6 +33,7 @@ import {
   recordUnrunCalls,
   runTool,
   toolRunFor,
+  withinResultCapForSdkErrors,
 } from '@/lib/ai/tools/tool-calls';
 import { boundedWrite } from '@/lib/ai/bounded-write';
 import { AI_TURN_FAILURE_MESSAGES } from '@/lib/ai/turn-messages';
@@ -547,7 +548,7 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
     if (outcome.finishReason === 'content-filter') return failedEnd('failed', 'model_refused');
     // A step that ends in tool calls continues with their results; one that asked the person waits for them.
     if (outcome.finishReason !== 'tool-calls' || context.toolCalls.asked) return { status: 'complete' };
-    messages = [...messages, ...outcome.responseMessages];
+    messages = [...messages, ...withinResultCapForSdkErrors(context, outcome.responseMessages)];
   }
 }
 

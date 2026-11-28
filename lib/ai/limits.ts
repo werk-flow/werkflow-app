@@ -95,7 +95,7 @@ export function maxTurnCostMicroUsd(entryPoint: AiEntryPoint): number {
 }
 
 /** The most one extraction can cost: its input and output caps, uncached. */
-export function maxExtractionCostMicroUsd(): number {
+function maxExtractionCostMicroUsd(): number {
   return costMicroUsd(
     {
       inputTokens: AI_EXTRACT_LIMITS.maxInputTokens,

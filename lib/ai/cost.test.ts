@@ -1,13 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import { AI_MODEL_PRICE, costMicroUsd } from './cost';
-import {
-  AI_EXTRACT_LIMITS,
-  AI_TURN_LIMITS,
-  inputTokenCeiling,
-  maxExtractionCostMicroUsd,
-  maxTurnCostMicroUsd,
-} from './limits';
+import { AI_EXTRACT_LIMITS, AI_TURN_LIMITS, inputTokenCeiling, maxTurnCostMicroUsd } from './limits';
 
 const none = { inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 };
 
@@ -40,7 +34,6 @@ test('the reservation covers every step and every retry of a turn, and every ext
     },
     AI_MODEL_PRICE,
   );
-  expect(maxExtractionCostMicroUsd()).toBe(extraction);
   expect(maxTurnCostMicroUsd('chat')).toBe(
     (limits.maxSteps + limits.maxRetries) * dearestAttempt + limits.maxToolModelCalls * extraction,
   );
