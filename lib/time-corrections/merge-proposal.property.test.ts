@@ -359,6 +359,40 @@ describe('A correction of one interval of an approved correction', () => {
           expect(facts.slice(0, interval.from)).toEqual(before.facts.slice(0, interval.from));
           expect(facts.slice(after)).toEqual(before.facts.slice(interval.to));
           expect(new Set(facts.map((item) => item.factId)).size).toBe(facts.length);
+          // The named interval itself changed: an unchanged snapshot fails here.
+          const replaced = facts.slice(interval.from, after);
+          const targetIds = new Set(
+            before.facts.slice(interval.from, interval.to).map((item) => item.factId),
+          );
+          if (kind === 'delete') {
+            expect(replaced).toEqual([]);
+            expect(facts.some((item) => targetIds.has(item.factId))).toBe(false);
+          } else if (kind === 'split') {
+            expect(replaced.map((item) => [item.entryType, item.timestamp])).toEqual([
+              [start.entryType, start.timestamp],
+              [end.entryType, middle],
+              [start.entryType, middle],
+              [end.entryType, end.timestamp],
+            ]);
+            // Both pieces keep the stored activity, job and details.
+            for (const piece of replaced) {
+              expect([piece.activityKind, piece.activity, piece.jobId]).toEqual([
+                start.activityKind,
+                start.activity,
+                start.jobId,
+              ]);
+            }
+          } else {
+            // Only an activity that carries a job moves (merge-proposal.ts); others stay as stored.
+            expect(replaced).toHaveLength(interval.to - interval.from);
+            const carriesJob = new Set(['work', 'callout', 'travel']);
+            replaced.forEach((piece, index) => {
+              const stored = before.facts[interval.from + index];
+              if (!stored) throw new Error('A reallocation keeps the interval length.');
+              if (carriesJob.has(piece.activityKind ?? '')) expect(piece.jobId).toBe('job-new');
+              else expect(piece).toEqual(stored);
+            });
+          }
         },
       ),
     );
