@@ -35,9 +35,10 @@ function actionEntry(interval: ActivityInterval): TimeEntry {
 
 /**
  * The end, when a correction of the start leaves it as it is: a legacy
- * clock-out or break start is its own record, so the row corrects it on its
- * own. A segment's end changes with the segment; a pending or closed-month
- * end shows its state through the row's first action.
+ * clock-out or break start is its own record, and an edit of an applied
+ * correction moves only the fact it names, so the row corrects it on its own.
+ * A segment's end changes with the segment; a pending or closed-month end
+ * shows its state through the row's first action.
  */
 function separatelyCorrectedEnd(
   interval: ActivityInterval,
@@ -48,8 +49,8 @@ function separatelyCorrectedEnd(
   if (!start || !end || primary !== start) return null;
   if (end.status !== 'approved' || end.pendingCorrectionRequestId) return null;
   if (isEntryInClosedPeriod(end, closedPeriods)) return null;
-  // The record a correction changes: the segment, the applied correction, or the entry.
-  const source = (edge: TimeEntry) => edge.canonicalSegmentId ?? edge.correctionApplicationId ?? edge.id;
+  // What an edit moves: the segment, or the entry (an applied correction's entry is one fact).
+  const source = (edge: TimeEntry) => edge.canonicalSegmentId ?? edge.id;
   return source(end) === source(start) ? null : end;
 }
 

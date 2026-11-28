@@ -1,6 +1,6 @@
 # Verify on Boat
 
-On a workstation with a Boat key, `bun run test:verify`, each [focused browser run that needs it](#focused-runs-on-boat) and [a migration's types](#types-on-boat) run on a short-lived Boat machine instead of the workstation (owner decision 15, werk-flow/werkflow-planning#294). Type-aware lint, the build, the stack and the browsers then load Boat's machine, not the 16 GB PC that agents share. CI stays on GitHub's runners ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
+On a workstation with a Boat key, `bun run test:verify`, each [focused browser run that needs it](#focused-runs-on-boat) and [a migration's types](#types-on-boat) run on a short-lived Boat machine instead of the workstation (owner decision 15, werk-flow/werkflow-planning#294). Type-aware lint, the build, the stack and the browsers then load Boat's machine, not the 16 GB PC that agents share. CI stays on GitHub's runners ([decision 0012](../decisions/0012-pull-requests-ci-and-releases.md#ci)).
 
 ## How a run picks Boat
 

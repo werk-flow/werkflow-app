@@ -1,5 +1,5 @@
 // Rule test: both agent tools run the edit guard before every tool call that can write a file,
-// Claude runs the delete guard before every shell call, and both run the sign-in, Boat key, heavy
+// both run the delete guard before every shell call, and both run the sign-in, Boat key, heavy
 // command, second-stack and shared stack migration guards, the device guard before T3's device_open,
 // and the child-start guard before T3's thread starts.
 import { expect, test } from 'bun:test';
@@ -59,11 +59,12 @@ test('Codex runs the edit guard before every file and shell tool', () => {
   expect(guardedTools('.codex/hooks.json', tools)).toEqual(tools);
 });
 
-// Only Claude Code's built-in safety check stops on a delete it cannot resolve
-// (lib/testing/runner/unresolvable-delete.ts); Codex in full access runs it without asking.
-test('Claude runs the delete guard before every shell call', () => {
-  expect(guardedTools('.claude/settings.json', ['Bash'], DELETE_GUARD)).toEqual(['Bash']);
-});
+// AGENTS.md "Ways to hurt yourself" requires both agents to refuse unresolvable deletes.
+for (const file of ['.claude/settings.json', '.codex/hooks.json']) {
+  test(`AGENTS.md "Ways to hurt yourself": ${file} runs the delete guard before every shell call`, () => {
+    expect(guardedTools(file, ['Bash'], DELETE_GUARD)).toEqual(['Bash']);
+  });
+}
 
 // Agents never read production data (lib/security/production-access.ts); both tools name an
 // MCP tool `mcp__<server>__<tool>` in hook payloads.

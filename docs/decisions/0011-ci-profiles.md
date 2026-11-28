@@ -65,3 +65,7 @@ Switch to `fleet`:
    - `Queue` not required.
 5. Enabling `ci.yml` starts no run for a PR that is already open. Start one for the PR that sets `ci/profile.json` to `fleet`: `gh pr update-branch <number> -R werk-flow/werkflow-app`, or close and reopen the PR.
 6. Merge that PR only with a green `Check` from GitHub Actions on its head. Then resume merges.
+
+## Amendment 2026-11-28: the release is dispatched, not scheduled
+
+`release.yml` has no cron. `ops/ci-alert.py` in `werk-flow/werkflow-planning` dispatches it with `scheduled=true` at 03:30 Berlin, Monday to Friday. This supersedes "release.yml's cron the release" in the amendment of 2026-11-23; [decision 0012](0012-pull-requests-ci-and-releases.md#releases) owns the release rule.

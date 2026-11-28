@@ -1,12 +1,12 @@
 import 'server-only';
-import type { ActionFailure } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { authorizeResponsibilityForTarget } from '@/lib/responsibilities/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import { proposeCalendarCorrection } from './calendar-proposal';
-import { mergeCorrectionProposal } from './merge-proposal';
+import { mergeApplicationCorrection, mergeCorrectionProposal } from './merge-proposal';
 import { exceedsLongestOpenTime, splitCorrectionFactsAtMidnight } from './timeline-validation';
 import {
   loadEmployeeIdentities,
@@ -102,6 +102,8 @@ export function submissionShapeError(input: SubmitTimeCorrectionInput): string |
   ) {
     return 'invalid_shape';
   }
+  // A correction of an approved correction names the fact whose interval it changes.
+  if (input.source?.kind === 'correction_application' && !input.source.factId) return 'invalid_shape';
   if (input.calendarAdjustment) {
     const targets = new Set(input.calendarAdjustment.map((boundary) => boundary.employeeRecordId));
     if (targets.size !== 1 || (input.kind === 'edit') !== targets.has(input.subjectEmployeeRecordId)) {
@@ -237,6 +239,30 @@ async function coversWholeLegacySession(input: {
 }
 
 /**
+ * The proposed facts merged into the source's: a calendar adjustment already
+ * holds every fact, a correction of an approved correction changes the one
+ * interval it names, any other kind merges into the whole source.
+ */
+function mergeProposal(
+  submission: SubmitTimeCorrectionInput,
+  before: TimeCorrectionSnapshot,
+  proposed: TimeCorrectionSnapshot,
+): ActionResult<{ snapshot: TimeCorrectionSnapshot }> {
+  if (submission.calendarAdjustment) return { success: true, snapshot: proposed };
+  if (submission.source?.kind === 'correction_application') {
+    return mergeApplicationCorrection({
+      kind: submission.kind,
+      before,
+      proposed,
+      factId: submission.source.factId,
+      newFactIdPrefix: submission.operationId,
+    });
+  }
+  const snapshot = mergeCorrectionProposal(submission.kind, before, proposed);
+  return snapshot ? { success: true, snapshot } : { success: false, error: 'activity_context_required' };
+}
+
+/**
  * The before and proposed snapshots of a submission and the sources they
  * rest on: a calendar adjustment replaces its sources' boundaries, any other
  * kind merges its proposed facts into the sources' facts.
@@ -280,17 +306,17 @@ export async function proposeSubmission(input: {
   });
   if (!proposedSnapshot) return { success: false, error: 'source_not_found' };
   const sources = contexts.flatMap((context) => (context.source ? [context.source] : []));
-  const merged = submission.calendarAdjustment
-    ? proposedSnapshot
-    : mergeCorrectionProposal(submission.kind, before, proposedSnapshot);
-  if (!merged) return { success: false, error: 'activity_context_required' };
-  if (!hasValidChronology(merged)) {
+  const merged = mergeProposal(submission, before, proposedSnapshot);
+  if (!merged.success) return merged;
+  if (!hasValidChronology(merged.snapshot)) {
     return { success: false, error: 'invalid_time_order' };
   }
-  if (exceedsLongestOpenTime(merged.facts)) return { success: false, error: 'correction_open_time_too_long' };
+  if (exceedsLongestOpenTime(merged.snapshot.facts)) {
+    return { success: false, error: 'correction_open_time_too_long' };
+  }
   const proposed: TimeCorrectionSnapshot = {
-    ...merged,
-    facts: splitCorrectionFactsAtMidnight(merged.facts),
+    ...merged.snapshot,
+    facts: splitCorrectionFactsAtMidnight(merged.snapshot.facts),
   };
   if (
     submission.calendarAdjustment &&

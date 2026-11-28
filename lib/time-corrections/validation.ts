@@ -49,7 +49,10 @@ export const submitTimeCorrectionSchema = z.object({
   subjectEmployeeRecordId: uuidSchema,
   kind: z.enum(['add', 'edit', 'delete', 'split', 'reclassify', 'reallocate', 'reassign', 'missed_clock']),
   reason: z.string().trim().min(3).max(2000),
-  source: timeCorrectionSourceInputSchema.nullable(),
+  /** For an approved correction, `factId` names the applied fact whose interval changes. */
+  source: timeCorrectionSourceInputSchema
+    .extend({ factId: z.string().min(1).max(200).optional() })
+    .nullable(),
   proposedFacts: z.array(timeCorrectionFactInputSchema).max(20),
   operationId: uuidSchema,
   calendarAdjustment: z.array(calendarBoundarySchema).min(2).max(20).optional(),
