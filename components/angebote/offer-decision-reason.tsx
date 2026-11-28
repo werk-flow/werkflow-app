@@ -109,6 +109,9 @@ function useReasonStep(offer: DecidableOffer, step: keyof typeof STEPS, onClose:
   const { run, isPending } = usePendingTask();
   // The action's answer carries the page with the decision; the dialog stays pending until it is on screen.
   const settle = useSettleOnChange(offer.version);
+  // The version the office opened the dialog on: a page refresh while it is open never moves the
+  // decision onto a state the office did not see; a changed offer refuses it.
+  const [expectedVersion] = useState(offer.version);
   const reasonError = reason.trim() ? undefined : 'Gib einen Grund an.';
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -117,7 +120,7 @@ function useReasonStep(offer: DecidableOffer, step: keyof typeof STEPS, onClose:
     void run(async () => {
       setError(null);
       const since = settle.markChange();
-      const values = { offerId: offer.id, expectedVersion: offer.version, reason };
+      const values = { offerId: offer.id, expectedVersion, reason };
       const input = { ...values, attemptKey: attempt.keyFor(JSON.stringify(values)) };
       // Recorded, so this tab skips the Realtime echo of its own write (lib/realtime/own-writes.ts).
       const result = await ownWrites

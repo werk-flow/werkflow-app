@@ -65,7 +65,7 @@ export const DIALOG_INVENTORY = {
   'components/angebote/offer-revision-start.tsx#StartOfferRevisionButton|{`Revision ${next} bearbeiten?`}': {
     audits: [{ route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-revision' }],
   },
-  'components/angebote/offer-acceptance-dialog.tsx#AcceptOfferDialog|Annahme von Revision {revision.revision} erfassen':
+  'components/angebote/offer-acceptance-dialog.tsx#AcceptOfferDialog|Annahme von Revision {opened.revision.revision} erfassen':
     {
       audits: [{ route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-acceptance' }],
     },

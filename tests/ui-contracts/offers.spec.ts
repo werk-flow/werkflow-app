@@ -673,11 +673,12 @@ test('starting revision 2 of a sent offer confirms first and keeps the dialog on
   await expect(confirm).toBeEnabled();
 });
 
-// „Annahme erfassen“: its fields wait while it is sent and keep their values after a failure. A
+// „Annahme erfassen“: it records against the version it opened on, its fields wait while it is sent
+// and keep their values after a failure. A
 // press repeated after a failure keeps its retry key, so an Annahme recorded
 // before a lost answer answers again; corrected values take a new key, which a recorded Annahme
 // refuses instead of answering with the first values.
-test('a pending Annahme locks its fields, a retry keeps its key, and corrected values take a new one', async ({
+test('an Annahme keeps the version it opened on and locks its fields; a retry keeps its key, corrected values take a new one', async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -686,6 +687,8 @@ test('a pending Annahme locks its fields, a retry keeps its key, and corrected v
   await openContractFixture(page, 'offers');
   await page.getByRole('button', { name: 'Annahme erfassen', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Annahme von Revision 1 erfassen' });
+  // The page renders a newer version while the dialog is open: the Annahme stays on what it opened on.
+  await page.evaluate(() => window.uiContractOfferServerRender?.(5));
   await dialog.getByRole('textbox', { name: 'Angenommen von' }).fill('Erika Musterfrau');
   await dialog.getByRole('combobox', { name: 'Angenommen per' }).click();
   await page.getByRole('option', { name: 'Telefon', exact: true }).click();
@@ -697,6 +700,7 @@ test('a pending Annahme locks its fields, a retry keeps its key, and corrected v
   const name = dialog.getByRole('textbox', { name: 'Angenommen von' });
   await expect(name).toBeDisabled();
   expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
+    expectedVersion: 1,
     revision: 1,
     acceptedByName: 'Erika Musterfrau',
     channel: 'telefon',

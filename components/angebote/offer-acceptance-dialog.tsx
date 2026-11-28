@@ -118,7 +118,11 @@ type FieldErrors = {
 };
 
 /** The form's values, its field errors once submitted, and the submit that records the Annahme. */
-function useAcceptOffer(offer: AcceptableOffer, revision: Revision, onClose: () => void) {
+function useAcceptOffer(
+  offer: AcceptableOffer,
+  { revision, expectedVersion }: { revision: Revision; expectedVersion: number },
+  onClose: () => void,
+) {
   const { showBanner } = useBanner();
   const today = getBusinessTodayIso();
   // One key per pressed values: an unchanged press after a lost answer gets the first Annahme, and
@@ -157,7 +161,7 @@ function useAcceptOffer(offer: AcceptableOffer, revision: Revision, onClose: () 
       const since = settle.markChange();
       const values = {
         offerId: offer.id,
-        expectedVersion: offer.version,
+        expectedVersion,
         revision: revision.revision,
         acceptedByName: form.name,
         acceptedOn,
@@ -196,9 +200,12 @@ function AcceptOfferDialog({
   content: RevisionContent;
   onClose: () => void;
 }) {
-  const { form, update, errors, error, isPending, submit } = useAcceptOffer(offer, revision, onClose);
-  const options = offerOptions(content);
-  const totals = acceptedScopeTotals(content, form.chosen);
+  // The revision, its content and the version the office opened the dialog on: a page refresh while
+  // it is open never moves the choices to another revision; a changed offer refuses the Annahme.
+  const [opened] = useState(() => ({ revision, content, expectedVersion: offer.version }));
+  const { form, update, errors, error, isPending, submit } = useAcceptOffer(offer, opened, onClose);
+  const options = offerOptions(opened.content);
+  const totals = acceptedScopeTotals(opened.content, form.chosen);
   return (
     <Dialog
       open
@@ -210,7 +217,7 @@ function AcceptOfferDialog({
       <DialogContent size="lg">
         <form onSubmit={submit} className="contents" noValidate>
           <DialogHeader>
-            <DialogTitle>Annahme von Revision {revision.revision} erfassen</DialogTitle>
+            <DialogTitle>Annahme von Revision {opened.revision.revision} erfassen</DialogTitle>
             <DialogDescription>
               Halte fest, wer {offer.offerNumber} wann und wie angenommen hat. Der angenommene Umfang wird
               danach nicht mehr geändert. WerkFlow prüft keine Unterschrift.
@@ -219,13 +226,13 @@ function AcceptOfferDialog({
           <DialogBody className="space-y-4">
             {offer.status === 'entwurf' && (
               <OfferDraftClosingNote>
-                {`Revision ${revision.revision + 1} ist noch ein Entwurf. Mit der Annahme von Revision ${revision.revision} wird er geschlossen, und seine Änderungen werden nicht gesendet.`}
+                {`Revision ${opened.revision.revision + 1} ist noch ein Entwurf. Mit der Annahme von Revision ${opened.revision.revision} wird er geschlossen, und seine Änderungen werden nicht gesendet.`}
               </OfferDraftClosingNote>
             )}
             <AcceptanceFacts form={form} update={update} errors={errors} disabled={isPending} />
-            {form.acceptedOn > revision.validUntil && (
+            {form.acceptedOn > opened.revision.validUntil && (
               <p className="text-sm text-muted-foreground">
-                {`Revision ${revision.revision} war nur bis ${formatGermanDate(revision.validUntil)} gültig. Die Annahme wird trotzdem erfasst und als verspätet vermerkt.`}
+                {`Revision ${opened.revision.revision} war nur bis ${formatGermanDate(opened.revision.validUntil)} gültig. Die Annahme wird trotzdem erfasst und als verspätet vermerkt.`}
               </p>
             )}
             {options.length > 0 && (
