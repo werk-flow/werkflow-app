@@ -112,7 +112,11 @@ export const lieferscheinLesen = defineTool({
     if (read.status === 'stopped' || read.status === 'failed') return { status: 'failed' };
     const lieferschein = read.status === 'read' ? cappedLieferschein(read.answer) : null;
     if (!lieferschein) return { status: 'refused', message: MESSAGES.unreadable };
-    const matches = await matchedLines(ctx, lieferschein.positionen);
+    // The caller's access and role are read again before the inventory is: a stop or a lost
+    // membership during the extraction ends the read here.
+    if (!(await run.admit())) return { status: 'failed' };
+    const matches = await matchedLines(ctx, lieferschein.positionen, run.signal);
+    if (run.signal.aborted) return { status: 'failed' };
     const lines = lieferschein.positionen.map((line, index) => ({
       nr: index + 1,
       artikelnummer: documentText(line.artikelnummer),

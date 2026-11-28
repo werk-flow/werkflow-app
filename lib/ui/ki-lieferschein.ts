@@ -16,12 +16,14 @@ const resultSchema = z.object({
     z.object({
       nr: z.number(),
       artikelnummer: text,
+      ean: z.string().nullable(),
       beschreibung: text,
       menge: z.number().nullable(),
       einheit: text,
+      packungsinhalt: z.number().nullable(),
       abgleich: z
         .object({
-          artikel: z.object({ name: text, nummer: text, einheit: unitCode }).nullable(),
+          artikel: z.object({ name: text, nummer: text, einheit: unitCode.nullable() }).nullable(),
           mengeInBasiseinheit: z.number().nullable(),
           katalog: z.object({ lieferant: text, name: text }).nullable(),
           hinweise: z.array(z.string()),
@@ -42,7 +44,12 @@ const PROBLEMS: Readonly<Record<string, string>> = {
   menge_fehlt: 'Keine Menge gelesen',
   einheit_unbekannt: 'Einheit nicht in der Einheitenliste',
   einheit_abweichend: 'Einheit passt nicht zum Artikel',
+  artikeleinheit_unbekannt: 'Einheit des Artikels nicht in der Einheitenliste',
+  packung_unklar: 'Mehrere Umrechnungen für diese Einheit',
+  packung_abweichend: 'Packungsinhalt weicht von der hinterlegten Umrechnung ab',
   packung_umgerechnet: 'Packung laut Lieferschein umgerechnet',
+  katalog_nicht_gelesen: 'Großhandelskatalog nicht lesbar',
+  mehrmals_im_katalog: 'Mehrmals im Großhandelskatalog',
 };
 
 type LieferscheinCardLine = {
@@ -52,6 +59,8 @@ type LieferscheinCardLine = {
   /** The own article and its quantity in the article's unit, or the catalog article. */
   match: string | null;
   problems: string[];
+  /** Whether the line fits an own article with no doubt: only such a line shows as fitting. */
+  fits: boolean;
 };
 
 export type LieferscheinCard = {
@@ -77,18 +86,25 @@ export function lieferscheinCard(result: unknown): LieferscheinCard | null {
     left: read.weggelassenePositionen,
     matched: read.abgleichGelesen,
     lines: read.positionen.map((line) => {
+      const pack = line.packungsinhalt === null ? '' : ` à ${line.packungsinhalt.toLocaleString('de-DE')}`;
       const quantity =
-        line.menge === null ? null : `${line.menge.toLocaleString('de-DE')} ${line.einheit?.text ?? ''}`;
+        line.menge === null
+          ? null
+          : `${line.menge.toLocaleString('de-DE')} ${line.einheit?.text ?? ''}${pack}`;
       const match = line.abgleich;
       const article = match?.artikel;
       return {
         nr: line.nr,
-        delivered: joined([quantity?.trim(), line.artikelnummer?.text, line.beschreibung?.text]),
+        delivered: joined([
+          quantity?.trim(),
+          line.artikelnummer?.text ?? (line.ean && `EAN ${line.ean}`),
+          line.beschreibung?.text,
+        ]),
         match: article
           ? joined([
               article.name?.text,
               article.nummer?.text,
-              match.mengeInBasiseinheit === null
+              match.mengeInBasiseinheit === null || article.einheit === null
                 ? null
                 : formatInventoryQuantity(match.mengeInBasiseinheit, article.einheit, 3),
             ])
@@ -96,6 +112,7 @@ export function lieferscheinCard(result: unknown): LieferscheinCard | null {
             ? joined([match.katalog.name?.text, match.katalog.lieferant?.text])
             : null,
         problems: (match?.hinweise ?? []).map((code) => PROBLEMS[code] ?? code),
+        fits: Boolean(article) && match?.hinweise.length === 0,
       };
     }),
   };

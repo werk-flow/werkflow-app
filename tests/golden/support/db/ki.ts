@@ -327,7 +327,13 @@ const pipe = { name: record('Kupferrohr 15 mm'), nummer: record('CU-15'), einhei
 /** A read line as „Lieferschein lesen“ stores it with its row (lib/ai/tools/lieferschein-lesen.ts). */
 function readLine(
   nr: number,
-  delivered: { artikelnummer: string; beschreibung: string; menge: number; einheit: string },
+  delivered: {
+    artikelnummer: string;
+    beschreibung: string;
+    menge: number;
+    einheit: string;
+    packungsinhalt?: number;
+  },
   abgleich: { artikel: typeof pipe | null; menge: number | null; katalog?: string; hinweise?: string[] },
 ) {
   return {
@@ -337,7 +343,7 @@ function readLine(
     beschreibung: doc(delivered.beschreibung),
     menge: delivered.menge,
     einheit: doc(delivered.einheit),
-    packungsinhalt: null,
+    packungsinhalt: delivered.packungsinhalt ?? null,
     abgleich: {
       artikel: abgleich.artikel,
       gefundenUeber: abgleich.artikel ? 'artikelnummer' : null,
@@ -385,7 +391,13 @@ const LIEFERSCHEINE = {
     ),
     readLine(
       2,
-      { artikelnummer: 'GC-22090', beschreibung: 'Pressbogen 90° 22 mm', menge: 2, einheit: 'VE' },
+      {
+        artikelnummer: 'GC-22090',
+        beschreibung: 'Pressbogen 90° 22 mm',
+        menge: 2,
+        einheit: 'VE',
+        packungsinhalt: 10,
+      },
       {
         artikel: { name: record('Pressbogen 90° 22 mm'), nummer: record('PB-22'), einheit: 'piece' },
         menge: 20,

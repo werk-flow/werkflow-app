@@ -2,26 +2,38 @@ import 'server-only';
 
 import { type ToolValue, recordText } from '@/lib/ai/context';
 import type { Lieferschein } from '@/lib/ai/extract/lieferschein';
-import { readDeliveryArticles } from '@/lib/inventory/delivery-articles';
-import { matchDeliveryLine } from '@/lib/inventory/delivery-matching';
-import { searchSupplierCatalogAs } from '@/lib/inventory/supplier-catalog-search';
+import { readDeliveryArticles, readDeliveryCatalogArticles } from '@/lib/inventory/delivery-articles';
+import { lookupValues, matchDeliveryLine } from '@/lib/inventory/delivery-matching';
+import { isInventoryUnitCode } from '@/lib/inventory/units';
 import type { ActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 // The matching step of „Lieferschein lesen“ (werk-flow/werkflow-planning#535, KI-0 part 2):
-// three internal reads the model never calls. Own articles by the supplier's article number
-// or EAN with their pack conversion, the unit list, and the wholesaler catalog for a line no
-// own article carries. No price leaves this module.
+// internal reads the model never calls. Own articles by the supplier's article number or EAN
+// with their pack conversion, the unit list, and the wholesaler catalog for a line no own
+// article carries. No price leaves this module.
 
-/** Catalog searches of one read, one per unmatched line in order: each is a trigram search. */
-const MAX_CATALOG_SEARCHES = 10;
+/** Catalog lookups of one read, one per unmatched line in order. */
+const MAX_CATALOG_LOOKUPS = 10;
 
-/** The catalog article whose number is the line's, by the search of the job-material picker. */
-async function catalogArticle(ctx: ActionContext, articleNumber: string) {
-  const found = await searchSupplierCatalogAs(ctx, articleNumber);
-  if (!found.success) return 'failed' as const;
-  const wanted = articleNumber.trim().toLowerCase();
-  return found.options.find((option) => option.articleNumber.trim().toLowerCase() === wanted) ?? null;
+/** The shortest number the catalog's trigram index narrows; a shorter one is not looked up. */
+const MIN_CATALOG_NUMBER_LENGTH = 3;
+
+/** What the catalog says about a line no own article carries. */
+async function catalogMatch(ctx: ActionContext, number: string, signal: AbortSignal) {
+  const found = await readDeliveryCatalogArticles(createSupabaseAdminClient(), ctx.orgId, number, signal);
+  if (found === 'failed') return { katalog: null, hinweis: 'katalog_nicht_gelesen' } as const;
+  const [article, ...more] = found;
+  if (!article) return null;
+  if (more.length > 0) return { katalog: null, hinweis: 'mehrmals_im_katalog' } as const;
+  return {
+    katalog: {
+      lieferant: recordText(article.supplierName),
+      name: recordText(article.name),
+      einheit: isInventoryUnitCode(article.unit) ? article.unit : null,
+    },
+    hinweis: 'nur_im_katalog',
+  } as const;
 }
 
 /**
@@ -32,25 +44,35 @@ async function catalogArticle(ctx: ActionContext, articleNumber: string) {
 export async function matchedLines(
   ctx: ActionContext,
   lines: Lieferschein['positionen'],
+  signal: AbortSignal,
 ): Promise<ToolValue[] | null> {
-  const named = (values: Array<string | null>) => [...new Set(values.filter((value) => value !== null))];
-  const articles = await readDeliveryArticles(createSupabaseAdminClient(), ctx.orgId, {
-    articleNumbers: named(lines.map((line) => line.artikelnummer)),
-    eans: named(lines.map((line) => line.ean)),
-  });
+  const articles = await readDeliveryArticles(
+    createSupabaseAdminClient(),
+    ctx.orgId,
+    {
+      articleNumbers: lookupValues(lines.map((line) => line.artikelnummer)),
+      eans: lookupValues(lines.map((line) => line.ean)),
+    },
+    signal,
+  );
   if (articles === 'failed') return null;
   const matches = lines.map((line) => matchDeliveryLine(line, articles));
-  const searched = matches
-    .flatMap((match, index) => {
-      const number = lines[index]?.artikelnummer;
-      return match.problems.includes('artikel_unbekannt') && number && number.length >= 3
-        ? [{ index, number }]
-        : [];
-    })
-    .slice(0, MAX_CATALOG_SEARCHES);
+  // The catalog is the job-material picker's, which only admin and Büro search.
+  const looked = ctx.isManagerOrAbove
+    ? matches
+        .flatMap((match, index) => {
+          const number = lines[index]?.artikelnummer;
+          return match.problems.includes('artikel_unbekannt') &&
+            number &&
+            number.length >= MIN_CATALOG_NUMBER_LENGTH
+            ? [{ index, number }]
+            : [];
+        })
+        .slice(0, MAX_CATALOG_LOOKUPS)
+    : [];
   const catalog = new Map(
     await Promise.all(
-      searched.map(async ({ index, number }) => [index, await catalogArticle(ctx, number)] as const),
+      looked.map(async ({ index, number }) => [index, await catalogMatch(ctx, number, signal)] as const),
     ),
   );
   return matches.map((match, index) => {
@@ -63,13 +85,13 @@ export async function matchedLines(
       },
       gefundenUeber: match.via,
       mengeInBasiseinheit: match.baseQuantity,
-      katalog:
-        hit && hit !== 'failed'
-          ? { lieferant: recordText(hit.supplierName), name: recordText(hit.name), einheit: hit.unit }
-          : null,
-      hinweise: match.problems.map((problem) =>
-        problem === 'artikel_unbekannt' && hit && hit !== 'failed' ? 'nur_im_katalog' : problem,
-      ),
+      katalog: hit?.katalog ?? null,
+      // A catalog article stands in for the missing own article; a failed or doubled lookup adds its doubt.
+      hinweise: !hit
+        ? match.problems
+        : hit.hinweis === 'nur_im_katalog'
+          ? match.problems.map((problem) => (problem === 'artikel_unbekannt' ? hit.hinweis : problem))
+          : [...match.problems, hit.hinweis],
     };
   });
 }

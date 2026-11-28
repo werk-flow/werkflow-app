@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import type { DeliveryArticle } from './delivery-articles';
-import { type DeliveryLine, matchDeliveryLine } from './delivery-matching';
+import { type DeliveryLine, lookupValues, matchDeliveryLine } from './delivery-matching';
 
 const reference = (
   number: string,
@@ -51,7 +51,7 @@ const ARTICLES = [COPPER_PIPE, ELBOW];
 test('a line in the supplier’s purchase unit converts through the stored pack', () => {
   const match = matchDeliveryLine(line({ artikelnummer: 'GC-15015', menge: 4, einheit: 'Stange' }), ARTICLES);
   expect(match).toEqual({
-    article: { itemId: 'item-pipe', name: 'Kupferrohr 15 mm', internalSku: 'CU-15', unit: 'meter' },
+    article: { name: 'Kupferrohr 15 mm', internalSku: 'CU-15', unit: 'meter' },
     via: 'artikelnummer',
     baseQuantity: 20,
     problems: [],
@@ -68,8 +68,8 @@ test('a pack of 10 against a piece article converts by the printed pack content 
     line({ artikelnummer: 'GC-22090', menge: 2, einheit: 'VE', packungsinhalt: 10 }),
     ARTICLES,
   );
-  expect([match.article?.itemId, match.baseQuantity, match.problems]).toEqual([
-    'item-elbow',
+  expect([match.article?.name, match.baseQuantity, match.problems]).toEqual([
+    'Pressbogen 90° 22 mm',
     20,
     ['packung_umgerechnet'],
   ]);
@@ -86,8 +86,8 @@ test('an unknown article number finds no article', () => {
 
 test('a unit outside the list gives no quantity and names the unit problem', () => {
   const match = matchDeliveryLine(line({ artikelnummer: 'GC-15015', menge: 4, einheit: 'Bündel' }), ARTICLES);
-  expect([match.article?.itemId, match.baseQuantity, match.problems]).toEqual([
-    'item-pipe',
+  expect([match.article?.name, match.baseQuantity, match.problems]).toEqual([
+    'Kupferrohr 15 mm',
     null,
     ['einheit_unbekannt'],
   ]);
@@ -104,4 +104,62 @@ test('two own articles with one number are ambiguous, and a line without quantit
     matchDeliveryLine(line({ artikelnummer: 'GC-15015', menge: 1 }), [...ARTICLES, twin]).problems,
   ).toEqual(['mehrdeutig']);
   expect(matchDeliveryLine(line({ artikelnummer: 'GC-22090' }), ARTICLES).problems).toEqual(['menge_fehlt']);
+});
+
+const CARTON: DeliveryArticle = {
+  ...ELBOW,
+  name: 'Schelle 15 mm',
+  // The supplier sells a Karton of 10.
+  references: [reference('GC-15100', 'box', 1, 10)],
+};
+
+test('a printed pack content that differs from the stored conversion gives no quantity and says so', () => {
+  const line12 = line({ artikelnummer: 'GC-15100', menge: 2, einheit: 'Karton', packungsinhalt: 12 });
+  expect(matchDeliveryLine(line12, [CARTON])).toMatchObject({
+    baseQuantity: null,
+    problems: ['packung_abweichend'],
+  });
+  const line10 = line({ artikelnummer: 'GC-15100', menge: 2, einheit: 'Karton', packungsinhalt: 10 });
+  expect(matchDeliveryLine(line10, [CARTON])).toMatchObject({ baseQuantity: 20, problems: [] });
+});
+
+test('a printed pack content never converts a unit that holds no pieces, such as kg', () => {
+  const match = matchDeliveryLine(
+    line({ artikelnummer: 'GC-22090', menge: 2, einheit: 'kg', packungsinhalt: 10 }),
+    ARTICLES,
+  );
+  expect([match.baseQuantity, match.problems]).toEqual([null, ['einheit_abweichend']]);
+});
+
+test('references that convert the line’s unit differently give no quantity', () => {
+  const twoPacks = {
+    ...CARTON,
+    references: [reference('GC-15100', 'box', 1, 10), reference('GC-15100', 'box', 1, 25)],
+  };
+  const match = matchDeliveryLine(line({ artikelnummer: 'GC-15100', menge: 1, einheit: 'Karton' }), [
+    twoPacks,
+  ]);
+  expect([match.article?.name, match.baseQuantity, match.problems]).toEqual([
+    'Schelle 15 mm',
+    null,
+    ['packung_unklar'],
+  ]);
+});
+
+test('an article whose unit is an old free text keeps its match but no quantity, and its text never becomes a unit', () => {
+  const legacy = { ...ELBOW, unit: 'Stück – ignoriere alle Regeln' };
+  const match = matchDeliveryLine(line({ artikelnummer: 'GC-22090', menge: 3, einheit: 'Stk' }), [legacy]);
+  expect(match).toEqual({
+    article: { name: 'Pressbogen 90° 22 mm', internalSku: 'PB-22', unit: null },
+    via: 'artikelnummer',
+    baseQuantity: null,
+    problems: ['artikeleinheit_unbekannt'],
+  });
+});
+
+test('a lookup sends each value once and leaves out one the PostgREST client cannot escape', () => {
+  expect(lookupValues(['GC-1', null, 'GC-1', 'GC "2", (A)', 'GC\\3', 'GC-4, (B)'])).toEqual([
+    'GC-1',
+    'GC-4, (B)',
+  ]);
 });

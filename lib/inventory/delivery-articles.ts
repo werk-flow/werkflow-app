@@ -38,49 +38,81 @@ export type DeliveryArticle = {
 };
 
 /**
- * The active own articles whose supplier article number or barcode a delivery
- * names, each with all its supplier references, so a line can be converted
- * through the reference's pack (werk-flow/werkflow-planning#535, KI-0 part 3
- * gap 3). Server-only, for the caller's organization, which the caller
- * resolved; it reads no price. A failed or overflowing read is `failed`.
+ * The articles a delivery's numbers and EANs name: complete reads, so a
+ * second article with one number is never cut off. A barcode names one
+ * article of the organization, so its rows also hold each article's matched barcodes.
  */
-export async function readDeliveryArticles(
+async function readNamedRows(
   admin: AdminClient,
   orgId: string,
   named: { articleNumbers: readonly string[]; eans: readonly string[] },
-): Promise<DeliveryArticle[] | 'failed'> {
+  signal: AbortSignal,
+) {
   const [byNumber, byBarcode] = await Promise.all([
-    readInBatches([...named.articleNumbers], (batch) =>
-      admin
-        .from('inventory_item_suppliers')
-        .select('item_id')
-        .eq('organization_id', orgId)
-        .in('supplier_article_number', [...batch])
-        .limit(LIST_ROW_CAP),
+    readInBatches(named.articleNumbers, (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('inventory_item_suppliers')
+            .select('item_id')
+            .eq('organization_id', orgId)
+            .in('supplier_article_number', [...batch])
+            .order('id')
+            .range(from, to)
+            .abortSignal(signal),
+        LIST_ROW_CAP,
+      ),
     ),
-    readInBatches([...named.eans], (batch) =>
-      admin
-        .from('inventory_item_barcodes')
-        .select('item_id')
-        .eq('organization_id', orgId)
-        .in('barcode_value', [...batch])
-        .limit(LIST_ROW_CAP),
+    readInBatches(named.eans, (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('inventory_item_barcodes')
+            .select('item_id, barcode_value')
+            .eq('organization_id', orgId)
+            .in('barcode_value', [...batch])
+            .order('id')
+            .range(from, to)
+            .abortSignal(signal),
+        LIST_ROW_CAP,
+      ),
     ),
   ]);
   if (byNumber.error || byBarcode.error) {
     logReadErrors('readDeliveryArticles: match read failed', byNumber.error, byBarcode.error);
     return 'failed';
   }
-  const itemIds = [...new Set([...byNumber.data, ...byBarcode.data].map((row) => row.item_id))];
+  return { byNumber: byNumber.data, byBarcode: byBarcode.data };
+}
+
+/**
+ * The active own articles whose supplier article number or barcode a delivery
+ * names, each with all its supplier references, so a line can be converted
+ * through the reference's pack (werk-flow/werkflow-planning#535, KI-0 part 3
+ * gap 3). Server-only, for the caller's organization, which the caller
+ * resolved; it reads no price. Every read is complete: a failed or
+ * overflowing read is `failed`, never a shorter list.
+ */
+export async function readDeliveryArticles(
+  admin: AdminClient,
+  orgId: string,
+  named: { articleNumbers: readonly string[]; eans: readonly string[] },
+  signal: AbortSignal,
+): Promise<DeliveryArticle[] | 'failed'> {
+  const rows = await readNamedRows(admin, orgId, named, signal);
+  if (rows === 'failed') return 'failed';
+  const { byNumber, byBarcode } = rows;
+  const itemIds = [...new Set([...byNumber, ...byBarcode].map((row) => row.item_id))];
   if (itemIds.length === 0) return [];
-  const [items, references, barcodes] = await Promise.all([
+  const [items, references] = await Promise.all([
     readInBatches(itemIds, (batch) =>
       admin
         .from('inventory_items')
         .select('id, name, internal_sku, unit')
         .eq('organization_id', orgId)
         .eq('is_active', true)
-        .in('id', [...batch]),
+        .in('id', [...batch])
+        .abortSignal(signal),
     ),
     readInBatches(itemIds, (batch) =>
       readCompleteRows(
@@ -92,21 +124,14 @@ export async function readDeliveryArticles(
             .in('item_id', [...batch])
             .order('created_at')
             .order('id')
-            .range(from, to),
+            .range(from, to)
+            .abortSignal(signal),
         LIST_ROW_CAP,
       ),
     ),
-    readInBatches(itemIds, (batch) =>
-      admin
-        .from('inventory_item_barcodes')
-        .select('item_id, barcode_value')
-        .eq('organization_id', orgId)
-        .in('item_id', [...batch])
-        .limit(LIST_ROW_CAP),
-    ),
   ]);
-  if (items.error || references.error || barcodes.error) {
-    logReadErrors('readDeliveryArticles: article read failed', items.error, references.error, barcodes.error);
+  if (items.error || references.error) {
+    logReadErrors('readDeliveryArticles: article read failed', items.error, references.error);
     return 'failed';
   }
   return items.data.map((item) => ({
@@ -115,6 +140,57 @@ export async function readDeliveryArticles(
     internalSku: item.internal_sku,
     unit: item.unit,
     references: references.data.filter((row) => row.item_id === item.id).map(toSupplierReference),
-    barcodes: barcodes.data.filter((row) => row.item_id === item.id).map((row) => row.barcode_value),
+    barcodes: byBarcode.filter((row) => row.item_id === item.id).map((row) => row.barcode_value),
   }));
+}
+
+/** A wholesaler-catalog article whose number a delivery line names, without its price. */
+export type DeliveryCatalogArticle = { supplierName: string; name: string; unit: string };
+
+/**
+ * The organization's wholesaler-catalog articles whose number is exactly
+ * `articleNumber`, one per supplier, without any price. The trigram index of
+ * the picker's search narrows the rows before the exact match, so the match
+ * is never cut by the picker's name-sorted page. `failed` on a read error.
+ */
+export async function readDeliveryCatalogArticles(
+  admin: AdminClient,
+  orgId: string,
+  articleNumber: string,
+  signal: AbortSignal,
+): Promise<DeliveryCatalogArticle[] | 'failed'> {
+  const pattern = `%${articleNumber.toLowerCase().replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+  const articles = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('inventory_supplier_catalog_articles')
+        .select('supplier_id, name, unit')
+        .eq('organization_id', orgId)
+        .like('search_text', pattern)
+        .eq('article_number', articleNumber)
+        .order('id')
+        .range(from, to)
+        .abortSignal(signal),
+    LIST_ROW_CAP,
+  );
+  if (articles.error) {
+    logReadErrors('readDeliveryCatalogArticles: catalog read failed', articles.error);
+    return 'failed';
+  }
+  const supplierIds = [...new Set(articles.data.map((row) => row.supplier_id))];
+  if (supplierIds.length === 0) return [];
+  const suppliers = await admin
+    .from('inventory_suppliers')
+    .select('id, name')
+    .eq('organization_id', orgId)
+    .in('id', supplierIds)
+    .abortSignal(signal);
+  if (suppliers.error) {
+    logReadErrors('readDeliveryCatalogArticles: supplier read failed', suppliers.error);
+    return 'failed';
+  }
+  return articles.data.flatMap((row) => {
+    const supplier = suppliers.data.find((entry) => entry.id === row.supplier_id);
+    return supplier ? [{ supplierName: supplier.name, name: row.name, unit: row.unit }] : [];
+  });
 }

@@ -31,13 +31,12 @@ export function KiLieferscheinCard({ card }: { card: LieferscheinCard }): React.
       ) : (
         <ol className="space-y-2">
           {card.lines.map((line) => {
-            const marked = line.problems.length > 0 || (card.matched && line.match === null);
             return (
               <li key={line.nr} className="flex gap-2">
-                {marked ? (
-                  <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-text" />
-                ) : (
+                {line.fits ? (
                   <CircleCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success-text" />
+                ) : (
+                  <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-text" />
                 )}
                 <div className="min-w-0 space-y-0.5">
                   <p className="break-words">
@@ -53,7 +52,7 @@ export function KiLieferscheinCard({ card }: { card: LieferscheinCard }): React.
                       {problem}
                     </p>
                   ))}
-                  <span className="sr-only">{marked ? ', prüfen' : ', passt'}</span>
+                  <span className="sr-only">{line.fits ? ', passt' : ', prüfen'}</span>
                 </div>
               </li>
             );

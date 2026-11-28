@@ -441,7 +441,7 @@ const EXTRACTIONS: Readonly<Record<string, () => StreamPart[]>> = {
       ],
     }),
   // Lines that do not fit the inventory as they stand: a pack of 10 against a piece article, a
-  // number no own article carries, and a unit outside the list.
+  // number no own article carries, a unit outside the list, and an article with an old free-text unit.
   abweichend: () =>
     extraction({
       ...LIEFERSCHEIN,
@@ -457,6 +457,7 @@ const EXTRACTIONS: Readonly<Record<string, () => StreamPart[]>> = {
           einheit: 'Stk',
         },
         { ...LIEFERSCHEIN.positionen[0], ean: null, menge: 2, einheit: 'Bündel' },
+        { ...LIEFERSCHEIN.positionen[0], artikelnummer: 'GC-30030', ean: null, menge: 1, einheit: 'Stk' },
       ],
     }),
   // About three seconds of writing: a stop lands while the extractor runs.
