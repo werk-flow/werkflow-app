@@ -49,7 +49,8 @@ function FigureRow({
  * „Kalkulation“: cost, sale amount and margin per Titel and for the offer,
  * live from the content as typed. Office-only: the page shows it to Admin and
  * Büro, and no document of the offer carries it. A Position without a cost
- * adds its whole sale amount to the margin; the panel names how many do.
+ * adds its whole sale amount to the margin; the panel names how many do. A
+ * Bedarfs- or Alternativposition counts in no sum; the panel names how many it leaves out.
  */
 export function OfferCalculationPanel({
   sections,
@@ -59,6 +60,7 @@ export function OfferCalculationPanel({
   calculation: OfferCalculation | null;
 }) {
   const withoutCost = calculation?.offer.withoutCost ?? 0;
+  const outsideTotal = calculation?.outsideTotal ?? 0;
   return (
     <section aria-labelledby="offer-calculation-title" className="space-y-3 rounded-lg border p-3 sm:p-4">
       <div className="space-y-1">
@@ -86,6 +88,13 @@ export function OfferCalculationPanel({
               {withoutCost === 1
                 ? 'Bei 1 Position fehlen die Kosten. Die Marge enthält deren ganzen Betrag.'
                 : `Bei ${withoutCost} Positionen fehlen die Kosten. Die Marge enthält deren ganzen Betrag.`}
+            </p>
+          )}
+          {outsideTotal > 0 && (
+            <p className="text-sm text-muted-foreground">
+              {outsideTotal === 1
+                ? '1 Bedarfs- oder Alternativposition zählt nicht mit.'
+                : `${outsideTotal} Bedarfs- und Alternativpositionen zählen nicht mit.`}
             </p>
           )}
         </>

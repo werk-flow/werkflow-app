@@ -476,6 +476,25 @@ describe('the business document renderer', () => {
     }
   });
 
+  test('an Alternativposition names its Position and what it costs more or less in its mark', async () => {
+    const sample = plainSample('Muster GmbH');
+    const document: BusinessDocument = {
+      ...sample,
+      sections: sample.sections.map((section) => ({
+        ...section,
+        positions: section.positions.map((position) =>
+          position.kind === 'alternative'
+            ? { ...position, alternativeTo: { number: '2.1', differenceCents: -37_000 } }
+            : position,
+        ),
+      })),
+    };
+    const lines = (await readPages(await renderBusinessDocument(document)))[0] ?? [];
+    const head = lines.find((line) => line.text.startsWith('2.5 '));
+    const markLine = lines.find((line) => line.text === 'Alternativposition zu 2.1, Minderpreis 370,00 €');
+    expect(markLine?.top ?? 0).toBeGreaterThan(head?.top ?? PAGE_HEIGHT);
+  });
+
   test('a title wider than the page wraps onto further lines instead of running off it', async () => {
     const title = `Angebot: ${'Austausch der Gasheizung im Mehrfamilienhaus '.repeat(3)}Ende`;
     for (const document of [

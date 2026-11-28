@@ -11,6 +11,7 @@ function free(
   return {
     kind: 'free',
     name,
+    positionType: { kind: 'normal' },
     description: '',
     quantity,
     unit: options.unit ?? 'piece',
@@ -78,6 +79,53 @@ describe('offerAmounts', () => {
   test('a negative half cent rounds away from zero, once per position', () => {
     const amounts = offerAmounts([{ title: 'Gutschrift', positions: [free('Rest', '-0.5', 1)] }]);
     expect(amounts.sections).toEqual([{ netCents: -1, positionCents: [-1] }]);
+  });
+
+  test('a Bedarfs- and an Alternativposition take their own amounts and count in no subtotal, total or VAT', () => {
+    const amounts = offerAmounts([
+      {
+        title: 'Heizung',
+        positions: [
+          free('Gas-Brennwerttherme 25 kW', '1', 425_000),
+          // Three decimals at 7 %: 2,125 m at 12,49 € is 26,54125 €, offered if needed.
+          {
+            ...free('Kupferrohr 15 mm', '2.125', 1249, { unit: 'meter', taxRateBasisPoints: 700 }),
+            positionType: { kind: 'bedarf' },
+          },
+          // Offered instead of 1.1, with a credit of its own: 388,00 € less 150,00 € back.
+          {
+            ...free('Gas-Brennwerttherme 20 kW', '1', 388_000),
+            positionType: { kind: 'alternative', alternativeTo: 1 },
+          },
+          { ...free('Rücknahme Altgerät', '-1', 15_000), positionType: { kind: 'bedarf' } },
+          free('Wartungsheft', '1', 2995, { taxRateBasisPoints: 700 }),
+        ],
+      },
+    ]);
+    expect(amounts.sections).toEqual([
+      { netCents: 427_995, positionCents: [425_000, 2654, 388_000, -15_000, 2995] },
+    ]);
+    // 19 % on 4.250,00 € only; 7 % on 29,95 € only (2,0965 €).
+    expect(amounts.taxSubtotals.map(({ basisCents, taxCents }) => ({ basisCents, taxCents }))).toEqual([
+      { basisCents: 425_000, taxCents: 80_750 },
+      { basisCents: 2995, taxCents: 210 },
+    ]);
+    expect(amounts.totals).toEqual({ lineNetCents: 427_995, taxCents: 80_960, grossCents: 508_955 });
+  });
+
+  test('Bedarfspositionen at the line bound each take their amount, as no VAT basis sums them', () => {
+    // 100.000 × 100.000,00 € is ten billion euros, the largest line amount.
+    const atBound = {
+      ...free('Fernwärmestation', '100000', 10_000_000),
+      positionType: { kind: 'bedarf' as const },
+    };
+    const amounts = offerAmounts([
+      { title: 'Optionen', positions: [atBound, atBound, atBound, free('Wartungsheft', '1', 2995)] },
+    ]);
+    expect(amounts.sections[0]?.positionCents).toEqual([
+      1_000_000_000_000, 1_000_000_000_000, 1_000_000_000_000, 2995,
+    ]);
+    expect(amounts.totals.lineNetCents).toBe(2995);
   });
 
   test('an offer without priced positions totals zero', () => {

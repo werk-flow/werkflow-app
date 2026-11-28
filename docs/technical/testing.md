@@ -76,7 +76,7 @@ Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers
 - **Permission groups** keep selection by declared scope: each group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
 - **Other groups** run nightly and in release mode.
 - A spec or support file selects the groups that import it.
-- Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, in CI's full runs and, except wall-clock groups, when their test code changed. `audit:layout:<area>` runs when its pages or dialogs render a changed file at most five areas render (`surface-closure.ts`).
+- Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, in full runs and, except wall-clock groups, when their test code changed. `audit:layout:<area>` runs when its pages or dialogs render a changed file at most five areas render (`surface-closure.ts`), `audit:visual` on any change but tests, docs, tooling.
 - Static gates run in every plan. Unit, SQL and component groups run when their inputs changed (`fast-tier.ts` in CI).
 - Groups whose own spec or support changed run first.
 - `test:verify` refuses to start while a group it would run has an unclassified latest failure.
@@ -125,7 +125,7 @@ bun run test:audit:focused --grep "@ACCEPT <set>"                # acceptance ca
 | --- | --- |
 | Slice or application change | The change plan passes, plus the visual review the slice names and the canary when provider behavior changed. |
 | Wave end, beta handoff, production release | The release plan and the cloud canary pass on the release tree. |
-| Documentation-only change | `bun run docs:check` and any executable contract the change touched. |
+| Documentation-only change | `bun run docs:check` and any executable contract it touched. |
 
 ## How a run executes
 
@@ -191,7 +191,7 @@ A preflight failure that creates no run, or a heavy group held back [without Boa
 
 ## Recurring traps
 
-Check these before classifying.
+Check these first.
 
 - **The tree's own migration.** The shared stack holds only `main`'s migrations. `test:verify` names the drift and [sends a cheap plan to Boat](boat-verification.md#how-a-run-picks-boat). A local failure on an object the stack lacks is `environment`.
 - **Stale fakes.** When a read changes its `select` shape, update every unit-test fake of that table. Embedded relations come back as arrays.

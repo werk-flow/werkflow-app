@@ -47,6 +47,8 @@ type RenderedSnapshot = {
   site: { name: string; address: string } | null;
   openingText: string;
   closingText: string;
+  /** The PDF left Bedarfs- and Alternativpositionen out of its sums; send_offer refuses an older rendering of them. */
+  positionTypes: true;
 };
 
 type RenderedOffer = { bytes: Uint8Array; revision: number; snapshot: RenderedSnapshot };
@@ -85,6 +87,7 @@ export async function renderOfferPdf(
       site: offer.site && { name: offer.site.name, address: offer.site.address },
       openingText: offer.openingText,
       closingText: offer.closingText,
+      positionTypes: true,
     },
   };
 }

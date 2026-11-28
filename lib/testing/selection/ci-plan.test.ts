@@ -182,7 +182,7 @@ test('a tooling change runs its affected groups, the runner pilots and the short
       byOrderIn(sampled),
     ),
   );
-  // A product change beside it keeps its whole selection.
+  // A product change beside it keeps its whole selection; its visual references stand for the visual kind.
   expect(
     ids(
       planFor(['scripts/ci/job.ts', 'lib/inventory/stock.ts'], {
@@ -190,7 +190,14 @@ test('a tooling change runs its affected groups, the runner pilots and the short
         durations: sampledDurations,
       }),
     ),
-  ).toEqual([...SAMPLE, 'golden:gg-00', 'audit:wave-2:p1-13'].sort(byOrderIn(sampled)));
+  ).toEqual(
+    [
+      ...SAMPLE.filter((id) => id !== 'audit:visual:acceptance:sets'),
+      'golden:gg-00',
+      'audit:wave-2:p1-13',
+      'audit:visual',
+    ].sort(byOrderIn(sampled)),
+  );
 });
 
 const byOrderIn =
@@ -311,7 +318,7 @@ test("the nightly run and the release gate add each wall-clock group's steps, un
 test('a pull request or a push to main runs the critical journeys and the groups its changed files select', () => {
   const plan = planFor(['lib/inventory/stock.ts']);
   expect(plan.fullReason).toBeUndefined();
-  expect(ids(plan)).toEqual(['golden:gg-00', 'audit:wave-2:p1-13']);
+  expect(ids(plan)).toEqual(['golden:gg-00', 'audit:wave-2:p1-13', 'audit:visual']);
   expect(ids(planFor(['tests/golden/p1-04.spec.ts']))).toEqual(['golden:p1-04']);
   expect(ids(planFor(['docs/README.md']))).toEqual([]);
   expect(planFor(['docs/README.md']).shards).toEqual([]);
@@ -428,7 +435,7 @@ test("a registry change inside its rows plans by diff, and one in the runner's l
   const changedFiles = [REGISTRY, 'lib/inventory/stock.ts'];
   const rows = planFor(changedFiles, { rowChanges: [REGISTRY] });
   expect(rows.fullReason).toBeUndefined();
-  expect(ids(rows)).toEqual(['golden:gg-00', 'audit:wave-2:p1-13']);
+  expect(ids(rows)).toEqual(['golden:gg-00', 'audit:wave-2:p1-13', 'audit:visual']);
   const logic = planFor(changedFiles);
   expect([logic.fullReason, logic.tooling.browser]).toEqual([
     undefined,
@@ -461,7 +468,7 @@ test('files that cannot change how every group installs, builds or runs plan by 
   }
 });
 
-test('visual and layout groups run in a pull request only when their own test code changed, lab groups also on product code', () => {
+test('layout groups and captures run in a pull request only when their own test code changed, lab groups and the visual references also on product code', () => {
   const sweeps = [
     ...groups,
     group(
@@ -473,10 +480,12 @@ test('visual and layout groups run in a pull request only when their own test co
     group('audit:lab:office', 'tests/audit/lab/office.spec.ts', ['work', 'planning'], 'product'),
   ];
   const plan = (changedFiles: string[]): string[] => ids(planFor(changedFiles, { groups: sweeps }));
-  // A work page selects the work journey and the lab group, never the work sweep that shares its scope.
+  // A work page selects the work journey, the visual references and the lab group, never the work sweep
+  // that shares its scope or the captures.
   expect(plan(['app/(app)/auftraege/page.tsx', 'components/ui/button.tsx', 'app/globals.css'])).toEqual([
     'golden:gg-00',
     'audit:wave-2:p1-13',
+    'audit:visual',
     'audit:lab:office',
   ]);
   expect(plan(['docs/technical/performance.md'])).toEqual([]);
@@ -575,7 +584,10 @@ test('shards hold every selected group once and never exceed the job budget', ()
   const dealt = plan.shards.flatMap((shard) => shard.groups.split(','));
   expect(dealt.sort()).toEqual(many.map((entry) => entry.id).sort());
   const one = planFor(['lib/inventory/stock.ts']);
-  expect(one.shards).toEqual([{ shard: 1, groups: 'golden:gg-00,audit:wave-2:p1-13' }]);
+  expect(one.shards).toEqual([
+    { shard: 1, groups: 'audit:visual' },
+    { shard: 2, groups: 'golden:gg-00,audit:wave-2:p1-13' },
+  ]);
 });
 
 test('a selection takes as few shards as hold its recorded seconds at the target, and an unknown group counts the default', () => {
