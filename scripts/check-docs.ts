@@ -28,6 +28,7 @@ import { findIndexCoverageProblems } from '../lib/docs/doc-index';
 import { findSkillMirrorProblems, type SkillTree } from '../lib/docs/skill-mirror';
 import { findBrokenLinks } from '../lib/docs/doc-links';
 import { decisionGrowthProblem } from '../lib/docs/decision-records';
+import { findInlineCodePaths } from '../lib/docs/inline-code-paths';
 
 const repoRoot = resolve(import.meta.dir, '..');
 const docsRoot = join(repoRoot, 'docs');
@@ -169,6 +170,16 @@ for (const path of guidanceFiles) {
     if (!existsSync(target) && !pointsIntoMissingSibling(target))
       problems.push(`guidance: ${path} references ${reference.target}, which does not exist`);
   }
+}
+
+// Decision 0005: repository paths named in AGENTS.md must name an existing mechanism.
+for (const reference of findInlineCodePaths(read('AGENTS.md'))) {
+  const target = join(repoRoot, reference.path);
+  // A trailing slash makes existsSync refuse a file, so `components/ui/` must be a folder.
+  if (existsSync(target)) continue;
+  problems.push(
+    `AGENTS.md:${reference.line} names \`${reference.path}\`, which does not exist; fix the name or restore the mechanism (decision 0005)`,
+  );
 }
 
 // Word budgets.
