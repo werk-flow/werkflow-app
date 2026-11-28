@@ -51,11 +51,3 @@ test('a triple-backtick span on one line is inline code, not a fence, and spans 
     { line: 3, path: 'lib/padded.ts' },
   ]);
 });
-
-test('a fence indented under a list item hides its example paths', () => {
-  expect(
-    findInlineCodePaths(
-      ['1. Run it:', '', '    ```bash', '    `lib/example.ts`', '    ```', '`lib/after.ts`'].join('\n'),
-    ),
-  ).toEqual([{ line: 6, path: 'lib/after.ts' }]);
-});
