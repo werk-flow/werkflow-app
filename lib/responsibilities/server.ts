@@ -39,6 +39,11 @@ export type ResponsibilityRuntimeState = {
 type ResponsibilityRuntimeAccessState = ResponsibilityRuntimeState & {
   accessEvaluatedAt: number;
   accessSchedulesByRecordId: ReadonlyMap<string, string | null>;
+  /**
+   * The employee record each member with effective access holds now: the
+   * records RLS lets their person act on (`p1_24_has_effective_access`).
+   */
+  recordByUser: ReadonlyMap<string, string>;
 };
 
 /**
@@ -126,6 +131,11 @@ export const loadResponsibilityRuntimeState = memoizeRequestRead(
           record.id,
           record.personnel_access_lifecycles[0]?.scheduled_for ?? null,
         ]),
+      ),
+      recordByUser: new Map(
+        members.flatMap((member) =>
+          member.hasEffectiveAccess ? [[member.userId, member.employeeRecordId] as const] : [],
+        ),
       ),
       members,
       people: people.toSorted((left, right) => {

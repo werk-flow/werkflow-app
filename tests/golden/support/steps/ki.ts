@@ -9,7 +9,7 @@ const KI_COPY = {
   send: 'Senden',
   threads: 'Chats',
   timeline: 'Verlauf',
-  firstContact: /Ich bin eine KI\./,
+  firstContact: /Ich bin eine KI und kann mich irren\./,
 } as const;
 
 /** What the replayed answers of lib/ai/replay.ts say: the plain answer, and the host an injected one sends to. */

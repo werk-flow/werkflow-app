@@ -19,6 +19,7 @@ const breakDayBreak = '8e000000-0000-4000-8000-000000000046';
 const breakDayOut = '8e000000-0000-4000-8000-000000000047';
 const correctedDayIn = '8e000000-0000-4000-8000-000000000048';
 const correctedDayOut = '8e000000-0000-4000-8000-000000000049';
+const workerRecordId = '8e000000-0000-4000-8000-000000000033';
 const correctionId = '8e000000-0000-4000-8000-000000000051';
 
 type EntryType = 'clock_in' | 'clock_out' | 'break_start';
@@ -50,7 +51,7 @@ const correction: TimeCorrectionApplicationProjection = {
     facts: [
       {
         factId: 'end',
-        employeeRecordId: '8e000000-0000-4000-8000-000000000033',
+        employeeRecordId: workerRecordId,
         userId: workerId,
         entryType: 'clock_out',
         timestamp: '2026-03-04T12:00:00.000Z',
@@ -64,6 +65,8 @@ const correction: TimeCorrectionApplicationProjection = {
 
 const world = installActionWorld({
   jobs: [jobId, otherJobId].map((id) => ({ id, organization_id: ORGANIZATION_A, project_id: null })),
+  // The worker holds the record the correction names; only its facts count.
+  employee_records: [{ id: workerRecordId, organization_id: ORGANIZATION_A, user_id: workerId }],
   time_entries: [
     row(pairIn, 'clock_in', '2026-03-02T07:00:00.000Z', jobId),
     row(pairOut, 'clock_out', '2026-03-02T11:00:00.000Z', null),

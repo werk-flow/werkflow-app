@@ -5,12 +5,14 @@ import type { AiTurnFailure } from '@/lib/ai/turn';
 import { AI_TURN_FAILURE_MESSAGES } from '@/lib/ai/turn-messages';
 import { logError } from '@/lib/logging';
 import { resolveActionContextFor } from '@/lib/org/action-context';
+import { rowFromItem } from '@/lib/ai/thread-rows';
 import {
-  type AiChatMessage,
+  type AiThreadEntry,
   type AiThreadSummary,
   type AiThreadWindow,
   aiThreadPageInput,
   aiThreadWindowInput,
+  aiToolDetailInput,
 } from '@/lib/ai/thread-types';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { z } from '@/lib/zod';
@@ -22,12 +24,20 @@ import { z } from '@/lib/zod';
 
 /** Threads per page of the list, latest activity first. */
 const THREAD_PAGE_SIZE = 30;
-/** Messages a thread opens with, newest first (brief non-negotiable 5). */
+/** Entries a thread opens with, newest first (brief non-negotiable 5): messages and the rows between them. */
 const WINDOW_MESSAGES = 40;
-/** UTF-8 bytes of message text a window carries at most; older messages page in. */
+/** UTF-8 bytes of message text and row bodies a window carries at most; older entries page in. */
 const WINDOW_BYTES = 256_000;
 
 const bodySchema = z.object({ text: z.string(), failure: z.string().optional() });
+const fileBodySchema = z.object({
+  fileId: z.string(),
+  name: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
+  pages: z.number().nullable(),
+  origin: z.enum(['upload', 'agent']),
+});
 
 function isTurnFailure(code: string): code is AiTurnFailure {
   return Object.hasOwn(AI_TURN_FAILURE_MESSAGES, code);
@@ -90,20 +100,10 @@ export async function getAiThreadWindow(
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await resolveActionContextFor(parsed.data.organizationId);
   if (!auth.success) return auth;
-  const { orgId, userId } = auth.context;
+  const { orgId } = auth.context;
   const supabase = await createSupabaseServerClient();
-  const thread = await supabase
-    .from('ai_threads')
-    .select('id')
-    .eq('organization_id', orgId)
-    .eq('user_id', userId)
-    .eq('id', parsed.data.threadId)
-    .maybeSingle();
-  if (thread.error) {
-    logError('getAiThreadWindow: thread read failed', thread.error);
-    return { success: false, error: 'load_failed' };
-  }
-  if (!thread.data) return { success: false, error: 'not_found' };
+  const thread = await readOwnThread(supabase, auth.context, parsed.data.threadId);
+  if (thread !== 'found') return { success: false, error: thread };
   const { afterSequence, beforeSequence } = parsed.data;
   const items = (bound: { after?: number; before?: number }) =>
     readWindowItems(supabase, orgId, parsed.data.threadId, bound);
@@ -119,10 +119,107 @@ export async function getAiThreadWindow(
 
 type ThreadClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
+/** Whether the thread is the caller's in their organization: another person's reads as not found. */
+async function readOwnThread(
+  supabase: ThreadClient,
+  caller: { orgId: string; userId: string },
+  threadId: string,
+): Promise<'found' | 'not_found' | 'load_failed'> {
+  const { data, error } = await supabase
+    .from('ai_threads')
+    .select('id')
+    .eq('organization_id', caller.orgId)
+    .eq('user_id', caller.userId)
+    .eq('id', threadId)
+    .maybeSingle();
+  if (error) {
+    logError('aiThreadReads: thread read failed', error);
+    return 'load_failed';
+  }
+  return data ? 'found' : 'not_found';
+}
+
+const toolDetailSchema = z.object({
+  input: z.json().optional(),
+  result: z.json().optional(),
+  resultOmitted: z.literal(true).optional(),
+});
+
+/** What an opened tool row shows: the call's input and result as the model read them. */
+type AiToolDetail = z.infer<typeof toolDetailSchema>;
+
 /**
- * Up to a window of messages, in sequence order. With `after`, the ones from
- * that sequence on; `hasOlder` then says that they did not fit. Otherwise the
- * latest ones, or those before `before`, newest first under the byte cap.
+ * One tool row's detail, read only when the person opens the row (brief
+ * non-negotiable 5): the input the tool ran with and the result it gave. A
+ * row that is not in the caller's own thread reads as not found.
+ */
+export async function getAiToolDetail(
+  input: z.infer<typeof aiToolDetailInput>,
+): Promise<{ success: true; detail: AiToolDetail } | ActionFailure> {
+  const parsed = aiToolDetailInput.safeParse(input);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const auth = await resolveActionContextFor(parsed.data.organizationId);
+  if (!auth.success) return auth;
+  const supabase = await createSupabaseServerClient();
+  const thread = await readOwnThread(supabase, auth.context, parsed.data.threadId);
+  if (thread !== 'found') return { success: false, error: thread };
+  const { data, error } = await supabase
+    .from('ai_thread_items')
+    .select('detail')
+    .eq('organization_id', auth.context.orgId)
+    .eq('thread_id', parsed.data.threadId)
+    .eq('idempotency_key', parsed.data.key)
+    .eq('kind', 'tool_call')
+    .maybeSingle();
+  if (error) {
+    logError('getAiToolDetail: detail read failed', error);
+    return { success: false, error: 'load_failed' };
+  }
+  if (!data) return { success: false, error: 'not_found' };
+  const detail = toolDetailSchema.safeParse(data.detail ?? {});
+  return { success: true, detail: detail.success ? detail.data : {} };
+}
+
+/** A stored message as the timeline shows it, with the bytes it counts against the window. */
+function messageFromItem(item: {
+  idempotency_key: string;
+  sequence: number;
+  kind: string;
+  status: AiThreadEntry['status'];
+  body: unknown;
+}): { entry: AiThreadEntry; bytes: number } | null {
+  const base = { key: item.idempotency_key, sequence: item.sequence, status: item.status };
+  if (item.kind === 'file') {
+    // Only the file's name and size come with the thread; its bytes load when it is opened.
+    const file = fileBodySchema.safeParse(item.body);
+    return file.success
+      ? { entry: { ...base, role: 'file', text: '', failure: null, file: file.data }, bytes: 0 }
+      : null;
+  }
+  if (item.kind !== 'user_message' && item.kind !== 'assistant_message') {
+    const row = rowFromItem(item);
+    return row ? { entry: row, bytes: Buffer.byteLength(JSON.stringify(item.body), 'utf8') } : null;
+  }
+  const body = bodySchema.safeParse(item.body);
+  const text = body.success ? body.data.text : '';
+  return {
+    bytes: Buffer.byteLength(text, 'utf8'),
+    entry: {
+      ...base,
+      role: item.kind === 'user_message' ? 'user' : 'assistant',
+      text,
+      failure:
+        item.status === 'complete' ? null : turnFailureSentence(body.success ? body.data.failure : undefined),
+    },
+  };
+}
+
+/**
+ * Up to a window of entries of every kind, in sequence order, so the window
+ * has no hole a row would leave. With `after`, the ones from that sequence
+ * on; `hasOlder` then says that they did not fit. Otherwise the latest ones,
+ * or those before `before`, newest first under the byte cap. A row of a kind
+ * this build cannot show takes its place unshown.
  */
 async function readWindowItems(
   supabase: ThreadClient,
@@ -134,8 +231,7 @@ async function readWindowItems(
     .from('ai_thread_items')
     .select('idempotency_key, sequence, kind, status, body')
     .eq('organization_id', organizationId)
-    .eq('thread_id', threadId)
-    .in('kind', ['user_message', 'assistant_message']);
+    .eq('thread_id', threadId);
   if (bound.before !== undefined) query = query.lt('sequence', bound.before);
   if (bound.after !== undefined) query = query.gte('sequence', bound.after);
   const { data, error } = await query
@@ -145,23 +241,16 @@ async function readWindowItems(
     logError('getAiThreadWindow: item read failed', error);
     return 'load_failed';
   }
-  const messages: AiChatMessage[] = [];
+  const messages: AiThreadEntry[] = [];
   let bytes = 0;
+  let read = 0;
   for (const item of data.slice(0, WINDOW_MESSAGES)) {
-    const body = bodySchema.safeParse(item.body);
-    const text = body.success ? body.data.text : '';
-    bytes += Buffer.byteLength(text, 'utf8');
-    if (messages.length > 0 && bytes > WINDOW_BYTES) break;
-    messages.push({
-      key: item.idempotency_key,
-      sequence: item.sequence,
-      role: item.kind === 'user_message' ? 'user' : 'assistant',
-      status: item.status,
-      text,
-      failure:
-        item.status === 'complete' ? null : turnFailureSentence(body.success ? body.data.failure : undefined),
-    });
+    const shown = messageFromItem(item);
+    bytes += shown?.bytes ?? 0;
+    if (read > 0 && bytes > WINDOW_BYTES) break;
+    read += 1;
+    if (shown) messages.push(shown.entry);
   }
-  const hasOlder = messages.length < data.length;
+  const hasOlder = read < data.length;
   return { messages: bound.after === undefined ? messages.reverse() : messages, hasOlder };
 }

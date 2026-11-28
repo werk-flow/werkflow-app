@@ -5,7 +5,7 @@ import { labStepsForFiles } from '../lab-steps';
 import { scenariosForFiles } from '../measured-scenarios';
 import { changeTrigger, type ChangeTrigger } from './change-triggers';
 import { componentAreaGroups } from './component-areas';
-import { MAINTENANCE_VISIT_SQL_FILES, MAINTENANCE_VISIT_SQL_SCOPES, OFFER_SQL_FILES } from './sql-file-lists';
+import * as sql from './sql-file-lists';
 
 export interface TestGroup {
   readonly id: string;
@@ -415,7 +415,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['service', ['service_boundaries.sql', 'assigned_equipment_search.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
   ['equipment-replacement', ['equipment_replacement_carry_over.sql'], ['service']],
-  ['maintenance-visit-next-actions', MAINTENANCE_VISIT_SQL_FILES, MAINTENANCE_VISIT_SQL_SCOPES],
+  ['maintenance-visit-next-actions', sql.MAINTENANCE_VISIT_SQL_FILES, sql.MAINTENANCE_VISIT_SQL_SCOPES],
   [
     'inventory-ledger',
     [
@@ -440,7 +440,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['inventory'],
   ],
   ['leistung-prices', ['leistung_prices.sql', 'client_price_conditions.sql'], ['commercial', 'customers']],
-  ['offers', OFFER_SQL_FILES, ['commercial', 'customers']],
+  ['offers', sql.OFFER_SQL_FILES, ['commercial', 'customers']],
   ['invoice-drafts', ['invoice_drafts.sql', 'invoice_line_sources.sql'], ['commercial', 'customers']],
   ['invoice-issue', ['invoice_issue.sql', 'invoice_issue_concurrency.sql'], ['commercial', 'documents']],
   ['document-deliveries', ['document_deliveries.sql'], ['commercial', 'documents']],
@@ -464,7 +464,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['work-leads', ['work_leads.sql'], ['work', 'personnel']],
   ['on-call-shifts', ['on_call_shifts.sql'], ['service', 'personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
-  ['rate-limits', ['rate_limits.sql', 'ai_threads.sql', 'ai_turn_charges.sql'], ['*']],
+  ['rate-limits', sql.RATE_LIMIT_SQL_FILES, ['*']],
   ['werkflow-billing-signals', ['werkflow_billing_signals.sql'], ['*']],
   ['werkflow-billing-mails', ['werkflow_billing_mails.sql', 'werkflow_billing_reconciliations.sql'], ['*']],
   ['resend-webhook-events', ['resend_webhook_events.sql'], ['*']],

@@ -127,7 +127,7 @@ export function resetAiTables(world: AiTurnWorld, settings: Row = {}): void {
   signInAs(world, 'employee');
 }
 
-function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
+function answer(world: AiTurnWorld, name: string, args: Row): Outcome | Promise<Outcome> {
   const rows = (table: string): Row[] => tableRows(world, table);
   const organizationId = args.p_organization_id;
   switch (name) {
@@ -138,6 +138,8 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
       return ok(used < Number(args.p_max_attempts));
     }
     case 'start_ai_turn':
+    // A message with files attaches them too (lib/testing/fixtures/ai-file-boundaries.ts models that).
+    case 'start_ai_turn_with_files':
       return startTurn(world, args);
     case 'read_ai_answer_status': {
       const item = rows('ai_thread_items').find(
@@ -181,6 +183,8 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
       if (!isToolCallRow(args)) world.afterAttempt?.(world);
       return ok('attempt');
     }
+    case 'record_ai_tool_item':
+      return recordToolItem(world, args);
     case 'settle_ai_run': {
       const run = rows('ai_runs').find((row) => row.id === args.p_run_id);
       if (run?.status === 'reserved') run.status = args.p_status;
@@ -189,6 +193,77 @@ function answer(world: AiTurnWorld, name: string, args: Row): Outcome {
     default:
       throw new Error(`${name} is outside this fixture`);
   }
+}
+
+const revisionOf = (body: unknown): number =>
+  z.object({ revision: z.number() }).safeParse(body).data?.revision ?? 0;
+
+/**
+ * `record_ai_tool_item`: a row of the caller's run's thread under its key,
+ * changed only to a higher revision, and with a ledger key the call's ledger
+ * row in the same call. The ledger row goes through `world.rpc` as
+ * `record_ai_run_attempt`, so a case that holds or refuses that write holds
+ * or refuses the whole call, as its one transaction does.
+ */
+async function recordToolItem(world: AiTurnWorld, args: Row): Promise<Outcome> {
+  const run = tableRows(world, 'ai_runs').find(
+    (row) =>
+      row.id === args.p_run_id &&
+      row.organization_id === args.p_organization_id &&
+      row.user_id === args.p_user_id,
+  );
+  if (!run) return raise('ai_run_not_found');
+  if (args.p_ledger_key !== undefined) {
+    const claimed = tableRows(world, 'ai_run_attempts').some(
+      (row) => row.organization_id === args.p_organization_id && row.idempotency_key === args.p_ledger_key,
+    );
+    const ledger = await world.rpc({
+      name: 'record_ai_run_attempt',
+      args: {
+        p_organization_id: args.p_organization_id,
+        p_run_id: args.p_run_id,
+        p_idempotency_key: args.p_ledger_key,
+        p_model_id: args.p_model_id,
+        p_prompt_version: args.p_prompt_version,
+        p_input_tokens: 0,
+        p_output_tokens: 0,
+        p_cache_read_tokens: 0,
+        p_cache_write_tokens: 0,
+        p_cost_micro_usd: 0,
+        p_outcome: args.p_outcome,
+      },
+    });
+    if (ledger.error) return { data: null, error: ledger.error };
+    // The first write under a ledger key claims the call's outcome; a later one writes no row and
+    // finds the row only when the first one saved this very row.
+    if (claimed) {
+      const saved = tableRows(world, 'ai_thread_items').find(
+        (row) =>
+          row.thread_id === run.thread_id &&
+          row.idempotency_key === args.p_item_key &&
+          JSON.stringify(row.body) === JSON.stringify(args.p_body),
+      );
+      return ok(saved?.sequence ?? null);
+    }
+  }
+  const all = tableRows(world, 'ai_thread_items');
+  const items = all.filter((row) => row.thread_id === run.thread_id);
+  const existing = items.find((row) => row.idempotency_key === args.p_item_key);
+  const fields = { status: args.p_status, body: args.p_body, detail: args.p_detail ?? null };
+  if (existing) {
+    if (revisionOf(args.p_body) > revisionOf(existing.body)) Object.assign(existing, fields);
+    return ok(existing.sequence);
+  }
+  all.push({
+    ...fields,
+    id: `item-${all.length + 1}`,
+    organization_id: args.p_organization_id,
+    thread_id: run.thread_id,
+    sequence: items.length + 1,
+    kind: args.p_kind,
+    idempotency_key: args.p_item_key,
+  });
+  return ok(items.length + 1);
 }
 
 const isStopped = (item: Row): boolean =>
@@ -317,7 +392,7 @@ function startTurn(world: AiTurnWorld, args: Row): Outcome {
   ]);
 }
 
-function appendItem(
+export function appendItem(
   world: AiTurnWorld,
   args: Row,
   kind: string,
@@ -405,6 +480,7 @@ export async function postTurn(
     organizationId?: string;
     threadId?: string;
     headers?: Record<string, string>;
+    fileIds?: string[];
   } = {},
 ): Promise<Response> {
   const { POST } = await import('@/app/api/ki/threads/[threadId]/turns/route');
@@ -417,6 +493,7 @@ export async function postTurn(
         organizationId: options.organizationId ?? ORGANIZATION_A,
         commandId: options.commandId ?? crypto.randomUUID(),
         text,
+        ...(options.fileIds ? { fileIds: options.fileIds } : {}),
       }),
     },
   );

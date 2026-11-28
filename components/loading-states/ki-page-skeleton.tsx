@@ -1,4 +1,4 @@
-import { KiTimelineSkeleton } from '@/components/ki/ki-timeline';
+import { KiTimelineSkeleton } from '@/components/loading-states/ki-timeline-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';

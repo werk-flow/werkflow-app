@@ -1,5 +1,6 @@
 import { describeFailure } from '@/lib/action-messages';
 import { AI_PRODUCT_NAME } from '@/lib/ai/name';
+import { aiThreadRowSchema } from '@/lib/ai/thread-rows';
 import { z } from '@/lib/zod';
 
 // The browser side of `POST /api/ki/threads/[threadId]/turns`
@@ -14,6 +15,9 @@ const REFUSAL_MESSAGES: Readonly<Record<string, string>> = {
   run_active: 'Eine andere Antwort wird gerade noch geschrieben. Warte, bis sie fertig ist.',
   command_conflict: 'Diese Nachricht wurde schon gesendet. Schick sie bitte noch einmal.',
   too_many_turns: 'Du hast gerade sehr viele Fragen gestellt. Warte etwas und versuch es dann noch einmal.',
+  file_not_found: 'Eine angehängte Datei gibt es nicht mehr. Entferne sie und häng sie neu an.',
+  files_over_cap:
+    'Zu viele oder zu große Dateien für eine Nachricht. Entferne eine und schick sie noch einmal.',
   budget_exhausted: `Das Monatsbudget für ${AI_PRODUCT_NAME} ist aufgebraucht. Im nächsten Monat geht es weiter.`,
 };
 
@@ -50,8 +54,14 @@ export async function stopTurn(input: {
 
 const itemRef = z.object({ id: z.string(), sequence: z.number() });
 const eventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('started'), userItem: itemRef, assistantItem: itemRef }),
+  z.object({
+    type: z.literal('started'),
+    userItem: itemRef,
+    assistantItem: itemRef,
+    files: z.array(z.object({ fileId: z.string(), sequence: z.number() })).optional(),
+  }),
   z.object({ type: z.literal('text'), delta: z.string() }),
+  z.object({ type: z.literal('row'), row: aiThreadRowSchema }),
   z.object({
     type: z.literal('end'),
     status: z.enum(['complete', 'failed', 'cancelled']),
@@ -79,15 +89,17 @@ export async function sendTurn(input: {
   threadId: string;
   commandId: string;
   text: string;
+  /** The uploads the message attaches, in the order shown. */
+  fileIds?: readonly string[];
   signal: AbortSignal;
   onEvent: (event: TurnEvent) => void;
 }): Promise<TurnOutcome> {
-  const { organizationId, threadId, commandId, text, signal, onEvent } = input;
+  const { organizationId, threadId, commandId, text, fileIds, signal, onEvent } = input;
   try {
     const response = await fetch(`/api/ki/threads/${threadId}/turns`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ organizationId, commandId, text }),
+      body: JSON.stringify({ organizationId, commandId, text, ...(fileIds?.length ? { fileIds } : {}) }),
       signal,
     });
     if (!response.ok || !response.body) {

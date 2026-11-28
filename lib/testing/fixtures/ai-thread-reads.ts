@@ -144,7 +144,10 @@ await readTurn(world, await postTurn('Wie entlüfte ich einen Heizkörper?', { c
     });
   const window = await getAiThreadWindow({ organizationId, threadId });
   assert.ok(window.success);
-  const bytes = window.window.messages.reduce((sum, message) => sum + Buffer.byteLength(message.text), 0);
+  const bytes = window.window.messages.reduce(
+    (sum, message) => sum + Buffer.byteLength('text' in message ? message.text : ''),
+    0,
+  );
   assert.ok(bytes <= 256_000, `the window must carry at most 256,000 bytes of text, carried ${bytes}`);
   assert.equal(window.window.hasOlder, true, 'a window cut at its byte cap says that older messages follow');
   resetAiTables(world);
@@ -160,7 +163,8 @@ await readTurn(world, await postTurn('Wie entlüfte ich einen Heizkörper?', { c
   );
   const window = await getAiThreadWindow({ organizationId, threadId: THREAD_ID });
   assert.ok(window.success);
-  const answer = window.window.messages.find((message) => message.key === `${replayed}:assistant`);
+  const found = window.window.messages.find((message) => message.key === `${replayed}:assistant`);
+  const answer = found?.role === 'assistant' ? found : undefined;
   assert.match(answer?.text ?? '', /evil\.example/, 'the replayed answer carries the outside addresses');
   process.stdout.write(`${JSON.stringify({ injectedAnswer: answer?.text })}\n`);
 }

@@ -2,6 +2,7 @@
 
 import { ArrowLeft, Sparkles, SquarePen } from 'lucide-react';
 
+import { KiTimelineSkeleton } from '@/components/loading-states/ki-timeline-skeleton';
 import { PageBody } from '@/components/shared/page-shell';
 import { Button } from '@/components/ui/button';
 import { SectionError } from '@/components/ui/section-error';
@@ -10,7 +11,7 @@ import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import type { AiThreadWindow } from '@/lib/ai/thread-types';
 import { KiComposer } from './ki-composer';
 import { KiThreadList } from './ki-thread-list';
-import { KiTimeline, KiTimelineSkeleton, type TimelineMessage } from './ki-timeline';
+import { KiTimeline, type TimelineEntry } from './ki-timeline';
 import {
   answerMessage,
   type LiveTurn,
@@ -27,19 +28,21 @@ function KiIntro(): React.JSX.Element {
       <Sparkles className="size-6 text-muted-foreground" />
       <p className="font-medium">Hallo, ich bin {AI_PRODUCT_NAME}.</p>
       <p className="text-sm text-muted-foreground">
-        Ich bin eine KI. Frag mich, was du für deine Arbeit wissen willst. Daten in WerkFlow kann ich noch
-        nicht lesen oder ändern.
+        Ich bin eine KI und kann mich irren. Ich finde für dich Aufträge, Kunden und Artikel in WerkFlow,
+        soweit du sie selbst sehen darfst. Ändern kann ich noch nichts.
       </p>
     </div>
   );
 }
 
-/** The thread's saved messages with the running turn's in place of their saved copies. */
-function shownMessages(view: ThreadView | undefined, live: LiveTurn | null): readonly TimelineMessage[] {
-  const saved: readonly TimelineMessage[] = view?.window?.messages ?? [];
+/** The thread's saved entries with the running turn's messages in place of their saved copies. */
+function shownMessages(view: ThreadView | undefined, live: LiveTurn | null): readonly TimelineEntry[] {
+  const saved: readonly TimelineEntry[] = view?.window?.messages ?? [];
   if (!live) return saved;
-  const turn = live.started ? [live.user, answerMessage(live)] : [live.user];
-  return [...saved.filter((message) => !message.key.startsWith(live.commandId)), ...turn];
+  const turn = live.started ? [...live.files, live.user, answerMessage(live)] : [...live.files, live.user];
+  const keys = new Set(turn.map((message) => message.key));
+  // The turn's rows stay: they come saved, from its stream and its live channel.
+  return [...saved.filter((message) => !keys.has(message.key)), ...turn];
 }
 
 function KiThreads({
@@ -67,19 +70,23 @@ function KiThreads({
 }
 
 function KiThread({
+  organizationId,
   threadId,
   view,
   live,
   onBack,
   onRetry,
   onLoadOlder,
+  onAnswer,
 }: {
+  organizationId: string;
   threadId: string;
   view: ThreadView | undefined;
   live: LiveTurn | null;
   onBack: () => void;
   onRetry: (threadId: string) => void;
   onLoadOlder: (threadId: string, beforeSequence?: number) => Promise<unknown>;
+  onAnswer: (text: string) => void;
 }): React.JSX.Element {
   const older = usePendingTask();
   const first = view?.window?.messages[0]?.sequence;
@@ -97,6 +104,7 @@ function KiThread({
       {view?.window || live ? (
         <KiTimeline
           messages={shownMessages(view, live)}
+          thread={{ organizationId, threadId, running: live !== null, onAnswer }}
           unconfirmed={view?.confirmed === false}
           hasOlder={view?.window?.hasOlder ?? false}
           loadingOlder={older.isPending}
@@ -144,17 +152,20 @@ export function KiChat(props: {
               </>
             ) : (
               <KiThread
+                organizationId={props.organizationId}
                 threadId={threadId}
                 view={views[threadId]}
                 live={turn.live?.threadId === threadId ? turn.live : null}
                 onBack={() => openThread(null)}
                 onRetry={show}
                 onLoadOlder={readWindow}
+                onAnswer={(text) => turn.send(text, draft, [], true)}
               />
             )}
           </div>
         </PageBody>
         <KiComposer
+          organizationId={props.organizationId}
           draft={draft}
           running={turn.live !== null && turn.live.threadId === threadId}
           stopping={turn.live !== null && turn.live.stoppedAt !== null}

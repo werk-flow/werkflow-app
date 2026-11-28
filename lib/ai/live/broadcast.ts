@@ -8,6 +8,7 @@ import {
   type KiLiveMessage,
   kiLiveTopic,
 } from '@/lib/ai/live/events';
+import type { AiThreadRow } from '@/lib/ai/thread-types';
 import type { AiTurnEnd, AiTurnSink } from '@/lib/ai/turn';
 import { AI_TURN_FAILURE_MESSAGES } from '@/lib/ai/turn-messages';
 import { type Schedule, timerSchedule } from '@/lib/ai/turn-stream';
@@ -102,19 +103,59 @@ export async function sendKiLiveStop(input: {
         input.commandId,
         { status: 'cancelled', failure: 'stopped', message: AI_TURN_FAILURE_MESSAGES.stopped },
         input.length,
+        [],
       ),
     ],
     2,
   );
 }
 
-function endMessage(command: string, end: AiTurnEnd, length: number): KiLiveMessage {
+function endMessage(command: string, end: AiTurnEnd, length: number, rows: AiThreadRow[]): KiLiveMessage {
   return {
     type: 'end',
     command,
     status: end.status,
     failure: end.status === 'complete' ? null : end.message,
     length,
+    ...(rows.length > 0 ? { rows } : {}),
+  };
+}
+
+/**
+ * What a turn wrote and saved but did not send yet: its text from the
+ * offset sent so far, then the rows saved after it, in order.
+ */
+function createOutbox(command: string) {
+  let pending = '';
+  let rows: KiLiveMessage[] = [];
+  let sent = 0;
+  let saved = 0;
+  const latest = new Map<string, AiThreadRow>();
+  return {
+    text(delta: string): void {
+      pending += delta;
+    },
+    row(row: AiThreadRow): void {
+      rows.push({ type: 'row', command, row });
+      if (row.revision >= (latest.get(row.key)?.revision ?? 0)) latest.set(row.key, row);
+    },
+    /** The turn's latest rows, each at its highest saved revision, at most the end's cap. */
+    rows: (): AiThreadRow[] => [...latest.values()].slice(-50),
+    saved(length: number): void {
+      saved = length;
+    },
+    waiting: (): boolean => pending.length > 0 || rows.length > 0,
+    /** The answer's length once all its text is sent. */
+    length: (): number => sent + pending.length,
+    take(): KiLiveMessage[] {
+      const taken = rows;
+      rows = [];
+      if (!pending) return taken;
+      const text: KiLiveMessage = { type: 'text', command, at: sent, delta: pending, saved };
+      sent += pending.length;
+      pending = '';
+      return [text, ...taken];
+    },
   };
 }
 
@@ -131,9 +172,7 @@ export function createKiLiveBroadcast(
 ): KiLiveBroadcast {
   const topic = kiLiveTopic(input.threadId);
   const { liveSendTimeoutMs } = AI_TURN_LIMITS[input.entryPoint];
-  let pending = '';
-  let sent = 0;
-  let saved = 0;
+  const outbox = createOutbox(input.commandId);
   let ended = false;
   let revoked = false;
   let inFlight: Promise<void> | null = null;
@@ -141,32 +180,18 @@ export function createKiLiveBroadcast(
 
   const post = createPost(topic, send, liveSendTimeoutMs);
 
-  const takeText = (): KiLiveMessage | null => {
-    if (!pending) return null;
-    const message: KiLiveMessage = {
-      type: 'text',
-      command: input.commandId,
-      at: sent,
-      delta: pending,
-      saved,
-    };
-    sent += pending.length;
-    pending = '';
-    return message;
-  };
-
   const dispatch = (messages: KiLiveMessage[]): void => {
     inFlight = post(messages).finally(() => {
       inFlight = null;
-      if (pending && !ended) schedulePump();
+      if (outbox.waiting() && !ended) schedulePump();
     });
   };
 
   const pump = (): void => {
     cancelPump = null;
     if (inFlight || ended) return;
-    const message = takeText();
-    if (message) dispatch([message]);
+    const messages = outbox.take();
+    if (messages.length > 0) dispatch(messages);
   };
 
   function schedulePump(): void {
@@ -187,11 +212,14 @@ export function createKiLiveBroadcast(
     sink: {
       text(delta) {
         if (ended) return;
-        pending += delta;
+        outbox.text(delta);
         schedulePump();
       },
-      saved(length) {
-        saved = length;
+      saved: outbox.saved,
+      row(row) {
+        if (ended) return;
+        outbox.row(row);
+        schedulePump();
       },
       revoked() {
         // The author lost access mid-turn: Realtime may still hold their join, so nothing more is sent.
@@ -204,10 +232,16 @@ export function createKiLiveBroadcast(
       await inFlight;
       if (revoked) return;
       // The stop route told every tab, with the length the database kept; this turn may know less.
-      if (end.status !== 'complete' && end.failure === 'stopped') return;
-      const length = sent + pending.length;
-      const last = takeText();
-      await post([...(last ? [last] : []), endMessage(input.commandId, end, length)], 2);
+      // Its rows still go, so a tool call the stop broke off shows as ended on every tab.
+      if (end.status !== 'complete' && end.failure === 'stopped') {
+        const rows = outbox
+          .rows()
+          .map((row): KiLiveMessage => ({ type: 'row', command: input.commandId, row }));
+        if (rows.length > 0) await post(rows, 2);
+        return;
+      }
+      const length = outbox.length();
+      await post([...outbox.take(), endMessage(input.commandId, end, length, outbox.rows())], 2);
     },
   };
 }

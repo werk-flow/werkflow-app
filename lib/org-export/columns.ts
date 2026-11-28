@@ -21,6 +21,7 @@ type ExcludedTable =
   | 'ai_runs'
   | 'ai_run_attempts'
   | 'ai_organization_settings'
+  | 'ai_thread_files'
   // Account-wide sign-in codes of a person, no business record.
   | 'email_change_challenges'
   // Rate-limit state of a person before any membership exists.
@@ -173,6 +174,8 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   maintenance_service_reports: 'Wartungen_Serviceberichte',
   maintenance_visit_finding_resolutions: 'Wartungen_Befunde_geschlossen',
   maintenance_visit_findings: 'Wartungen_Befunde',
+  offer_acceptance_withdrawals: 'Angebote_Annahmen_zurückgenommen',
+  offer_acceptances: 'Angebote_Annahmen',
   offer_events: 'Angebote_Verlauf',
   offer_positions: 'Angebote_Positionen',
   offer_revisions: 'Angebote_Revisionen',

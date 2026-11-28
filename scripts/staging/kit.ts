@@ -24,6 +24,7 @@ import {
   type StripeFacts,
 } from '../../lib/testing/staging/readers';
 import {
+  RETIRED_MARKER,
   RUN_ORGANIZATION_PATTERN,
   StagingFailure,
   actorRunId,
@@ -32,15 +33,20 @@ import {
   originsFact,
   isRunId,
   namedStep,
+  retentionRefusals,
+  retireReason,
+  retiredAs,
   runActorEmail,
   runMemberEmail,
   runActorsQuery,
   runOrganizationName,
   selectRuns,
+  sweepPlan,
   type ActorRow,
   type Fact,
   type MemberRole,
   type OrganizationRow,
+  type RetireReason,
   type RunRows,
 } from '../../lib/testing/staging/runs';
 import { uuidSchema } from '../../lib/validation/uuid';
@@ -182,7 +188,13 @@ export async function readDev<T extends ReadableTable>(
 }
 
 const actorRows = z.array(
-  z.object({ id: uuidSchema, email: z.string(), created_at: z.string(), run_marker: z.string().nullable() }),
+  z.object({
+    id: uuidSchema,
+    email: z.string(),
+    created_at: z.string(),
+    run_marker: z.string().nullable(),
+    retired_marker: z.string().nullable(),
+  }),
 );
 const organizationRows = z.array(z.object({ id: uuidSchema, name: z.string(), admin_id: uuidSchema }));
 
@@ -196,9 +208,13 @@ async function readRunRows(kit: Kit): Promise<{ actors: ActorRow[]; organization
     ]),
   ]);
   return {
-    actors: actorRows
-      .parse(actors)
-      .map((row) => ({ id: row.id, email: row.email, createdAt: row.created_at, runMarker: row.run_marker })),
+    actors: actorRows.parse(actors).map((row) => ({
+      id: row.id,
+      email: row.email,
+      createdAt: row.created_at,
+      runMarker: row.run_marker,
+      retiredMarker: row.retired_marker,
+    })),
     organizations: organizationRows
       .parse(organizations)
       .map((row) => ({ id: row.id, name: row.name, adminId: row.admin_id })),
@@ -314,13 +330,19 @@ export async function createActor(kit: Kit, runId: string, invitedAs?: MemberRol
  * The run's actor with a new password set through the secret key, so a cleanup works from any machine
  * and after any other machine's attempt. The user must still carry the run's address and run marker.
  */
-async function actorFor(kit: Kit, run: RunRows): Promise<Actor> {
+async function actorFor(kit: Kit, run: RunRows): Promise<Actor | 'retired'> {
   const user = userAnswer.parse(
     await json(await authAdmin(kit, `users/${run.actorId}`), 'Reading the actor'),
   );
   const email = user.email;
   if (actorRunId(email) !== run.runId || user.app_metadata[RUN_MARKER] !== run.runId)
     throw new StagingFailure('The user does not carry its run address and marker; nothing changed.');
+  // Another machine's cleanup retired it after this one read DEV.
+  const retired = retiredAs(user.app_metadata[RETIRED_MARKER]);
+  if (retired !== null) {
+    kit.log('retired', { run: run.runId, actor: run.actorId, reason: retired });
+    return 'retired';
+  }
   const password = newPassword();
   kit.secrets.push(password);
   await json(
@@ -539,15 +561,23 @@ export async function waitFor<T>(
 
 // --- The cleanup: through the app's own deletion paths ---
 
-/** Deletes the actor's organization in its settings, as its Admin does. */
-async function deleteOrganization(page: Page, organizationName: string): Promise<void> {
+/**
+ * Deletes the actor's organization in its settings, as its Admin does, and answers no refusals; or
+ * answers the codes of the app's refusal, which its dialog names instead of asking for the name.
+ */
+async function deleteOrganization(page: Page, organizationName: string): Promise<string[]> {
   await page.goto('/einstellungen/organisation');
   await hydrated(page);
   await page.getByRole('button', { name: 'Organisation löschen', exact: true }).click();
   const dialog = page.getByRole('alertdialog', { name: 'Organisation löschen' });
+  await expect(dialog).toBeVisible({ timeout: TIMEOUT_MS });
+  // The page read the deletion scope before it rendered, so the open dialog already holds its refusal.
+  const refusals = retentionRefusals(await dialog.getAttribute('data-retention-refusals'));
+  if (refusals.length) return refusals;
   await dialog.getByRole('textbox').fill(organizationName);
   await dialog.getByRole('button', { name: 'Endgültig löschen' }).click();
   await expect(page).toHaveURL(/\/onboarding\/start|\/dashboard/, { timeout: TIMEOUT_MS });
+  return [];
 }
 
 /** Deletes the account on the onboarding page, which ends a paid reservation at Stripe first. */
@@ -560,54 +590,191 @@ async function deleteAccount(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/login\?message=account_deleted/, { timeout: TIMEOUT_MS });
 }
 
-/** Removes one run's rows through the app: each organization in its settings, then the account. */
+const SUBSCRIPTION_ID = /^sub_[A-Za-z0-9]+$/;
+const CUSTOMER_ID = /^cus_[A-Za-z0-9]+$/;
+/** The states after which Stripe never debits a subscription again. */
+const ENDED_SUBSCRIPTION_STATES = new Set(['canceled', 'incomplete_expired']);
+
+/**
+ * Cancels a sandbox subscription at once, as the app does before it deletes an organization; one that
+ * already ended stays as it is.
+ */
+async function cancelSandboxSubscription(kit: Kit, subscriptionId: string): Promise<void> {
+  if (!SUBSCRIPTION_ID.test(subscriptionId)) throw new StagingFailure('No subscription id.');
+  const [current] = await readStripe(kit, `subscriptions/${subscriptionId}`);
+  if (ENDED_SUBSCRIPTION_STATES.has(String(current?.status))) return;
+  const response = await call(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${kit.keys.STRIPE_SANDBOX_KEY}` },
+  });
+  const [canceled] = sandboxAnswer(await json(response, 'Cancelling the sandbox subscription'));
+  if (canceled?.status !== 'canceled')
+    throw new StagingFailure(`The sandbox subscription ${subscriptionId} is not canceled.`);
+  kit.log('subscription canceled', { subscription: subscriptionId });
+}
+
+/**
+ * Marks a run's actor as retired in its app metadata, through the secret key that created it. The user
+ * must still carry the run's address and run marker; the write adds the reason and keeps every other key.
+ */
+async function markRetired(kit: Kit, actorId: string, runId: string, reason: RetireReason): Promise<void> {
+  const user = userAnswer.parse(await json(await authAdmin(kit, `users/${actorId}`), 'Reading the actor'));
+  if (actorRunId(user.email) !== runId || user.app_metadata[RUN_MARKER] !== runId)
+    throw new StagingFailure('The user does not carry its run address and marker; nothing changed.');
+  const marked = userAnswer.parse(
+    await json(
+      await authAdmin(kit, `users/${actorId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ app_metadata: { [RETIRED_MARKER]: reason } }),
+      }),
+      'Marking the actor retired',
+    ),
+  );
+  if (marked.app_metadata[RUN_MARKER] !== runId || marked.app_metadata[RETIRED_MARKER] !== reason)
+    throw new StagingFailure(`Actor ${actorId} does not carry its run and retired markers.`);
+  kit.log('retired', { run: runId, actor: actorId, reason });
+}
+
+/**
+ * Retires the run whose organization the app keeps for `reason`. It cancels the organization's sandbox
+ * subscriptions, then marks each member that is a run's actor, and the Admin last, so a cleanup after a
+ * failed step repeats the whole retirement. It writes no DEV row and leaves recorded time as it is.
+ */
+async function retireRun(
+  kit: Kit,
+  admin: Actor,
+  organizationId: string,
+  reason: RetireReason,
+  runActors: readonly ActorRow[],
+): Promise<void> {
+  const organization = await runOrganization(kit, admin);
+  if (organization.id !== organizationId)
+    throw new StagingFailure(`Organization ${organizationId} is not the run's own.`);
+  // The refusal came from the actor's active organization: it is the run's only when the actor
+  // administers no other.
+  await requireAdministered(kit, admin.id, 1);
+  const billing = z
+    .array(
+      z.object({ stripe_customer_id: z.string().nullable(), stripe_subscription_id: z.string().nullable() }),
+    )
+    .parse(
+      await readDev(kit, organization, {
+        table: 'werkflow_subscriptions',
+        columns: ['stripe_customer_id', 'stripe_subscription_id'],
+      }),
+    );
+  // Stripe's own list too: a subscription its webhook has not recorded yet still debits.
+  const subscriptionIds = new Set(billing.flatMap((row) => row.stripe_subscription_id ?? []));
+  for (const { stripe_customer_id: customerId } of billing) {
+    if (customerId === null) continue;
+    if (!CUSTOMER_ID.test(customerId)) throw new StagingFailure('No customer id.');
+    const listed = await readStripe(kit, `subscriptions?customer=${customerId}&status=all&limit=100`);
+    if (listed.length === 100)
+      throw new StagingFailure(`Customer ${customerId} has 100 subscriptions or more.`);
+    for (const { id } of listed) if (typeof id === 'string') subscriptionIds.add(id);
+  }
+  for (const subscriptionId of subscriptionIds) await cancelSandboxSubscription(kit, subscriptionId);
+  const memberIds = new Set(
+    z
+      .array(z.object({ user_id: uuidSchema }))
+      .parse(await readDev(kit, organization, { table: 'organization_members', columns: ['user_id'] }))
+      .map((row) => row.user_id),
+  );
+  // Only a run's own actors carry marks: any other member is never touched.
+  const members = runActors.flatMap((row) => {
+    const runId = actorRunId(row.email);
+    return row.id !== admin.id && memberIds.has(row.id) && runId !== null && row.runMarker === runId
+      ? [{ id: row.id, runId }]
+      : [];
+  });
+  // A member's own organization would be skipped with it: such a member's run is cleaned on its own.
+  for (const member of members) await requireAdministered(kit, member.id, 0);
+  for (const member of members) await markRetired(kit, member.id, member.runId, reason);
+  await markRetired(kit, admin.id, admin.runId, reason);
+}
+
+/** Throws unless the actor administers exactly `expected` organizations on DEV, whatever their names. */
+async function requireAdministered(kit: Kit, actorId: string, expected: number): Promise<void> {
+  const administered = z
+    .array(z.object({ id: uuidSchema }))
+    .parse(
+      await readOnlySql(kit, 'select id from public.organizations where admin_id = $1::uuid', [actorId]),
+    );
+  if (administered.length !== expected)
+    throw new StagingFailure(`Actor ${actorId} administers ${administered.length} organizations.`);
+}
+
+/**
+ * Removes one run's rows through the app: each organization in its settings, then the account. When the
+ * app keeps an organization for recorded working time, it retires the run instead; any other refusal
+ * fails.
+ */
 async function cleanUpRun(
   kit: Kit,
   run: RunRows,
   organizationNames: ReadonlyMap<string, string>,
+  runActors: readonly ActorRow[],
 ): Promise<void> {
+  // A member of an organization retired earlier in this cleanup, or by another machine, went with it.
   const actor = await actorFor(kit, run);
-  await withStagingBrowser(kit, async (page) => {
+  if (actor === 'retired') return;
+  const kept = await withStagingBrowser(kit, async (page) => {
     await signIn(page, actor);
     for (const id of run.organizationIds) {
       const name = organizationNames.get(id);
       if (!name) throw new StagingFailure(`No name for organization ${id}.`);
       // Each deletion moves the active organization to the next one, or to the onboarding page.
-      await deleteOrganization(page, name);
+      const refusals = await deleteOrganization(page, name);
+      if (refusals.length) return { organizationId: id, refusals };
       kit.log('organization deleted', { run: run.runId, organization: id });
     }
     await deleteAccount(page);
+    return null;
   });
-  kit.log('actor deleted', { run: run.runId, actor: run.actorId });
+  if (kept === null) {
+    kit.log('actor deleted', { run: run.runId, actor: run.actorId });
+    return;
+  }
+  const reason = retireReason(kept.refusals);
+  if (reason === null)
+    throw new StagingFailure(
+      `The app keeps organization ${kept.organizationId}: ${kept.refusals.join(',')}.`,
+    );
+  await retireRun(kit, actor, kept.organizationId, reason, runActors);
 }
 
 /**
  * Removes `runId`'s rows, or with `null` every run older than a day, and proves on DEV that they are
- * gone. Answers whether every selected run went.
+ * gone. A retired run is skipped and printed as `retired`. Answers whether every selected run went or
+ * is retired.
  */
 export async function cleanUp(kit: Kit, runId: string | null): Promise<boolean> {
   try {
     const before = await readRunRows(kit);
-    // An Admin's run first: its organization's deletion ends its members' memberships, which their
-    // account deletion waits for.
-    const runs = selectRuns(before.actors, before.organizations, runId, new Date()).sort(
-      (first, second) => second.organizationIds.length - first.organizationIds.length,
-    );
+    const plan = sweepPlan(selectRuns(before.actors, before.organizations, runId, new Date()));
+    for (const run of plan.retired)
+      kit.log('retired', { run: run.runId, actor: run.actorId, reason: run.retired });
     const names = new Map(before.organizations.map((row) => [row.id, row.name]));
     let passed = true;
-    for (const run of runs) {
+    for (const run of plan.clean) {
       try {
-        await cleanUpRun(kit, run, names);
+        await cleanUpRun(kit, run, names, before.actors);
       } catch (error) {
         passed = false;
         kit.log('cleanup failed', { run: run.runId, reason: failureLine(kit, error) });
       }
     }
     const after = await readRunRows(kit);
-    const left = selectRuns(after.actors, after.organizations, runId, new Date());
+    const { clean: left, retired } = sweepPlan(
+      selectRuns(after.actors, after.organizations, runId, new Date()),
+    );
     for (const run of left)
       kit.log('left on DEV', { run: run.runId, organizations: run.organizationIds.length });
-    kit.log('cleanup', { selected: runs.length, left: left.length });
+    kit.log('cleanup', {
+      selected: plan.clean.length + plan.retired.length,
+      retired: retired.length,
+      left: left.length,
+    });
     return passed && left.length === 0;
   } catch (error) {
     // A DEV read that fails proves nothing is gone.

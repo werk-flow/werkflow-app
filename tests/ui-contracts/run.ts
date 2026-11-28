@@ -64,11 +64,12 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^(?:@\/lib\/offers\/(?:send-)?actions|@\/lib\/invoices\/line-source-actions|next\/navigation)$/,
+                  /^(?:@\/lib\/offers\/(?:send-|decision-)?actions|@\/lib\/invoices\/line-source-actions|next\/navigation)$/,
               },
               (args) => {
                 if (
                   args.path === '@/lib/offers/actions' ||
+                  args.path === '@/lib/offers/decision-actions' ||
                   args.importer.endsWith('create-offer-dialog.tsx') ||
                   args.importer.endsWith('offer-article-picker.tsx') ||
                   args.importer.endsWith('offer-sending.tsx')
@@ -320,8 +321,13 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             });
             // The WerkFlow KI chat sends its turns, and hears its live channel, through stand-ins the spec drives.
             builder.onResolve({ filter: /^\.\/(?:turn-client|use-ki-live)$/ }, (args) => {
-              if (args.importer.endsWith('components/ki/use-ki-chat.ts'))
+              if (/components\/ki\/use-ki-(?:chat|stop)\.ts$/.test(args.importer))
                 return { path: join(import.meta.dir, 'ki-chat-boundaries.tsx') };
+            });
+            // The composer's uploads wait for the spec; discarding one records it.
+            builder.onResolve({ filter: /^@\/lib\/ai\/files\/(?:upload-client|actions)$/ }, (args) => {
+              if (args.importer.endsWith('components/ki/ki-attachments.tsx'))
+                return { path: join(import.meta.dir, 'ki-files-boundaries.ts') };
             });
             // The WerkFlow KI card switches through a held stand-in whose response renders the route.
             builder.onResolve({ filter: /^@\/lib\/ai\/settings-actions$/ }, () => ({
