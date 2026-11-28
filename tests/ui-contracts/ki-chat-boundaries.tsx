@@ -77,12 +77,17 @@ export function useKiLive(input: {
   }, [threadId, onEvent, onJoin]);
 }
 
-/** A listed thread opens with the window the spec set, or empty: the spec drives each turn. Any other thread is not the person’s. */
+/**
+ * A listed thread, or one the spec set a window for, opens with that window, or empty: the spec drives each
+ * turn. Any other thread is not the person’s.
+ */
 function answerKiThreadWindow(threadId: unknown) {
   if (window.uiContractKiReadsFail) return { success: false, error: window.uiContractKiReadsFail };
-  const listed = KI_CONTRACT_THREADS.find((thread) => thread.id === threadId);
-  return listed
-    ? { success: true, window: window.uiContractKiWindows[listed.id] ?? { messages: [], hasOlder: false } }
+  const id = typeof threadId === 'string' ? threadId : '';
+  const known =
+    KI_CONTRACT_THREADS.some((thread) => thread.id === id) || Object.hasOwn(window.uiContractKiWindows, id);
+  return known
+    ? { success: true, window: window.uiContractKiWindows[id] ?? { messages: [], hasOlder: false } }
     : { success: false, error: 'not_found' };
 }
 

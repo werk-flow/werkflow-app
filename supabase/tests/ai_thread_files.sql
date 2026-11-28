@@ -244,9 +244,9 @@ $$;
 
 -- A changed resend of a refused message (werk-flow/werkflow-planning#623): the
 -- message was saved with two files, the person removed one and sent again as
--- a new command. The file they kept moves to the new message, with one item;
--- the removed one stays where it was. Only a refused, unanswered message of
--- the same thread gives a file up.
+-- a new command. The file they kept moves to the new message, and the earlier
+-- item stays as the record of what was sent; the removed one stays where it
+-- was. Only a refused, unanswered message of the same thread gives a file up.
 do $$
 declare
   v_org constant uuid := 'af000000-0000-4000-8000-000000000010';
@@ -271,9 +271,9 @@ begin
   end if;
   if (select array_agg(item.idempotency_key order by item.sequence) from public.ai_thread_items item
       where item.thread_id = v_thread) is distinct from array[
-        'cmd-6:file:' || v_removed, 'cmd-6:user', 'cmd-7:file:' || v_kept, 'cmd-7:user'
+        'cmd-6:file:' || v_kept, 'cmd-6:file:' || v_removed, 'cmd-6:user', 'cmd-7:file:' || v_kept, 'cmd-7:user'
       ] then
-    raise exception 'The kept file did not move to the changed resend, once, before its message';
+    raise exception 'The changed resend did not get the kept file before its message, or an item went';
   end if;
   if (select file.item_id from public.ai_thread_files file where file.id = v_kept) is distinct from (
       select item.id from public.ai_thread_items item where item.idempotency_key = 'cmd-7:file:' || v_kept)

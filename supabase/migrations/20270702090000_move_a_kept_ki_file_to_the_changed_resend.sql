@@ -6,11 +6,14 @@
 -- added, it is a new command, and until now the server refused every file
 -- the first command had attached ('ai_file_not_found'). Now a file still on
 -- the author's refused, unanswered message in the same thread moves to the
--- new message: its item there goes, the new message gets one, and the file
--- row follows. A file keeps one item, and its bytes stay. The new item names
--- the commands the file came from, and such a command never starts: its
--- message lost files it was sent with. A file of an answered message, of
--- another thread, of another person or organization still refuses.
+-- new message: the new message gets a file item, and the file row points at
+-- it, so the file belongs to one message and its bytes stay. The earlier item
+-- stays as the record of what was sent, so the thread's sequence keeps no gap
+-- (a live cursor reads a gap as unread); the page shows a file once, with its
+-- latest message. The new item names the commands the file came from, and
+-- such a command never starts: its message lost files it was sent with. A
+-- file of an answered message, of another thread, of another person or
+-- organization still refuses.
 --
 -- Prevention: Tier 1 (this function is the only path that attaches a file),
 -- Tier 2 supabase/tests/ai_thread_files.sql.
@@ -19,8 +22,8 @@
 -- p_command_id, one complete `file` item each, in the order given, and
 -- creates the thread when it is new. A file is the author's unsent upload, or
 -- one still on a message of this thread whose command was saved and never
--- answered; that file's item goes, so the file keeps one item, and the new
--- item lists that command under `movedFrom`. Refusals:
+-- answered; the file row moves to the new item, which lists that command
+-- under `movedFrom`. Refusals:
 -- 'ai_files_over_turn_cap' (too many files or bytes for one message) and
 -- 'ai_file_not_found' (no such file of the author: another person's, another
 -- organization's, gone, or on an answered message or another thread). Only
@@ -89,13 +92,8 @@ begin
       ) || case when v_moved_from is null then '{}'::jsonb else jsonb_build_object('movedFrom', v_moved_from) end,
       p_command_id || ':file:' || v_file.id::text
     );
-    -- The row follows first: removing the earlier item would take the file row with it.
     update public.ai_thread_files file set item_id = v_item.item_id
     where file.id = v_file.id and file.organization_id = p_organization_id;
-    if v_file.item_id is not null then
-      delete from public.ai_thread_items item
-      where item.id = v_file.item_id and item.organization_id = p_organization_id;
-    end if;
   end loop;
 end;
 $$;

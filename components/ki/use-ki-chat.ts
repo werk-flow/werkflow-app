@@ -604,18 +604,15 @@ function settleRefused(turn: LiveTurn, outcome: TurnOutcome, host: TurnHost): vo
 }
 
 /**
- * The thread and command of a message. Only a message sent again unchanged
- * after its refusal, the same text with the same files in the same order, is
- * the same command in the same thread. A changed one from the new chat goes
- * to the refused message's thread while it keeps one of its files, which
- * moves there from that message; otherwise it starts a new thread.
+ * The thread and command of a message: only an unchanged resend after a refusal is the same command. From the
+ * new chat, it or a changed one that keeps a file of it goes to the refused message's thread (`earlier`).
  */
 function commandFor(
   text: string,
   uploads: readonly AiUploadedFile[],
   host: TurnHost,
   refused: RetryCommand | undefined,
-): { target: string; commandId: string } {
+): { target: string; commandId: string; earlier: boolean } {
   const retry =
     refused?.text === text &&
     sameFiles(refused.fileIds, uploads) &&
@@ -623,9 +620,11 @@ function commandFor(
       ? refused
       : undefined;
   const keeps = uploads.some((upload) => refused?.fileIds.includes(upload.fileId)) ? refused : undefined;
+  const earlier = host.threadId === null ? (retry ?? keeps)?.threadId : undefined;
   return {
-    target: host.threadId ?? (retry ?? keeps)?.threadId ?? crypto.randomUUID(),
+    target: host.threadId ?? earlier ?? crypto.randomUUID(),
     commandId: retry?.commandId ?? crypto.randomUUID(),
+    earlier: earlier !== undefined,
   };
 }
 
@@ -729,7 +728,9 @@ function useLiveTurn(host: TurnHost) {
         return setError({ draft, message: describeTurnRefusal('run_active') });
       }
       clears.current = draftClears();
-      const { target, commandId } = commandFor(text, uploads, host, takeRetry(draft));
+      const { target, commandId, earlier } = commandFor(text, uploads, host, takeRetry(draft));
+      // The page loads what that thread holds. Read before the turn's stamp, a denial takes nothing off the page.
+      if (earlier) void host.readWindow(target);
       invalidateStop();
       holdMessage({ draft, threadId: target, commandId, text }, uploads);
       host.supersedeReads(target);

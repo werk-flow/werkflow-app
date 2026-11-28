@@ -319,7 +319,7 @@ test('a changed resend after a refusal carries the file it still shows, and each
   await expect(cards('Aufmaß.pdf')).toHaveCount(1);
   await expect(cards('Skizze.pdf')).toHaveCount(1);
 
-  // The server moved the kept file to the new message; the page shows it there, once.
+  // The server moved the kept file to the new message and kept the earlier item; the page shows the file once.
   const command = resent?.commandId ?? '';
   await page.evaluate(
     ({ thread, read }) => {
@@ -330,6 +330,7 @@ test('a changed resend after a refusal carries the file it still shows, and each
       read: {
         hasOlder: false,
         messages: [
+          fileItem(refused.commandId, KEPT, 'Aufmaß.pdf', 1),
           fileItem(refused.commandId, REMOVED, 'Skizze.pdf', 2),
           {
             key: `${refused.commandId}:user`,
@@ -378,6 +379,60 @@ test('a changed resend from a new chat goes to the thread its refused message wa
   expect(resent?.threadId).toBe(first?.threadId);
   expect(resent?.fileIds).toEqual([KEPT]);
   expect(resent?.commandId).not.toBe(first?.commandId);
+});
+
+test('after a reload, a changed resend from the new chat shows the refused message it joins', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'ki-chat');
+  const text = 'Welche Teile fehlen?';
+  const first = await sendTwoFiles(page, text);
+  if (!first) throw new Error('The message was not sent.');
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'refused', message: 'Gerade nicht.' }));
+
+  // The route saved the refused message with both files in a new thread; the page reloads.
+  await openContractFixture(page, 'ki-chat');
+  await page.evaluate(
+    ({ thread, read }) => {
+      window.uiContractKiWindows[thread] = read;
+    },
+    {
+      thread: first.threadId,
+      read: {
+        hasOlder: false,
+        messages: [
+          fileItem(first.commandId, KEPT, 'Aufmaß.pdf', 1),
+          fileItem(first.commandId, REMOVED, 'Skizze.pdf', 2),
+          {
+            key: `${first.commandId}:user`,
+            sequence: 3,
+            role: 'user',
+            status: 'complete',
+            text,
+            failure: null,
+          },
+        ],
+      } satisfies AiThreadWindow,
+    },
+  );
+  await attached(page).getByRole('button', { name: 'Skizze.pdf entfernen' }).click();
+  await composer(page).fill('Welche Teile fehlen fürs Aufmaß?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  const [resent] = await page.evaluate(() => window.uiContractKiTurn.calls);
+  expect(resent?.threadId).toBe(first.threadId);
+
+  // The answer completes before any live event: the refused message and the file it kept still show.
+  await emit(page, {
+    type: 'started',
+    userItem: { id: 'u', sequence: 5 },
+    assistantItem: { id: 'a', sequence: 6 },
+    files: [{ fileId: KEPT, sequence: 4 }],
+  });
+  await emit(page, { type: 'end', status: 'complete' });
+  await page.evaluate(() => window.uiContractKiTurn.resolve?.({ kind: 'answered' }));
+  await expect(timeline(page).getByText(text, { exact: true })).toBeVisible();
+  await expect(timeline(page).getByRole('listitem').filter({ hasText: 'Skizze.pdf' })).toHaveCount(1);
+  await expect(timeline(page).getByRole('listitem').filter({ hasText: 'Aufmaß.pdf' })).toHaveCount(1);
 });
 
 test('a removed file keeps its place until the server removed it, and an upload on its way can be cancelled', async ({
