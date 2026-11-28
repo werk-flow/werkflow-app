@@ -11,7 +11,7 @@ import {
 } from '@/lib/testing/time-correction-arbitraries';
 import { createActivitySelection } from '@/lib/time-tracking/segments';
 import type { TimeActivitySelection, TimeSegmentKind } from '@/lib/time-tracking/types';
-import { mergeCorrectionProposal } from './merge-proposal';
+import { mergeApplicationCorrection, mergeCorrectionProposal } from './merge-proposal';
 import { splitCorrectionFactsAtMidnight } from './timeline-validation';
 import type { TimeCorrectionFact, TimeCorrectionSnapshot } from './types';
 
@@ -256,5 +256,121 @@ describe('An edit of recorded time', () => {
     const patch = correctionFact('patch', 'clock_out', at('2026-01-15T22:00:00Z'), contextOf(activity));
     const merged = mergeCorrectionProposal('edit', before, snapshot([patch]));
     expect(clockMinutes(merged?.facts ?? [])).toEqual({ work: 150, rest: 30 });
+  });
+});
+
+// "Corrections": a correction of time that came from an approved correction changes exactly the
+// interval it names. Every other interval of the application stays as it was, or it is refused.
+
+/** An approved correction of 2–4 separate intervals, each one activity or one with a break, in time order. */
+const applicationArbitrary = fc
+  .array(
+    fc.tuple(
+      fc.integer({ min: 1, max: 120 }),
+      fc.integer({ min: 30, max: 180 }),
+      fc.boolean(),
+      fc.constantFrom(...ACTIVITIES),
+    ),
+    { minLength: 2, maxLength: 4 },
+  )
+  .map((shapes) => {
+    let cursor = Date.parse('2026-10-14T04:00:00.000Z');
+    const facts: TimeCorrectionFact[] = [];
+    const intervals = shapes.map(([gap, minutes, withBreak, activity], index) => {
+      const start = cursor + gap * MINUTE_MS;
+      cursor = start + minutes * MINUTE_MS;
+      const context = contextOf(activity);
+      const from = facts.length;
+      facts.push(correctionFact(`i${index}-in`, 'clock_in', start, context));
+      if (withBreak) {
+        facts.push(correctionFact(`i${index}-bs`, 'break_start', start + 10 * MINUTE_MS, context));
+        facts.push(correctionFact(`i${index}-be`, 'break_end', start + 20 * MINUTE_MS, context));
+      }
+      facts.push(correctionFact(`i${index}-out`, 'clock_out', cursor, context));
+      return { from, to: facts.length, withBreak };
+    });
+    return { before: snapshot(facts), intervals };
+  });
+
+/** The application with a drawn target fact and the interval that holds it. */
+const targetedApplicationArbitrary = fc.tuple(applicationArbitrary, fc.nat()).map(([application, draw]) => {
+  const target = draw % application.before.facts.length;
+  const interval = application.intervals.find(({ from, to }) => target >= from && target < to);
+  const fact = application.before.facts[target];
+  if (!interval || !fact) throw new Error('Every fact lies in an interval.');
+  return { ...application, target, fact, interval };
+});
+
+const correctApplication = (
+  kind: Parameters<typeof mergeApplicationCorrection>[0]['kind'],
+  before: TimeCorrectionSnapshot,
+  factId: string,
+  proposed: TimeCorrectionFact[],
+) =>
+  mergeApplicationCorrection({ kind, before, proposed: snapshot(proposed), factId, newFactIdPrefix: 'new' });
+
+describe('A correction of one interval of an approved correction', () => {
+  test('that edits changes only the time of the fact it names', () => {
+    fc.assert(
+      fc.property(
+        targetedApplicationArbitrary,
+        fc.integer({ min: 1, max: 5 }),
+        ({ before, target, fact }, minutes) => {
+          const timestamp = new Date(Date.parse(fact.timestamp) + minutes * MINUTE_MS).toISOString();
+          const result = correctApplication('edit', before, fact.factId, [
+            { ...fact, factId: 'patch', timestamp },
+          ]);
+          expect(result).toEqual({
+            success: true,
+            snapshot: snapshot(before.facts.with(target, { ...fact, timestamp })),
+          });
+        },
+      ),
+    );
+  });
+
+  test('that deletes, splits or reallocates changes only its interval, or is refused inside a session with a break', () => {
+    fc.assert(
+      fc.property(
+        targetedApplicationArbitrary,
+        fc.constantFrom('delete' as const, 'split' as const, 'reallocate' as const),
+        ({ before, fact, interval }, kind) => {
+          const start = before.facts[interval.from];
+          const end = before.facts[interval.to - 1];
+          if (!start || !end) throw new Error('An interval has a start and an end.');
+          const middle = new Date(
+            (Date.parse(start.timestamp) + Date.parse(end.timestamp)) / 2,
+          ).toISOString();
+          const proposed =
+            kind === 'delete'
+              ? []
+              : kind === 'reallocate'
+                ? [{ ...start, jobId: 'job-new' }]
+                : [start, { ...end, timestamp: middle }, { ...start, timestamp: middle }, end];
+          const result = correctApplication(kind, before, fact.factId, proposed);
+          if (interval.withBreak) {
+            expect(result).toEqual({ success: false, error: 'time_correction_multiple_intervals' });
+            return;
+          }
+          if (!result.success) throw new Error(result.error);
+          const { facts } = result.snapshot;
+          const after = facts.length - (before.facts.length - interval.to);
+          expect(facts.slice(0, interval.from)).toEqual(before.facts.slice(0, interval.from));
+          expect(facts.slice(after)).toEqual(before.facts.slice(interval.to));
+          expect(new Set(facts.map((item) => item.factId)).size).toBe(facts.length);
+        },
+      ),
+    );
+  });
+
+  test('that reassigns is refused, so no application is moved in part', () => {
+    fc.assert(
+      fc.property(targetedApplicationArbitrary, ({ before, fact }) => {
+        const result = correctApplication('reassign', before, fact.factId, [
+          { ...fact, employeeRecordId: 'other-record', userId: 'other' },
+        ]);
+        expect(result).toEqual({ success: false, error: 'time_correction_multiple_intervals' });
+      }),
+    );
   });
 });

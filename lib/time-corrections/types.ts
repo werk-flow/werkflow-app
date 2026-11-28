@@ -168,6 +168,15 @@ export function isTimeCorrectionSnapshot(value: Json): value is TimeCorrectionSn
   );
 }
 
+const correctionEntryIdPrefix = (applicationId: string) => `correction:${applicationId}:`;
+
+/** The applied fact an entry of an approved correction shows (`correctionFactToEntry`); null for any other entry. */
+export function correctionFactIdOf(entry: TimeEntry): string | null {
+  if (!entry.correctionApplicationId) return null;
+  const prefix = correctionEntryIdPrefix(entry.correctionApplicationId);
+  return entry.id.startsWith(prefix) ? entry.id.slice(prefix.length) || null : null;
+}
+
 export function correctionFactToEntry(
   fact: TimeCorrectionFact,
   application: Pick<
@@ -176,7 +185,7 @@ export function correctionFactToEntry(
   >,
 ): TimeEntry {
   return {
-    id: `correction:${application.applicationId}:${fact.factId}`,
+    id: `${correctionEntryIdPrefix(application.applicationId)}${fact.factId}`,
     userId: fact.userId,
     organizationId: '',
     entryType: fact.entryType,

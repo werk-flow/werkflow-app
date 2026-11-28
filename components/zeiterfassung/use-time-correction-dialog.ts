@@ -18,7 +18,7 @@ import {
 } from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry, TimeSegmentKind } from '@/lib/time-tracking/types';
 import { formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
-import { correctionSource } from '@/lib/time-corrections/entry-source';
+import { entryCorrectionTarget } from '@/lib/time-corrections/entry-source';
 import { buildTimelineFacts } from '@/lib/time-corrections/timeline';
 import type { CorrectionOperation } from '@/components/correction-operation';
 import { buildTimeCorrectionProposedFacts } from './time-correction-dialog-facts';
@@ -460,7 +460,7 @@ export function useTimeCorrectionDialogForm({
     enabled: sessionState.open && !entry,
   });
 
-  const source = useMemo(() => correctionSource(entry), [entry]);
+  const source = useMemo(() => entryCorrectionTarget(entry), [entry]);
 
   const submit = async () => {
     if (!entry) setAttempted(true);

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { TimeEntry } from '@/lib/time-tracking/types';
-import { correctionSource } from './entry-source';
+import { correctionSource, entryCorrectionTarget } from './entry-source';
 import { calendarCorrectionBoundaries } from './calendar-draft';
 import { correctionFactToEntry } from './types';
 
@@ -25,6 +25,12 @@ const entry = correctionFactToEntry(
 
 test('Verlauf can correct added time using the same application source as the calendar', () => {
   expect(correctionSource(entry)).toEqual({ kind: 'correction_application', id: 'application' });
+  expect(entryCorrectionTarget(entry)).toEqual({
+    kind: 'correction_application',
+    id: 'application',
+    factId: 'fact',
+  });
+  expect(entryCorrectionTarget({ ...entry, id: 'unrelated' })).toBeNull();
   expect(
     calendarCorrectionBoundaries({ sourceEntries: [entry], updates: [] }, [
       { userId: 'user', employeeRecordId: 'employee' },
