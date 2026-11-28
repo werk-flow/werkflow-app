@@ -179,7 +179,7 @@ function roleCaptures(role: 'admin' | 'buero'): OpenSet['captures'] {
       id: `${role}-nachlass-editor`,
       ...page,
       view: { kind: 'page' },
-      reveal: 'Von den normalen Positionen, ohne Bedarfs- und Alternativpositionen.',
+      reveal: 'Vom Titel zählen nur die normalen Positionen, keine Bedarfs- oder Alternativpositionen.',
     },
     { id: `${role}-nachlass-kalkulation`, ...page, view: { kind: 'page' }, act: showCalculation },
     {

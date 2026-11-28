@@ -21,8 +21,8 @@ const DIRECTION_LABELS: Record<PositionForm['adjustment'], string> = {
 };
 
 const SCOPE_LABELS: Record<PositionForm['adjustmentScope'], string> = {
-  titel: 'Prozent vom Titel',
-  angebot: 'Prozent vom Angebot',
+  titel: 'Titel',
+  angebot: 'Angebot',
   betrag: 'Fester Betrag',
 };
 
@@ -148,8 +148,8 @@ export function PositionTaxField({
 /**
  * A Nachlass or Zuschlag: its direction, what it is of, its percentage or its
  * fixed net amount with its VAT rate, and its amount, which counts in the
- * Titel's sum. A percentage covers the normal Positionen only; the
- * description says so.
+ * Titel's sum. A percentage covers the normal Positionen only; the line
+ * below says so.
  */
 export function AdjustmentFields({
   fieldId,
@@ -168,65 +168,73 @@ export function AdjustmentFields({
 }) {
   const fixed = position.adjustmentScope === 'betrag';
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-end">
-      <ChoiceField
-        id={`${fieldId('percent')}-direction`}
-        label="Art"
-        value={position.adjustment}
-        labels={DIRECTION_LABELS}
-        onChange={(direction) => onChange(withAdjustmentDirection(position, direction))}
-        disabled={disabled}
-      />
-      <ChoiceField
-        id={`${fieldId('percent')}-scope`}
-        label="Bezogen auf"
-        value={position.adjustmentScope}
-        labels={SCOPE_LABELS}
-        onChange={(adjustmentScope) => onChange({ ...position, adjustmentScope })}
-        disabled={disabled}
-      />
-      {fixed ? (
-        <>
-          <Field label="Betrag netto" htmlFor={fieldId('price')} required error={errors[fieldId('price')]}>
+    <>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-end">
+        <ChoiceField
+          id={`${fieldId('percent')}-direction`}
+          label="Art"
+          value={position.adjustment}
+          labels={DIRECTION_LABELS}
+          onChange={(direction) => onChange(withAdjustmentDirection(position, direction))}
+          disabled={disabled}
+        />
+        <ChoiceField
+          id={`${fieldId('percent')}-scope`}
+          label="Bezogen auf"
+          value={position.adjustmentScope}
+          labels={SCOPE_LABELS}
+          onChange={(adjustmentScope) => onChange({ ...position, adjustmentScope })}
+          disabled={disabled}
+        />
+        {fixed ? (
+          <>
+            <Field label="Betrag netto" htmlFor={fieldId('price')} required error={errors[fieldId('price')]}>
+              <Input
+                inputMode="decimal"
+                autoComplete="off"
+                value={position.price}
+                onChange={(event) => onChange({ ...position, price: event.target.value })}
+                placeholder="0,00"
+                disabled={disabled}
+              />
+            </Field>
+            <PositionTaxField
+              id={`${fieldId('price')}-tax`}
+              position={position}
+              onChange={onChange}
+              disabled={disabled}
+            />
+          </>
+        ) : (
+          <Field
+            label="Prozent"
+            htmlFor={fieldId('percent')}
+            required
+            error={errors[fieldId('percent')]}
+            className="col-span-2"
+          >
             <Input
               inputMode="decimal"
               autoComplete="off"
-              value={position.price}
-              onChange={(event) => onChange({ ...position, price: event.target.value })}
-              placeholder="0,00"
+              value={position.percent}
+              onChange={(event) => onChange({ ...position, percent: event.target.value })}
+              placeholder="zum Beispiel 3"
               disabled={disabled}
             />
           </Field>
-          <PositionTaxField
-            id={`${fieldId('price')}-tax`}
-            position={position}
-            onChange={onChange}
-            disabled={disabled}
-          />
-        </>
-      ) : (
-        <Field
-          label="Prozent"
-          htmlFor={fieldId('percent')}
-          required
-          error={errors[fieldId('percent')]}
-          description="Von den normalen Positionen, ohne Bedarfs- und Alternativpositionen."
-          className="col-span-2"
-        >
-          <Input
-            inputMode="decimal"
-            autoComplete="off"
-            value={position.percent}
-            onChange={(event) => onChange({ ...position, percent: event.target.value })}
-            placeholder="zum Beispiel 3"
-            disabled={disabled}
-          />
-        </Field>
+        )}
+        <p className="col-span-2 text-right text-sm font-medium tabular-nums sm:col-span-1 sm:min-w-28 sm:pb-2">
+          <span className="sr-only">Betrag netto: </span>
+          {figures === null ? '–' : formatEuroCents(figures.saleCents)}
+        </p>
+      </div>
+      {!fixed && (
+        <p className="text-xs text-muted-foreground">
+          {position.adjustmentScope === 'titel'
+            ? 'Vom Titel zählen nur die normalen Positionen, keine Bedarfs- oder Alternativpositionen.'
+            : 'Vom ganzen Angebot zählen nur die normalen Positionen, keine Bedarfs- oder Alternativpositionen.'}
+        </p>
       )}
-      <p className="col-span-2 text-right text-sm font-medium tabular-nums sm:col-span-1 sm:min-w-28 sm:pb-2">
-        <span className="sr-only">Betrag netto: </span>
-        {figures === null ? '–' : formatEuroCents(figures.saleCents)}
-      </p>
-    </div>
+    </>
   );
 }
