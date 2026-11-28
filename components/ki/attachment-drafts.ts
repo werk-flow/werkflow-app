@@ -1,6 +1,6 @@
 'use client';
 
-import { readDraft, writeDraft } from '@/lib/ai/chat-drafts';
+import { draftClears, readDraft, writeDraft } from '@/lib/ai/chat-drafts';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import type { AiUploadedFile } from '@/lib/ai/files/types';
@@ -44,6 +44,48 @@ export function writeAttachments(draft: string, uploads: readonly AiUploadedFile
   writeDraft(attachmentsKey(draft), uploads.length > 0 ? JSON.stringify(uploads) : '');
 }
 
+/** A removed upload whose discard the server has not answered: it keeps its place, since a refused one comes back. */
+type Removal = { fileId: string; draft: string; sizeBytes: number };
+
+/**
+ * The removals the server has not answered, with the drafts they keep a place
+ * in. Memory only: they outlive the composer through a client-side navigation,
+ * and a reload ends the wait for the answer, after which nothing comes back.
+ * A sign-out's clear ends them too: their files went with the drafts.
+ */
+let removals: readonly (Removal & { clears: number })[] = [];
+
+export function holdRemoval(removal: Removal): void {
+  removals = [...removals, { ...removal, clears: draftClears() }];
+}
+
+/** Frees the place once the server answered; a refused removal's file comes back after it. */
+export function releaseRemoval(fileId: string): void {
+  removals = removals.filter((removal) => removal.fileId !== fileId);
+}
+
+export function pendingRemovals(draft: string): readonly Removal[] {
+  return removals.filter((removal) => removal.draft === draft && removal.clears === draftClears());
+}
+
+/** Why a removal of the draft's file failed, for whichever composer shows the draft when the file comes back. */
+let refusedRemovals: readonly { draft: string; message: string; clears: number }[] = [];
+
+/** Keeps or, with null, drops the draft's refused removal; a sign-out's clear ends it with the file's name. */
+export function holdRemovalRefusal(draft: string, message: string | null): void {
+  refusedRemovals = [
+    ...refusedRemovals.filter((refusal) => refusal.draft !== draft),
+    ...(message ? [{ draft, message, clears: draftClears() }] : []),
+  ];
+}
+
+export function removalRefusal(draft: string): string | null {
+  return (
+    refusedRemovals.find((refusal) => refusal.draft === draft && refusal.clears === draftClears())?.message ??
+    null
+  );
+}
+
 const moveListeners = new Set<(from: string, to: string) => void>();
 
 /** Hears each move of a draft's uploads, so an upload still on its way follows its draft. */
@@ -52,13 +94,19 @@ export function onAttachmentsMoved(listener: (from: string, to: string) => void)
   return () => moveListeners.delete(listener);
 }
 
-/** Moves a draft's uploads behind those of another draft: a new chat's, once its thread exists. */
+/** Moves a draft's uploads and pending removals behind those of another draft: a new chat's, once its thread exists. */
 export function moveAttachments(from: string, to: string): void {
   const moved = readAttachments(from);
   if (moved.length > 0) {
     writeAttachments(from, []);
     writeAttachments(to, [...readAttachments(to), ...moved]);
   }
+  removals = removals.map((removal) => (removal.draft === from ? { ...removal, draft: to } : removal));
+  // A refused removal's reason goes with the file it brought back.
+  if (refusedRemovals.some((refusal) => refusal.draft === from))
+    refusedRemovals = refusedRemovals
+      .filter((refusal) => refusal.draft !== to)
+      .map((refusal) => (refusal.draft === from ? { ...refusal, draft: to } : refusal));
   for (const listener of moveListeners) listener(from, to);
 }
 

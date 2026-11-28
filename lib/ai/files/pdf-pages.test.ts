@@ -54,6 +54,17 @@ describe('the page count of an uploaded PDF', () => {
     expect(countPdfPages(await compressedWithFilter(3, '/FlateDecodeX'))).toBeNull();
   });
 
+  test('a longer filter name that starts with FlateDecode is not taken for Flate', async () => {
+    // A name ends only at white space or a delimiter (PDF 32000-1, 7.2.2): `-` is a regular character.
+    expect(countPdfPages(await compressedWithFilter(3, '/FlateDecode-X'))).toBeNull();
+    expect(countPdfPages(await compressedWithFilter(3, '/FlateDecode.X'))).toBeNull();
+    expect(countPdfPages(await compressedWithFilter(3, '/FlateDecode/Length'))).toBe(3);
+    expect(countPdfPages(await compressedWithFilter(3, '/FlateDecode>>'))).toBe(3);
+    // PDF white space is its own six bytes: NUL ends a name, a no-break space (0xA0) does not.
+    expect(countPdfPages(await compressedWithFilter(3, '[/FlateDecode\u0000]'))).toBe(3);
+    expect(countPdfPages(await compressedWithFilter(3, '[/FlateDecode\u00a0]'))).toBeNull();
+  });
+
   test('object stream indexes that list more objects than the bound are not read', async () => {
     // 100,001 entries in an index of zeros: the index is refused before any entry is kept.
     const file = Buffer.concat([Buffer.from(await pdf(1, false)), objectStreamOf(1024, 100_001)]);

@@ -4,7 +4,7 @@
 // stands in for the thread's live channel (components/ki/use-ki-live.ts): the
 // spec sees which thread the page joined and sends its events. The thread
 // reads go to `/api/background-read`, which the spec routes.
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { KiChat } from '@/components/ki/ki-chat';
 import { describeTurnRefusal, type TurnEvent, type TurnOutcome } from '@/components/ki/turn-client';
@@ -46,6 +46,8 @@ declare global {
       emit: ((event: KiLiveEvent) => void) | null;
       join: (() => void) | null;
     };
+    /** Set by the fixture: false takes the chat off the page, as a client-side navigation away does; true brings it back. */
+    uiContractKiShowChat: (shown: boolean) => void;
   }
 }
 
@@ -81,12 +83,17 @@ export function useKiLive(input: {
   }, [threadId, onEvent, onJoin]);
 }
 
-/** A listed thread opens with the window the spec set, or empty: the spec drives each turn. Any other thread is not the person’s. */
+/**
+ * A listed thread, or one the spec set a window for, opens with that window, or empty: the spec drives each
+ * turn. Any other thread is not the person’s.
+ */
 function answerKiThreadWindow(threadId: unknown) {
   if (window.uiContractKiReadsFail) return { success: false, error: window.uiContractKiReadsFail };
-  const listed = KI_CONTRACT_THREADS.find((thread) => thread.id === threadId);
-  return listed
-    ? { success: true, window: window.uiContractKiWindows[listed.id] ?? { messages: [], hasOlder: false } }
+  const id = typeof threadId === 'string' ? threadId : '';
+  const known =
+    KI_CONTRACT_THREADS.some((thread) => thread.id === id) || Object.hasOwn(window.uiContractKiWindows, id);
+  return known
+    ? { success: true, window: window.uiContractKiWindows[id] ?? { messages: [], hasOlder: false } }
     : { success: false, error: 'not_found' };
 }
 
@@ -149,17 +156,23 @@ export const KI_CONTRACT_THREADS = [
 ];
 
 export function KiChatContractFixture(): React.JSX.Element {
+  const [shown, setShown] = useState(true);
+  useEffect(() => {
+    window.uiContractKiShowChat = setShown;
+  }, []);
   return (
     <BannerProvider>
       <main className="flex h-dvh flex-col">
         <h1>Komponentenverträge</h1>
-        <KiChat
-          organizationId="00000000-0000-4000-8000-0000000000a1"
-          userId="00000000-0000-4000-8000-0000000000b1"
-          initialThreadId={null}
-          initialThreads={{ threads: KI_CONTRACT_THREADS, hasMore: false }}
-          initialWindow={null}
-        />
+        {shown && (
+          <KiChat
+            organizationId="00000000-0000-4000-8000-0000000000a1"
+            userId="00000000-0000-4000-8000-0000000000b1"
+            initialThreadId={null}
+            initialThreads={{ threads: KI_CONTRACT_THREADS, hasMore: false }}
+            initialWindow={null}
+          />
+        )}
       </main>
     </BannerProvider>
   );
