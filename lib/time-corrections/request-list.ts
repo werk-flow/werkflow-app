@@ -14,6 +14,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { PENDING_CORRECTION_STATUSES } from './pending-projection';
+import { isEffectiveFact } from './person-corrections';
 import { TIME_ACTIVITY_LABELS } from '@/lib/time-tracking/types';
 import { formatBerlinTime } from '@/lib/utils';
 import { snapshotSegments } from './snapshot-segments';
@@ -63,9 +64,8 @@ export async function readCorrectionRequestList(input: {
   const admin = createSupabaseAdminClient();
   // The holder lookup answers null for "not responsible" and for a failed
   // read alike; a failed read must not hide the requests the caller reviews.
-  if (!(await loadResponsibilityRuntimeState(organizationId))) {
-    return { success: false, error: 'responsibility_load_failed' };
-  }
+  const state = await loadResponsibilityRuntimeState(organizationId);
+  if (!state) return { success: false, error: 'responsibility_load_failed' };
   const holder = await getEffectiveResponsibilityHolderForActor({
     organizationId,
     responsibility: 'time_approval',
@@ -91,7 +91,19 @@ export async function readCorrectionRequestList(input: {
     logReadFailure('getTimeCorrectionRequests: requests failed', error);
     return { success: false, error: 'fetch_failed' };
   }
-  return hydrateCorrectionRequests({ admin, organizationId, callerUserId, callerRole, holder, roots });
+  // One person's requests are their time: only the record they hold now counts, for every caller.
+  const listed = filter.subjectUserId
+    ? roots.filter((request) => hasEffectiveSubject(request, state.recordByUser))
+    : roots;
+  return hydrateCorrectionRequests({
+    admin,
+    organizationId,
+    callerUserId,
+    callerRole,
+    holder,
+    roots: listed,
+    recordByUser: state.recordByUser,
+  });
 }
 
 /** The roles, names and revisions of the requests; null when a read fails. */
@@ -149,6 +161,19 @@ async function readRequestDetails(
       revisions.data.map((revision) => [`${revision.request_id}:${revision.revision}`, revision]),
     ),
   };
+}
+
+/**
+ * Whether the request's subject still holds the employee record it was filed
+ * on (`isEffectiveFact`). A request of a record its person no longer holds is
+ * retained data of a removed employee to that person (docs/technical/security.md,
+ * "Calendar correction input boundary").
+ */
+function hasEffectiveSubject(request: RequestRow, recordByUser: ReadonlyMap<string, string>): boolean {
+  return isEffectiveFact(
+    { userId: request.subject_user_id, employeeRecordId: request.subject_employee_record_id },
+    recordByUser,
+  );
 }
 
 /** Whether the caller's time-approval responsibility covers the request's subject. */
@@ -215,21 +240,33 @@ function toCorrectionRequest(
  * The selected requests with names, the current revision and the caller's
  * review and withdraw rights, in the selection order, limited to the ones
  * the caller may see. A missing or unreadable revision fails the read.
+ *
+ * A request belongs to the record it was filed on. Its subject sees it only
+ * while they hold that record (`hasEffectiveSubject`), and so does its
+ * requester. An approver sees it whoever holds the record now: every open
+ * request blocks its month's close (`findPendingCorrectionRequest`), and a
+ * correction filed before an offboarding still counts for payroll.
+ * `list_time_correction_history_page` applies the same rule in the database.
  */
 export async function hydrateCorrectionRequests(
-  input: CallerView & { admin: AdminClient; organizationId: string; roots: RequestRow[] },
+  input: CallerView & {
+    admin: AdminClient;
+    organizationId: string;
+    roots: RequestRow[];
+    /** The employee record each person holds in the organization now (`loadResponsibilityRuntimeState`). */
+    recordByUser: ReadonlyMap<string, string>;
+  },
 ): Promise<TimeCorrectionListResult> {
   const { admin, organizationId, roots } = input;
   if (!roots.length) return { success: true, requests: [] };
   const details = await readRequestDetails(admin, organizationId, roots);
   if (!details) return { success: false, error: 'fetch_failed' };
-  const visible = roots.filter(
-    (request) =>
-      input.callerRole !== 'employee' ||
-      request.requested_by === input.callerUserId ||
-      request.subject_user_id === input.callerUserId ||
-      holderCovers(input, request, details),
-  );
+  const visible = roots.filter((request) => {
+    const effective = hasEffectiveSubject(request, input.recordByUser);
+    if (request.subject_user_id === input.callerUserId) return effective;
+    if (input.callerRole !== 'employee' || holderCovers(input, request, details)) return true;
+    return request.requested_by === input.callerUserId && effective;
+  });
   const requests: TimeCorrectionRequest[] = [];
   for (const request of visible) {
     const hydrated = toCorrectionRequest(input, request, details);

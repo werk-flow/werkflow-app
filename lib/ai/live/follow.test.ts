@@ -7,8 +7,10 @@ import {
   kiLiveCursor,
   kiLiveGapFillable,
   mergeNewer,
+  mergeWindow,
+  placeRow,
 } from '@/lib/ai/live/follow';
-import type { AiChatMessage, AiThreadWindow } from '@/lib/ai/thread-types';
+import type { AiChatMessage, AiThreadWindow, AiToolRow } from '@/lib/ai/thread-types';
 
 const command = 'c1';
 const v = KI_LIVE_PROTOCOL;
@@ -65,7 +67,9 @@ function applyKiLiveEvent(
   return { window: result.window, applied: result.held.length === 0 };
 }
 const answerOf = (window: AiThreadWindow): AiChatMessage | undefined =>
-  window.messages.find((entry) => entry.key === `${command}:assistant`);
+  window.messages.find(
+    (entry): entry is AiChatMessage => entry.key === `${command}:assistant` && entry.role === 'assistant',
+  );
 
 test('a started turn adds the message and an empty answer in sequence order, once', () => {
   const { window } = applyKiLiveEvent(earlier, started);
@@ -208,4 +212,155 @@ test('a gap is read only once the partial save covers it, and an end is read at 
   ).toBe(false);
   expect(kiLiveGapFillable([text(40, 'x', 20), text(41, 'y', 41)])).toBe(true);
   expect(kiLiveGapFillable([text(40, 'x', 20), end(42)])).toBe(true);
+});
+
+const toolRow = (key: string, sequence: number, revision: number): AiToolRow => ({
+  key,
+  sequence,
+  role: 'tool',
+  status: revision === 1 ? 'streaming' : 'complete',
+  revision,
+  label: 'Aufträge finden',
+  control: 'read',
+  outcome: revision === 1 ? null : 'ok',
+  hasDetail: revision > 1,
+});
+
+test('an older page stays when the window read starts right after a tool row it holds', () => {
+  // The page shows sequences 1–3, the last a tool row; the latest window starts at 4.
+  const shown: AiThreadWindow = {
+    hasOlder: true,
+    messages: [
+      message('c1:user', 1, { role: 'user' }),
+      message('c1:assistant', 2),
+      toolRow('c1:tool:1', 3, 2),
+    ],
+  };
+  const latest: AiThreadWindow = {
+    hasOlder: true,
+    messages: [message('c2:user', 4, { role: 'user' }), message('c2:assistant', 5)],
+  };
+  const merged = mergeWindow(shown, latest);
+  expect(merged.messages.map((entry) => entry.sequence)).toEqual([1, 2, 3, 4, 5]);
+  expect(merged.hasOlder, 'the older pages already shown keep their own paging state').toBe(true);
+});
+
+test('a live row lands at its place, and a later save of it replaces it while an older one never does', () => {
+  const window: AiThreadWindow = {
+    hasOlder: false,
+    messages: [message('c1:user', 1, { role: 'user' }), message('c1:assistant', 2, { status: 'streaming' })],
+  };
+  const row = (revision: number): KiLiveEvent => ({
+    v,
+    type: 'row',
+    command,
+    row: toolRow('c1:tool:1', 3, revision),
+  });
+  const running = applyKiLiveEvents(window, [row(1)]);
+  expect(running.held).toEqual([]);
+  expect(running.window.messages.map((entry) => [entry.key, entry.status])).toEqual([
+    ['c1:user', 'complete'],
+    ['c1:assistant', 'streaming'],
+    ['c1:tool:1', 'streaming'],
+  ]);
+  const done = applyKiLiveEvents(running.window, [row(2), row(1)]);
+  expect(done.window.messages.at(-1)).toEqual(toolRow('c1:tool:1', 3, 2));
+  expect(placeRow(done.window, toolRow('c1:tool:1', 3, 2)), 'an unchanged row keeps the window').toBe(
+    done.window,
+  );
+});
+
+test("an end carries the turn's rows, so a row whose send the page missed lands with it", () => {
+  const window: AiThreadWindow = {
+    hasOlder: false,
+    messages: [
+      message(`${command}:user`, 1, { role: 'user' }),
+      message(`${command}:assistant`, 2, { status: 'streaming', text: 'Fertig.' }),
+      toolRow(`${command}:tool:1`, 3, 1),
+    ],
+  };
+  const ended: KiLiveEvent = {
+    v,
+    type: 'end',
+    command,
+    status: 'complete',
+    failure: null,
+    length: 7,
+    rows: [toolRow(`${command}:tool:1`, 3, 2), toolRow(`${command}:tool:2`, 4, 2)],
+  };
+  const result = applyKiLiveEvents(window, [ended]);
+  expect(result.held).toEqual([]);
+  expect(result.window.messages.map((entry) => [entry.key, entry.status])).toEqual([
+    [`${command}:user`, 'complete'],
+    [`${command}:assistant`, 'complete'],
+    [`${command}:tool:1`, 'complete'],
+    [`${command}:tool:2`, 'complete'],
+  ]);
+});
+
+test('an end that arrives after the page already ended the answer still places its rows', () => {
+  const window: AiThreadWindow = {
+    hasOlder: false,
+    messages: [message(`${command}:assistant`, 2, { text: 'Fertig.' }), toolRow(`${command}:tool:1`, 3, 1)],
+  };
+  const ended: KiLiveEvent = {
+    v,
+    type: 'end',
+    command,
+    status: 'complete',
+    failure: null,
+    length: 7,
+    rows: [toolRow(`${command}:tool:1`, 3, 2)],
+  };
+  expect(applyKiLiveEvents(window, [ended]).window.messages.at(-1)).toEqual(
+    toolRow(`${command}:tool:1`, 3, 2),
+  );
+});
+
+test('a row that reaches a tab without its turn waits for a read, so the cursor does not skip the turn', () => {
+  // The tab missed `started`: it holds nothing of the turn whose row is at sequence 3.
+  const empty: AiThreadWindow = { hasOlder: false, messages: [] };
+  const row: KiLiveEvent = { v, type: 'row', command, row: toolRow(`${command}:tool:1`, 3, 1) };
+  const result = applyKiLiveEvents(empty, [row]);
+  expect(result.held, 'a row above sequences the page never loaded must wait').toEqual([row]);
+  expect(kiLiveCursor(result.window), 'the catch-up starts at the first sequence the page lacks').toBe(1);
+  expect(kiLiveGapFillable(result.held), 'a waiting row asks for a read').toBe(true);
+  const read: AiThreadWindow = {
+    hasOlder: false,
+    messages: [
+      message(`${command}:user`, 1, { role: 'user' }),
+      message(`${command}:assistant`, 2, { status: 'streaming' }),
+    ],
+  };
+  const filled = applyKiLiveEvents(mergeNewer(result.window, read), result.held);
+  expect(filled.held).toEqual([]);
+  expect(filled.window.messages.map((entry) => entry.sequence)).toEqual([1, 2, 3]);
+});
+
+test('an empty window read keeps its older pages when the page held nothing, and an empty thread has none', () => {
+  expect(
+    mergeWindow(null, { hasOlder: true, messages: [] }).hasOlder,
+    'a read whose window holds no shown entry must still page older ones in',
+  ).toBe(true);
+  expect(mergeWindow(null, { hasOlder: false, messages: [] }).hasOlder).toBe(false);
+});
+
+test('a row of a stopped turn that arrives after the stop still lands, so a broken-off call shows as ended', () => {
+  let window = applyKiLiveEvent(earlier, started).window;
+  window = applyKiLiveEvent(window, text(0, 'Ich suche.')).window;
+  const running = toolRow(`${command}:tool:1`, 5, 1);
+  window = applyKiLiveEvents(window, [{ v, type: 'row', command, row: running }]).window;
+  const stopped: KiLiveEvent = {
+    v,
+    type: 'end',
+    command,
+    status: 'cancelled',
+    failure: 'Du hast die Antwort angehalten.',
+    length: 10,
+  };
+  const broken = { ...running, status: 'failed' as const, revision: 2, outcome: 'failed' as const };
+  const result = applyKiLiveEvents(window, [stopped, { v, type: 'row', command, row: broken }]);
+  expect(result.held).toEqual([]);
+  expect(answerOf(result.window)?.status).toBe('cancelled');
+  expect(result.window.messages.find((entry) => entry.key === running.key)).toEqual(broken);
 });

@@ -50,3 +50,35 @@ test('a client that left receives nothing more, and the writer goes on without f
   clock.tasks[0]?.run();
   expect(() => stream.end({ status: 'complete' })).not.toThrow();
 });
+
+test('an author who lost the thread gets no more text or rows, only the end', async () => {
+  const clock = manualSchedule();
+  const stream = createTurnEventStream(clock.schedule);
+  stream.sink.text('vorher');
+  stream.sink.revoked?.();
+  stream.sink.text('nachher');
+  stream.sink.row?.({
+    key: 'c1:tool:1',
+    sequence: 3,
+    role: 'tool',
+    status: 'failed',
+    revision: 2,
+    label: 'Aufträge finden',
+    control: 'read',
+    outcome: 'failed',
+    hasDetail: false,
+  });
+  stream.end({
+    status: 'cancelled',
+    failure: 'revoked',
+    message: 'Du hast keinen Zugriff mehr auf diesen Chat.',
+  });
+  expect(await lines(stream.readable)).toEqual([
+    {
+      type: 'end',
+      status: 'cancelled',
+      failure: 'revoked',
+      message: 'Du hast keinen Zugriff mehr auf diesen Chat.',
+    },
+  ]);
+});

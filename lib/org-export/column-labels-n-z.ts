@@ -462,6 +462,7 @@ export const COLUMN_LABELS_N_TO_Z = {
   window_start_date: 'Zeitfenster ab (Datum)',
   window_start_time: 'Zeitfenster ab (Uhrzeit)',
   withdrawal_reason: 'Grund der Rücknahme',
+  withdrawn_by: 'Zurückgenommen von (ID)',
   withdrawn_entry: 'Zurückgenommene Buchung',
   witness_context: 'Zeugen',
   wording_snapshot: 'Wortlaut',

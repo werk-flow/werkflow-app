@@ -256,6 +256,7 @@ export type Database = {
         Row: {
           body: Json;
           created_at: string;
+          detail: Json | null;
           id: string;
           idempotency_key: string;
           kind: Database["public"]["Enums"]["ai_thread_item_kind"];
@@ -268,6 +269,7 @@ export type Database = {
         Insert: {
           body: Json;
           created_at?: string;
+          detail?: Json | null;
           id?: string;
           idempotency_key: string;
           kind: Database["public"]["Enums"]["ai_thread_item_kind"];
@@ -280,6 +282,7 @@ export type Database = {
         Update: {
           body?: Json;
           created_at?: string;
+          detail?: Json | null;
           id?: string;
           idempotency_key?: string;
           kind?: Database["public"]["Enums"]["ai_thread_item_kind"];
@@ -2666,21 +2669,21 @@ export type Database = {
       };
       employment_target_signals: {
         Row: {
-          employee_record_id: string;
+          employee_record_id: string | null;
           id: string;
           organization_id: string;
           updated_at: string;
           user_id: string;
         };
         Insert: {
-          employee_record_id: string;
+          employee_record_id?: string | null;
           id?: string;
           organization_id: string;
           updated_at?: string;
           user_id: string;
         };
         Update: {
-          employee_record_id?: string;
+          employee_record_id?: string | null;
           id?: string;
           organization_id?: string;
           updated_at?: string;
@@ -6856,6 +6859,124 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "maintenance_due_work";
             referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      offer_acceptance_withdrawals: {
+        Row: {
+          acceptance_id: string;
+          created_at: string;
+          id: string;
+          organization_id: string;
+          reason: string;
+          withdrawn_by: string | null;
+        };
+        Insert: {
+          acceptance_id: string;
+          created_at?: string;
+          id?: string;
+          organization_id: string;
+          reason: string;
+          withdrawn_by?: string | null;
+        };
+        Update: {
+          acceptance_id?: string;
+          created_at?: string;
+          id?: string;
+          organization_id?: string;
+          reason?: string;
+          withdrawn_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offer_acceptance_withdrawals_acceptance_fk";
+            columns: ["acceptance_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offer_acceptances";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_acceptance_withdrawals_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      offer_acceptances: {
+        Row: {
+          accepted_by_name: string;
+          accepted_on: string;
+          channel: string;
+          chosen_options: string[];
+          created_at: string;
+          gross_cents: number;
+          id: string;
+          net_cents: number;
+          note: string;
+          offer_id: string;
+          organization_id: string;
+          recorded_by: string | null;
+          revision: number;
+          scope: Json;
+          tax_cents: number;
+        };
+        Insert: {
+          accepted_by_name: string;
+          accepted_on: string;
+          channel: string;
+          chosen_options?: string[];
+          created_at?: string;
+          gross_cents: number;
+          id?: string;
+          net_cents: number;
+          note?: string;
+          offer_id: string;
+          organization_id: string;
+          recorded_by?: string | null;
+          revision: number;
+          scope: Json;
+          tax_cents: number;
+        };
+        Update: {
+          accepted_by_name?: string;
+          accepted_on?: string;
+          channel?: string;
+          chosen_options?: string[];
+          created_at?: string;
+          gross_cents?: number;
+          id?: string;
+          net_cents?: number;
+          note?: string;
+          offer_id?: string;
+          organization_id?: string;
+          recorded_by?: string | null;
+          revision?: number;
+          scope?: Json;
+          tax_cents?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offer_acceptances_offer_fk";
+            columns: ["offer_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offers";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_acceptances_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "offer_acceptances_revision_fk";
+            columns: ["offer_id", "revision"];
+            isOneToOne: false;
+            referencedRelation: "offer_revisions";
+            referencedColumns: ["offer_id", "revision"];
           },
         ];
       };
@@ -17312,6 +17433,23 @@ export type Database = {
         };
         Returns: undefined;
       };
+      accept_offer: {
+        Args: {
+          p_accepted_by_name: string;
+          p_accepted_on: string;
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_channel: string;
+          p_chosen_options: string[];
+          p_expected_version: number;
+          p_note: string;
+          p_offer_id: string;
+          p_organization_id: string;
+          p_revision: number;
+          p_totals: Json;
+        };
+        Returns: Json;
+      };
       accept_site_access_proposal: {
         Args: {
           p_actor_id: string;
@@ -17917,6 +18055,18 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      close_offer: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_expected_version: number;
+          p_offer_id: string;
+          p_organization_id: string;
+          p_outcome: string;
+          p_reason: string;
+        };
+        Returns: Json;
       };
       close_time_period: {
         Args: {
@@ -20077,6 +20227,10 @@ export type Database = {
         Args: { p_offer_id: string; p_organization_id: string };
         Returns: Json;
       };
+      get_offer_decisions: {
+        Args: { p_offer_id: string; p_organization_id: string };
+        Returns: Json;
+      };
       get_offer_price_condition: {
         Args: {
           p_leistung_id?: string;
@@ -21383,6 +21537,23 @@ export type Database = {
           p_run_id: string;
         };
         Returns: string;
+      };
+      record_ai_tool_item: {
+        Args: {
+          p_body: Json;
+          p_detail?: Json;
+          p_item_key: string;
+          p_kind: Database["public"]["Enums"]["ai_thread_item_kind"];
+          p_ledger_key?: string;
+          p_model_id?: string;
+          p_organization_id: string;
+          p_outcome?: string;
+          p_prompt_version?: string;
+          p_run_id: string;
+          p_status: Database["public"]["Enums"]["ai_thread_item_status"];
+          p_user_id: string;
+        };
+        Returns: number;
       };
       record_client_communication_exception: {
         Args: {
@@ -24711,6 +24882,17 @@ export type Database = {
           p_reason: string;
         };
         Returns: undefined;
+      };
+      withdraw_offer_acceptance: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_expected_version: number;
+          p_offer_id: string;
+          p_organization_id: string;
+          p_reason: string;
+        };
+        Returns: Json;
       };
       withdraw_pending_time_entries: {
         Args: {

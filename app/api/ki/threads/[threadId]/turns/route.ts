@@ -4,6 +4,7 @@ import { hasVisibleText } from '@/lib/ai/context';
 import { aiMessageFileIds } from '@/lib/ai/files/types';
 import { AI_TURN_LIMITS } from '@/lib/ai/limits';
 import { createKiLiveBroadcast } from '@/lib/ai/live/broadcast';
+import type { AiThreadRow } from '@/lib/ai/thread-types';
 import { type AiTurnRefusal, startAiTurn } from '@/lib/ai/turn';
 import { createTurnEventStream } from '@/lib/ai/turn-stream';
 import { logError } from '@/lib/logging';
@@ -107,6 +108,10 @@ export async function POST(
       revoked: () => {
         stream.sink.revoked?.();
         live.sink.revoked();
+      },
+      row: (row: AiThreadRow) => {
+        stream.sink.row?.(row);
+        live.sink.row(row);
       },
     };
     // The invocation stays alive until the run has saved its answer, settled its cost and told the other tabs.

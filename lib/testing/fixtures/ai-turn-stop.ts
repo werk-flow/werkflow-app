@@ -257,6 +257,20 @@ const outputCap = costMicroUsd(
   assert.equal(world.streamRequests.length, 1, 'a stopped turn starts no further step');
   assert.equal(providerAttempts(world).at(-1)?.p_outcome, 'stopped');
   assert.deepEqual(runStatus(), ['cancelled']);
+  const toolItem = rows('ai_thread_items').find((row) => row.kind === 'tool_call');
+  assert.equal(
+    toolItem?.status,
+    'failed',
+    'a call the stop broke off must end as failed, never stay running',
+  );
+  const live = liveEvents();
+  const liveRows = live.flatMap((event) => (event.type === 'row' ? [event.row] : []));
+  assert.equal(liveRows.at(-1)?.status, 'failed', 'every tab must see the broken-off call end');
+  assert.deepEqual(
+    live.flatMap((event) => (event.type === 'end' ? [event.failure] : [])),
+    ['Du hast die Antwort angehalten.'],
+    'only the stop route ends the answer on other tabs; the stopped turn sends its rows, no end',
+  );
 }
 
 // A stop that lands after the answer's last partial save is first seen by the final save: the turn

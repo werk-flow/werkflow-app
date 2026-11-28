@@ -1,6 +1,7 @@
 import { expect, mock, spyOn, test } from 'bun:test';
 
-import type { KiLiveEvent } from '@/lib/ai/live/events';
+import { KI_LIVE_PROTOCOL, type KiLiveEvent } from '@/lib/ai/live/events';
+import type { AiToolRow } from '@/lib/ai/thread-types';
 
 mock.module('server-only', () => ({}));
 const { createKiLiveBroadcast } = await import('./broadcast');
@@ -62,14 +63,14 @@ test('a turn sends its start, then its text batched per interval with its offset
   live.sink.saved(3);
   live.sink.text(' Welt');
   expect(network.calls[1]?.events).toEqual([
-    { v: 2, type: 'text', command: 'c1', at: 0, delta: 'Hallo', saved: 0 },
+    { v: KI_LIVE_PROTOCOL, type: 'text', command: 'c1', at: 0, delta: 'Hallo', saved: 0 },
   ]);
   network.calls[1]?.answer(true);
   const ended = live.end({ status: 'complete' });
   await flush();
   expect(network.calls[2]?.events, 'the end must carry the rest of the text before it, in one send').toEqual([
-    { v: 2, type: 'text', command: 'c1', at: 5, delta: ' Welt', saved: 3 },
-    { v: 2, type: 'end', command: 'c1', status: 'complete', failure: null, length: 10 },
+    { v: KI_LIVE_PROTOCOL, type: 'text', command: 'c1', at: 5, delta: ' Welt', saved: 3 },
+    { v: KI_LIVE_PROTOCOL, type: 'end', command: 'c1', status: 'complete', failure: null, length: 10 },
   ]);
   network.calls[2]?.answer(true);
   await ended;
@@ -156,6 +157,42 @@ test('a save that says the author lost access stops every further send, the end 
   expect(sent).toEqual(['started', 'text']);
 });
 
+test('a stopped turn sends its rows but no text and no end: the stop route sent the end with the kept length', async () => {
+  const clock = manualSchedule();
+  const sent: KiLiveEvent[][] = [];
+  const live = createKiLiveBroadcast(
+    input,
+    async (_topic, events) => {
+      sent.push(events);
+      return true;
+    },
+    clock.schedule,
+  );
+  const row = (revision: number, status: AiToolRow['status']): AiToolRow => ({
+    key: 'c1:tool:1',
+    sequence: 3,
+    role: 'tool',
+    status,
+    revision,
+    label: 'Aufträge finden',
+    control: 'read',
+    outcome: status === 'streaming' ? null : 'failed',
+    hasDetail: false,
+  });
+  live.start(started);
+  await flush();
+  live.sink.row(row(1, 'streaming'));
+  clock.runDue();
+  await flush();
+  // The stop breaks the call off: its row is recorded as failed after the stop, beside unsent text.
+  live.sink.text('weiter');
+  live.sink.row(row(2, 'failed'));
+  await live.end({ status: 'cancelled', failure: 'stopped', message: 'Du hast die Antwort angehalten.' });
+  expect(sent.at(-1), 'every tab must see the broken-off call end, and only that').toEqual([
+    { v: KI_LIVE_PROTOCOL, type: 'row', command: 'c1', row: row(2, 'failed') },
+  ]);
+});
+
 test('a failed send is logged once per turn and the end still goes out', async () => {
   // logError writes through console.error (lib/logging.ts); the spy keeps this test's lines to itself.
   const logged = spyOn(console, 'error').mockImplementation(() => undefined);
@@ -177,7 +214,7 @@ test('a failed send is logged once per turn and the end still goes out', async (
   await flush();
   await live.end({ status: 'failed', failure: 'interrupted', message: 'Die Antwort wurde unterbrochen.' });
   expect(sent.at(-1)?.at(-1)).toEqual({
-    v: 2,
+    v: KI_LIVE_PROTOCOL,
     type: 'end',
     command: 'c1',
     status: 'failed',

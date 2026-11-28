@@ -22,6 +22,8 @@ import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import { AI_PROMPT_VERSION } from '@/lib/ai/prompt/system-prompt';
 import { isAiReleasedFor } from '@/lib/ai/release-gate';
 import { readAiOrganizationSwitch } from '@/lib/ai/settings';
+import { rowFromItem } from '@/lib/ai/thread-rows';
+import type { AiThreadRow } from '@/lib/ai/thread-types';
 import { toToolSet } from '@/lib/ai/tools/define-tool';
 import { aiToolsFor } from '@/lib/ai/tools/registry';
 import {
@@ -105,6 +107,8 @@ export type AiTurnSink = {
   text: (delta: string) => void;
   saved?: (length: number) => void;
   revoked?: () => void;
+  /** A row of the turn's tool calls, questions or to-do list, each time it is saved (lib/ai/tools/tool-calls.ts). */
+  row?: (row: AiThreadRow) => void;
 };
 
 type ItemRef = { id: string; sequence: number };
@@ -246,7 +250,14 @@ function threadTitle(text: string): string {
   return Array.from(firstLine).slice(0, 80).join('') || AI_PRODUCT_NAME;
 }
 
-/** The thread's latest finished messages, oldest first: the model's memory of the conversation. */
+/** A question the agent asked, as the model reads it back: the question and the answers it offered. */
+function questionText(item: { kind: string; sequence: number; body: unknown }): string {
+  const row = rowFromItem({ ...item, idempotency_key: 'history', status: 'complete' });
+  if (row?.role !== 'question') return '';
+  return [row.question, ...row.options.map((option) => `- ${option}`)].join('\n');
+}
+
+/** The thread's latest finished messages and questions, oldest first: the model's memory of the conversation. */
 async function readHistory(
   admin: Admin,
   command: AiTurnCommand,
@@ -259,7 +270,7 @@ async function readHistory(
     .eq('organization_id', command.organizationId)
     .eq('thread_id', command.threadId)
     .eq('status', 'complete')
-    .in('kind', ['user_message', 'assistant_message'])
+    .in('kind', ['user_message', 'assistant_message', 'question'])
     .lt('sequence', beforeSequence)
     .order('sequence', { ascending: false })
     .limit(HISTORY_MESSAGES)
@@ -271,6 +282,10 @@ async function readHistory(
   return data
     .toSorted((left, right) => left.sequence - right.sequence)
     .flatMap((item): AiThreadMessage[] => {
+      if (item.kind === 'question') {
+        const text = questionText(item);
+        return text ? [{ role: 'assistant', text }] : [];
+      }
       const body = messageBodySchema.safeParse(item.body);
       if (!body.success || !body.data.text) return [];
       return [{ role: item.kind === 'user_message' ? 'user' : 'assistant', text: body.data.text }];
@@ -523,8 +538,8 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
     }
     if (outcome.finishReason === 'length') return failedEnd('cancelled', 'answer_too_long');
     if (outcome.finishReason === 'content-filter') return failedEnd('failed', 'model_refused');
-    // A step that ends in tool calls continues with their results.
-    if (outcome.finishReason !== 'tool-calls') return { status: 'complete' };
+    // A step that ends in tool calls continues with their results; one that asked the person waits for them.
+    if (outcome.finishReason !== 'tool-calls' || context.toolCalls.asked) return { status: 'complete' };
     messages = [...messages, ...outcome.responseMessages];
   }
 }
@@ -573,8 +588,9 @@ async function runStep(
       };
     }
     const { failure, retryable } = classified ?? { failure: 'interrupted', retryable: false };
-    // What the user already saw is never written twice: a stream that broke after it wrote is not retried.
-    if (!retryable || written || answer.retriesLeft <= 0) {
+    // What the user already saw is never written twice: a stream that broke after it wrote, or after
+    // it asked the person a question, is not retried.
+    if (!retryable || written || context.toolCalls.asked || answer.retriesLeft <= 0) {
       // Only the harness's own classification reaches the log, never a field the provider sent (B17).
       const status = provider?.status;
       logError('aiTurn: provider attempt failed', status === undefined ? outcome : `${outcome}_${status}`);

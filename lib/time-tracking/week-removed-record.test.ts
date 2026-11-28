@@ -1,6 +1,7 @@
 // The week (Zeiterfassung) and the member status (Mitarbeiter list and detail)
 // count only the approved and pending correction facts of the person's
-// effective employee record. A person whose record was removed and who holds a
+// effective employee record, and mark no entry with a pending request filed on
+// a record they no longer hold. A person whose record was removed and who holds a
 // new one sees none of the facts the old record retains, in their own week and
 // in the office's view of them (docs/technical/security.md, "Calendar correction input boundary";
 // werk-flow/werkflow-planning#610). The file spawns itself: module mocks stay
@@ -18,6 +19,8 @@ const employee = '20000000-0000-4000-8000-000000000001';
 const admin = '20000000-0000-4000-8000-000000000002';
 const removedRecord = '30000000-0000-4000-8000-000000000001';
 const currentRecord = '30000000-0000-4000-8000-000000000002';
+const removedMarkedEntry = '40000000-0000-4000-8000-000000000001';
+const currentMarkedEntry = '40000000-0000-4000-8000-000000000002';
 
 function berlin(localDateTime: string): string {
   const resolved = resolveBerlinWallTime(localDateTime);
@@ -57,8 +60,26 @@ function addedShift(id: string, employeeRecordId: string): TimeCorrectionApplica
 async function runFixture(): Promise<void> {
   setSystemTime(new Date(berlin('2026-11-26T12:00')));
   let caller: { id: string; role: 'employee' | 'admin' } = { id: employee, role: 'employee' };
+  /** A recorded clock-in of the employee's that a pending proposal would change. */
+  const clockIn = (id: string, localDateTime: string) => ({
+    id,
+    organization_id: organization,
+    user_id: employee,
+    entry_type: 'clock_in',
+    timestamp: berlin(localDateTime),
+    job_id: null,
+    status: 'approved',
+    is_manual: false,
+    reviewed_by: null,
+    reviewed_at: null,
+    created_at: berlin(localDateTime),
+    updated_at: berlin(localDateTime),
+  });
   const tables: InMemoryTables = {
-    time_entries: [],
+    time_entries: [
+      clockIn(removedMarkedEntry, '2026-11-23T07:00'),
+      clockIn(currentMarkedEntry, '2026-11-26T07:00'),
+    ],
     time_segments: [],
     // The employee's old record lost its login; they hold a new one.
     employee_records: [
@@ -92,6 +113,7 @@ async function runFixture(): Promise<void> {
     kind: 'add' as const,
     currentRevision: 1,
     updatedAt: berlin('2026-11-25T10:00'),
+    subjectEmployeeRecordId: employeeRecordId,
     subjectUserId: employee,
     proposedSnapshot: {
       schemaVersion: 1 as const,
@@ -101,11 +123,24 @@ async function runFixture(): Promise<void> {
       })),
     },
   });
+  // Each proposal would also change one recorded clock-in.
+  const source = (requestId: string, timeEntryId: string) => ({
+    correction_application_id: null,
+    ordinal: 0,
+    organization_id: organization,
+    request_id: requestId,
+    revision: 1,
+    source_kind: 'legacy_entry' as const,
+    source_version: '1',
+    time_entry_id: timeEntryId,
+    time_segment_id: null,
+    time_session_id: null,
+  });
   mock.module('@/lib/time-corrections/pending-projection', () => ({
     createPendingProjectionPort: () => ({}),
     loadPendingCorrectionProjection: async () => ({
       requests: [proposal('pending-removed', removedRecord), proposal('pending-current', currentRecord)],
-      sources: [],
+      sources: [source('pending-removed', removedMarkedEntry), source('pending-current', currentMarkedEntry)],
     }),
   }));
   const { getTimeEntries } = await import('./entry-read-actions');
@@ -119,11 +154,20 @@ async function runFixture(): Promise<void> {
       ...(whole ? {} : { userId: employee }),
     });
     assert.ok(result.success, 'the week reads');
-    return [...result.entries, ...(result.provisionalEntries ?? [])].map((entry) => entry.id).sort();
+    return [...result.entries, ...(result.provisionalEntries ?? [])]
+      .flatMap((entry) =>
+        entry.id === removedMarkedEntry || entry.id === currentMarkedEntry
+          ? entry.pendingCorrectionRequestId
+            ? [`marked:${entry.id}:${entry.pendingCorrectionRequestId}`]
+            : []
+          : [entry.id],
+      )
+      .sort();
   };
   const currentFacts = [
     'correction:current:current-clock_in',
     'correction:current:current-clock_out',
+    `marked:${currentMarkedEntry}:pending-current`,
     'proposal:pending-current:1:pending-current-clock_in',
     'proposal:pending-current:1:pending-current-clock_out',
   ];

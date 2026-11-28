@@ -7,7 +7,7 @@
 // prints one `TRANSFER` line; lib/ai/live/transfer-budget.test.ts holds the
 // ceilings. Each block also states the invariant the numbers stand on.
 import assert from 'node:assert/strict';
-import { kiLiveEventSchema, type KiLiveEvent } from '@/lib/ai/live/events';
+import { KI_LIVE_PROTOCOL, kiLiveEventSchema, type KiLiveEvent } from '@/lib/ai/live/events';
 import { applyKiLiveEvents, kiLiveCursor, kiLiveGapFillable, mergeNewer } from '@/lib/ai/live/follow';
 import type { AiThreadWindow } from '@/lib/ai/thread-types';
 import { signInAs, tableRows } from './action-boundary-world';
@@ -107,7 +107,9 @@ function follower(start: AiThreadWindow) {
 }
 
 const answerText = (window: AiThreadWindow, command: string): string | undefined =>
-  window.messages.find((message) => message.key === `${command}:assistant`)?.text;
+  window.messages.flatMap((message) =>
+    message.key === `${command}:assistant` && message.role === 'assistant' ? [message.text] : [],
+  )[0];
 
 seedHeavyThread();
 
@@ -223,7 +225,7 @@ assert.ok(opened.window.messages.length <= 40, 'a thread opens with at most 40 m
   );
   const events = sends.flatMap((send) => parseEvents(send.events));
   assert.ok(
-    events.every((event) => event.v === 2 && event.command === command),
+    events.every((event) => event.v === KI_LIVE_PROTOCOL && event.command === command),
     'an answer must not set the protocol version or name another command',
   );
   assert.equal(events.filter((event) => event.type === 'end').length, 1, 'only the real end ends the answer');

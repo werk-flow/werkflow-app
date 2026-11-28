@@ -22,6 +22,7 @@ function request(id: string, subject: string, requestedBy = subject): PendingReq
     id,
     kind: 'add',
     status: 'submitted',
+    subject_employee_record_id: `record-${subject}`,
     subject_user_id: subject,
     requested_by: requestedBy,
     current_revision: 2,
