@@ -10,7 +10,7 @@ import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
-import { fingerprintSnapshot } from '@/lib/planning/capacity';
+import { compareByCodePoint, fingerprintSnapshot } from '@/lib/planning/capacity';
 import { formatBerlinLocalDateTime, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { assessPlanningOccurrences } from '@/lib/planning/server';
 import type { MaterializedOccurrence, PlanningAssignmentDraft, PlanningConflict } from '@/lib/planning/types';
@@ -321,7 +321,8 @@ async function loadSchedulableBatchRows(
       return { success: false, error: 'batch_item_started' };
     }
   }
-  return { success: true, rows };
+  // The assessment hashes its occurrences in this order, so it must not follow the read's.
+  return { success: true, rows: rows.toSorted((left, right) => compareByCodePoint(left.id, right.id)) };
 }
 
 function materializeBatchItems(

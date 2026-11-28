@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
 import { EMPTY_HOLIDAY_CALENDAR, resolveDailyTarget } from '@/lib/personnel/targets';
-import { fingerprintSnapshot } from './capacity';
 import { assessedCrew, evaluateProposedCapacity } from './planned-load';
 import type { MaterializedOccurrence } from './types';
 
@@ -110,56 +109,12 @@ describe('planned load of several visits in one write', () => {
 });
 
 describe('the crew of an assessment', () => {
-  // A Sunday: without a work schedule each person gets the default-target and the day-off warning.
-  const sunday = '2026-11-08';
-  const sundayVisit: MaterializedOccurrence = {
-    ...visit,
-    originalStartLocal: `${sunday}T08:00`,
-    startAt: '2026-11-08T07:00:00.000Z',
-    endAt: '2026-11-08T11:00:00.000Z',
-  };
-  const targetOn = (dateIso: string) =>
-    resolveDailyTarget({
-      dateIso,
-      schedules: [],
-      conditions: [],
-      calendar: EMPTY_HOLIDAY_CALENDAR,
-      employment: { entryDate: '2020-01-01', exitDate: null },
-    });
-  const assessInReadOrder = (readOrder: string[]) => {
-    const crew = assessedCrew(
-      readOrder.map((employeeRecordId) => ({ employeeRecordId, teamSourceId: null })),
-    );
-    return evaluateProposedCapacity({
-      occurrences: [sundayVisit],
-      assignmentsFor: () => crew,
-      existingRows: [],
-      excludedOccurrenceIds: new Set(),
-      employeeRecordIds: crew.map((assignment) => assignment.employeeRecordId),
-      uniqueDates: [sunday],
-      targets: {
-        targetByEmployeeDate: new Map(readOrder.map((id) => [`${id}:${sunday}`, targetOn(sunday)])),
-        pendingVacation: [],
-      },
-      accessEndDateByRecord: new Map(),
-    });
-  };
-
-  test('lists each person once, whatever order the people were read in', () => {
+  test('lists each person once, ordered by record, whatever order the people were read in', () => {
     const crew = assessedCrew([
       { employeeRecordId: 'emil', teamSourceId: null },
       { employeeRecordId: 'bruno', teamSourceId: 'team' },
       { employeeRecordId: 'emil', teamSourceId: null },
     ]);
     expect(crew.map((assignment) => assignment.employeeRecordId)).toEqual(['bruno', 'emil']);
-  });
-
-  test('gives a confirmed assessment the same fingerprint when the save reads its people in another order', async () => {
-    const first = assessInReadOrder(['emil', 'bruno']);
-    const second = assessInReadOrder(['bruno', 'emil']);
-    expect(new Set(first.conflicts.map((conflict) => conflict.employeeRecordId))).toEqual(
-      new Set(['emil', 'bruno']),
-    );
-    expect(await fingerprintSnapshot(second)).toBe(await fingerprintSnapshot(first));
   });
 });

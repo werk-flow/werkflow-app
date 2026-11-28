@@ -45,7 +45,9 @@ async function loadAssignmentContext(input: {
           .select('id, capability_id, require_confirmation')
           .eq('organization_id', orgId)
           .eq('job_id', input.jobId)
+          // The coverage is hashed in this order; requirements added together share created_at.
           .order('created_at')
+          .order('id')
           .limit(101)
       : Promise.resolve({ data: [], error: null }),
     admin

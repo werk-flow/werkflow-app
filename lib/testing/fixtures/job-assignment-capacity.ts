@@ -191,3 +191,16 @@ world.rpcCalls = [];
 const removal = await updateJobAssignments(jobId, []);
 assert.equal(removal.success, true);
 assert.equal(world.rpcCalls[0]?.args.p_visit_id, null);
+
+// Two people join at once, and the confirming save reads them in the other order: the
+// assessment is the same, so the reason the manager gave for it is accepted.
+world.rpcCalls = [];
+const pair = await updateJobAssignments(jobId, [CALLER_ID, erikUserId, mehmetUserId]);
+assert.ok(!pair.success && 'conflicts' in pair && pair.error === 'planning_warning');
+world.tables.employee_records = [...(world.tables.employee_records ?? [])].reverse();
+const pairConfirmed = await updateJobAssignments(jobId, [CALLER_ID, erikUserId, mehmetUserId], null, null, {
+  fingerprint: pair.fingerprint,
+  reason: 'Übergabe an Mehmet nach dem Urlaub abgestimmt',
+});
+assert.equal(pairConfirmed.success, true, 'the read order of the people does not make the assessment stale');
+assert.equal(world.rpcCalls[0]?.args.p_capacity_fingerprint, pair.fingerprint);
