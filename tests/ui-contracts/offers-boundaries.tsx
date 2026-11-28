@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 
 import { CreateOfferDialog } from '@/components/angebote/create-offer-dialog';
+import { AcceptOfferButton } from '@/components/angebote/offer-acceptance-dialog';
 import { OfferContentEditor } from '@/components/angebote/editor/offer-content-editor';
 import { EditOfferHeaderButton } from '@/components/angebote/offer-header-dialog';
 import { StartOfferRevisionButton } from '@/components/angebote/offer-revision-start';
 import { OfferSendActions } from '@/components/angebote/offer-sending';
 import { BannerProvider } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
+import type { RevisionContent } from '@/lib/offers/accepted-scope';
 import type { OfferCostedSection, OfferWithCosts } from '@/lib/offers/types';
 
 // „Angebot anlegen“: a press without title or customer marks both fields,
@@ -16,7 +18,8 @@ import type { OfferCostedSection, OfferWithCosts } from '@/lib/offers/types';
 // draft starts without Titel; the spec renders its saved content as the
 // save's revalidated page would. „Vorschau“ reads the PDF the spec routes.
 // With `uiContractOfferSent` set before the bundle loads, the offer is sent
-// as revision 1, and „Bearbeiten“ starts revision 2 instead.
+// as revision 1, „Bearbeiten“ starts revision 2 instead, and „Annahme
+// erfassen“ records its Annahme with a Bedarfsposition to choose.
 declare global {
   interface Window {
     uiContractOfferSent?: boolean;
@@ -49,6 +52,44 @@ const OFFER: OfferWithCosts = {
   sections: [],
 };
 
+// Revision 1 as sent: a boiler and a Neutralisationsbox if needed.
+const SENT_CONTENT: RevisionContent = [
+  {
+    number: '1',
+    title: 'Wärmeerzeuger',
+    netCents: 489000,
+    positions: [
+      {
+        number: '1.1',
+        kind: 'free',
+        name: 'Gas-Brennwerttherme',
+        description: '',
+        quantity: '1',
+        unit: 'piece',
+        unitLabel: 'Stk',
+        unitPriceCents: 489000,
+        priceQuantity: 1,
+        taxRateBasisPoints: 1900,
+        amountCents: 489000,
+      },
+      {
+        number: '1.2',
+        kind: 'free',
+        name: 'Neutralisationsbox',
+        description: '',
+        quantity: '1',
+        unit: 'piece',
+        unitLabel: 'Stk',
+        unitPriceCents: 18500,
+        priceQuantity: 1,
+        taxRateBasisPoints: 1900,
+        amountCents: 18500,
+        positionType: 'bedarf',
+      },
+    ],
+  },
+];
+
 export function OffersContractFixture(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [version, setVersion] = useState(1);
@@ -66,7 +107,14 @@ export function OffersContractFixture(): React.JSX.Element {
         <Button onClick={() => setOpen(true)}>Neues Angebot</Button>
         {open && <CreateOfferDialog onClose={() => setOpen(false)} />}
         {sent ? (
-          <StartOfferRevisionButton offer={{ ...OFFER, version }} sentRevision={1} />
+          <>
+            <StartOfferRevisionButton offer={{ ...OFFER, version }} sentRevision={1} />
+            <AcceptOfferButton
+              offer={{ ...OFFER, status: 'gesendet', version }}
+              revision={{ revision: 1, sentOn: '2026-01-02', validUntil: '2099-12-31' }}
+              content={SENT_CONTENT}
+            />
+          </>
         ) : (
           <EditOfferHeaderButton
             offer={{ ...OFFER, version }}
