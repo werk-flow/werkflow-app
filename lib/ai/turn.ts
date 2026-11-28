@@ -525,6 +525,8 @@ async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd>
   let messages = context.modelContext.messages;
   for (let step = 1; ; step += 1) {
     if (step > limits.maxSteps) return failedEnd('cancelled', 'step_limit');
+    // Tool results past their cap would not fit the next step.
+    if (context.toolCalls.resultsOverflow) return failedEnd('failed', 'input_too_large');
     const gate = await readStepGate(context, answer, context.turnSignal);
     if (gate !== 'open') return failedEnd('cancelled', gate);
     if (!isAllowedModel(context.model)) return failedEnd('failed', 'provider_refused');

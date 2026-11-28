@@ -250,6 +250,14 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
   zweimal: repeatedToolCall(2),
   // The same in three steps: the third call comes after the turn's results are full.
   dreimal: repeatedToolCall(3),
+  // Calls the named tool six times in one step: the turn's results outgrow their cap.
+  sechsmal: [
+    (userText) => [
+      ...[1, 2, 3, 4, 5, 6].flatMap((call) => requestedToolCall(userText, `call-${call}`) ?? []),
+      finish('tool-calls', 1100, 90),
+    ],
+    () => [...textParts('Erledigt.'), finish('stop', 1300, 20)],
+  ],
   // Reads the latest file three times in one step: the third read is past the turn's model-call cap.
   'drei-lieferscheine': [
     () => [

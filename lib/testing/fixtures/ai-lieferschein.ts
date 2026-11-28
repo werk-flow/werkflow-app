@@ -50,10 +50,30 @@ const grossLesen = defineTool({
     return { status: 'ok', value: { daten: 'x'.repeat(20_000) } };
   },
 });
+// A planted read tool whose first result fills the cap's room and whose later calls refuse with a long sentence.
+let knappCalls = 0;
+const knappLesen = defineTool({
+  name: 'knapp_lesen',
+  label: 'Knapp lesen',
+  description: 'Liest fast alles.',
+  input: z.strictObject({}),
+  roles: ['admin', 'buero'],
+  control: 'read',
+  audit: 'ledger',
+  idempotency: 'not_needed',
+  dataClasses: ['work'],
+  writesMemory: false,
+  async execute() {
+    knappCalls += 1;
+    // Exactly the bytes a result may take, 1,000 short of the cap.
+    if (knappCalls === 1) return { status: 'ok', value: { daten: 'x'.repeat(30_988) } };
+    return { status: 'refused', message: 'Nein. '.repeat(150) };
+  },
+});
 const { AI_TOOLS, aiToolsFor } = registry;
 mock.module('@/lib/ai/tools/registry', () => ({
-  AI_TOOLS: [...AI_TOOLS, grossLesen],
-  aiToolsFor: (role: Parameters<typeof aiToolsFor>[0]) => [...aiToolsFor(role), grossLesen],
+  AI_TOOLS: [...AI_TOOLS, grossLesen, knappLesen],
+  aiToolsFor: (role: Parameters<typeof aiToolsFor>[0]) => [...aiToolsFor(role), grossLesen, knappLesen],
 }));
 
 const PDF = 'application/pdf';
@@ -364,4 +384,16 @@ async function readWith(
     { type: 'json', value: { status: 'refused', meldung: TOOL_RESULTS_FULL } },
     { type: 'json', value: { status: 'refused' } },
   ]);
+}
+
+// Every output counts against the cap, a refusal's sentence too: one that does not fit reads as the
+// bare status, and once even that would not fit, the turn ends before another step.
+{
+  resetAiTables(world);
+  signInAs(world, 'buero');
+  const call = JSON.stringify({ name: 'knapp_lesen', input: {} });
+  const events = await readTurn(world, await postTurn(`[replay:sechsmal] ${call}`));
+  assert.equal(events.at(-1)?.failure, 'input_too_large');
+  assert.equal(chatRequests(world).length, 1, 'no step may start with the results past their cap');
+  assert.equal(toolCallOutcomes(world).length, 6, 'every call is ledgered');
 }

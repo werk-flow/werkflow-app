@@ -97,6 +97,9 @@ test('a line of empty fields is no content either, but a quantity of 0 is', () =
   const header = { lieferant: null, lieferscheinnummer: null, datum: null, weiterePositionen: 0 };
   expect(cappedLieferschein({ ...header, positionen: [empty] })).toBeNull();
   expect(cappedLieferschein({ ...header, positionen: [{ ...empty, menge: 0 }] })?.positionen).toHaveLength(1);
+  // The only line with a field lies past the cap: the draft would show none.
+  const lines = [...Array.from({ length: AI_EXTRACT_LIMITS.maxLines }, () => empty), { ...empty, menge: 3 }];
+  expect(cappedLieferschein({ ...header, positionen: lines })).toBeNull();
 });
 
 test('an answer that is no Lieferschein of the schema reads as nothing', () => {

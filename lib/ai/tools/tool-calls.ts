@@ -56,6 +56,8 @@ export type ToolCalls = {
   resultBytes: number;
   /** A result was refused for the cap: no later result of the turn joins the context. */
   resultsFull: boolean;
+  /** Even a bare status went past the result cap: the turn takes no further model step. */
+  resultsOverflow: boolean;
   /** Model calls the tools started, against the turn's `maxToolModelCalls`. */
   modelCalls: number;
   /** The tools' model calls still running: the run settles only after each one is ledgered. */
@@ -76,6 +78,7 @@ export function newToolCalls(): ToolCalls {
     asked: false,
     resultBytes: 0,
     resultsFull: false,
+    resultsOverflow: false,
     modelCalls: 0,
     runningModelCalls: new Set(),
     costUnrecorded: false,
@@ -281,18 +284,23 @@ function withinResultCap(context: ToolCallRun, result: AiToolResult): AiToolResu
   return first ? { status: 'refused', message: TOOL_RESULTS_FULL } : { status: 'refused' };
 }
 
-/** What the model reads of a call, counted against the turn's result cap. */
+/**
+ * What the model reads of a call, counted against the turn's result cap. An
+ * output that does not fit reads as its bare status; when even that does not
+ * fit, the turn takes no further step (lib/ai/turn.ts).
+ */
 function modelOutput(context: ToolCallRun, result: AiToolResult): ToolResultPart['output'] {
-  const output: ToolResultPart['output'] =
+  const { toolCalls } = context;
+  const cap = AI_TURN_LIMITS[context.command.entryPoint].maxToolResultBytes;
+  const status = result.status === 'ok' ? 'refused' : result.status;
+  const bare: ToolResultPart['output'] = { type: 'json', value: { status } };
+  let output: ToolResultPart['output'] =
     result.status === 'ok'
       ? untrustedToolOutput(result.value)
-      : {
-          type: 'json',
-          value: result.message
-            ? { status: result.status, meldung: result.message }
-            : { status: result.status },
-        };
-  context.toolCalls.resultBytes += outputBytes(output);
+      : { type: 'json', value: result.message ? { status, meldung: result.message } : { status } };
+  if (toolCalls.resultBytes + outputBytes(output) > cap) output = bare;
+  if (toolCalls.resultBytes + outputBytes(output) > cap) toolCalls.resultsOverflow = true;
+  toolCalls.resultBytes += outputBytes(output);
   return output;
 }
 

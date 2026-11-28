@@ -98,14 +98,15 @@ export function cappedLieferschein(answer: unknown): Lieferschein | null {
   const parsed = lieferscheinSchema.safeParse(answer);
   if (!parsed.success) return null;
   const { positionen, weiterePositionen, ...fields } = parsed.data;
-  // A draft needs a field: a header field, or a line with any field (a quantity of 0 counts).
-  const lineHasField = positionen.some((entry) => Object.values(entry).some((value) => value !== null));
-  if (!fields.lieferant && !fields.lieferscheinnummer && !fields.datum && !lineHasField) return null;
   // The model counts the lines it left out; a longer list than asked is cut here and counted too.
-  const cut = Math.max(0, positionen.length - AI_EXTRACT_LIMITS.maxLines);
+  const kept = positionen.slice(0, AI_EXTRACT_LIMITS.maxLines);
+  const cut = positionen.length - kept.length;
+  // A draft needs a field it shows: a header field, or a kept line with any field (a quantity of 0 counts).
+  const lineHasField = kept.some((entry) => Object.values(entry).some((value) => value !== null));
+  if (!fields.lieferant && !fields.lieferscheinnummer && !fields.datum && !lineHasField) return null;
   return {
     ...fields,
-    positionen: positionen.slice(0, AI_EXTRACT_LIMITS.maxLines),
+    positionen: kept,
     weggelassen: weiterePositionen === null ? null : weiterePositionen + cut,
   };
 }
