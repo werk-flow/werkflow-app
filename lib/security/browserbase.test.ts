@@ -9,7 +9,6 @@ import {
   callsLeft,
   parseLedger,
   planBrowserbase,
-  remoteSessionRefusal,
   searchTextRefusal,
   urlRefusal,
   withCall,
@@ -142,9 +141,10 @@ test('a refusal never repeats the address it refused, so credentials in it stay 
   for (const argv of [
     ['fetch', `https://user:${secret}@example.com/`],
     ['drive', 'open', `https://user:${secret}@example.com/`],
-    ['remote', 'open', `https://user:${secret}@example.com/`],
     ['search', 'a', '--include-domains', `${secret}@example.com`],
     ['drive', 'open', '--session', 'x', '--bogus', secret],
+    ['drive', 'open', `javascript${secret}:alert(1)`],
+    ['fetch', 'https://example.com', `--${secret.toLowerCase()}`],
   ])
     expect(refusalOf(...argv), argv[0]).not.toContain(secret);
 });
@@ -154,9 +154,9 @@ test('drive runs local driver commands only, never a cloud or attached browser',
     kind: 'drive',
     args: ['open', 'https://example.com'],
   });
-  expect(planBrowserbase(['drive', 'snapshot', '--session', 'remote'])).toEqual({
+  expect(planBrowserbase(['drive', 'snapshot', '--session', 'research'])).toEqual({
     kind: 'drive',
-    args: ['snapshot', '--session', 'remote'],
+    args: ['snapshot', '--session', 'research'],
   });
   for (const flag of [
     '--remote',
@@ -199,24 +199,11 @@ test('open and tab new check the URL wherever it stands among the flags', () => 
   });
 });
 
-test('remote takes a public page or a session id, and nothing else', () => {
-  expect(planBrowserbase(['remote', 'open', 'https://example.com', '--session', 'two'])).toEqual({
-    kind: 'remote-open',
-    url: 'https://example.com',
-    session: 'two',
-  });
-  const id = '0f0e0d0c-0b0a-4908-8706-050403020100';
-  expect(planBrowserbase(['remote', 'stop', id])).toEqual({ kind: 'remote-stop', sessionId: id });
-  expect(refusalOf('remote', 'stop', id, '--session', 'two')).toContain('remote stop <session id>');
-  expect(refusalOf('remote', 'open', 'http://localhost')).toContain('local host');
-  expect(refusalOf('remote', 'stop', 'abc')).toContain('session id');
-  expect(refusalOf('remote', 'open', 'https://example.com', '--verified')).toContain('--session');
-});
-
-test('a remote session starts only while a full session still fits the month', () => {
-  expect(remoteSessionRefusal(45)).toBeUndefined();
-  expect(remoteSessionRefusal(46)).toContain('only 14 of');
-  expect(remoteSessionRefusal(70)).toContain('only 0 of');
+test('a cloud browser is off: its connect URL would sit in a process argument', () => {
+  expect(refusalOf('remote', 'open', 'https://example.com')).toContain(
+    'commands: quota, search, fetch, drive',
+  );
+  expect(refusalOf('drive', 'open', 'https://example.com', '--remote')).toContain('leaves the local browser');
 });
 
 test('the ledger counts calls over a rolling window and stops at the machine share', () => {

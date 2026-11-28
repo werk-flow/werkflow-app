@@ -1,13 +1,13 @@
 ---
 name: browserbase-research
-description: Use for deep or large web research for WerkFlow (market, competitors, SHK trade rules, standards, subsidies, vendor docs) that needs more than a few searches or pages. Covers `bun run browserbase` (Search, Fetch, a local or cloud browser), the shared monthly quota, and what must never be searched or opened.
+description: Use for deep or large web research for WerkFlow (market, competitors, SHK trade rules, standards, subsidies, vendor docs) that needs more than a few searches or pages. Covers `bun run browserbase` (Search, Fetch, a local browser), the shared monthly quota, and what must never be searched or opened.
 ---
 
 # Browserbase research
 
-Browserbase is the default tool for deep WerkFlow research: a run of many searches and pages. Its free plan has a monthly quota that all three agent machines share, so spend it in this order: Search, then Fetch, then a browser.
+Browserbase is the default tool for deep WerkFlow research: a run of many searches and pages. Its free plan has a monthly quota that all three agent machines share, so spend it in this order: Search, then Fetch, then the local browser, which spends nothing.
 
-`bun run browserbase -- <command>` is the only way in. It sends Search and Fetch itself with the [agent key](../../../docs/technical/machine-setup.md#agent-keys), and runs the `browse` CLI pinned in `package.json` as the browser driver, without the key. Never run `browse` or `bunx browse` yourself, and never pass a key: the wrapper refuses `--api-key` and `--base-url`.
+`bun run browserbase -- <command>` is the only way in. It sends Search and Fetch itself with the [agent key](../../../docs/technical/machine-setup.md#agent-keys), and runs the `browse` CLI pinned in `package.json` as the local browser driver, without the key. Never run `browse` or `bunx browse` yourself, and never pass a key: the wrapper refuses `--api-key` and `--base-url`.
 
 ## Fit beside other tools
 
@@ -25,7 +25,7 @@ Every query, URL and page goes to a third party and into model context.
 
 ## Before a large run
 
-1. Run `bun run browserbase -- quota`. It prints the project's browser minutes this month (all machines, of 60) and this machine's Search and Fetch calls left (of 300 each over the last 31 days).
+1. Run `bun run browserbase -- quota`. It prints this machine's Search and Fetch calls left: 300 of each per 31 days, so the three machines stay inside the plan's 1,000.
 2. Estimate the run's calls. If it needs more than is left, narrow it before you start: fewer queries, fewer results per query, fewer pages.
 3. Stop when the wrapper refuses a call for quota. Report what you found and what is left undone. Never switch to another machine or another tool to finish the same run.
 
@@ -51,26 +51,20 @@ Fetch returns a page's raw HTML without running JavaScript, up to 5 MB. The free
 
 Use a browser only for a page that Fetch cannot read: one that renders with JavaScript or needs a click.
 
-- **Local first.** `drive` runs Playwright's Chromium on this machine and spends no quota:
+`drive` runs Playwright's Chromium on this machine, with a throwaway profile and no sign-ins:
 
-  ```sh
-  bun run browserbase -- drive open https://example.com --session research
-  bun run browserbase -- drive snapshot --session research
-  bun run browserbase -- drive click @0-35 --session research
-  bun run browserbase -- drive stop --session research
-  ```
+```sh
+bun run browserbase -- drive open https://example.com --session research
+bun run browserbase -- drive snapshot --session research
+bun run browserbase -- drive click @0-35 --session research
+bun run browserbase -- drive stop --session research
+```
 
-- **Cloud only when local fails**, for example when a site blocks the local browser. A cloud session spends browser minutes (60 a month for every machine together) and ends after 15 minutes at the latest. The wrapper turns recording and logging off and refuses a session when less than 15 minutes are left this month.
+`open` takes a full URL. Stop the session when you have the page.
 
-  ```sh
-  bun run browserbase -- remote open https://example.com
-  bun run browserbase -- drive snapshot --session remote
-  bun run browserbase -- remote stop <session id>
-  ```
+There is no cloud browser: the pinned CLI takes a cloud session's connect URL only as a process argument, which the [security rules](../../../docs/technical/security.md) forbid for a credential. If a site blocks the local browser, use Search and Fetch, or report the page as unreachable.
 
-  Stop the session as soon as you have the page. An open session spends minutes while you think.
-
-`drive` refuses `--remote`, `--cdp`, `--auto-connect` and the Chrome flags, and every command that is not a page action, `eval` and `status` included. `remote stop` ends only a session this machine opened.
+`drive` refuses `--remote`, `--cdp`, `--auto-connect` and the Chrome flags, and every command that is not a page action, `eval` and `status` included.
 
 ## When it fails
 

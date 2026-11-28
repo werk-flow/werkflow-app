@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   closeSync,
   existsSync,
@@ -10,7 +9,6 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,18 +17,14 @@ import { chromium } from '@playwright/test';
 
 import {
   BROWSERBASE_API,
-  BROWSER_MINUTES_PER_MONTH,
   type CallKind,
   MACHINE_CALL_SHARE,
-  SESSION_CAP_MINUTES,
-  SESSION_NAME,
   type SearchRequest,
   apiFailure,
   browseEnvironment,
   callsLeft,
   parseLedger,
   planBrowserbase,
-  remoteSessionRefusal,
   withCall,
 } from '../lib/security/browserbase';
 import { readStagingAgentKeys } from '../lib/security/staging-agent-keys';
@@ -40,16 +34,12 @@ import { z } from '../lib/zod';
  * `bun run browserbase -- <command>`: the one way agents reach Browserbase
  * (.claude/skills/browserbase-research/SKILL.md). It sends every keyed call itself, so the key never
  * enters a subprocess, a redirect or a log, and runs the CLI pinned in package.json only as the
- * browser driver, without the key. lib/security/browserbase.ts decides what a call may do.
+ * local browser driver, without the key. lib/security/browserbase.ts decides what a call may do.
  */
 const checkout = resolve(import.meta.dir, '..');
 const STATE = join(homedir(), '.local/state/werkflow');
 const LEDGER_FILE = join(STATE, 'browserbase-calls.json');
 const LEDGER_LOCK = `${LEDGER_FILE}.lock`;
-/** The Stagehand extension this machine uploaded, which the driver needs in a cloud browser. */
-const EXTENSION_FILE = join(STATE, 'browserbase-extension.json');
-/** Which driver session each cloud session opened on this machine runs in. */
-const REMOTE_FILE = join(STATE, 'browserbase-remote.json');
 const TIMEOUT_MS = 30_000;
 
 function refuse(why: string): never {
@@ -72,48 +62,32 @@ function apiKey(): string {
  * A Browserbase API call. The key goes in a header to Browserbase only: a redirect fails the call
  * instead of carrying the header elsewhere, nothing retries it, and no body is printed.
  */
-async function api(key: string, path: string, init: RequestInit = {}): Promise<Response> {
+async function api(key: string, path: string, body: unknown): Promise<Response> {
   return fetch(`${BROWSERBASE_API}${path}`, {
-    ...init,
+    method: 'POST',
+    body: JSON.stringify(body),
     redirect: 'error',
-    headers: {
-      'X-BB-API-Key': key,
-      ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-    },
+    headers: { 'X-BB-API-Key': key, 'Content-Type': 'application/json' },
     signal: AbortSignal.timeout(TIMEOUT_MS),
     // BUN_CONFIG_VERBOSE_FETCH in the environment would print the key's header.
     verbose: false,
   });
 }
 
-/** A call's parsed JSON answer, or a refusal with its status alone. */
+/** A call's parsed JSON answer, or a refusal with fixed text: a parse error may quote the body. */
 async function apiJson<T>(what: string, response: Response, schema: z.ZodType<T>): Promise<T> {
   if (!response.ok) {
     await response.body?.cancel();
     refuse(apiFailure(what, response.status));
   }
-  const parsed = schema.safeParse(await response.json());
-  return parsed.success ? parsed.data : refuse(`${what} answered in an unknown shape.`);
-}
-
-const projectsSchema = z.array(z.object({ id: z.string() })).length(1);
-const usageSchema = z.object({ browserMinutes: z.number() });
-const sessionSchema = z.object({ id: z.string(), connectUrl: z.string() });
-
-/** The browser minutes of the key's one project this billing month. */
-async function browserMinutesUsed(key: string): Promise<number> {
+  let body: unknown;
   try {
-    const projects = await apiJson('The project listing', await api(key, '/projects'), projectsSchema);
-    const projectId = projects[0]?.id ?? '';
-    const usage = await apiJson(
-      'The usage read',
-      await api(key, `/projects/${projectId}/usage`),
-      usageSchema,
-    );
-    return usage.browserMinutes;
+    body = await response.json();
   } catch {
-    return refuse('Browserbase did not report the project usage. Run `bun run agent-access:check`.');
+    return refuse(`${what} answered no JSON.`);
   }
+  const parsed = schema.safeParse(body);
+  return parsed.success ? parsed.data : refuse(`${what} answered in an unknown shape.`);
 }
 
 /** Writes a state file through a rename, so a reader never sees half of it. */
@@ -130,8 +104,9 @@ const STALE_LOCK_MS = 10_000;
 /**
  * Runs `reserve` while this machine's other agents wait, so two of them never both spend the last
  * call. The lock is a file created exclusively, held only for the read and write, never the request.
+ * `reserve` returns its refusal instead of exiting, so the lock is always released.
  */
-async function withLedgerLock<T>(reserve: () => T): Promise<T> {
+async function withLedgerLock(reserve: () => string | undefined): Promise<string | undefined> {
   mkdirSync(STATE, { recursive: true });
   const deadline = Date.now() + 2 * STALE_LOCK_MS;
   while (Date.now() < deadline) {
@@ -149,35 +124,33 @@ async function withLedgerLock<T>(reserve: () => T): Promise<T> {
       unlinkSync(LEDGER_LOCK);
     }
   }
-  return refuse(
-    `${LEDGER_LOCK} stayed locked. Another call is stuck; look at it before you delete the lock.`,
-  );
+  return `${LEDGER_LOCK} stayed locked. Another call is stuck; look at it before you delete the lock.`;
+}
+
+function readLedger(): ReturnType<typeof parseLedger> {
+  return parseLedger(existsSync(LEDGER_FILE) ? readFileSync(LEDGER_FILE, 'utf8') : undefined);
 }
 
 /** Counts one call before it is sent: refused once this machine's share of the window is spent. */
 async function reserveCall(call: CallKind): Promise<void> {
-  await withLedgerLock(() => {
-    const text = existsSync(LEDGER_FILE) ? readFileSync(LEDGER_FILE, 'utf8') : undefined;
-    const ledger =
-      parseLedger(text) ??
-      refuse(`${LEDGER_FILE} is no call ledger. Look at it; delete it only if you know this month's calls.`);
+  const refusal = await withLedgerLock(() => {
+    const ledger = readLedger();
+    if (!ledger)
+      return `${LEDGER_FILE} is no call ledger. Look at it; delete it only if you know this month's calls.`;
     const now = Date.now();
     if (callsLeft(ledger, call, now) === 0)
-      refuse(
-        `this machine spent its ${MACHINE_CALL_SHARE} ${call} calls of the last 31 days. Stop the run here.`,
-      );
+      return `this machine spent its ${MACHINE_CALL_SHARE} ${call} calls of the last 31 days. Stop the run here.`;
     writeState(LEDGER_FILE, withCall(ledger, call, now));
+    return undefined;
   });
+  if (refusal) refuse(refusal);
 }
 
-async function quota(): Promise<number> {
-  const browserMinutes = await browserMinutesUsed(apiKey());
-  const ledger = parseLedger(existsSync(LEDGER_FILE) ? readFileSync(LEDGER_FILE, 'utf8') : undefined);
+/** This machine's calls left. The API reports no call counts, so the ledger is the only source. */
+function quota(): number {
+  const ledger = readLedger();
   if (!ledger) return refuse(`${LEDGER_FILE} is no call ledger.`);
   const now = Date.now();
-  console.log(
-    `[browserbase] browser minutes used this month, all machines: ${browserMinutes} of ${BROWSER_MINUTES_PER_MONTH}`,
-  );
   for (const kind of ['search', 'fetch'] as const)
     console.log(
       `[browserbase] ${kind} calls left on this machine, last 31 days: ${callsLeft(ledger, kind, now)} of ${MACHINE_CALL_SHARE}`,
@@ -192,11 +165,7 @@ const searchSchema = z.object({
 async function search(request: SearchRequest, output: string | undefined): Promise<number> {
   const key = apiKey();
   await reserveCall('search');
-  const answer = await apiJson(
-    'Search',
-    await api(key, '/search', { method: 'POST', body: JSON.stringify(request) }),
-    searchSchema,
-  );
+  const answer = await apiJson('Search', await api(key, '/search', request), searchSchema);
   const results = answer.results.map(({ title, url, publishedDate }) => ({
     title: title.trim(),
     url,
@@ -218,10 +187,7 @@ async function fetchPage(url: string, output: string | undefined): Promise<numbe
   // `raw`: the free plan answers 402 to markdown and JSON. No redirect: it could lead past the URL guard.
   const page = await apiJson(
     'Fetch',
-    await api(key, '/fetch', {
-      method: 'POST',
-      body: JSON.stringify({ url, format: 'raw', allowRedirects: false }),
-    }),
+    await api(key, '/fetch', { url, format: 'raw', allowRedirects: false }),
     fetchSchema,
   );
   if (output) {
@@ -246,7 +212,7 @@ function chromePath(): string | undefined {
   }
 }
 
-/** The pinned CLI as the browser driver. It never gets the key. */
+/** The pinned CLI as the local browser driver. It never gets the key. */
 async function runDriver(args: readonly string[]): Promise<number> {
   let cli: string;
   try {
@@ -264,134 +230,13 @@ async function runDriver(args: readonly string[]): Promise<number> {
   return child.exited;
 }
 
-async function releaseSession(key: string, sessionId: string): Promise<boolean> {
-  try {
-    const response = await api(key, `/sessions/${sessionId}`, {
-      method: 'POST',
-      body: JSON.stringify({ status: 'REQUEST_RELEASE' }),
-    });
-    await response.body?.cancel();
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-const extensionSchema = z.object({ id: z.string().min(1), sha256: z.string() });
-
-/** The Stagehand extension archive that the pinned CLI's driver expects in a cloud browser. */
-function extensionArchive(): string {
-  try {
-    const browse = createRequire(fileURLToPath(import.meta.resolve('browse/package.json')));
-    return join(
-      dirname(browse.resolve('@browserbasehq/stagehand/package.json')),
-      'dist/assets/stagehand-extension.zip',
-    );
-  } catch {
-    return refuse(`the pinned CLI is not installed. Run \`bun install --frozen-lockfile\` in ${checkout}.`);
-  }
-}
-
-/**
- * The project's copy of the extension: the one this machine uploaded for the same archive, or a new
- * upload. Stagehand uploads one per session and deletes it after; one per machine and CLI version
- * keeps a session's start short and leaves nothing to clean up when a run dies.
- */
-async function stagehandExtension(key: string, fresh: boolean): Promise<string> {
-  const bytes = readFileSync(extensionArchive());
-  const sha256 = createHash('sha256').update(bytes).digest('hex');
-  if (!fresh && existsSync(EXTENSION_FILE)) {
-    const cached = extensionSchema.safeParse(JSON.parse(readFileSync(EXTENSION_FILE, 'utf8')));
-    if (cached.success && cached.data.sha256 === sha256) return cached.data.id;
-  }
-  const form = new FormData();
-  form.append('file', new Blob([bytes], { type: 'application/zip' }), 'stagehand-extension.zip');
-  const uploaded = await apiJson(
-    'The extension upload',
-    await api(key, '/extensions', { method: 'POST', body: form }),
-    z.object({ id: z.string().min(1) }),
-  );
-  writeState(EXTENSION_FILE, { id: uploaded.id, sha256 });
-  return uploaded.id;
-}
-
-/** A session with recording and logging off, with the extension; a stale cached extension is uploaded again once. */
-async function createSession(key: string): Promise<z.infer<typeof sessionSchema>> {
-  for (const fresh of [false, true]) {
-    const response = await api(key, '/sessions', {
-      method: 'POST',
-      body: JSON.stringify({
-        extensionId: await stagehandExtension(key, fresh),
-        timeout: SESSION_CAP_MINUTES * 60,
-        browserSettings: { recordSession: false, logSession: false },
-      }),
-    });
-    if (response.ok) return sessionSchema.parse(await response.json());
-    await response.body?.cancel();
-  }
-  throw new Error('Browserbase refused the session.');
-}
-
-const remoteSchema = z.record(z.string(), z.string().regex(SESSION_NAME));
-
-function remoteSessions(): Record<string, string> {
-  if (!existsSync(REMOTE_FILE)) return {};
-  const parsed = remoteSchema.safeParse(JSON.parse(readFileSync(REMOTE_FILE, 'utf8')));
-  return parsed.success ? parsed.data : refuse(`${REMOTE_FILE} is no session list. Look at it.`);
-}
-
-/** A cloud browser with recording and logging off, opened in the local driver as a named session. */
-async function remoteOpen(url: string, session: string): Promise<number> {
-  const key = apiKey();
-  const refusal = remoteSessionRefusal(await browserMinutesUsed(key));
-  if (refusal) refuse(refusal);
-  let created: z.infer<typeof sessionSchema>;
-  try {
-    created = await createSession(key);
-  } catch {
-    return refuse('Browserbase did not create the session.');
-  }
-  // The connect URL opens the session to whoever holds it, so it goes to the driver only, which
-  // keeps it until the session ends; `drive status`, which would print it, is refused.
-  const opened = await runDriver(['open', url, '--cdp', created.connectUrl, '--session', session]);
-  if (opened !== 0) {
-    const released = await releaseSession(key, created.id);
-    console.error(
-      `[browserbase] The page did not open; session ${created.id} released: ${released ? 'ok' : 'failed'}.`,
-    );
-    return opened;
-  }
-  writeState(REMOTE_FILE, { ...remoteSessions(), [created.id]: session });
-  console.log(
-    `[browserbase] Remote session ${created.id} is open as --session ${session}, recording and logging off. ` +
-      `It ends after ${SESSION_CAP_MINUTES} minutes at the latest. ` +
-      `Drive it with \`bun run browserbase -- drive <command> --session ${session}\`, ` +
-      `end it with \`bun run browserbase -- remote stop ${created.id}\`.`,
-  );
-  return 0;
-}
-
-/** Ends a cloud session this machine opened, and its driver session; any other id is refused. */
-async function remoteStop(sessionId: string): Promise<number> {
-  const sessions = remoteSessions();
-  const session = sessions[sessionId];
-  if (!session) return refuse('no cloud session with that id was opened on this machine.');
-  const key = apiKey();
-  await runDriver(['stop', '--session', session]);
-  const released = await releaseSession(key, sessionId);
-  if (released)
-    writeState(REMOTE_FILE, Object.fromEntries(Object.entries(sessions).filter(([id]) => id !== sessionId)));
-  console.log(`[browserbase] session ${sessionId} released: ${released ? 'ok' : 'failed'}`);
-  return released ? 0 : 1;
-}
-
 const plan = planBrowserbase(process.argv.slice(2));
 switch (plan.kind) {
   case 'refused':
     refuse(plan.reason);
     break;
   case 'quota':
-    process.exitCode = await quota();
+    process.exitCode = quota();
     break;
   case 'search':
     process.exitCode = await search(plan.request, plan.output);
@@ -401,11 +246,5 @@ switch (plan.kind) {
     break;
   case 'drive':
     process.exitCode = await runDriver(plan.args);
-    break;
-  case 'remote-open':
-    process.exitCode = await remoteOpen(plan.url, plan.session);
-    break;
-  case 'remote-stop':
-    process.exitCode = await remoteStop(plan.sessionId);
     break;
 }

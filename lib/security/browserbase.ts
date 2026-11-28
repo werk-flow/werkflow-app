@@ -1,4 +1,3 @@
-import { isUuid } from '../validation/uuid';
 import { z } from '../zod';
 
 // The rules of `bun run browserbase`, the one way agents reach Browserbase
@@ -8,10 +7,6 @@ import { z } from '../zod';
 // (docs/technical/machine-setup.md, "Agent keys"), so the quota is shared too.
 
 export const BROWSERBASE_API = 'https://api.browserbase.com/v1';
-
-/** The project's monthly browser time on the free plan, and the longest one session may run. */
-export const BROWSER_MINUTES_PER_MONTH = 60;
-export const SESSION_CAP_MINUTES = 15;
 
 /**
  * Each machine's share of the monthly Search and Fetch calls (1,000 each on the free plan, shared by
@@ -60,13 +55,6 @@ export function withCall(ledger: Ledger, kind: CallKind, now: number): Ledger {
   return { ...pruned, [kind]: [...pruned[kind], now] };
 }
 
-/** Whether a new remote session fits the month's browser time: a session may run its full cap. */
-export function remoteSessionRefusal(browserMinutesUsed: number): string | undefined {
-  const left = BROWSER_MINUTES_PER_MONTH - browserMinutesUsed;
-  if (left >= SESSION_CAP_MINUTES) return undefined;
-  return `only ${Math.max(0, left)} of the month's ${BROWSER_MINUTES_PER_MONTH} browser minutes are left, fewer than one ${SESSION_CAP_MINUTES}-minute session. Use \`drive\` with the local browser.`;
-}
-
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 const PRIVATE_SUFFIXES = ['localhost', 'local', 'internal', 'lan', 'home.arpa'];
 
@@ -78,7 +66,7 @@ const PRIVATE_SUFFIXES = ['localhost', 'local', 'internal', 'lan', 'home.arpa'];
 export function urlRefusal(raw: string): string | undefined {
   const url = URL.parse(raw);
   if (!url) return 'it is no URL';
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') return `${url.protocol} is no web address`;
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'it is no web address';
   if (url.username || url.password) return 'it carries credentials';
   const host = url.hostname.toLowerCase().replace(/\.$/, '');
   if (host.startsWith('[') || IPV4.test(host)) return 'it names an IP address, not a public host';
@@ -132,8 +120,8 @@ const OPEN_FLAGS: FlagSpec = {
 const TAB_NEW_FLAGS: FlagSpec = { values: new Set(['session']), switches: new Set() };
 
 /**
- * Driver commands that act on a page already open. Left out: `status` (prints a cloud session's
- * connect URL), `eval` (runs any script), `cdp`, `daemon`, `doctor`, `network` and `discord`
+ * Driver commands that act on a page already open. Left out: `status` (prints the browser's
+ * endpoint), `eval` (runs any script), `cdp`, `daemon`, `doctor`, `network` and `discord`
  * (diagnostics and side channels), `upload` (sends a local file to the page), and every cloud,
  * functions, skills and templates command.
  */
@@ -161,9 +149,10 @@ const DRIVER_COMMANDS = new Set([
 ]);
 
 /**
- * Driver flags no command takes: `--remote` starts a recorded cloud session, `--cdp`,
+ * Driver flags no command takes: `--remote` starts a cloud session that records by default, `--cdp`,
  * `--auto-connect` and `--target-id` attach to a browser that may carry someone's sign-ins, and the
- * Chrome flags could swap the browser's temporary profile for a real one.
+ * Chrome flags could swap the browser's temporary profile for a real one. A cloud browser stays off
+ * until the driver takes its connect URL other than as a process argument (docs/technical/security.md).
  */
 const REFUSED_DRIVER_FLAGS = new Set([
   'remote',
@@ -197,10 +186,8 @@ export type Plan =
   | { kind: 'search'; request: SearchRequest; output: string | undefined }
   /** A counted raw Fetch call, which the wrapper sends itself. */
   | { kind: 'fetch'; url: string; output: string | undefined }
-  /** A driver command on the local browser or an open cloud session, without the key. */
-  | { kind: 'drive'; args: readonly string[] }
-  | { kind: 'remote-open'; url: string; session: string }
-  | { kind: 'remote-stop'; sessionId: string };
+  /** A driver command on the local browser, without the key. */
+  | { kind: 'drive'; args: readonly string[] };
 
 const refused = (reason: string): Plan => ({ kind: 'refused', reason });
 
@@ -229,7 +216,7 @@ function parseFlags(
       continue;
     }
     if (spec.switches.has(name) && !arg.includes('=')) continue;
-    if (!spec.values.has(name)) return { refusal: `--${name} is no flag this command takes` };
+    if (!spec.values.has(name)) return { refusal: 'an argument is no flag this command takes' };
     const split = arg.indexOf('=');
     const value = split >= 0 ? arg.slice(split + 1) : args[++index];
     if (value === undefined) return { refusal: `--${name} needs a value` };
@@ -312,38 +299,11 @@ function planDrive(args: readonly string[]): Plan {
   for (const arg of rest) {
     const name = flagName(arg);
     if (name !== undefined && REFUSED_DRIVER_FLAGS.has(name))
-      return refused(
-        `--${name} leaves the local browser or its profile; use \`remote open\` for a cloud browser`,
-      );
+      return refused(`--${name} leaves the local browser or its profile`);
   }
   if (command === 'open') return planOpen(args, OPEN_FLAGS, 1);
   if (command === 'tab' && rest[0] === 'new') return planOpen(args, TAB_NEW_FLAGS, 2);
   return { kind: 'drive', args };
-}
-
-export const SESSION_NAME = /^[a-z][a-z0-9-]{0,40}$/;
-
-function planRemote(args: readonly string[]): Plan {
-  const [action, target, ...rest] = args;
-  if (action === 'open' && target !== undefined) {
-    let session = 'remote';
-    if (rest.length) {
-      const [flag, value, ...extra] = rest;
-      if (flag !== '--session' || value === undefined || extra.length || !SESSION_NAME.test(value))
-        return refused('remote open takes only --session <name> after its URL');
-      session = value;
-    }
-    const url = target;
-    const reason = urlRefusal(url);
-    return reason
-      ? refused(`the URL is no public research page: ${reason}`)
-      : { kind: 'remote-open', url, session };
-  }
-  if (action === 'stop' && target !== undefined && !rest.length) {
-    if (!isUuid(target)) return refused('remote stop takes the session id that remote open printed');
-    return { kind: 'remote-stop', sessionId: target };
-  }
-  return refused('use remote open <url> [--session <name>] or remote stop <session id>');
 }
 
 /** What `bun run browserbase -- <args>` may do. */
@@ -360,10 +320,8 @@ export function planBrowserbase(argv: readonly string[]): Plan {
       return planFetch(args);
     case 'drive':
       return planDrive(args);
-    case 'remote':
-      return planRemote(args);
     default:
-      return refused('commands: quota, search, fetch, drive, remote open, remote stop');
+      return refused('commands: quota, search, fetch, drive');
   }
 }
 
@@ -382,7 +340,7 @@ export function apiFailure(what: string, status: number): string {
 
 /**
  * Variables the CLI reads that could change what it sends or prints: its own, and `DEBUG`, under
- * which its libraries print requests, a cloud session's connect URL among them.
+ * which its libraries print requests and endpoints.
  */
 const CLI_VARIABLE = /^(?:BROWSERBASE_|BROWSE_|BB_|STAGEHAND_|DEBUG$|NODE_DEBUG$)/;
 
