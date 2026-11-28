@@ -513,6 +513,29 @@ test('a removed file keeps its place through a navigation away and back, so a fa
   await expect(attached(page).getByRole('listitem')).toHaveCount(5);
 });
 
+test('a removal still pending when a sign-out clears the drafts keeps no place in the next draft', async ({
+  page,
+}) => {
+  const ids = [1, 2, 3, 4, 5, 6].map((n) => `00000000-0000-4000-8000-00000000030${n}`);
+  await openContractFixture(page, 'ki-chat');
+  await choose(page, [pdf('Alt.pdf')]);
+  await finishUpload(page, ids[0] ?? '', 1);
+  await page.evaluate(() => {
+    window.uiContractKiHeldDiscards = [];
+  });
+  await attached(page).getByRole('button', { name: 'Alt.pdf entfernen' }).click();
+  await expect(attached(page)).toHaveCount(0);
+
+  // The sign-out cleared the drafts and failed, so the page stays: five new files fit.
+  await page.evaluate(() => window.uiContractKiClearDrafts());
+  for (const [index, id] of ids.slice(1).entries()) {
+    await choose(page, [pdf(`Neu ${index + 1}.pdf`)]);
+    await finishUpload(page, id, 1);
+  }
+  await expect(attached(page).getByRole('listitem')).toHaveCount(5);
+  await expect(page.getByRole('main').getByText('höchstens 5 Dateien', { exact: false })).toHaveCount(0);
+});
+
 test('a new chat takes its files along once saved, and a refusal after sign-out writes nothing back', async ({
   page,
 }) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { readDraft, writeDraft } from '@/lib/ai/chat-drafts';
+import { draftClears, readDraft, writeDraft } from '@/lib/ai/chat-drafts';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import type { AiUploadedFile } from '@/lib/ai/files/types';
@@ -51,11 +51,12 @@ type Removal = { fileId: string; draft: string; sizeBytes: number };
  * The removals the server has not answered, with the drafts they keep a place
  * in. Memory only: they outlive the composer through a client-side navigation,
  * and a reload ends the wait for the answer, after which nothing comes back.
+ * A sign-out's clear ends them too: their files went with the drafts.
  */
-let removals: readonly Removal[] = [];
+let removals: readonly (Removal & { clears: number })[] = [];
 
 export function holdRemoval(removal: Removal): void {
-  removals = [...removals, removal];
+  removals = [...removals, { ...removal, clears: draftClears() }];
 }
 
 /** Frees the place once the server answered; a refused removal's file comes back after it. */
@@ -64,7 +65,7 @@ export function releaseRemoval(fileId: string): void {
 }
 
 export function pendingRemovals(draft: string): readonly Removal[] {
-  return removals.filter((removal) => removal.draft === draft);
+  return removals.filter((removal) => removal.draft === draft && removal.clears === draftClears());
 }
 
 const moveListeners = new Set<(from: string, to: string) => void>();
