@@ -192,6 +192,15 @@ describe('A correction of one interval of an approved correction', () => {
     expect(result).toEqual({ error: 'time_correction_multiple_intervals' });
   });
 
+  test('of the work after a break is refused for a deletion, which would leave the break open', async () => {
+    const afterBreak: TimeCorrectionSnapshot = {
+      schemaVersion: 1,
+      facts: [fact('f0', 'break_end', '10:30'), fact('f1', 'clock_out', '12:00')],
+    };
+    const result = await correct({ kind: 'delete', factId: 'f0', proposedFacts: [], snapshot: afterBreak });
+    expect(result).toEqual({ error: 'time_correction_multiple_intervals' });
+  });
+
   test('edits the second break of a session, not the first', async () => {
     const twoBreaks: TimeCorrectionSnapshot = {
       schemaVersion: 1,

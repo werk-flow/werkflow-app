@@ -178,8 +178,8 @@ function editSource(
  * A correction of one interval of an approved correction: the run up to a
  * clock-out that holds the named fact changes, every other fact stays as it
  * was. An edit moves exactly the named fact. A deletion, split, reclassification
- * or reallocation needs an interval of one activity, and a reassignment an
- * application of one; anything else would reach past the interval and is
+ * or reallocation needs an interval of one clock-in and its clock-out, and a
+ * reassignment an application of one; anything else would reach past the interval and is
  * refused. A split keeps the stored activity with its details. New facts get
  * ids from `newFactIdPrefix`, so none collides with a sibling's.
  */
@@ -214,8 +214,10 @@ export function mergeApplicationCorrection(input: {
     return days.size > 1 ? { success: false, error: 'correction_crosses_midnight' } : replace(edited);
   }
   const interval = before.facts.slice(from, to);
-  const [start] = interval;
-  if (!start || interval.length !== 2 || (kind === 'reassign' && interval.length !== before.facts.length)) {
+  const [start, end, ...more] = interval;
+  // One activity of its own: a clock-in and its clock-out, not the end of a break before it.
+  const ownPair = start?.entryType === 'clock_in' && end?.entryType === 'clock_out' && !more.length;
+  if (!start || !ownPair || (kind === 'reassign' && interval.length !== before.facts.length)) {
     return { success: false, error: 'time_correction_multiple_intervals' };
   }
   if (kind === 'split') {
