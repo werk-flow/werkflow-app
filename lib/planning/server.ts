@@ -483,21 +483,25 @@ export async function assessPlanningOccurrences(input: {
   excludeOccurrenceId?: string;
   excludeOccurrenceIds?: string[];
 }): Promise<PlanningAssessment | null> {
-  const assignmentsFor: AssignmentsForOccurrence = (occurrence) => [
-    ...new Map(
-      (input.assignmentsByOriginalStartLocal
-        ? (input.assignmentsByOriginalStartLocal.get(occurrence.originalStartLocal) ?? [])
-        : input.assignments
-      ).map((assignment) => [assignment.employeeRecordId, assignment]),
-    ).values(),
-  ];
+  // The fingerprint follows the order of the people, and callers read them
+  // from the database without a fixed order. Sorted, a confirmation that
+  // re-assesses the same people matches the assessment the manager saw.
+  const assignmentsFor: AssignmentsForOccurrence = (occurrence) =>
+    [
+      ...new Map(
+        (input.assignmentsByOriginalStartLocal
+          ? (input.assignmentsByOriginalStartLocal.get(occurrence.originalStartLocal) ?? [])
+          : input.assignments
+        ).map((assignment) => [assignment.employeeRecordId, assignment]),
+      ).values(),
+    ].sort((left, right) => (left.employeeRecordId < right.employeeRecordId ? -1 : 1));
   const employeeRecordIds = [
     ...new Set(
       input.occurrences.flatMap((occurrence) =>
         assignmentsFor(occurrence).map((assignment) => assignment.employeeRecordId),
       ),
     ),
-  ];
+  ].sort();
   const occurrenceDates = collectAssessedOccurrenceDates(input.occurrences);
   const uniqueDates = [...new Set(occurrenceDates)].sort();
   if (uniqueDates.length === 0 || employeeRecordIds.length === 0) {

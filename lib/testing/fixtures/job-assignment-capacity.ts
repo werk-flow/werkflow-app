@@ -191,3 +191,17 @@ world.rpcCalls = [];
 const removal = await updateJobAssignments(jobId, []);
 assert.equal(removal.success, true);
 assert.equal(world.rpcCalls[0]?.args.p_visit_id, null);
+
+// The database returns rows without an ORDER BY in any order. A confirmation
+// re-assesses the same people, so it matches the assessment the manager saw
+// even when the people's records come back in another order.
+world.rpcCalls = [];
+const both = await updateJobAssignments(jobId, [CALLER_ID, erikUserId, mehmetUserId]);
+assert.ok(!both.success && 'conflicts' in both && both.error === 'planning_warning');
+world.tables.employee_records?.reverse();
+const confirmedBoth = await updateJobAssignments(jobId, [CALLER_ID, erikUserId, mehmetUserId], null, null, {
+  fingerprint: both.fingerprint,
+  reason: 'Übergabe und Vertretung sind abgestimmt',
+});
+assert.equal(confirmedBoth.success, true, 'the row order of a read never makes a confirmation stale');
+assert.equal(world.rpcCalls.length, 1);
