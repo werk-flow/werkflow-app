@@ -4,7 +4,7 @@
 #
 # Writes sha, verified (a green full run exists), release (the run goes on) and, for a run
 # that stops, skip and skip_reason to $GITHUB_OUTPUT. A manual release always goes on. A scheduled one goes on only when
-# main moved since production and its newest full run is green, or it has none yet and
+# main moved since production, no rollback is in place, and its newest full run is green, or it has none yet and
 # the release runs its own. A dry run decides like a scheduled run and changes nothing.
 # Needs GITHUB_REF and origin/production fetched. It reads GitHub without a token through
 # full-run-verdict.sh, so a machine that holds none, such as a CI runner's release user
@@ -43,6 +43,13 @@ if test "$mode" != manual && git merge-base --is-ancestor "$sha" origin/producti
 fi
 git merge-base --is-ancestor origin/production "$sha" \
   || { echo "::error::production is not an ancestor of main; it only ever moves forward."; exit 1; }
+
+# A rollback (rollback.yml) opens the issue "Rollback in place" before it switches the domain, and main
+# still holds the code it rolled back. A scheduled run holds until a release by hand, which closes the
+# issue, ships a main that holds the fix. ROLLBACK_ISSUE is that issue's number, empty when none is open.
+if test "$mode" != manual && test -n "${ROLLBACK_ISSUE:-}"; then
+  skip red-run "A rollback is in place (#${ROLLBACK_ISSUE}). Release by hand (gh workflow run release) once main holds the fix."
+fi
 
 # The newest full run on the commit decides (full-run-verdict.sh); a failed read or a malformed row
 # stops the gate.

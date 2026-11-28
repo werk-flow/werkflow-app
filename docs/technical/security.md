@@ -105,7 +105,7 @@ A reader cached across requests throws `CachedReadError` on a failed read, so th
 
 ### Supply chain
 
-Every plan carries an advisory check under 24 hours old. An unknown finding fails, as does an exception that is expired, outgrown or on a changed dependency tree, matching or not. A workflow pins each outside action to a commit SHA and its release.
+Every plan carries an advisory check under 24 hours old. An unknown finding fails, as does an expired, outgrown or changed-tree exception, matching or not. A workflow pins each outside action to a commit SHA and its release.
 
 On an unchanged tree, an exception matching no finding passes with a note: remove it.
 
@@ -121,7 +121,7 @@ On an unchanged tree, an exception matching no finding passes with a note: remov
 - Log personal data, codes, provider bodies or a raw error object. Log through `logError`, never `console`.
 - Cache a permission fact across requests, or an authenticated response at the CDN.
 - Add a retry or a cookie fallback that turns a failed identity check into access.
-- Write to PROD outside the `release` workflow.
+- Write to PROD outside the `release` and `rollback` workflows.
 - Pass a secret as a program argument in a script: other local users read it in `/proc` (`curl-headers.sh`).
 - Read PROD data in an agent session: results reach the model provider ([which tool reaches what](environments.md#which-tool-reaches-what)).
 - Keep an account-wide token or a PROD key where agents read, except `.env.live-backup` in the owner's [production session](environments.md#work-on-production): agents hold only [agent keys](machine-setup.md#agent-keys).

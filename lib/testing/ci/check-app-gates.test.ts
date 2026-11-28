@@ -354,6 +354,7 @@ test('the gate jobs may read check runs, so a configured App is not refused by G
     contents: 'read',
     actions: 'read',
     checks: 'read',
+    issues: 'read',
   });
   const fullRun = readWorkflow('main-full-run.yml');
   expect(fullRun.at('jobs', 'decide', 'permissions')).toMatchObject({ checks: 'read' });

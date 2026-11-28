@@ -16,7 +16,11 @@ import { workflowsFolder } from '../testing/ci-workflow';
 // report names checks, never a value or a provider body.
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
-const DEPLOY_WORKFLOWS = [`${workflowsFolder()}/staging.yml`, `${workflowsFolder()}/release.yml`];
+// Every deploy goes through one script, which holds the list of names.
+const DEPLOY_SCRIPT = '.github/scripts/deploy-edge-functions.sh';
+const DEPLOY_WORKFLOWS = ['staging.yml', 'release.yml', 'rollback.yml'].map(
+  (name) => `${workflowsFolder()}/${name}`,
+);
 // The guard each function's handler calls before it acts: the secret-key check or the health token.
 const CALLER_GUARDS = ['createMailAuthorizer', 'hasToken('];
 
@@ -27,15 +31,18 @@ function functionFolders(): string[] {
     .sort();
 }
 
-function deployedFunctions(workflow: string): string[] {
-  const text = readFileSync(resolve(repositoryRoot, workflow), 'utf8');
-  const names = /supabase functions deploy ((?:[a-z0-9][a-z0-9-]* )+)--/.exec(text)?.[1];
+function deployedFunctions(): string[] {
+  const text = readFileSync(resolve(repositoryRoot, DEPLOY_SCRIPT), 'utf8');
+  const names = /^names=\(([a-z0-9 -]+)\)$/m.exec(text)?.[1];
   return (names ?? '').trim().split(/\s+/).filter(Boolean).sort();
 }
 
 test('each deploy step names every function, and every function checks its own caller', () => {
+  expect(deployedFunctions(), DEPLOY_SCRIPT).toEqual(functionFolders());
   for (const workflow of DEPLOY_WORKFLOWS) {
-    expect(deployedFunctions(workflow), workflow).toEqual(functionFolders());
+    const text = readFileSync(resolve(repositoryRoot, workflow), 'utf8');
+    expect(text, `${workflow} deploys through ${DEPLOY_SCRIPT}`).toContain(DEPLOY_SCRIPT);
+    expect(text, `${workflow} names no function itself`).not.toContain('supabase functions deploy');
   }
   for (const name of functionFolders()) {
     const handler = readFileSync(resolve(repositoryRoot, `supabase/functions/${name}/handler.ts`), 'utf8');

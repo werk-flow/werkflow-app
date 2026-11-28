@@ -291,3 +291,15 @@ test('a GH_TOKEN, where set, reaches only api.github.com, and only as a curl con
   expect(readFileSync(join(stub, 'arguments'), 'utf8')).not.toContain(TOKEN);
   expect(result.output).not.toContain(TOKEN);
 });
+
+test('a scheduled run holds while a rollback is in place, and a release by hand goes on', () => {
+  appChecks([{ conclusion: 'success', completed_at: T }]);
+  const held = decide('scheduled', { ROLLBACK_ISSUE: '812' });
+  expect(held.status, held.output).toBe(0);
+  expect(held.outputs).toContain('release=false');
+  expect(held.outputs).toContain('skip=red-run');
+  expect(held.output).toContain('A rollback is in place (#812)');
+  expect(decide('dry-run', { ROLLBACK_ISSUE: '812' }).outputs).toContain('release=false');
+  expect(decide('manual', { ROLLBACK_ISSUE: '812' }).outputs).toContain('release=true');
+  expect(decide('scheduled', { ROLLBACK_ISSUE: '' }).outputs).toContain('release=true');
+});

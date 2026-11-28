@@ -306,13 +306,19 @@ test('an unreadable production flag fails the job instead of guessing', () => {
   expect(readFileSync(join(stub, 'gh.log'), 'utf8')).toBe('');
 });
 
-test('only the release, its missed-run alert, the health check and the PROD inspection can assign the owner', () => {
+test('only the release, the rollback, the missed-run alert, the health check and the PROD inspection can assign the owner', () => {
   const workflows = join(repositoryRoot, workflowsFolder());
   const callers = readdirSync(workflows).filter((file) =>
     readFileSync(join(workflows, file), 'utf8').includes('AFFECTS_PRODUCTION'),
   );
-  expect(callers.sort()).toEqual(['health.yml', 'prod-inspect.yml', 'production-alert.yml', 'release.yml']);
-  for (const file of ['release.yml', 'production-alert.yml', 'prod-inspect.yml'])
+  expect(callers.sort()).toEqual([
+    'health.yml',
+    'prod-inspect.yml',
+    'production-alert.yml',
+    'release.yml',
+    'rollback.yml',
+  ]);
+  for (const file of ['release.yml', 'rollback.yml', 'production-alert.yml', 'prod-inspect.yml'])
     expect(readFileSync(join(workflows, file), 'utf8'), file).toContain('AFFECTS_PRODUCTION: true\n');
 });
 
@@ -402,7 +408,9 @@ function decide(mode: string, ahead: boolean, fullRunConclusion: string, run: ob
       html_url: 'https://github.test/job',
     },
   ]);
-  const result = bash(repository, candidateScript, [mode], { COMMIT: revParse(repository, 'HEAD') });
+  const result = bash(repository, candidateScript, [mode], {
+    COMMIT: revParse(repository, 'HEAD'),
+  });
   expect(result.status).toBe(0);
   return {
     sha: revParse(repository, 'HEAD'),

@@ -1,0 +1,185 @@
+name: rollback
+
+# The way back from a bad release (docs/technical/environments.md, "Release and rollback").
+#   gh workflow run rollback.yml                      plan only: names the build it would go back to
+#   gh workflow run rollback.yml -f dry_run=false     go back to the previous release
+#   gh workflow run rollback.yml -f dry_run=false -f target=<sha>
+#                                                     go back to that released commit, or resume a
+#                                                     rollback to it whose edge functions failed
+# It switches the domain to exactly the planned build with Vercel's Instant Rollback
+# (.github/scripts/rollback-switch.sh), redeploys that commit's edge functions, which Vercel's
+# rollback does not cover, and checks production as the release does. It never touches the
+# database and never moves `production`. While the domain serves an older build than production's
+# head, scheduled releases hold (release-candidate.sh); a release by hand ends the rollback.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Plan only, change nothing. Set false to roll back.
+        type: boolean
+        default: true
+      target:
+        description: Full sha of a released commit to go back to. Empty means the previous release.
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+# The Vercel project that serves app.werk-flow.app.
+env:
+  VERCEL_TEAM_ID: team_B8v4QHjpjZWyFXo6wkhiXkgN
+  VERCEL_PROJECT_ID: prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R
+
+jobs:
+  plan:
+    name: Find the build to go back to
+    # Only main holds the release's rules; a dispatch from a branch stops here.
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read # the release runs: one still going, and which migrations reached PROD
+    outputs:
+      sha: ${{ steps.target.outputs.sha }}
+      deployment: ${{ steps.target.outputs.deployment }}
+      served: ${{ steps.target.outputs.served }}
+    steps:
+      # The history and the migrations are read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Plan the rollback
+        id: target
+        uses: ./.github/actions/rollback-plan
+        with:
+          target: ${{ inputs.target }}
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+
+  rollback:
+    name: Roll back production
+    needs: plan
+    if: ${{ !inputs.dry_run }}
+    # The PROD secrets live in this environment only, and only main may use it, as for the release.
+    environment: production
+    # The release's group, held from the second plan through the smoke check, so a rollback and a
+    # release never write or check at once. A dry run stays out of it.
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read # the release runs: one still going, and which migrations reached PROD
+      issues: write # "Rollback in place", opened before the switch
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Production may have moved while this job waited for the group: plan again under it.
+      - name: Plan again under the release group
+        id: again
+        uses: ./.github/actions/rollback-plan
+        with:
+          target: ${{ needs.plan.outputs.sha }}
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Refuse when production moved since the plan
+        env:
+          PLANNED: ${{ needs.plan.outputs.deployment }}
+          PLANNED_SERVED: ${{ needs.plan.outputs.served }}
+          NOW: ${{ steps.again.outputs.deployment }}
+          NOW_SERVED: ${{ steps.again.outputs.served }}
+        run: |
+          test "$NOW" = "$PLANNED" || { echo "::error::The plan named ${PLANNED}, the second plan ${NOW}; run the rollback again."; exit 1; }
+          test "$NOW_SERVED" = "$PLANNED_SERVED" || test "$NOW_SERVED" = "$PLANNED" \
+            || { echo "::error::Production serves ${NOW_SERVED} now, not ${PLANNED_SERVED} as planned; run the rollback again."; exit 1; }
+
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
+        with:
+          version: 2.116.0
+
+      # Before traffic moves: the target's function source beside this workflow's deploy script,
+      # which an older commit may lack. A failure here leaves production as it was.
+      - name: Put the target's edge function source in place
+        env:
+          SHA: ${{ needs.plan.outputs.sha }}
+        run: git restore --source="$SHA" --staged --worktree -- supabase/functions
+
+      # An open "Rollback in place" means an earlier run of this workflow switched the domain, so a
+      # domain that serves the target already is a resume, not a release that never finished.
+      - name: Find an earlier rollback
+        id: earlier
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash .github/scripts/rollback-in-place.sh
+
+      # Before the switch, so scheduled releases hold even when a later step fails. A release by hand
+      # closes it.
+      - name: Open "Rollback in place"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          AFFECTS_PRODUCTION: true
+          SHA: ${{ needs.plan.outputs.sha }}
+          DEPLOYMENT: ${{ needs.plan.outputs.deployment }}
+        run: |
+          body="$(printf 'rollback.yml switches app.werk-flow.app to %s (%s). Scheduled releases hold while this is open. Repair main by PR, then release by hand (gh workflow run release), which closes this issue.' "$SHA" "$DEPLOYMENT")"
+          bash .github/scripts/alert-issue.sh open 'Rollback in place' "$body"
+
+      # The code first: it is what users see, and the switch takes seconds.
+      - name: Switch the domain to the planned build
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOYMENT: ${{ needs.plan.outputs.deployment }}
+          ROLLBACK_ACTIVE: ${{ steps.earlier.outputs.issue != '' }}
+        run: bash .github/scripts/rollback-switch.sh "$DEPLOYMENT"
+
+      # A failure here leaves the old code on the new functions: run again with -f target=<sha>,
+      # which keeps the domain and deploys the functions again.
+      - name: Redeploy the target's edge functions to PROD
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: bash .github/scripts/deploy-edge-functions.sh jbgaqpdjauzoocplgdsn --present-only
+
+      - name: Smoke-check production without reading its data
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
+          APP_URL: https://app.werk-flow.app
+          HEALTH_URL: https://jbgaqpdjauzoocplgdsn.supabase.co/functions/v1/health
+          DEPLOYMENT: ${{ needs.plan.outputs.deployment }}
+        run: bash .github/scripts/release-smoke.sh "$DEPLOYMENT"
+
+  alert:
+    name: Alert
+    needs: [plan, rollback]
+    # A failed rollback leaves production in doubt, so it assigns the owner. A dry run says nothing.
+    if: ${{ !cancelled() && !inputs.dry_run && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # name the failed jobs
+      issues: write # open, update and close the alert issue
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Open, update or close the alert issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: 'CI alert: rollback'
+          AFFECTS_PRODUCTION: true
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+          ALERT_DETAIL: 'To retry, run rollback.yml with -f dry_run=false -f target=<the sha the plan job named>; it keeps a domain that serves that build and deploys its edge functions again.'
+        run: bash .github/scripts/alert-issue.sh run "$TITLE" "$RESULTS"
