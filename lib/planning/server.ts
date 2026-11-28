@@ -24,7 +24,7 @@ import { toJson } from '@/lib/supabase/json';
 import { loadApprovedVacationSpansByRecord } from '@/lib/vacation/server';
 import { loadSchoolDaySpansByRecord } from '@/lib/personnel/school-day-server';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import { fingerprintSnapshot } from './capacity';
+import { compareByCodePoint, fingerprintSnapshot } from './capacity';
 import { addLocalDays, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 import { accessEndDatesByRecord } from './availability';
 import {
@@ -483,22 +483,29 @@ export async function assessPlanningOccurrences(input: {
   excludeOccurrenceId?: string;
   excludeOccurrenceIds?: string[];
 }): Promise<PlanningAssessment | null> {
-  const assignmentsFor: AssignmentsForOccurrence = (occurrence) => [
-    ...new Map(
-      (input.assignmentsByOriginalStartLocal
-        ? (input.assignmentsByOriginalStartLocal.get(occurrence.originalStartLocal) ?? [])
-        : input.assignments
-      ).map((assignment) => [assignment.employeeRecordId, assignment]),
-    ).values(),
-  ];
+  // The fingerprint follows the order of the visits and people, and callers
+  // read them from the database without a fixed order. Sorted, a confirmation
+  // that re-assesses the same plan matches the assessment the manager saw.
+  const occurrences = [...input.occurrences].sort((left, right) =>
+    compareByCodePoint(left.originalStartLocal, right.originalStartLocal),
+  );
+  const assignmentsFor: AssignmentsForOccurrence = (occurrence) =>
+    [
+      ...new Map(
+        (input.assignmentsByOriginalStartLocal
+          ? (input.assignmentsByOriginalStartLocal.get(occurrence.originalStartLocal) ?? [])
+          : input.assignments
+        ).map((assignment) => [assignment.employeeRecordId, assignment]),
+      ).values(),
+    ].sort((left, right) => compareByCodePoint(left.employeeRecordId, right.employeeRecordId));
   const employeeRecordIds = [
     ...new Set(
-      input.occurrences.flatMap((occurrence) =>
+      occurrences.flatMap((occurrence) =>
         assignmentsFor(occurrence).map((assignment) => assignment.employeeRecordId),
       ),
     ),
-  ];
-  const occurrenceDates = collectAssessedOccurrenceDates(input.occurrences);
+  ].sort();
+  const occurrenceDates = collectAssessedOccurrenceDates(occurrences);
   const uniqueDates = [...new Set(occurrenceDates)].sort();
   if (uniqueDates.length === 0 || employeeRecordIds.length === 0) {
     return emptyPlanningAssessment();
@@ -508,7 +515,7 @@ export async function assessPlanningOccurrences(input: {
   const context = await loadAssessmentContext({ admin, orgId: input.orgId, employeeRecordIds, uniqueDates });
   if (!context) return null;
   const capacity = evaluateProposedCapacity({
-    occurrences: input.occurrences,
+    occurrences,
     assignmentsFor,
     existingRows: context.existingRows,
     excludedOccurrenceIds: new Set([
@@ -525,7 +532,7 @@ export async function assessPlanningOccurrences(input: {
     admin,
     orgId: input.orgId,
     jobId: input.jobId,
-    assessments: buildQualificationAssessmentRequests(input.occurrences, assignmentsFor),
+    assessments: buildQualificationAssessmentRequests(occurrences, assignmentsFor),
   });
   if (!evaluations) return null;
   return finishPlanningAssessment({ admin, capacity, evaluations, records: context.records });
