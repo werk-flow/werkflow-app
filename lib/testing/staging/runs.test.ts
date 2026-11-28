@@ -10,11 +10,14 @@ import {
   newRunId,
   originsFact,
   redact,
+  retentionRefusals,
+  retireReason,
   runActorEmail,
   runActorsQuery,
   runMemberEmail,
   runOrganizationName,
   selectRuns,
+  sweepPlan,
   type ActorRow,
   type OrganizationRow,
 } from './runs';
@@ -30,6 +33,7 @@ const actor = (id: string, runId: string, createdAt: string): ActorRow => ({
   email: runActorEmail(runId),
   createdAt,
   runMarker: runId,
+  retiredMarker: null,
 });
 const organization = (id: string, name: string, adminId: string): OrganizationRow => ({ id, name, adminId });
 
@@ -91,11 +95,35 @@ describe('cleanup selection', () => {
     actor('actor-old', RUN, OLD),
     actor('actor-fresh', OTHER_RUN, FRESH),
     // A real person on DEV, whatever their address looks like.
-    { id: 'person', email: 'agent@werkflow-agents.test', createdAt: OLD, runMarker: null },
-    { id: 'partner', email: `agent+${RUN}@partner.example`, createdAt: OLD, runMarker: RUN },
+    {
+      id: 'person',
+      email: 'agent@werkflow-agents.test',
+      createdAt: OLD,
+      runMarker: null,
+      retiredMarker: null,
+    },
+    {
+      id: 'partner',
+      email: `agent+${RUN}@partner.example`,
+      createdAt: OLD,
+      runMarker: RUN,
+      retiredMarker: null,
+    },
     // A run address someone typed by hand: no marker, or one for another run.
-    { id: 'look-alike', email: runActorEmail('20261120-0900-abcdef'), createdAt: OLD, runMarker: null },
-    { id: 'wrong-marker', email: runActorEmail('20261120-0900-fedcba'), createdAt: OLD, runMarker: RUN },
+    {
+      id: 'look-alike',
+      email: runActorEmail('20261120-0900-abcdef'),
+      createdAt: OLD,
+      runMarker: null,
+      retiredMarker: null,
+    },
+    {
+      id: 'wrong-marker',
+      email: runActorEmail('20261120-0900-fedcba'),
+      createdAt: OLD,
+      runMarker: RUN,
+      retiredMarker: null,
+    },
   ];
   const organizations = [
     organization('org-run', runOrganizationName(RUN), 'actor-old'),
@@ -109,13 +137,13 @@ describe('cleanup selection', () => {
 
   test('the stale sweep takes runs whose actor is older than a day, with their own organizations', () => {
     expect(selectRuns(actors, organizations, null, NOW)).toEqual([
-      { runId: RUN, actorId: 'actor-old', organizationIds: ['org-run'] },
+      { runId: RUN, actorId: 'actor-old', organizationIds: ['org-run'], retired: null },
     ]);
   });
 
   test("a run's own cleanup takes that run at any age, and nothing else", () => {
     expect(selectRuns(actors, organizations, OTHER_RUN, NOW)).toEqual([
-      { runId: OTHER_RUN, actorId: 'actor-fresh', organizationIds: ['org-fresh'] },
+      { runId: OTHER_RUN, actorId: 'actor-fresh', organizationIds: ['org-fresh'], retired: null },
     ]);
     expect(selectRuns(actors, organizations, '20261126-1200-000000', NOW)).toEqual([]);
   });
@@ -126,15 +154,83 @@ describe('cleanup selection', () => {
       email: runMemberEmail(OTHER_RUN, 'buero'),
       createdAt: FRESH,
       runMarker: OTHER_RUN,
+      retiredMarker: null,
     };
     const unmarked = { ...member, id: 'unmarked', runMarker: null };
     expect(selectRuns([member, unmarked], organizations, OTHER_RUN, NOW)).toEqual([
-      { runId: OTHER_RUN, actorId: 'member', organizationIds: [] },
+      { runId: OTHER_RUN, actorId: 'member', organizationIds: [], retired: null },
     ]);
   });
 
   test('an actor with an unreadable creation time stays', () => {
     expect(selectRuns([actor('actor-odd', RUN, 'yesterday')], organizations, null, NOW)).toEqual([]);
+  });
+});
+
+describe('retirement', () => {
+  test("the app's one refusal for recorded working time retires the run", () => {
+    expect(retireReason(retentionRefusals('has_time_records'))).toBe('has_time_records');
+  });
+
+  test('any other refusal, alone or beside it, fails the cleanup instead', () => {
+    for (const attribute of [
+      'has_retained_documents',
+      'has_time_records has_retained_documents',
+      'has_retained_documents has_time_records',
+      'has_time_records_soon',
+      'HAS_TIME_RECORDS',
+    ])
+      expect(retireReason(retentionRefusals(attribute)), attribute).toBeNull();
+  });
+
+  test('a dialog that names no refusal retires nothing', () => {
+    expect(retentionRefusals(null)).toEqual([]);
+    expect(retentionRefusals('')).toEqual([]);
+    expect(retireReason([])).toBeNull();
+  });
+
+  test("the cleanup's DEV read returns each actor's retired marker", () => {
+    expect(runActorsQuery().query).toContain(
+      "raw_app_meta_data->>'werkflow_agent_retired' as retired) run where",
+    );
+  });
+
+  const retired = { ...actor('actor-retired', RUN, OLD), retiredMarker: 'has_time_records' };
+  const stale = actor('actor-stale', '20261125-1400-0a0b0c', OLD);
+  const member = {
+    ...actor('member-retired', RUN, OLD),
+    email: runMemberEmail(RUN, 'employee'),
+    retiredMarker: 'has_time_records',
+  };
+  const organizations = [organization('org-kept', runOrganizationName(RUN), 'actor-retired')];
+
+  test('a retired run is skipped by the sweep and by its own cleanup, and every other run is cleaned', () => {
+    const plan = sweepPlan(selectRuns([member, stale, retired], organizations, null, NOW));
+    expect(plan.clean).toEqual([
+      { runId: '20261125-1400-0a0b0c', actorId: 'actor-stale', organizationIds: [], retired: null },
+    ]);
+    expect(plan.retired).toEqual([
+      { runId: RUN, actorId: 'member-retired', organizationIds: [], retired: 'has_time_records' },
+      { runId: RUN, actorId: 'actor-retired', organizationIds: ['org-kept'], retired: 'has_time_records' },
+    ]);
+    expect(sweepPlan(selectRuns([retired], organizations, RUN, NOW)).clean).toEqual([]);
+  });
+
+  test('a retired marker of any other value still keeps the run retired, printed as unknown', () => {
+    const odd = { ...retired, retiredMarker: 'something else' };
+    expect(selectRuns([odd], organizations, null, NOW)).toEqual([
+      { runId: RUN, actorId: 'actor-retired', organizationIds: ['org-kept'], retired: 'unknown' },
+    ]);
+  });
+
+  test("the sweep cleans an Admin's run before its members'", () => {
+    const admin = actor('admin', RUN, OLD);
+    const plain = { ...actor('member', RUN, OLD), email: runMemberEmail(RUN, 'buero') };
+    const orgs = [organization('org-run', runOrganizationName(RUN), 'admin')];
+    expect(sweepPlan(selectRuns([plain, admin], orgs, null, NOW)).clean.map((run) => run.actorId)).toEqual([
+      'admin',
+      'member',
+    ]);
   });
 });
 
