@@ -18,6 +18,7 @@
     "lib/time-corrections/actions.ts": "Server Actions that authorize, call the database and revalidate; their time rules live in submission.ts and the covered modules it calls.",
     "lib/time-corrections/approved-projection.ts": "Reads approved correction applications from the database; projection.ts applies them to recorded time.",
     "lib/time-corrections/calendar-draft.ts": "Maps a calendar drag to correction boundaries one to one and passes the times through; calendar-proposal.ts moves them.",
+    "lib/time-corrections/entry-source.ts": "Maps a shown entry to the source and applied fact a correction names; no time arithmetic. merge-proposal.ts applies the correction to that fact's interval.",
     "lib/time-corrections/history-visibility.ts": "Which correction requests a role sees: a permission rule, no time or money.",
     "lib/time-corrections/messages.ts": "German failure sentences; no rule.",
     "lib/time-corrections/person-corrections.ts": "Keeps the correction facts of a person's effective employee record: a permission filter, no time arithmetic; projection.ts applies the facts.",

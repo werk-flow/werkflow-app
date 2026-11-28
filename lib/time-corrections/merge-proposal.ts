@@ -1,6 +1,8 @@
+import type { ActionResult } from '@/lib/action-result';
 import { getLocalDayStart } from '@/lib/date-time/berlin';
 import { isSameActivitySelection } from '@/lib/time-tracking/clock-actions';
 import type { TimeActivitySelection } from '@/lib/time-tracking/types';
+import { correctionDayOwner } from './timeline-validation';
 import type { TimeCorrectionFact, TimeCorrectionSnapshot } from './types';
 import type { SubmitTimeCorrectionInput } from './validation';
 
@@ -170,4 +172,85 @@ function editSource(
       index === targetIndex ? { ...fact, timestamp: patch.timestamp } : fact,
     ),
   };
+}
+
+/**
+ * A correction of one interval of an approved correction: the run up to a
+ * clock-out that holds the named fact changes, every other fact stays as it
+ * was. An edit moves exactly the named fact. A deletion, split, reclassification
+ * or reallocation needs an interval of one clock-in and its clock-out, and a
+ * reassignment an application of one; anything else would reach past the interval and is
+ * refused. A split keeps the stored activity and job with its details. New facts get
+ * ids from `newFactIdPrefix`, so none collides with a sibling's.
+ */
+export function mergeApplicationCorrection(input: {
+  kind: SubmitTimeCorrectionInput['kind'];
+  before: TimeCorrectionSnapshot;
+  proposed: TimeCorrectionSnapshot;
+  factId: string | undefined;
+  newFactIdPrefix: string;
+}): ActionResult<{ snapshot: TimeCorrectionSnapshot }> {
+  const { kind, before, proposed } = input;
+  const matches = before.facts.flatMap((fact, index) => (fact.factId === input.factId ? [index] : []));
+  const target = matches.length === 1 ? matches[0] : undefined;
+  const named = target === undefined ? undefined : before.facts[target];
+  if (target === undefined || !named) return { success: false, error: 'source_not_found' };
+  const closes = before.facts.flatMap((fact, index) => (fact.entryType === 'clock_out' ? [index + 1] : []));
+  const from = closes.filter((end) => end <= target).at(-1) ?? 0;
+  const to = closes.find((end) => end > target) ?? before.facts.length;
+  const replace = (facts: TimeCorrectionFact[]): ActionResult<{ snapshot: TimeCorrectionSnapshot }> => ({
+    success: true,
+    snapshot: {
+      schemaVersion: 1,
+      facts: [...before.facts.slice(0, from), ...facts, ...before.facts.slice(to)],
+    },
+  });
+  if (kind === 'edit') {
+    const [patch, ...rest] = proposed.facts;
+    if (!patch || rest.length) return { success: false, error: 'invalid_shape' };
+    const edited = before.facts.slice(from, to).with(target - from, { ...named, timestamp: patch.timestamp });
+    // One moved boundary stays on its day, and never carries its interval over midnight.
+    const dayOf = (fact: TimeCorrectionFact) => getLocalDayStart(correctionDayOwner(fact)).getTime();
+    const days = new Set([dayOf(named), ...edited.map(dayOf)]);
+    return days.size > 1 ? { success: false, error: 'correction_crosses_midnight' } : replace(edited);
+  }
+  const interval = before.facts.slice(from, to);
+  const [start, end, ...more] = interval;
+  // One activity of its own: a clock-in and its clock-out, not the end of a break before it.
+  const ownPair = start?.entryType === 'clock_in' && end?.entryType === 'clock_out' && !more.length;
+  if (!start || !ownPair || (kind === 'reassign' && interval.length !== before.facts.length)) {
+    return { success: false, error: 'time_correction_multiple_intervals' };
+  }
+  if (kind === 'split') {
+    const split = splitInterval(start, proposed, input.newFactIdPrefix);
+    return split ? replace(split) : { success: false, error: 'invalid_shape' };
+  }
+  const merged = mergeCorrectionProposal(kind, { schemaVersion: 1, facts: interval }, proposed);
+  if (!merged) return { success: false, error: 'activity_context_required' };
+  return replace(merged.facts);
+}
+
+/**
+ * The split pieces of one stored activity: two pairs that meet at the split
+ * time, both of the stored activity and job with its details, such as a
+ * drive's route and role. A split changes times only; the proposal's activity
+ * and job are not read. Null when the pieces are not two such pairs.
+ */
+function splitInterval(
+  start: TimeCorrectionFact,
+  proposed: TimeCorrectionSnapshot,
+  newFactIdPrefix: string,
+): TimeCorrectionFact[] | null {
+  const [, firstEnd, secondStart] = proposed.facts;
+  const twoPairs =
+    proposed.facts.map((fact) => fact.entryType).join() === 'clock_in,clock_out,clock_in,clock_out' &&
+    firstEnd?.timestamp === secondStart?.timestamp;
+  return twoPairs
+    ? proposed.facts.map((piece, index) => ({
+        ...start,
+        factId: `${newFactIdPrefix}:${index}`,
+        entryType: piece.entryType,
+        timestamp: piece.timestamp,
+      }))
+    : null;
 }
