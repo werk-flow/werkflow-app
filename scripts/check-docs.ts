@@ -175,7 +175,8 @@ for (const path of guidanceFiles) {
 // Decision 0005: repository paths named in AGENTS.md must name an existing mechanism.
 for (const reference of findInlineCodePaths(read('AGENTS.md'))) {
   const target = join(repoRoot, reference.path);
-  if (existsSync(target) && (!reference.path.endsWith('/') || statSync(target).isDirectory())) continue;
+  // A trailing slash makes existsSync refuse a file, so `components/ui/` must be a folder.
+  if (existsSync(target)) continue;
   problems.push(
     `AGENTS.md:${reference.line} names \`${reference.path}\`, which does not exist; fix the name or restore the mechanism (decision 0005)`,
   );

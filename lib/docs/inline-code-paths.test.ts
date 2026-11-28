@@ -37,3 +37,17 @@ test('fenced examples never supply named mechanisms or change subsequent line nu
     ),
   ).toEqual([{ line: 9, path: 'lib/real.ts' }]);
 });
+
+test('a triple-backtick span on one line is inline code, not a fence, and spans keep CommonMark padding', () => {
+  expect(
+    findInlineCodePaths(
+      ['```lib/triple.ts```', '`lib/next-line.ts`', '` lib/padded.ts `', '`` `lib/example-only.ts` ``'].join(
+        '\n',
+      ),
+    ),
+  ).toEqual([
+    { line: 1, path: 'lib/triple.ts' },
+    { line: 2, path: 'lib/next-line.ts' },
+    { line: 3, path: 'lib/padded.ts' },
+  ]);
+});

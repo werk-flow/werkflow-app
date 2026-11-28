@@ -1,6 +1,6 @@
 import { markdownLinesOutsideFences } from './markdown-lines';
 
-export type InlineCodePath = { line: number; path: string };
+type InlineCodePath = { line: number; path: string };
 
 /**
  * Repository-shaped inline code spans, regardless of whether their targets exist: path characters
@@ -9,8 +9,9 @@ export type InlineCodePath = { line: number; path: string };
 export function findInlineCodePaths(markdown: string): InlineCodePath[] {
   const paths: InlineCodePath[] = [];
   for (const { line, text } of markdownLinesOutsideFences(markdown)) {
-    for (const match of text.matchAll(/(?<![\\`])(`+)([^`]*?)\1(?!`)/g)) {
-      const path = match[2];
+    // A span closes on a run of exactly its opening length; one space each side is padding (CommonMark).
+    for (const match of text.matchAll(/(?<![\\`])(`+)(?!`)(.+?)(?<!`)\1(?!`)/g)) {
+      const path = match[2]?.replace(/^ (.*) $/, '$1');
       if (
         path !== undefined &&
         /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]*)+$/.test(path) &&
