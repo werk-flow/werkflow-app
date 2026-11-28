@@ -630,8 +630,10 @@ test('a new chat takes its files along once saved, and a refusal after sign-out 
   expect(stored).not.toContain('Rechnung.pdf');
   expect(stored).not.toContain('Und die Rechnung?');
 
-  // The sign-out failed and the page stayed: the next message goes as a new turn.
+  // The sign-out failed and the page stayed: the next message goes as a new turn. Typed once the turn
+  // ended („Senden“ is back), so it lands in the draft the composer shows from then on.
   const before = await page.evaluate(() => window.uiContractKiTurn.calls.length);
+  await expect(page.getByRole('button', { name: 'Senden', exact: true })).toBeVisible();
   await composer(page).fill('Noch einmal');
   await page.getByRole('button', { name: 'Senden', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.uiContractKiTurn.calls.length)).toBe(before + 1);
