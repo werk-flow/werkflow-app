@@ -464,11 +464,11 @@ const EXTRACTIONS: Readonly<Record<string, () => StreamPart[]>> = {
 };
 
 /** The text of a document's bytes, read as Latin-1 so every byte stays one character. */
-const documentText = (bytes: Uint8Array): string => Buffer.from(bytes).toString('latin1');
+const latin1Text = (bytes: Uint8Array): string => Buffer.from(bytes).toString('latin1');
 
 /** The extraction a file's marker names. */
 function replayExtraction(bytes: Uint8Array): { name: string; parts: StreamPart[] } {
-  const name = /werkflow-replay:([a-z-]+)/.exec(documentText(bytes))?.[1] ?? 'sauber';
+  const name = /werkflow-replay:([a-z-]+)/.exec(latin1Text(bytes))?.[1] ?? 'sauber';
   return { name, parts: (EXTRACTIONS[name] ?? EXTRACTIONS.sauber ?? (() => []))() };
 }
 
@@ -480,7 +480,7 @@ function replayExtraction(bytes: Uint8Array): { name: string; parts: StreamPart[
 export function countReplayDocumentTokens({ document, system, text, schema }: AiDocumentRequest): number {
   const framing = Buffer.byteLength(system + text + JSON.stringify(schema), 'utf8');
   if (document.mimeType !== 'application/pdf') return framing + 1_600;
-  return framing + (documentText(document.bytes).match(/\/Type\s*\/Page(?![A-Za-z])/g)?.length ?? 0) * 1_800;
+  return framing + (latin1Text(document.bytes).match(/\/Type\s*\/Page(?![A-Za-z])/g)?.length ?? 0) * 1_800;
 }
 
 /** The bytes of the document a request sends, or null for a request without one. */
