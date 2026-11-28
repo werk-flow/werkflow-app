@@ -623,7 +623,6 @@ async function markRetired(kit: Kit, actorId: string, runId: string, reason: Ret
  * Retires the run whose organization the app keeps for `reason`. It cancels the organization's sandbox
  * subscriptions, then marks each member that is a run's actor, and the Admin last, so a cleanup after a
  * failed step repeats the whole retirement. It writes no DEV row and leaves recorded time as it is.
- * Answers the retired actors' ids.
  */
 async function retireRun(
   kit: Kit,
@@ -631,19 +630,13 @@ async function retireRun(
   organizationId: string,
   reason: RetireReason,
   runActors: readonly ActorRow[],
-): Promise<string[]> {
+): Promise<void> {
   const organization = await runOrganization(kit, admin);
   if (organization.id !== organizationId)
     throw new StagingFailure(`Organization ${organizationId} is not the run's own.`);
   // The refusal came from the actor's active organization: it is the run's only when the actor
   // administers no other.
-  const administered = z
-    .array(z.object({ id: uuidSchema }))
-    .parse(
-      await readOnlySql(kit, 'select id from public.organizations where admin_id = $1::uuid', [admin.id]),
-    );
-  if (administered.length !== 1)
-    throw new StagingFailure(`Actor ${admin.id} administers ${administered.length} organizations.`);
+  await requireAdministered(kit, admin.id, 1);
   const billing = z
     .array(
       z.object({ stripe_customer_id: z.string().nullable(), stripe_subscription_id: z.string().nullable() }),
@@ -678,24 +671,37 @@ async function retireRun(
       ? [{ id: row.id, runId }]
       : [];
   });
+  // A member's own organization would be skipped with it: such a member's run is cleaned on its own.
+  for (const member of members) await requireAdministered(kit, member.id, 0);
   for (const member of members) await markRetired(kit, member.id, member.runId, reason);
   await markRetired(kit, admin.id, admin.runId, reason);
-  return [...members.map((member) => member.id), admin.id];
+}
+
+/** Throws unless the actor administers exactly `expected` organizations on DEV, whatever their names. */
+async function requireAdministered(kit: Kit, actorId: string, expected: number): Promise<void> {
+  const administered = z
+    .array(z.object({ id: uuidSchema }))
+    .parse(
+      await readOnlySql(kit, 'select id from public.organizations where admin_id = $1::uuid', [actorId]),
+    );
+  if (administered.length !== expected)
+    throw new StagingFailure(`Actor ${actorId} administers ${administered.length} organizations.`);
 }
 
 /**
  * Removes one run's rows through the app: each organization in its settings, then the account. When the
  * app keeps an organization for recorded working time, it retires the run instead; any other refusal
- * fails. Answers the ids of the actors it retired.
+ * fails.
  */
 async function cleanUpRun(
   kit: Kit,
   run: RunRows,
   organizationNames: ReadonlyMap<string, string>,
   runActors: readonly ActorRow[],
-): Promise<string[]> {
+): Promise<void> {
+  // A member of an organization retired earlier in this cleanup, or by another machine, went with it.
   const actor = await actorFor(kit, run);
-  if (actor === 'retired') return [run.actorId];
+  if (actor === 'retired') return;
   const kept = await withStagingBrowser(kit, async (page) => {
     await signIn(page, actor);
     for (const id of run.organizationIds) {
@@ -711,14 +717,14 @@ async function cleanUpRun(
   });
   if (kept === null) {
     kit.log('actor deleted', { run: run.runId, actor: run.actorId });
-    return [];
+    return;
   }
   const reason = retireReason(kept.refusals);
   if (reason === null)
     throw new StagingFailure(
       `The app keeps organization ${kept.organizationId}: ${kept.refusals.join(',')}.`,
     );
-  return retireRun(kit, actor, kept.organizationId, reason, runActors);
+  await retireRun(kit, actor, kept.organizationId, reason, runActors);
 }
 
 /**
@@ -733,13 +739,10 @@ export async function cleanUp(kit: Kit, runId: string | null): Promise<boolean> 
     for (const run of plan.retired)
       kit.log('retired', { run: run.runId, actor: run.actorId, reason: run.retired });
     const names = new Map(before.organizations.map((row) => [row.id, row.name]));
-    // Members of an organization this cleanup retired, which went with it.
-    const retiredNow = new Set<string>();
     let passed = true;
     for (const run of plan.clean) {
-      if (retiredNow.has(run.actorId)) continue;
       try {
-        for (const id of await cleanUpRun(kit, run, names, before.actors)) retiredNow.add(id);
+        await cleanUpRun(kit, run, names, before.actors);
       } catch (error) {
         passed = false;
         kit.log('cleanup failed', { run: run.runId, reason: failureLine(kit, error) });
